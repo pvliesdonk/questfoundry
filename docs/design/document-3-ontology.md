@@ -568,7 +568,15 @@ Only the first is narrative convergence. An LLM seeing "two edges point to the s
 
 A beat's `belongs_to` edge means "this beat serves this path's storyline — it advances this path's dilemma." It does NOT mean "this beat only appears on this path" or "this beat is about this path."
 
-Intersection beats participate in scenes with beats from other paths, but they still belong to their original path. The current implementation's cross-assignment of `belongs_to` edges conflated "shares a scene with beats from path B" with "is part of path B's storyline." This produced the hard-convergence violation: beats from mutually exclusive paths appeared to belong to both, creating structurally impossible scenes.
+Intersection beats participate in scenes with beats from other paths, but they still belong to their original path. The historical cross-assignment of `belongs_to` edges across dilemmas conflated "shares a scene with beats from path B" with "is part of path B's storyline." This produced the hard-convergence violation: beats from mutually exclusive dilemmas appeared to belong to both, creating structurally impossible scenes.
+
+**Same-dilemma pre-commit multi-`belongs_to` is permitted.** A pre-commit beat — one that occurs before the dilemma's commit point — belongs to both paths of its own dilemma. This is structurally correct: every player experiences pre-commit beats regardless of which path they will later choose. Pre-commit beats have two `belongs_to` edges (one to each path in the dilemma); post-commit beats have exactly one. This is not the same as cross-dilemma multi-assignment, which remains forbidden.
+
+Guard rails:
+
+1. **Same-dilemma constraint.** A beat with two `belongs_to` edges must reference two paths that belong to the same dilemma. Cross-dilemma multi-`belongs_to` is a hard-convergence violation.
+2. **Pre-commit only.** Only beats before the dilemma's commit may have two `belongs_to` edges. The commit beat itself has one (it is the first beat exclusive to its path). Post-commit beats always have one.
+3. **Intersection exclusion.** An intersection group must not contain two pre-commit beats from the same dilemma — they already co-occur by definition; declaring them as an intersection is redundant and creates false structural implications.
 
 ### Beat Ordering ≠ Temporal Position Relative to Commits
 
@@ -655,7 +663,7 @@ The danger: creating separate entity nodes for each state combination (`mentor_t
 | `anchored_to` | Dilemma → Entity | BRAINSTORM | Entities central to this dilemma |
 | `explores` | Path → Answer | SEED | Which answer this path develops |
 | `has_consequence` | Path → Consequence | SEED | Narrative outcomes of this path |
-| `belongs_to` | Beat → Path | SEED | Which path this beat serves (single path) |
+| `belongs_to` | Beat → Path | SEED | Which path this beat serves. Pre-commit beats have two edges (both paths in the dilemma); post-commit beats have one. |
 | `flexibility` | Beat → Entity | SEED | Substitutable entity with role annotation. Working — consumed by GROW. |
 | `predecessor` | Beat → Beat | GROW | Ordering in the beat DAG (B comes after A) |
 | `intersection` | Beat → Intersection Group | GROW | This beat participates in this co-occurrence group |
@@ -838,10 +846,10 @@ This section documents where the current implementation (`docs/design/00-spec.md
 
 **Impact:** The `RoutingPlan` architecture transfers to POLISH as `PolishPlan`. ADR-017 needs supersession. GROW phases 7–9 (passage creation, choice creation, routing) move to POLISH.
 
-### InitialBeat.paths — List vs Singular belongs_to
+### InitialBeat.paths — Same-Dilemma Dual belongs_to
 
-**Current:** `InitialBeat.paths` is `list[str]` with `min_length=1`. The mutation creates one `belongs_to` edge per path in the list, allowing a beat to belong to multiple paths simultaneously. The serialize prompt shows multiple paths as valid.
+**Current:** `InitialBeat.paths` is `list[str]` with `min_length=1`. The mutation creates one `belongs_to` edge per path in the list.
 
-**This document:** Each beat has exactly one `belongs_to` edge to one path (Part 1, Part 3, Part 9). Multi-path membership conflates path membership with scene co-occurrence — the exact pattern that caused the hard-convergence violation. Co-occurrence is modeled by intersection groups (Part 4), not by multiple `belongs_to` edges.
+**This document:** Pre-commit beats belong to both paths of their dilemma (two `belongs_to` edges); post-commit beats belong to one path (one `belongs_to` edge). This is structurally correct: pre-commit beats are experienced by all players before the choice is made. The historical prohibition on multi-path `belongs_to` (Part 8) targeted cross-dilemma multi-assignment — the pattern that caused hard-convergence violations. Same-dilemma pre-commit dual membership is a different structural relationship and is explicitly permitted (see Part 8, "Path Membership ≠ Scene Participation").
 
-**Impact:** `InitialBeat.paths` becomes singular `path_id: str`. Intersection co-occurrence is signaled through entity flexibility annotations, not multi-path assignment. The mutation, prompt, and validation all need updating.
+**Impact:** `InitialBeat` needs a mechanism to signal which beats are pre-commit (dual `belongs_to`) vs post-commit (singular `belongs_to`). The recommended approach is an `also_belongs_to: str | null` field — null for post-commit beats, the other path's ID for pre-commit beats. GROW and POLISH consumers that assume one `belongs_to` per beat need auditing. See #1206.
