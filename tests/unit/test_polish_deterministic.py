@@ -256,10 +256,14 @@ class TestComputeProseFeasibility:
 
 
 def _setup_dilemma(graph: Graph, dilemma_id: str, path_ids: list[str]) -> None:
-    """Helper to create a dilemma node and set dilemma_id on path nodes."""
+    """Helper to create a dilemma node and set dilemma_id on path nodes.
+
+    Stores the prefixed dilemma_id (e.g. "dilemma::d1") on path nodes to
+    match production data shape from mutations.py:apply_seed_output().
+    """
     graph.create_node(dilemma_id, {"type": "dilemma", "raw_id": dilemma_id.split("::")[-1]})
     for pid in path_ids:
-        graph.update_node(pid, dilemma_id=dilemma_id.split("::")[-1])
+        graph.update_node(pid, dilemma_id=dilemma_id)
 
 
 class TestComputeChoiceEdges:
