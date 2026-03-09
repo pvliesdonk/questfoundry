@@ -736,7 +736,7 @@ This section documents where the current implementation (`docs/design/00-spec.md
 
 **Current:** Intersection is modeled by cross-assigning `belongs_to` edges. A beat from path A gets an additional `belongs_to` edge to path B, making it "belong to" both paths. This was the direct cause of the hard-convergence violation fixed on the `fix/hard-convergence-intersection` branch.
 
-**This document:** Intersection is a co-occurrence grouping. Beats retain their single `belongs_to` edge. A separate intersection group declares which beats from different paths share a scene. Path membership and scene participation are distinct concepts.
+**This document:** Intersection is a co-occurrence grouping. Beats retain their existing `belongs_to` edges (one for post-commit beats; two for same-dilemma pre-commit beats — see Part 8, "Path Membership ≠ Scene Participation"). A separate intersection group declares which beats from different paths share a scene. Path membership and scene participation are distinct concepts.
 
 **Impact:** The `apply_intersection_mark()` function in `grow_algorithms.py` and all code that queries `belongs_to` edges to determine intersection membership needs redesign.
 
