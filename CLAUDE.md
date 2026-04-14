@@ -137,20 +137,21 @@ log.error("provider_error", provider="ollama", message=str(e))
 
 ### Model Workflow (Ontology → Pydantic → Graph)
 
-**The design specification (`docs/design/00-spec.md`) defines the ontology.** Pydantic models in `src/questfoundry/models/` are hand-written implementations of that ontology. The graph (`graph.db`) is the runtime source of truth for story state.
+**The Story Graph Ontology (`docs/design/story-graph-ontology.md`) defines the ontology**, working alongside the narrative principles in `docs/design/how-branching-stories-work.md`. Hand-written Pydantic models in `src/questfoundry/models/` implement that ontology. The graph (`graph.db`) is the runtime source of truth for story state.
 
 ```
-docs/design/00-spec.md        ← Ontology definition (node types, relationships)
+docs/design/story-graph-ontology.md   ← Ontology definition (node types, edges, invariants)
+docs/design/how-branching-stories-work.md ← Narrative model the ontology serves
         ↓
-src/questfoundry/models/*.py  ← Hand-written Pydantic models (validate LLM output)
+src/questfoundry/models/*.py          ← Hand-written Pydantic models (validate LLM output)
         ↓
-graph/mutations.py            ← Semantic validation against graph state
+graph/mutations.py                    ← Semantic validation against graph state
         ↓
-graph.db                      ← Runtime source of truth (SQLite, nodes + edges)
+graph.db                              ← Runtime source of truth (SQLite, nodes + edges)
 ```
 
 **When adding new stage models:**
-1. Check the ontology in `docs/design/00-spec.md` for the node types and fields
+1. Check the ontology in `docs/design/story-graph-ontology.md` for the node types, edges, and invariants that apply
 2. Create/update Pydantic models in `src/questfoundry/models/`
 3. Add semantic validation in `graph/mutations.py` if needed
 4. Export from `models/__init__.py`
@@ -292,10 +293,12 @@ qf inspect -p <project> --json # Machine-readable JSON output
 
 ## Key Files to Reference
 
-- `docs/design/00-spec.md` - Unified v5 specification (vision, pipeline, schemas)
-- `docs/design/procedures/` - Stage algorithm specifications
+- `docs/design/how-branching-stories-work.md` - Narrative model: dilemmas, paths, beats, intersections, convergence (authoritative)
+- `docs/design/story-graph-ontology.md` - Graph/data model: node types, edge types, invariants (authoritative; supersedes the ontology sections of `00-spec.md`)
+- `docs/design/procedures/` - Per-stage algorithm specifications (DREAM, BRAINSTORM, SEED, GROW, POLISH, FILL, DRESS, SHIP)
 - `docs/design/01-prompt-compiler.md` - Prompt assembly system
 - `docs/design/07-getting-started.md` - Implementation slices
+- `docs/design/00-spec.md` - **Deprecated.** Historical reference only. Non-ontology content (Anti-Patterns, Design Decisions, Context Budget Analysis, Open Questions, Future Bolt-ons) has not yet been migrated; do not cite as authoritative.
 
 ## Anti-Patterns to Avoid
 
@@ -593,8 +596,8 @@ that hurt structured output quality.
 ### 8. Context Enrichment Principle (Ontology-Driven)
 
 > **Every LLM call MUST receive all ontologically relevant graph data available at
-> call time. The ontology (`docs/design/00-spec.md`) is the authoritative source for
-> what fields exist on each node type — consult it, don't guess.**
+> call time. The ontology (`docs/design/story-graph-ontology.md`) is the authoritative
+> source for what fields exist on each node type — consult it, don't guess.**
 
 Small models (4B parameters) cannot infer narrative meaning from identifiers alone.
 When a `format_*_context()` function builds context for an LLM call, it MUST include
@@ -617,7 +620,7 @@ the LLM's decision about how to handle that dilemma.
 - Someone eventually notices and enriches the context
 
 **When writing or modifying any `format_*_context()` function:**
-1. **Read the ontology** (`docs/design/00-spec.md`) for the relevant node type(s)
+1. **Read the ontology** (`docs/design/story-graph-ontology.md`) for the relevant node type(s)
 2. List every field defined in the spec for those node types
 3. Include all fields that would help the LLM make an informed decision
 4. Keep it compact (5-8 lines per item) but never strip to bare IDs

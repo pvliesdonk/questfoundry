@@ -2,6 +2,13 @@
 
 > For the narrative description of the SEED stage, see ["How Branching Stories Work", Part 2](../how-branching-stories-work.md). This document provides the detailed algorithm specification.
 >
+> **Y-shape structure SEED is responsible for creating (#1206).** A dilemma is a minimal branching story shaped like the letter Y. SEED must produce, per dilemma:
+> - A **shared pre-commit chain** — beats that introduce and develop the dilemma. These beats belong to *every* path of the dilemma (two `belongs_to` edges for a binary dilemma) — every player experiences them regardless of which answer they will later choose.
+> - A **commit beat per path** — the first beat exclusive to that path. Each commit beat carries a `dilemma_impacts` entry with `effect: commits`. Commit beats have exactly one `belongs_to` edge.
+> - **2–4 post-commit beats per path** — beats that prove that path's answer. Post-commit beats have exactly one `belongs_to` edge.
+>
+> In the beat DAG, the last shared pre-commit beat has one successor per path (the divergence point); each successor is that path's commit beat. Without this Y-shape, POLISH Phase 4c's `compute_choice_edges()` finds no divergence and produces zero choices. The three guard rails from the [Story Graph Ontology, Part 8, "Path Membership ≠ Scene Participation"](../story-graph-ontology.md) apply: same-dilemma constraint, pre-commit only, intersection exclusion.
+>
 > **Terminology transitions (2026-02-24):** The [Story Graph Ontology](../story-graph-ontology.md) replaces several terms used in this document. The code has not yet been updated.
 > - `convergence_policy` (hard/soft/flavor) → `dilemma_role` (hard/soft). Convergence behavior is derived from the role, not declared directly. `flavor` is removed — flavor-level choices are handled by POLISH as false branches.
 > - `InteractionConstraint` (shared_entity/causal_chain/resource_conflict) → dilemma ordering relationships. The three declared relationships are `wraps`, `concurrent`, and `serial`. `shared_entity` is derived from `anchored_to` edges (not explicitly declared). `causal_chain` is subsumed by `serial`. `resource_conflict` is removed.
@@ -219,13 +226,20 @@ consequences:
       - "Mentor's knowledge becomes available resource"
 ```
 
-LLM also generates 2-4 initial beats per path:
+LLM generates the full Y-shape beat scaffold for each dilemma (see the transition admonition at the top of this document for the complete structure):
+
+- **Shared pre-commit beats** — one chain per dilemma, introducing and developing the dramatic question. Each pre-commit beat carries a `paths` list naming *every* explored path of the dilemma, producing one `belongs_to` edge per listed path. The chain terminates at the last shared pre-commit beat, whose successors in the DAG are the per-path commit beats.
+- **Commit beat per path** — the first beat exclusive to that path, carrying `dilemma_impacts.effect: commits`. Its `paths` list names exactly one path.
+- **Post-commit beats per path** — 2–4 beats that prove the path's answer. Each names exactly one path.
 
 ```yaml
 initial_beats:
+  # Shared pre-commit beat — dual belongs_to within the dilemma
   - id: mentor_warning
     summary: "Mentor delivers cryptic warning about the investigation"
-    paths: [path::mentor_trust__protector]
+    paths:
+      - path::mentor_trust__protector
+      - path::mentor_trust__manipulator
     dilemma_impacts:
       - dilemma_id: dilemma::mentor_trust
         effect: advances
@@ -233,7 +247,20 @@ initial_beats:
     entities: [mentor, kay]
     location: archive_entrance          # primary location
     location_alternatives: []           # filled in Phase 3b
+
+  # Commit beat — first beat exclusive to the protector path (singular belongs_to)
+  - id: mentor_confession_protector
+    summary: "Mentor reveals the protective motive behind the warnings"
+    paths: [path::mentor_trust__protector]
+    dilemma_impacts:
+      - dilemma_id: dilemma::mentor_trust
+        effect: commits
+        path_id: path::mentor_trust__protector
+    entities: [mentor, kay]
+    location: archive_reading_room
 ```
+
+Pre-commit beats have one `belongs_to` edge per path of the dilemma; commit and post-commit beats have exactly one. The number of pre-commit beats is a narrative decision, not a fixed quota — a dilemma may need one shared setup beat or several, depending on how much development the question needs before the fork.
 
 **Human Gate:** Yes
 
@@ -792,7 +819,8 @@ Before SEED is complete, verify:
 - [ ] All dilemmas have exploration decisions
 - [ ] All explored answers have path definitions
 - [ ] All paths have consequences with ripples
-- [ ] All paths have initial beats (2-4 each)
+- [ ] Every explored dilemma has a shared pre-commit chain (one or more beats with `belongs_to` edges to every path of the dilemma)
+- [ ] Every path has a commit beat (singular `belongs_to`, `effect: commits` in `dilemma_impacts`) and 2–4 post-commit beats
 - [ ] Convergence sketch exists
 - [ ] Viability analysis reviewed
 - [ ] No orphan references

@@ -16,7 +16,7 @@ POLISH transforms GROW's beat DAG into a prose-ready passage graph. It is the br
 **Input (from GROW):**
 - Beat nodes with summaries, dilemma impacts, entity references, scene types
 - Predecessor/successor ordering edges in the beat DAG
-- `belongs_to` edges (each beat → exactly one path)
+- `belongs_to` edges (pre-commit beats → every path of their dilemma; commit and post-commit beats → exactly one path — see the [Story Graph Ontology, Part 8](../story-graph-ontology.md))
 - Intersection group nodes with grouped beat references
 - State flag nodes derived from consequences
 - Entity overlay nodes with state flag activation
@@ -48,7 +48,7 @@ def validate_grow_output(graph: Graph) -> list[str]:
 **Required conditions:**
 - Beat nodes exist with summaries and dilemma_impacts
 - No cycles in the predecessor/successor DAG
-- Every beat has exactly one `belongs_to` edge (singular path membership)
+- Every beat has at least one `belongs_to` edge, conforming to the Y-shape invariant: pre-commit beats within a dilemma carry one `belongs_to` edge per path of that dilemma (dual for a binary dilemma); commit beats and post-commit beats carry exactly one. Cross-dilemma multi-`belongs_to` is forbidden. See the [Story Graph Ontology, Part 8, "Path Membership ≠ Scene Participation"](../story-graph-ontology.md) for the three guard rails.
 - State flag nodes exist for each explored dilemma's consequences
 - Dilemma nodes have `dilemma_role` (hard/soft) set
 - Every computed arc traversal is complete (no dead ends)

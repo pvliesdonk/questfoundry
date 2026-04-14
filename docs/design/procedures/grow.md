@@ -10,7 +10,7 @@
 >
 > **Additional terminology transitions:**
 > - `convergence_policy` (hard/soft/flavor) → `dilemma_role` (hard/soft). `flavor` is removed — handled by POLISH as false branches.
-> - Intersection model: the Story Graph Ontology redefines intersections as co-occurrence groupings. Beats retain their single `belongs_to` edge; an intersection group node declares scene sharing. The current implementation uses cross-assigned `belongs_to` edges.
+> - Intersection model: the Story Graph Ontology redefines intersections as co-occurrence groupings. Beats retain their existing `belongs_to` edges under the Y-shape invariant — pre-commit beats belong to every path of their dilemma (dual for a binary dilemma), commit and post-commit beats belong to exactly one path — and an intersection group node declares scene sharing across dilemmas. Three guard rails apply: (1) **same-dilemma constraint** — any beat with two `belongs_to` edges must reference paths of the same dilemma; cross-dilemma multi-`belongs_to` remains forbidden; (2) **pre-commit only** — only beats before the dilemma's commit may have multi-`belongs_to`; (3) **intersection exclusion** — intersection groups must not contain two pre-commit beats from the same dilemma (they already co-occur by definition). The current implementation still cross-assigns `belongs_to` edges to model intersections, which is incorrect on both axes. See the [Story Graph Ontology, Part 8](../story-graph-ontology.md).
 > - Arc model: the Story Graph Ontology treats arcs as computed DAG traversals, not stored graph nodes.
 > - `sequenced_after` → `predecessor`/`successor` edges.
 > - `location_alternatives` → entity flexibility edges (generalized to any entity category).
@@ -168,14 +168,16 @@ If the non-canonical answer is not promoted to a path in SEED, that dilemma has 
 > assess which beats were "prose-compatible" across paths and marked them with
 > `path_agnostic_for`. This was replaced by residue beats (Phase 8d) which
 > handle post-convergence variation without requiring upfront prose compatibility
-> assessment. Beats that belong to multiple arcs are now detected structurally
-> via `belongs_to` edges rather than LLM annotation.
+> assessment. Whether a beat is shared across multiple arcs is now inferred
+> structurally from the beat DAG (a beat's `belongs_to` edges plus its position
+> relative to commit beats determines which arcs traverse it), rather than
+> from LLM annotation.
 
 ---
 
 ### Phase 3: Intersection Detection
 
-> **Intersection model change:** The [Story Graph Ontology, Part 4](../story-graph-ontology.md) redefines intersections as co-occurrence groupings. Beats retain their single `belongs_to` edge; an intersection group node declares which beats share a scene. The current implementation uses cross-assigned `belongs_to` edges. See the Story Graph Ontology for the new model.
+> **Intersection model change:** The [Story Graph Ontology, Part 4](../story-graph-ontology.md) redefines intersections as co-occurrence groupings. Beats retain their existing `belongs_to` edges under the Y-shape invariant (pre-commit beats: every path of their dilemma; commit and post-commit beats: exactly one path), and an intersection group node declares which beats share a scene across dilemmas. The three guard rails in the transition admonition at the top of this document apply: same-dilemma constraint, pre-commit only, intersection exclusion. The current implementation still cross-assigns `belongs_to` edges to model intersections — this must be replaced with intersection group nodes. See the Story Graph Ontology for the new model.
 
 **Purpose:** Find beats from different paths (different dilemmas) that should be one scene.
 
@@ -389,9 +391,11 @@ membership, which would invalidate pre-intersection pivot beats. Runs before Pha
    - `pivot_beat` must exist in path-scoped beat set
 5. Results stored on path nodes: `entity_arcs: [{entity_id, arc_line, pivot_beat, arc_type}]`
 
-**Shared pivot policy:** If `pivot_beat` belongs to multiple arcs (detected via
-`belongs_to` edges), a warning is logged but no error raised. Path-specific
-pivot beats are preferred.
+**Shared pivot policy:** If `pivot_beat` is shared across multiple arcs (either a
+pre-commit beat with multi-`belongs_to` within its dilemma, or an intersection-
+shared scene), a warning is logged but no error raised. Post-commit, path-
+specific pivot beats are preferred because the entity's trajectory usually
+turns *on* the commit, not before it.
 
 **Output:** Path nodes annotated with `entity_arcs`
 
