@@ -513,9 +513,9 @@ Key design choices:
 - Topology enforcement for `hard` policy deferred to #751
 - Spoke grants wiring deferred to #752
 
-> **Forward-looking note (2026-02-24):** [Document 3](../design/document-3-ontology.md) replaces `convergence_policy` (hard/soft/flavor) with `dilemma_role` (hard/soft). Convergence behavior is derived from the role. `flavor` is removed — handled by POLISH as false branches. A superseding ADR will be created when the code migration is implemented. See [Issue #977](https://github.com/pvliesdonk/questfoundry/issues/977).
+> **Forward-looking note (2026-02-24):** The [Story Graph Ontology](../design/story-graph-ontology.md) replaces `convergence_policy` (hard/soft/flavor) with `dilemma_role` (hard/soft). Convergence behavior is derived from the role. `flavor` is removed — handled by POLISH as false branches. A superseding ADR will be created when the code migration is implemented. See [Issue #977](https://github.com/pvliesdonk/questfoundry/issues/977).
 >
-> **Impact on `flavor` (2026-02-25):** The `flavor` convergence category is fully removed from the ontology. During migration, existing `flavor` values are mapped to `soft` with `residue_weight: cosmetic` (a field defined in [Document 3, Part 2](../design/document-3-ontology.md)). A Pydantic model validator with a deprecation warning handles backward compatibility with existing graph data. Flavor-level choices are not dilemmas — they become false branches or minor passage variants created by POLISH. See [Issue #984](https://github.com/pvliesdonk/questfoundry/issues/984) for the migration plan.
+> **Impact on `flavor` (2026-02-25):** The `flavor` convergence category is fully removed from the ontology. During migration, existing `flavor` values are mapped to `soft` with `residue_weight: cosmetic` (a field defined in the [Story Graph Ontology, Part 2](../design/story-graph-ontology.md)). A Pydantic model validator with a deprecation warning handles backward compatibility with existing graph data. Flavor-level choices are not dilemmas — they become false branches or minor passage variants created by POLISH. See [Issue #984](https://github.com/pvliesdonk/questfoundry/issues/984) for the migration plan.
 
 ---
 
@@ -586,7 +586,7 @@ Key design choices:
 - `grow_phase2_agnostic.yaml` template deleted.
 - No behavioral change for stories — residue beats were already generating variation before the cleanup.
 
-> **Note (2026-02-24):** [Document 3](../design/document-3-ontology.md) retains the residue beats concept but splits the unified "codeword" concept into "state flags" (internal routing) and "codewords" (player-facing gamebook markers). The structural approach is preserved; the terminology changes in a future PR. See [Issue #977](https://github.com/pvliesdonk/questfoundry/issues/977).
+> **Note (2026-02-24):** The [Story Graph Ontology](../design/story-graph-ontology.md) retains the residue beats concept but splits the unified "codeword" concept into "state flags" (internal routing) and "codewords" (player-facing gamebook markers). The structural approach is preserved; the terminology changes in a future PR. See [Issue #977](https://github.com/pvliesdonk/questfoundry/issues/977).
 >
 > **Stage boundary note (2026-02-25):** Residue beat creation moves from GROW Phase 8d to POLISH Phase 5 (LLM enrichment) and Phase 6 (atomic application). The concept and its structural approach are unchanged — only the stage attribution shifts. See [ADR-019](#adr-019-polish-stage-supersedes-grow-routing).
 
@@ -705,7 +705,7 @@ Key design choices:
 - [ADR-013: Branching Contract Design](https://github.com/pvliesdonk/questfoundry/blob/main/docs/architecture/decisions.md#adr-013-branching-contract-design)
 - [ADR-015: Residue Beats Replace Poly-State Prose](https://github.com/pvliesdonk/questfoundry/blob/main/docs/architecture/decisions.md#adr-015-residue-beats-replace-poly-state-prose)
 
-> **Note (2026-02-24):** [Document 3](../design/document-3-ontology.md) redefines intersections as co-occurrence groups (not cross-path `belongs_to` edges) and moves passage/choice creation to the POLISH stage. The Unified Routing Plan architecture may need redesign to account for the POLISH stage boundary. Status remains Proposed pending Document 3 convergence work. See [Issue #977](https://github.com/pvliesdonk/questfoundry/issues/977).
+> **Note (2026-02-24):** The [Story Graph Ontology](../design/story-graph-ontology.md) redefines intersections as co-occurrence groups (not cross-path `belongs_to` edges) and moves passage/choice creation to the POLISH stage. The Unified Routing Plan architecture may need redesign to account for the POLISH stage boundary. Status remains Proposed pending Story Graph Ontology convergence work. See [Issue #977](https://github.com/pvliesdonk/questfoundry/issues/977).
 >
 > **Superseded (2026-02-25):** ADR-019 supersedes this ADR. The plan-then-execute architecture is preserved but moves from GROW to the new POLISH stage. `RoutingPlan` becomes `PolishPlan`. See [ADR-019](#adr-019-polish-stage-supersedes-grow-routing).
 
@@ -830,8 +830,8 @@ ADR-017's architecture (compute a complete plan, then apply atomically) is sound
 ### Links
 
 - [Discussion #980: Design Review — GROW/POLISH Stage Boundary](https://github.com/pvliesdonk/questfoundry/discussions/980)
-- [Document 1, Part 4: Shaping the Story (POLISH)](../design/how-branching-stories-work.md)
-- [Document 3, Parts 5-6: Passage Layer and Entity Overlays](../design/document-3-ontology.md)
+- ["How Branching Stories Work", Part 4: Shaping the Story (POLISH)](../design/how-branching-stories-work.md)
+- [Story Graph Ontology, Parts 5-6: Passage Layer and Entity Overlays](../design/story-graph-ontology.md)
 - [ADR-017: Unified Routing Plan (superseded)](#adr-017-unified-routing-plan-for-grow-variant-routing)
 - [Epic #990: Converge with Documents 1 and 3](https://github.com/pvliesdonk/questfoundry/issues/990)
 

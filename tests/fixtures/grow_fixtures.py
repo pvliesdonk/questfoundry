@@ -649,7 +649,7 @@ def make_intersection_candidate_graph() -> Graph:
     # Add location data to some beats for intersection detection
     graph.update_node("beat::mentor_meet", location="location::market")
     graph.update_node("beat::artifact_discover", location="location::docks")
-    # Flexibility edge (Doc 3): beat can also occur at market
+    # Flexibility edge (Story Graph Ontology): beat can also occur at market
     graph.add_edge("flexibility", "beat::artifact_discover", "location::market", role="location")
 
     return graph

@@ -1041,7 +1041,7 @@ dilemma_analyses_prompt: |
   ## Output
   Return ONLY valid JSON with the "dilemma_analyses" array. Classify ALL dilemmas.
 
-# Section 8: Dilemma Ordering Relationships (post-prune, Doc 3)
+# Section 8: Dilemma Ordering Relationships (post-prune, Story Graph Ontology)
 dilemma_relationships_prompt: |
   You are classifying the temporal ordering between ALL dilemma pairs for a SEED stage.
 

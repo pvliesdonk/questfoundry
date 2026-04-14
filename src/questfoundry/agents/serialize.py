@@ -2274,7 +2274,7 @@ async def serialize_dilemma_relationships(
     callbacks: list[BaseCallbackHandler] | None = None,
     on_phase_progress: PhaseProgressFn | None = None,
 ) -> tuple[list[DilemmaRelationship], int, int]:
-    """Run dilemma ordering relationship analysis (Section 8, Doc 3).
+    """Run dilemma ordering relationship analysis (Section 8, Story Graph Ontology).
 
     Identifies pairwise dilemma ordering (wraps, concurrent, serial).
     Runs AFTER pruning so only surviving dilemmas are analyzed.

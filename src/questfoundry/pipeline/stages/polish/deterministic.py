@@ -174,7 +174,7 @@ async def phase_plan_computation(
     # 4b: Prose feasibility audit
     feasibility = compute_prose_feasibility(graph, plan.passage_specs)
 
-    # 4b (overlay audit): Overlay composition check (Doc 3 §6)
+    # 4b (overlay audit): Overlay composition check (Story Graph Ontology §6)
     _audit_overlay_composition(graph, plan.passage_specs, feasibility)
 
     plan.feasibility_annotations = feasibility["annotations"]
@@ -498,7 +498,7 @@ def _audit_overlay_composition(
     specs: list[PassageSpec],
     feasibility: dict[str, Any],
 ) -> None:
-    """Audit overlay composition for prose feasibility (Doc 3 §6).
+    """Audit overlay composition for prose feasibility (Story Graph Ontology §6).
 
     For each passage, checks whether any entity present in its beats could
     have 4 or more overlays simultaneously active under any single flag

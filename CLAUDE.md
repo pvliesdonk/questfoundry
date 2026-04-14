@@ -325,7 +325,7 @@ The codebase has a history of implementations that run without errors but are mi
 Before creating a PR or closing an issue that touches pipeline stages:
 
 1. **Launch the `architect-reviewer` subagent** with:
-   - The relevant design document sections (Doc 1, Doc 3, procedure docs)
+   - The relevant design document sections ("How Branching Stories Work", the Story Graph Ontology, procedure docs)
    - The implementation files being changed
    - The issue acceptance criteria (if applicable)
 

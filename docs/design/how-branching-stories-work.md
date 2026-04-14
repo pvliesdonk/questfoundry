@@ -1,6 +1,6 @@
 # How to Build a Branching Interactive Story
 
-> **Status: Authoritative.** This document, together with [Document 3](document-3-ontology.md), is the authoritative source of truth for QuestFoundry's story model. Where other design documents contradict this one, this document takes precedence. See [Issue #977](https://github.com/pvliesdonk/questfoundry/issues/977).
+> **Status: Authoritative.** This document, together with the [Story Graph Ontology](story-graph-ontology.md), is the authoritative source of truth for QuestFoundry's story model. Where other design documents contradict this one, this document takes precedence. See [Issue #977](https://github.com/pvliesdonk/questfoundry/issues/977).
 
 ## Common Language
 
@@ -70,7 +70,7 @@ The pipeline builds a branching story in stages:
 | **DRESS** | Create illustrations and reference material |
 | **SHIP** | Export to playable formats |
 
-This document explains the creative process at each stage — not the code or the technical specification, but what an author is trying to accomplish and why. For the formal graph ontology that translates these narrative concepts into a data model, see [Document 3 — Story Graph Ontology](document-3-ontology.md).
+This document explains the creative process at each stage — not the code or the technical specification, but what an author is trying to accomplish and why. For the formal graph ontology that translates these narrative concepts into a data model, see the [Story Graph Ontology](story-graph-ontology.md).
 
 ---
 
@@ -156,7 +156,7 @@ SEED also identifies which soft dilemmas can be **serial** — one resolving bef
 
 A dilemma's commit is typically a single dramatic moment — one choice that locks in the path. But a commit can also be **distributed** across multiple smaller choices that accumulate toward resolution. Instead of one visible fork, the player makes three or five smaller decisions whose collective weight determines the outcome. The player may not realize which moments mattered until the reckoning — the point where the story reflects their accumulated pattern back to them.
 
-This pattern (known in interactive fiction craft as "moral dilemma chains" or "the Witcher Principle") makes hard choices less obvious and more resistant to save-scumming, but it has significant structural implications. It is not part of the current pipeline and is documented here as a known future direction. See [Document 3](document-3-ontology.md) for a discussion of the implementation options.
+This pattern (known in interactive fiction craft as "moral dilemma chains" or "the Witcher Principle") makes hard choices less obvious and more resistant to save-scumming, but it has significant structural implications. It is not part of the current pipeline and is documented here as a known future direction. See the [Story Graph Ontology](story-graph-ontology.md) for a discussion of the implementation options.
 
 ### Convergence Sketching
 

@@ -1600,8 +1600,8 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
 
     # 14. Check arc structure: advances/reveals before commit (WARNING)
     # 15. Check arc structure: beat exists after commit (WARNING)
-    # Doc 1 Part 2: "This scaffold must be complete — the arc from beginning
-    # to end must be present."
+    # "How Branching Stories Work", Part 2: "This scaffold must be complete —
+    # the arc from beginning to end must be present."
     for path_id in sorted(path_dilemma_map.keys()):
         if path_id not in paths_with_commits:
             continue  # No commit beat; already reported as error in check 13
@@ -1833,7 +1833,7 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
             with contextlib.suppress(ValueError):
                 prefixed_location = _resolve_entity_ref(graph, raw_location)
 
-        # Resolve location_alternatives → flexibility edges (Doc 3)
+        # Resolve location_alternatives → flexibility edges (Story Graph Ontology)
         raw_location_alts = beat.get("location_alternatives", [])
         prefixed_location_alts = []
         for eid in raw_location_alts:
@@ -1876,7 +1876,7 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
             prefixed_path_id = _prefix_id("path", raw_path_id)
             graph.add_edge("belongs_to", beat_id, prefixed_path_id)
 
-        # Create flexibility edges for location alternatives (Doc 3)
+        # Create flexibility edges for location alternatives (Story Graph Ontology)
         for alt_entity in prefixed_location_alts:
             graph.add_edge("flexibility", beat_id, alt_entity, role="location")
 
@@ -1915,7 +1915,7 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
                     update_fields[key] = data[key]
             graph.update_node(dilemma_node_id, **update_fields)
 
-    # Create dilemma ordering edges between dilemma pairs (Doc 3, Part 2)
+    # Create dilemma ordering edges between dilemma pairs (Story Graph Ontology, Part 2)
     for relationship in output.get("dilemma_relationships", []):
         a_raw = relationship.get("dilemma_a", "")
         b_raw = relationship.get("dilemma_b", "")

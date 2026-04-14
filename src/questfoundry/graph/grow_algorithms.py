@@ -1444,7 +1444,7 @@ def _group_by_location(
         primary = beat_data.get("location")
         if primary:
             location_beats[primary].append(beat_id)
-        # Read flexibility edges (Doc 3) instead of location_alternatives property.
+        # Read flexibility edges (Story Graph Ontology) instead of location_alternatives property.
         # NOTE: No role filter applied — currently only role="location" flexibility
         # edges exist (written by mutations.py). If other roles are added (e.g.,
         # role="entity"), this query must filter by role="location".
@@ -1923,7 +1923,7 @@ def resolve_intersection_location(graph: Graph, beat_ids: list[str]) -> str | No
         locs = set()
         if primary:
             locs.add(primary)
-        # Read flexibility edges (Doc 3) instead of location_alternatives property
+        # Read flexibility edges (Story Graph Ontology) instead of location_alternatives property
         for edge in graph.get_edges(from_id=bid, edge_type="flexibility"):
             locs.add(edge["to"])
         all_locations.append(locs)
@@ -1957,7 +1957,7 @@ def apply_intersection_mark(
     shared_entities: list[str] | None = None,
     rationale: str | None = None,
 ) -> None:
-    """Mark beats as co-occurring in an intersection group (Doc 3, Part 4).
+    """Mark beats as co-occurring in an intersection group (Story Graph Ontology, Part 4).
 
     Creates an ``intersection_group`` node and links each participating
     beat to it via ``intersection`` edges.  Each beat keeps its single
