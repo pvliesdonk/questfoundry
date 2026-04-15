@@ -212,6 +212,7 @@ Beyond the global GitHub workflow rules, these are project-specific:
 - **Removal issues MUST have a Verification section** with grep/shell commands confirming the old code is gone, AND test updates asserting the new expected state. Run verification before closing.
 - **Separate add from remove** — never bundle "add feature X" and "remove old feature Y" in one issue unless the removal is < 10 lines.
 - **Epics ≤ 10 issues.** Split larger efforts into milestones. Audit completion between milestones.
+- **Every push triggers AI-bot PR review** (Gemini, Codex, claude-review), each costing real tokens (~$3 per claude-review run). **Do not push incremental work-in-progress commits.** Batch fixes locally, run tests and self-review, and only push when you are genuinely ready for another round of re-review. If you're still editing after a reviewer's comments, wait until all addressed, then one push. Rebases and force-pushes count — think before every `git push`.
 
 ### File Organization
 
