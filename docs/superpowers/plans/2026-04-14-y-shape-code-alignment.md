@@ -63,7 +63,8 @@ Add the `also_belongs_to: str | None` field to `InitialBeat`. Update the class d
 - `InitialBeat(beat_id="b1", summary="s", path_id="p_a", also_belongs_to="p_b")` constructs a pre-commit beat.
 - `InitialBeat(..., path_id="p_a", also_belongs_to="p_a")` raises `ValueError`.
 - Legacy `paths: ["p_a"]` migrates to `path_id="p_a"`, `also_belongs_to=None` with a `DeprecationWarning`.
-- Legacy `paths: ["p_a", "p_b"]` is explicitly rejected with a message pointing at `also_belongs_to`.
+- Legacy `paths: ["p_a", "p_b"]` migrates to `path_id="p_a"`, `also_belongs_to="p_b"` with a `DeprecationWarning` (unambiguous Y-shape intent — two entries map directly to the dual-membership schema).
+- Legacy `paths` with 3+ entries raises `ValueError("at most 2 entries — use path_id + also_belongs_to")`.
 - No change to `SeedOutput.initial_beats: list[InitialBeat]` type signature (only field-level addition).
 - All existing unit tests in `tests/unit/test_seed_models.py` pass unchanged.
 - `architect-reviewer` sign-off with 0 MISSING/DEAD findings against Doc 3 §849–855 (Missing: Temporal Hints / InitialBeat.paths — Same-Dilemma Dual belongs_to).
@@ -1456,10 +1457,10 @@ def test_collapse_chain_does_not_join_shared_with_post_commit(
 ) -> None:
     """A shared pre-commit beat cannot collapse into a post-commit passage."""
     from questfoundry.graph.graph import Graph
-    from questfoundry.pipeline.stages.polish.deterministic import group_beats_into_passages
+    from questfoundry.pipeline.stages.polish.deterministic import compute_beat_grouping
 
     graph = _build_y_shape_for_collapse(tmp_path)
-    specs = group_beats_into_passages(graph)
+    specs = compute_beat_grouping(graph)
 
     # Find the spec containing shared_setup and the spec containing commit_a.
     shared_spec = next(s for s in specs if "beat::shared_setup" in s.beat_ids)
@@ -1684,7 +1685,7 @@ Replace the "N beats per path" framing with a Y-shape structure. **Recommended a
 Justification for two-call over single-unified:
 - **Small-model friendly.** qwen3:4b-instruct-32k handles one task per prompt reliably; "generate N shared beats AND M per-path beats, labelling each correctly" is cognitive overload and causes mislabelling. CLAUDE.md §10 "Small Model Prompt Bias" says fix the prompt before blaming the model.
 - **Error surface is smaller per call.** A single call producing both kinds needs to be correct on both axes; two calls let each call fail independently and repair independently.
-- **Schema is simpler per call.** Shared call: no `also_belongs_to` (the mutation layer sets it from the dilemma context). Per-path call: no `also_belongs_to`. Both use `InitialBeat` but the pipeline merges them post-hoc.
+- **Schema is simpler per call.** Shared call: model outputs `also_belongs_to` = the sibling path (required for Y-shape multi-membership). Per-path call: `also_belongs_to` is null (single-membership). Both use `InitialBeat` but the pipeline merges them post-hoc.
 - **Validation is sharper.** Each call has a tight invariant: "shared call beats MUST have `effect != commits`"; "per-path call beats MUST have `effect == commits` in exactly one beat per path".
 
 Cost: ~2x tokens in the serialize phase. Acceptable for correctness; existing implementations already run SEED multiple times due to validation repair loops.
@@ -1702,6 +1703,183 @@ Update all five prompts (discuss_seed.yaml, summarize_seed.yaml, summarize_seed_
 - `architect-reviewer` sign-off with 0 MISSING/DEAD findings against `docs/design/procedures/seed.md` Phase 3 and Doc 3 §8 guard rails 1 and 2.
 
 ### Tasks
+
+---
+
+### Task 4.0: Add Y-shape size variables to `size.py` and wire them into `serialize.py`
+
+**Files:**
+- Modify: `src/questfoundry/pipeline/size.py:24-85, 86-187, 234-259`
+- Modify: `src/questfoundry/agents/serialize.py:1729-1734`
+- Modify: `tests/unit/test_size.py`
+
+The two new prompt keys (`shared_beats_prompt`, `per_path_beats_prompt`) reference
+`{size_shared_beats_per_dilemma}` and `{size_post_commit_beats_per_path}` respectively.
+Those variables must exist in `size_template_vars()` and must be injected before the
+prompts are used in Task 4.2.
+
+- [ ] **Step 1: Write the failing tests**
+
+Add to `tests/unit/test_size.py` inside `TestSizeProfile`:
+
+```python
+def test_standard_has_y_shape_beat_fields(self) -> None:
+    s = get_size_profile("standard")
+    assert s.shared_beats_per_dilemma_min == 1
+    assert s.shared_beats_per_dilemma_max == 2
+    assert s.post_commit_beats_per_path_min == 2
+    assert s.post_commit_beats_per_path_max == 3
+
+def test_all_presets_have_consistent_y_shape_ranges(self) -> None:
+    for name, profile in PRESETS.items():
+        for prefix in ("shared_beats_per_dilemma", "post_commit_beats_per_path"):
+            lo = getattr(profile, f"{prefix}_min")
+            hi = getattr(profile, f"{prefix}_max")
+            assert lo <= hi, f"{name}.{prefix}: {lo} > {hi}"
+```
+
+Replace the `test_all_expected_keys_present` body in `TestSizeTemplateVars`:
+
+```python
+def test_all_expected_keys_present(self) -> None:
+    vars_ = size_template_vars()
+    expected = {
+        "size_characters",
+        "size_locations",
+        "size_objects",
+        "size_dilemmas",
+        "size_entities",
+        "size_beats_per_path",
+        "size_shared_beats_per_dilemma",
+        "size_post_commit_beats_per_path",
+        "size_convergence_points",
+        "size_est_passages",
+        "size_est_words",
+        "size_tone_words",
+        "size_preset",
+    }
+    assert set(vars_.keys()) == expected
+
+def test_standard_y_shape_template_vars(self) -> None:
+    profile = get_size_profile("standard")
+    vars_ = size_template_vars(profile)
+    assert vars_["size_shared_beats_per_dilemma"] == "1-2"
+    assert vars_["size_post_commit_beats_per_path"] == "2-3"
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+```bash
+uv run pytest tests/unit/test_size.py -x -q
+```
+
+Expected: FAIL — `SizeProfile` has no attribute `shared_beats_per_dilemma_min`.
+
+- [ ] **Step 3: Add the new fields to `SizeProfile`**
+
+In `src/questfoundry/pipeline/size.py`, add two pairs of fields inside the `SizeProfile`
+dataclass after the existing `beats_per_path_min/max` fields (around line 54):
+
+```python
+    # Beat structure
+    beats_per_path_min: int
+    beats_per_path_max: int
+    # Y-shape beat structure (shared pre-commit + per-path post-commit)
+    shared_beats_per_dilemma_min: int
+    shared_beats_per_dilemma_max: int
+    post_commit_beats_per_path_min: int
+    post_commit_beats_per_path_max: int
+    convergence_points_min: int
+    convergence_points_max: int
+```
+
+- [ ] **Step 4: Fill values in all four presets**
+
+Add the four new keyword arguments to every `SizeProfile(...)` call in `PRESETS`:
+
+```python
+# vignette
+shared_beats_per_dilemma_min=1,
+shared_beats_per_dilemma_max=1,
+post_commit_beats_per_path_min=1,
+post_commit_beats_per_path_max=2,
+
+# short
+shared_beats_per_dilemma_min=1,
+shared_beats_per_dilemma_max=2,
+post_commit_beats_per_path_min=1,
+post_commit_beats_per_path_max=2,
+
+# standard
+shared_beats_per_dilemma_min=1,
+shared_beats_per_dilemma_max=2,
+post_commit_beats_per_path_min=2,
+post_commit_beats_per_path_max=3,
+
+# long
+shared_beats_per_dilemma_min=1,
+shared_beats_per_dilemma_max=2,
+post_commit_beats_per_path_min=2,
+post_commit_beats_per_path_max=3,
+```
+
+Each block goes after `beats_per_path_max=...` in its respective `SizeProfile(...)` call.
+
+- [ ] **Step 5: Add the two new keys to `size_template_vars()`**
+
+In `size_template_vars()`, add after `"size_beats_per_path"`:
+
+```python
+        "size_shared_beats_per_dilemma": p.range_str("shared_beats_per_dilemma"),
+        "size_post_commit_beats_per_path": p.range_str("post_commit_beats_per_path"),
+```
+
+- [ ] **Step 6: Run tests to verify they pass**
+
+```bash
+uv run pytest tests/unit/test_size.py -x -q
+```
+
+Expected: all PASS.
+
+- [ ] **Step 7: Update `serialize.py` injection**
+
+Replace lines 1729–1734 in `src/questfoundry/agents/serialize.py`:
+
+```python
+    # Inject size-aware beat count ranges into beat prompts
+    size_vars = size_template_vars(size_profile)
+    beats_range = size_vars["size_beats_per_path"]
+    shared_range = size_vars["size_shared_beats_per_dilemma"]
+    post_range = size_vars["size_post_commit_beats_per_path"]
+    for key in ("beats", "per_path_beats"):
+        if key in prompts:
+            prompts[key] = prompts[key].replace("{size_beats_per_path}", beats_range)
+    if "shared_beats" in prompts:
+        prompts["shared_beats"] = prompts["shared_beats"].replace(
+            "{size_shared_beats_per_dilemma}", shared_range
+        )
+    if "per_path_beats" in prompts:
+        prompts["per_path_beats"] = prompts["per_path_beats"].replace(
+            "{size_post_commit_beats_per_path}", post_range
+        )
+```
+
+- [ ] **Step 8: Type-check and lint**
+
+```bash
+uv run mypy src/questfoundry/pipeline/size.py src/questfoundry/agents/serialize.py
+uv run ruff check src/questfoundry/pipeline/size.py src/questfoundry/agents/serialize.py
+```
+
+Expected: no errors.
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add src/questfoundry/pipeline/size.py src/questfoundry/agents/serialize.py tests/unit/test_size.py
+git commit -m "feat(size): add Y-shape shared/post-commit beat count variables"
+```
 
 ---
 
@@ -2525,7 +2703,7 @@ Per grow.md Phase 7 step 3: onto arc nodes as `convergence_policy` / `payoff_bud
 
 - [ ] **Step 3: Draft the follow-up issue body**
 
-Place in `/tmp/followup-convergence-map.md`:
+Draft the follow-up issue body (also inlined in the child issue templates section at the end of this plan):
 
 ```markdown
 # GROW: persist convergence_map to arc/dilemma nodes for POLISH consumption
@@ -2546,7 +2724,7 @@ architect-reviewer sign-off with 0 MISSING/DEAD findings against grow.md Phase 7
 Y-shape code alignment epic (this plan) must merge first — convergence detection depends on Y-shape graph structure.
 ```
 
-- [ ] **Step 4: No commit — the evaluation lives in this plan doc and the issue body file.**
+- [ ] **Step 4: No commit — the evaluation lives in this plan doc.**
 
 ---
 
@@ -2562,7 +2740,7 @@ Y-shape code alignment epic (this plan) must merge first — convergence detecti
 
 - [ ] **Step 2: Draft the follow-up issue body**
 
-Place in `/tmp/followup-soft-convergence-edges.md`:
+Draft the follow-up issue body (also inlined in the child issue templates section at the end of this plan):
 
 ```markdown
 # GROW Phase 7: create predecessor edges establishing soft-dilemma convergence topology
@@ -2594,7 +2772,7 @@ architect-reviewer sign-off with 0 MISSING/DEAD findings against Doc 3 §3 (conv
 
 ### Scope
 
-Add one end-to-end integration test that constructs a Y-shape SEED output, runs `apply_seed_mutations`, then runs POLISH Phase 4c (`compute_choice_edges` or its wrapper), and asserts >0 choice edges are created. This is the acceptance test for the whole epic.
+Add one end-to-end integration test that constructs a Y-shape SEED output, runs `apply_seed_mutations`, then calls `compute_beat_grouping` (Phase 4a) and `compute_choice_edges` (Phase 4c), and asserts `len(choice_specs) >= 2`. Note: `compute_choice_edges` returns `list[ChoiceSpec]` — it does NOT write edges to the graph. This is the acceptance test for the whole epic.
 
 Also decide on the `graph.db` migration strategy. **Recommendation: clean break.** Existing projects have intermediate graph states that were never Y-shape; trying to migrate them to Y-shape automatically would require inferring pre-commit beats from their dilemma impacts, which is not reliable. Document the break: "After this epic merges, re-run SEED on existing projects." There is no `qf migrate` subcommand to build.
 
@@ -2634,7 +2812,7 @@ from questfoundry.graph.graph import Graph
 from questfoundry.graph.mutations import apply_seed_mutations
 from questfoundry.pipeline.stages.polish.deterministic import (
     compute_choice_edges,
-    group_beats_into_passages,
+    compute_beat_grouping,
 )
 
 
@@ -2762,15 +2940,15 @@ def test_y_shape_end_to_end_polish_produces_choices(tmp_path: Path) -> None:
     graph.add_edge("predecessor", "beat::consequence_manipulator",
                    "beat::commit_trust_manipulator")
 
-    # POLISH passage grouping.
-    specs = group_beats_into_passages(graph)
+    # POLISH passage grouping (Phase 4a).
+    specs = compute_beat_grouping(graph)
 
-    # POLISH Phase 4c: choice edges.
-    compute_choice_edges(graph, specs)
+    # POLISH Phase 4c: choice edge derivation.
+    # compute_choice_edges returns ChoiceSpec objects — it does NOT write to the graph.
+    choice_specs = compute_choice_edges(graph, specs)
 
-    choice_edges = graph.get_edges(edge_type="choice")
-    assert len(choice_edges) >= 2, (
-        f"Y-shape should produce ≥2 choice edges; got {len(choice_edges)}"
+    assert len(choice_specs) >= 2, (
+        f"Y-shape should produce ≥2 choice specs; got {len(choice_specs)}"
     )
 ```
 
@@ -3048,7 +3226,7 @@ Closes after child issue 2 (mutations) merges. Can proceed in parallel with chil
 
 ```markdown
 ## Scope
-Add `tests/integration/test_y_shape_end_to_end.py` — a hand-constructed Y-shape SEED artifact flows through `apply_seed_mutations` → `group_beats_into_passages` → `compute_choice_edges`, asserting ≥2 choice edges. Document the migration stance: clean break — re-run SEED on existing projects.
+Add `tests/integration/test_y_shape_end_to_end.py` — a hand-constructed Y-shape SEED artifact flows through `apply_seed_mutations` → `compute_beat_grouping` → `compute_choice_edges`, asserting `len(choice_specs) >= 2` (note: `compute_choice_edges` returns `list[ChoiceSpec]`, it does not write to the graph). Document the migration stance: clean break — re-run SEED on existing projects.
 
 ## Plan reference
 Phase 7 of `docs/superpowers/plans/2026-04-14-y-shape-code-alignment.md`.
@@ -3068,13 +3246,50 @@ Closes after child issues 1–5 all merge.
 
 **Title:** `GROW: persist convergence_map to arc/dilemma nodes for POLISH consumption`
 
-**Body:** see `/tmp/followup-convergence-map.md` (drafted in Task 6.1).
+**Body:**
+
+```markdown
+## Problem
+`src/questfoundry/pipeline/stages/grow/deterministic.py:413` calls `find_convergence_points(...)` and logs a count but discards the result. Downstream (POLISH) has no way to know where soft dilemmas should rejoin.
+
+## Scope
+After `find_convergence_points()` returns a `dict[arc_id, ConvergenceInfo]`:
+- For each arc node: set `convergence_policy`, `payoff_budget`, `converges_at` properties from `ConvergenceInfo`.
+- For each dilemma node referenced in `dilemma_convergences`: set per-dilemma `converges_at` / `policy` / `budget` properties.
+- Add a unit test: after `phase_convergence` runs, arc and dilemma nodes carry the expected properties.
+
+## Design conformance
+architect-reviewer sign-off with 0 MISSING/DEAD findings against grow.md Phase 7.
+
+## Dependencies
+Y-shape code alignment epic must merge first — convergence detection depends on Y-shape graph structure.
+```
 
 ### Follow-up Issue B (OUT OF EPIC — file separately)
 
 **Title:** `GROW Phase 7: create predecessor edges establishing soft-dilemma convergence topology`
 
-**Body:** see `/tmp/followup-soft-convergence-edges.md` (drafted in Task 6.2).
+**Body:**
+
+```markdown
+## Problem
+Per Document 3 §3 line 219, convergence is a topological fact — a beat with predecessors from both post-commit chains of a soft dilemma. `_find_convergence_for_soft()` identifies the intended convergence point but no code creates the predecessor edges that make it real. Soft dilemmas behave identically to hard dilemmas: paths diverge and never rejoin.
+
+## Scope
+After `phase_convergence` computes `convergence_map`:
+- For each arc with `converges_at != None`:
+  - Identify the soft-dilemma's two post-commit chains.
+  - Create `predecessor` edges from the last exclusive beat of each chain to `converges_at`.
+  - Verify the resulting DAG is still acyclic.
+- Unit test: construct a fixture with two soft-dilemma paths, run `phase_convergence`, assert the DAG now has the expected predecessor edges.
+
+## Design conformance
+architect-reviewer sign-off with 0 MISSING/DEAD findings against Doc 3 §3 (convergence topology) and grow.md Phase 7.
+
+## Dependencies
+- Y-shape code alignment epic must merge first.
+- Issue "GROW: persist convergence_map to arc/dilemma nodes" (above) — these can proceed in parallel but share the `phase_convergence` function.
+```
 
 ---
 
