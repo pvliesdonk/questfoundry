@@ -765,21 +765,6 @@ def _prefix_entity_id(category: str, raw_id: str) -> str:
     return format_entity_id(category, raw_id)
 
 
-def _get_path_id_from_beat(beat: dict[str, Any]) -> str | None:
-    """Extract path ID from a beat dict, supporting both current and legacy formats.
-
-    Args:
-        beat: Beat dict with ``path_id`` (current) or ``paths`` (legacy).
-
-    Returns:
-        Raw path ID string, or None if not present.
-
-    .. deprecated::
-        Use :func:`_get_path_ids_from_beat` which supports Y-shape dual membership.
-    """
-    return beat.get("path_id") or (beat.get("paths", [None])[0] if beat.get("paths") else None)
-
-
 def _get_path_ids_from_beat(beat: dict[str, Any]) -> tuple[str, ...]:
     """Extract path IDs from a beat dict, supporting current and legacy formats.
 
