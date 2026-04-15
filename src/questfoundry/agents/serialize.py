@@ -832,12 +832,11 @@ def _build_per_path_beat_context(
     # write per-path commit/post-commit beats that continue from the shared setup.
     # Only injected when shared beats actually exist — no empty header otherwise.
     if shared_beats_by_dilemma is not None:
-        # Look up by raw dilemma name (strip prefix for lookup key)
+        # The grouping loop in serialize_seed_as_function always keys by raw
+        # (non-prefixed) dilemma ID via strip_scope_prefix, so look up with
+        # the raw form only.  No fallback needed — if empty, no beats exist.
         raw_dilemma = dilemma_id.removeprefix(f"{SCOPE_DILEMMA}::")
         dilemma_shared = shared_beats_by_dilemma.get(raw_dilemma, [])
-        if not dilemma_shared:
-            # Also try with prefix in case caller stored with prefix
-            dilemma_shared = shared_beats_by_dilemma.get(dilemma_id, [])
         if dilemma_shared:
             lines.append("")
             lines.append(
@@ -2295,7 +2294,10 @@ async def serialize_seed_as_function(
                     if impacts:
                         raw_did = strip_scope_prefix(impacts[0].get("dilemma_id", ""))
                     else:
-                        # Fall back: infer from path_id (format: path::dilemma__answer)
+                        # Fallback for LLM schema deviations: the SharedBeatsSection
+                        # validator and prompt schema normally ensure
+                        # dilemma_impacts[0] is present, but parse the dilemma from
+                        # path_id as a last resort if the LLM omits dilemma_impacts.
                         path_ref = beat.get("path_id", "")
                         raw_pid = strip_scope_prefix(path_ref)
                         # path ID format is <dilemma>__<answer>; take the dilemma part
