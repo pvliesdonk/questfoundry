@@ -228,18 +228,17 @@ consequences:
 
 LLM generates the full Y-shape beat scaffold for each dilemma (see the transition admonition at the top of this document for the complete structure):
 
-- **Shared pre-commit beats** — one chain per dilemma, introducing and developing the dramatic question. Each pre-commit beat carries a `paths` list naming *every* explored path of the dilemma, producing one `belongs_to` edge per listed path. The chain terminates at the last shared pre-commit beat, whose successors in the DAG are the per-path commit beats.
-- **Commit beat per path** — the first beat exclusive to that path, carrying `dilemma_impacts.effect: commits`. Its `paths` list names exactly one path.
-- **Post-commit beats per path** — 2–4 beats that prove the path's answer. Each names exactly one path.
+- **Shared pre-commit beats** — one chain per dilemma, introducing and developing the dramatic question. Each pre-commit beat has a `path_id` (its primary path) and an `also_belongs_to` field naming the other explored path of the dilemma, producing one `belongs_to` edge per path. The chain terminates at the last shared pre-commit beat, whose successors in the DAG are the per-path commit beats.
+- **Commit beat per path** — the first beat exclusive to that path, carrying `dilemma_impacts.effect: commits`. It has only `path_id`; `also_belongs_to` is absent or null.
+- **Post-commit beats per path** — 2–4 beats that prove the path's answer. Each has only `path_id`.
 
 ```yaml
 initial_beats:
   # Shared pre-commit beat — dual belongs_to within the dilemma
   - id: mentor_warning
     summary: "Mentor delivers cryptic warning about the investigation"
-    paths:
-      - path::mentor_trust__protector
-      - path::mentor_trust__manipulator
+    path_id: path::mentor_trust__protector
+    also_belongs_to: path::mentor_trust__manipulator
     dilemma_impacts:
       - dilemma_id: dilemma::mentor_trust
         effect: advances
@@ -251,7 +250,7 @@ initial_beats:
   # Commit beat — first beat exclusive to the protector path (singular belongs_to)
   - id: mentor_confession_protector
     summary: "Mentor reveals the protective motive behind the warnings"
-    paths: [path::mentor_trust__protector]
+    path_id: path::mentor_trust__protector
     dilemma_impacts:
       - dilemma_id: dilemma::mentor_trust
         effect: commits
