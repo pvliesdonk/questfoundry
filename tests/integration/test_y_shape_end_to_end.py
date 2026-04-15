@@ -316,3 +316,17 @@ def test_polish_produces_two_choice_specs_for_y_shape(y_shape_graph: Graph) -> N
     assert len(to_passages) >= 2, (
         f"Each answer path must lead to a distinct passage; got {to_passages}"
     )
+
+    # Verify Case B grants flow: in Y-shape, the divergence beat is the shared
+    # pre-commit beat (effect=advances) and the path_children are the per-path
+    # COMMIT beats. Their dilemma_impacts[effect=commits] should populate grants
+    # on each ChoiceSpec — this asserts the children-derived dilemma actually
+    # flows through to state-flag generation.
+    for cs in choice_specs:
+        assert cs.grants, (
+            f"ChoiceSpec {cs.from_passage} → {cs.to_passage} missing grants; "
+            "Y-shape commit beats should produce state flags"
+        )
+        assert any("trust_protector_or_manipulator" in g for g in cs.grants), (
+            f"grants {cs.grants!r} should reference the dilemma under test"
+        )
