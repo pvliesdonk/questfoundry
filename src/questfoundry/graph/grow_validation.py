@@ -32,6 +32,9 @@ __all__ = [
     "build_passage_adjacency",
     "check_dilemma_role_compliance",
     "check_dilemmas_resolved",
+    "check_no_cross_dilemma_belongs_to",
+    "check_no_dual_on_commit_beat",
+    "check_no_pre_commit_intersections",
     "check_passage_dag_cycles",
     "check_single_root_beat",
     "check_single_start",
@@ -677,6 +680,137 @@ def check_dilemma_role_compliance(graph: Graph) -> list[ValidationCheck]:
 
 
 # ---------------------------------------------------------------------------
+# Y-shape guard rail checks (Story Graph Ontology §8)
+# ---------------------------------------------------------------------------
+
+
+def check_no_cross_dilemma_belongs_to(graph: Graph) -> ValidationCheck:
+    """Guard rail 1: dual belongs_to must reference paths of the same dilemma.
+
+    Cross-dilemma dual belongs_to is a hard-convergence violation (Story Graph
+    Ontology §8 "Path Membership ≠ Scene Participation").
+    """
+    path_nodes = graph.get_nodes_by_type("path")
+    beat_nodes = graph.get_nodes_by_type("beat")
+
+    # path → dilemma map (normalized)
+    path_to_dilemma: dict[str, str] = {}
+    for pid, pdata in path_nodes.items():
+        did = pdata.get("dilemma_id")
+        if did:
+            path_to_dilemma[pid] = normalize_scoped_id(did, "dilemma")
+
+    # beat → set of paths
+    beat_paths: dict[str, set[str]] = {}
+    for e in graph.get_edges(edge_type="belongs_to"):
+        if e["from"] in beat_nodes:
+            beat_paths.setdefault(e["from"], set()).add(e["to"])
+
+    violations: list[str] = []
+    for beat_id, paths in beat_paths.items():
+        if len(paths) < 2:
+            continue
+        dilemmas = {path_to_dilemma.get(p) for p in paths}
+        dilemmas.discard(None)
+        if len(dilemmas) > 1:
+            violations.append(
+                f"{beat_id} -> {sorted(paths)} across dilemmas {sorted(d for d in dilemmas if d)}"
+            )
+
+    dual_count = sum(1 for p in beat_paths.values() if len(p) >= 2)
+    if not violations:
+        return ValidationCheck(
+            name="no_cross_dilemma_belongs_to",
+            severity="pass",
+            message=f"All {dual_count} dual-belongs_to beats are same-dilemma",
+        )
+    return ValidationCheck(
+        name="no_cross_dilemma_belongs_to",
+        severity="fail",
+        message=f"cross-dilemma dual belongs_to (guard rail 1): {'; '.join(violations[:3])}",
+    )
+
+
+def check_no_dual_on_commit_beat(graph: Graph) -> ValidationCheck:
+    """Guard rail 2: commit beats must have a single belongs_to.
+
+    A commit beat is the first beat exclusive to its path; dual membership
+    on a commit beat is structurally impossible (Story Graph Ontology §8).
+    """
+    beat_nodes = graph.get_nodes_by_type("beat")
+    beat_paths: dict[str, set[str]] = {}
+    for e in graph.get_edges(edge_type="belongs_to"):
+        if e["from"] in beat_nodes:
+            beat_paths.setdefault(e["from"], set()).add(e["to"])
+
+    violations: list[str] = []
+    for bid, pset in beat_paths.items():
+        if len(pset) < 2:
+            continue
+        impacts = beat_nodes[bid].get("dilemma_impacts", [])
+        if any(imp.get("effect") == "commits" for imp in impacts):
+            violations.append(f"{bid} commits AND has {len(pset)} belongs_to edges")
+
+    if not violations:
+        return ValidationCheck(
+            name="no_dual_on_commit_beat",
+            severity="pass",
+            message="No commit beats with dual belongs_to",
+        )
+    return ValidationCheck(
+        name="no_dual_on_commit_beat",
+        severity="fail",
+        message=f"commit beat with dual belongs_to (guard rail 2): {'; '.join(violations[:3])}",
+    )
+
+
+def check_no_pre_commit_intersections(graph: Graph) -> ValidationCheck:
+    """Guard rail 3: intersection groups must not contain two pre-commit
+    beats from the same dilemma.
+
+    Such beats already co-occur by definition (Story Graph Ontology §8);
+    declaring them as an intersection is redundant and creates false
+    structural implications.
+    """
+    beat_nodes = graph.get_nodes_by_type("beat")
+    group_nodes = graph.get_nodes_by_type("intersection_group")
+
+    _accum: dict[str, set[str]] = {}
+    for e in graph.get_edges(edge_type="belongs_to"):
+        if e["from"] in beat_nodes:
+            _accum.setdefault(e["from"], set()).add(e["to"])
+    beat_paths: dict[str, frozenset[str]] = {b: frozenset(p) for b, p in _accum.items()}
+
+    violations: list[str] = []
+    for gid, gdata in group_nodes.items():
+        beat_ids = gdata.get("beat_ids", [])
+        dual_by_pathset: dict[frozenset[str], list[str]] = {}
+        for bid in beat_ids:
+            pset = beat_paths.get(bid, frozenset())
+            if len(pset) < 2:
+                continue
+            dual_by_pathset.setdefault(pset, []).append(bid)
+        for pset, bids in dual_by_pathset.items():
+            if len(bids) >= 2:
+                violations.append(
+                    f"{gid} contains {len(bids)} pre-commit beats sharing paths "
+                    f"{sorted(pset)}: {bids}"
+                )
+
+    if not violations:
+        return ValidationCheck(
+            name="no_pre_commit_intersections",
+            severity="pass",
+            message="No intersection groups with pre-commit collisions",
+        )
+    return ValidationCheck(
+        name="no_pre_commit_intersections",
+        severity="fail",
+        message=f"pre-commit beats grouped in intersection (guard rail 3): {'; '.join(violations[:3])}",
+    )
+
+
+# ---------------------------------------------------------------------------
 # Entry points
 # ---------------------------------------------------------------------------
 
@@ -712,6 +846,9 @@ def run_grow_checks(graph: Graph) -> ValidationReport:
         check_passage_dag_cycles(graph),
         check_spine_arc_exists(graph),
         check_dilemmas_resolved(graph),
+        check_no_cross_dilemma_belongs_to(graph),
+        check_no_dual_on_commit_beat(graph),
+        check_no_pre_commit_intersections(graph),
     ]
     checks.extend(check_dilemma_role_compliance(graph))
     return ValidationReport(checks=checks)

@@ -1051,3 +1051,243 @@ class TestSingleRootBeat:
             f"Synthetic beats should be excluded, got: {result.message}"
         )
         assert "beat::real_root" in result.message
+
+
+# ---------------------------------------------------------------------------
+# Y-shape guard rail test helpers
+# ---------------------------------------------------------------------------
+
+
+def _build_valid_y_shape() -> Graph:
+    """Build a minimal Y-shape graph: two paths from the same dilemma,
+    with one shared pre-commit beat (dual belongs_to) and one commit beat
+    per path (single belongs_to). Used by guard rail 1 and 3 tests.
+    """
+    graph = Graph.empty()
+    graph.create_node("dilemma::d1", {"type": "dilemma", "raw_id": "d1"})
+    graph.create_node(
+        "path::d1_a",
+        {"type": "path", "raw_id": "d1_a", "dilemma_id": "dilemma::d1", "is_canonical": True},
+    )
+    graph.create_node(
+        "path::d1_b",
+        {"type": "path", "raw_id": "d1_b", "dilemma_id": "dilemma::d1", "is_canonical": False},
+    )
+    # Pre-commit beat: shared (dual belongs_to, same dilemma)
+    graph.create_node("beat::shared", {"type": "beat", "raw_id": "shared", "dilemma_impacts": []})
+    graph.add_edge("belongs_to", "beat::shared", "path::d1_a")
+    graph.add_edge("belongs_to", "beat::shared", "path::d1_b")
+    # Commit beats: one per path (single belongs_to, effect==commits)
+    graph.create_node(
+        "beat::commit_a",
+        {
+            "type": "beat",
+            "raw_id": "commit_a",
+            "dilemma_impacts": [{"dilemma_id": "dilemma::d1", "effect": "commits"}],
+        },
+    )
+    graph.add_edge("belongs_to", "beat::commit_a", "path::d1_a")
+    graph.create_node(
+        "beat::commit_b",
+        {
+            "type": "beat",
+            "raw_id": "commit_b",
+            "dilemma_impacts": [{"dilemma_id": "dilemma::d1", "effect": "commits"}],
+        },
+    )
+    graph.add_edge("belongs_to", "beat::commit_b", "path::d1_b")
+    return graph
+
+
+def _build_cross_dilemma_dual() -> Graph:
+    """Build a graph where one beat has belongs_to pointing at paths from two
+    different dilemmas — a guard rail 1 violation.
+    """
+    graph = Graph.empty()
+    graph.create_node("dilemma::d1", {"type": "dilemma", "raw_id": "d1"})
+    graph.create_node("dilemma::d2", {"type": "dilemma", "raw_id": "d2"})
+    graph.create_node(
+        "path::d1_a",
+        {"type": "path", "raw_id": "d1_a", "dilemma_id": "dilemma::d1"},
+    )
+    graph.create_node(
+        "path::d2_a",
+        {"type": "path", "raw_id": "d2_a", "dilemma_id": "dilemma::d2"},
+    )
+    # Beat points to paths from two different dilemmas — the violation.
+    graph.create_node(
+        "beat::bad",
+        {"type": "beat", "raw_id": "bad", "dilemma_impacts": []},
+    )
+    graph.add_edge("belongs_to", "beat::bad", "path::d1_a")
+    graph.add_edge("belongs_to", "beat::bad", "path::d2_a")
+    return graph
+
+
+# ---------------------------------------------------------------------------
+# Guard rail 1: check_no_cross_dilemma_belongs_to
+# ---------------------------------------------------------------------------
+
+
+class TestCheckNoCrossDilemmaBelongsTo:
+    def test_passes_for_valid_y_shape(self) -> None:
+        from questfoundry.graph.grow_validation import check_no_cross_dilemma_belongs_to
+
+        graph = _build_valid_y_shape()
+        check = check_no_cross_dilemma_belongs_to(graph)
+        assert check.severity == "pass"
+
+    def test_fails_for_cross_dilemma(self) -> None:
+        from questfoundry.graph.grow_validation import check_no_cross_dilemma_belongs_to
+
+        graph = _build_cross_dilemma_dual()
+        check = check_no_cross_dilemma_belongs_to(graph)
+        assert check.severity == "fail"
+        assert "cross-dilemma" in check.message
+
+    def test_passes_for_empty_graph(self) -> None:
+        from questfoundry.graph.grow_validation import check_no_cross_dilemma_belongs_to
+
+        graph = Graph.empty()
+        check = check_no_cross_dilemma_belongs_to(graph)
+        assert check.severity == "pass"
+
+    def test_passes_for_single_belongs_to_beats(self) -> None:
+        """Beats with a single belongs_to never trigger the cross-dilemma check."""
+        from questfoundry.graph.grow_validation import check_no_cross_dilemma_belongs_to
+
+        graph = Graph.empty()
+        graph.create_node("dilemma::d1", {"type": "dilemma", "raw_id": "d1"})
+        graph.create_node(
+            "path::d1_a", {"type": "path", "raw_id": "d1_a", "dilemma_id": "dilemma::d1"}
+        )
+        graph.create_node("beat::b1", {"type": "beat", "raw_id": "b1"})
+        graph.add_edge("belongs_to", "beat::b1", "path::d1_a")
+        check = check_no_cross_dilemma_belongs_to(graph)
+        assert check.severity == "pass"
+
+
+# ---------------------------------------------------------------------------
+# Guard rail 2: check_no_dual_on_commit_beat
+# ---------------------------------------------------------------------------
+
+
+class TestCheckNoDualOnCommitBeat:
+    def test_fails_when_commit_has_dual(self) -> None:
+        from questfoundry.graph.grow_validation import check_no_dual_on_commit_beat
+
+        graph = Graph.empty()
+        graph.create_node("path::a", {"type": "path", "dilemma_id": "d"})
+        graph.create_node("path::b", {"type": "path", "dilemma_id": "d"})
+        graph.create_node(
+            "beat::bad_commit",
+            {
+                "type": "beat",
+                "dilemma_impacts": [{"dilemma_id": "d", "effect": "commits"}],
+            },
+        )
+        graph.add_edge("belongs_to", "beat::bad_commit", "path::a")
+        graph.add_edge("belongs_to", "beat::bad_commit", "path::b")
+
+        check = check_no_dual_on_commit_beat(graph)
+        assert check.severity == "fail"
+        assert "commit beat" in check.message
+
+    def test_passes_for_valid_y_shape(self) -> None:
+        """In a valid Y-shape, commit beats have single belongs_to."""
+        from questfoundry.graph.grow_validation import check_no_dual_on_commit_beat
+
+        graph = _build_valid_y_shape()
+        check = check_no_dual_on_commit_beat(graph)
+        assert check.severity == "pass"
+
+    def test_passes_for_pre_commit_dual(self) -> None:
+        """Pre-commit (non-commit) beats are allowed to have dual belongs_to."""
+        from questfoundry.graph.grow_validation import check_no_dual_on_commit_beat
+
+        graph = Graph.empty()
+        graph.create_node("path::a", {"type": "path", "dilemma_id": "d"})
+        graph.create_node("path::b", {"type": "path", "dilemma_id": "d"})
+        # No effect=="commits" in dilemma_impacts -> pre-commit beat
+        graph.create_node(
+            "beat::pre",
+            {"type": "beat", "dilemma_impacts": [{"dilemma_id": "d", "effect": "explores"}]},
+        )
+        graph.add_edge("belongs_to", "beat::pre", "path::a")
+        graph.add_edge("belongs_to", "beat::pre", "path::b")
+
+        check = check_no_dual_on_commit_beat(graph)
+        assert check.severity == "pass"
+
+    def test_passes_for_empty_graph(self) -> None:
+        from questfoundry.graph.grow_validation import check_no_dual_on_commit_beat
+
+        graph = Graph.empty()
+        check = check_no_dual_on_commit_beat(graph)
+        assert check.severity == "pass"
+
+
+# ---------------------------------------------------------------------------
+# Guard rail 3: check_no_pre_commit_intersections
+# ---------------------------------------------------------------------------
+
+
+class TestCheckNoPreCommitIntersections:
+    def test_fails_when_group_has_two_shared(self) -> None:
+        from questfoundry.graph.grow_validation import check_no_pre_commit_intersections
+
+        graph = Graph.empty()
+        graph.create_node("path::a", {"type": "path", "dilemma_id": "d"})
+        graph.create_node("path::b", {"type": "path", "dilemma_id": "d"})
+        graph.create_node("beat::s1", {"type": "beat", "dilemma_impacts": []})
+        graph.create_node("beat::s2", {"type": "beat", "dilemma_impacts": []})
+        graph.add_edge("belongs_to", "beat::s1", "path::a")
+        graph.add_edge("belongs_to", "beat::s1", "path::b")
+        graph.add_edge("belongs_to", "beat::s2", "path::a")
+        graph.add_edge("belongs_to", "beat::s2", "path::b")
+        graph.create_node(
+            "intersection_group::bad",
+            {"type": "intersection_group", "beat_ids": ["beat::s1", "beat::s2"]},
+        )
+
+        check = check_no_pre_commit_intersections(graph)
+        assert check.severity == "fail"
+        assert "pre-commit" in check.message
+
+    def test_passes_for_valid_y_shape(self) -> None:
+        """No intersection groups in a basic Y-shape -> passes."""
+        from questfoundry.graph.grow_validation import check_no_pre_commit_intersections
+
+        graph = _build_valid_y_shape()
+        check = check_no_pre_commit_intersections(graph)
+        assert check.severity == "pass"
+
+    def test_passes_when_group_has_one_shared_beat(self) -> None:
+        """A group with only one shared pre-commit beat is valid (cross-dilemma intersection)."""
+        from questfoundry.graph.grow_validation import check_no_pre_commit_intersections
+
+        graph = Graph.empty()
+        graph.create_node("path::a", {"type": "path", "dilemma_id": "d1"})
+        graph.create_node("path::b", {"type": "path", "dilemma_id": "d1"})
+        graph.create_node("path::c", {"type": "path", "dilemma_id": "d2"})
+        graph.create_node("beat::s1", {"type": "beat", "dilemma_impacts": []})
+        graph.create_node("beat::s2", {"type": "beat", "dilemma_impacts": []})
+        # s1 is pre-commit from d1 (dual), s2 is pre-commit from d2 (single)
+        graph.add_edge("belongs_to", "beat::s1", "path::a")
+        graph.add_edge("belongs_to", "beat::s1", "path::b")
+        graph.add_edge("belongs_to", "beat::s2", "path::c")
+        # Group containing one dual and one single -> only 1 dual per path-set -> pass
+        graph.create_node(
+            "intersection_group::ok",
+            {"type": "intersection_group", "beat_ids": ["beat::s1", "beat::s2"]},
+        )
+
+        check = check_no_pre_commit_intersections(graph)
+        assert check.severity == "pass"
+
+    def test_passes_for_empty_graph(self) -> None:
+        from questfoundry.graph.grow_validation import check_no_pre_commit_intersections
+
+        graph = Graph.empty()
+        check = check_no_pre_commit_intersections(graph)
+        assert check.severity == "pass"
