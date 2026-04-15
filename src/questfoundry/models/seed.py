@@ -272,6 +272,7 @@ class InitialBeat(BaseModel):
     )
     also_belongs_to: str | None = Field(
         default=None,
+        min_length=1,
         description=(
             "Sibling path for pre-commit (Y-shape) beats: creates a second "
             "belongs_to edge. Must be null for post-commit beats. Must "

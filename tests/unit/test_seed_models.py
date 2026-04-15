@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from typing import ClassVar
 
 import pytest
@@ -1010,8 +1011,6 @@ class TestInitialBeatPathId:
 
 def test_initial_beat_pre_commit_dual_belongs_to() -> None:
     """Pre-commit beats carry ``also_belongs_to`` pointing at the sibling path."""
-    from questfoundry.models.seed import InitialBeat
-
     beat = InitialBeat(
         beat_id="b1",
         summary="Shared setup before the fork.",
@@ -1024,8 +1023,6 @@ def test_initial_beat_pre_commit_dual_belongs_to() -> None:
 
 def test_initial_beat_post_commit_single_belongs_to_default() -> None:
     """Post-commit beats default to ``also_belongs_to = None``."""
-    from questfoundry.models.seed import InitialBeat
-
     beat = InitialBeat(
         beat_id="b1",
         summary="Payoff beat.",
@@ -1036,11 +1033,7 @@ def test_initial_beat_post_commit_single_belongs_to_default() -> None:
 
 def test_initial_beat_also_belongs_to_equal_path_id_is_rejected() -> None:
     """``also_belongs_to`` must differ from ``path_id`` — dual membership needs two paths."""
-    import pytest
-
-    from questfoundry.models.seed import InitialBeat
-
-    with pytest.raises(ValueError, match="also_belongs_to must differ from path_id"):
+    with pytest.raises(ValidationError, match="also_belongs_to must differ from path_id"):
         InitialBeat(
             beat_id="b1",
             summary="Broken dual.",
@@ -1051,10 +1044,6 @@ def test_initial_beat_also_belongs_to_equal_path_id_is_rejected() -> None:
 
 def test_initial_beat_legacy_paths_two_elements_becomes_dual() -> None:
     """Legacy ``paths: [p_a, p_b]`` migrates to Y-shape dual membership."""
-    import warnings
-
-    from questfoundry.models.seed import InitialBeat
-
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         beat = InitialBeat(
@@ -1070,13 +1059,19 @@ def test_initial_beat_legacy_paths_two_elements_becomes_dual() -> None:
 
 def test_initial_beat_legacy_paths_three_elements_is_rejected() -> None:
     """A list of three or more paths is a schema error — not a migration target."""
-    import pytest
-
-    from questfoundry.models.seed import InitialBeat
-
-    with pytest.raises(ValueError, match="at most 2 entries"):
+    with pytest.raises(ValidationError, match="at most 2 entries"):
         InitialBeat(
             beat_id="b1",
             summary="Bad.",
             paths=["p_a", "p_b", "p_c"],
+        )
+
+
+def test_initial_beat_also_belongs_to_empty_string_is_rejected() -> None:
+    with pytest.raises(ValidationError):
+        InitialBeat(
+            beat_id="b1",
+            summary="Test.",
+            path_id="path::trust__protector",
+            also_belongs_to="",
         )
