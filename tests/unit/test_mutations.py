@@ -5565,3 +5565,138 @@ def test_apply_seed_mutations_emits_dual_belongs_to_for_pre_commit_beat() -> Non
         "path::trust_protector_or_manipulator__protector",
         "path::trust_protector_or_manipulator__manipulator",
     }
+
+
+# ---------------------------------------------------------------------------
+# Task 2.4: guard rail 1 - cross-dilemma dual belongs_to is forbidden
+# ---------------------------------------------------------------------------
+
+
+def test_apply_seed_mutations_rejects_cross_dilemma_dual_belongs_to() -> None:
+    """Guard rail 1: pre-commit beats must share a dilemma across both paths."""
+    from questfoundry.graph.mutations import apply_seed_mutations
+
+    graph = _two_dilemma_graph()
+    seed = _two_dilemma_seed_output(
+        initial_beats=[
+            {
+                "beat_id": "bad_dual",
+                "summary": "Cross-dilemma.",
+                "path_id": "dilemma_a__answer_a1",
+                "also_belongs_to": "dilemma_b__answer_b1",
+                "dilemma_impacts": [
+                    {"dilemma_id": "dilemma_a", "effect": "advances", "note": "x"},
+                ],
+            },
+            # Still need commits beats for validation to pass other checks.
+            {
+                "beat_id": "commit_a",
+                "summary": "Dilemma A commits.",
+                "path_id": "dilemma_a__answer_a1",
+                "dilemma_impacts": [{"dilemma_id": "dilemma_a", "effect": "commits", "note": "x"}],
+            },
+            {
+                "beat_id": "post_a",
+                "summary": "Dilemma A aftermath.",
+                "path_id": "dilemma_a__answer_a1",
+                "dilemma_impacts": [{"dilemma_id": "dilemma_a", "effect": "advances", "note": "x"}],
+            },
+            {
+                "beat_id": "commit_b",
+                "summary": "Dilemma B commits.",
+                "path_id": "dilemma_b__answer_b1",
+                "dilemma_impacts": [{"dilemma_id": "dilemma_b", "effect": "commits", "note": "x"}],
+            },
+            {
+                "beat_id": "post_b",
+                "summary": "Dilemma B aftermath.",
+                "path_id": "dilemma_b__answer_b1",
+                "dilemma_impacts": [{"dilemma_id": "dilemma_b", "effect": "advances", "note": "x"}],
+            },
+        ]
+    )
+
+    with pytest.raises(ValueError, match="cross-dilemma dual belongs_to"):
+        apply_seed_mutations(graph, seed)
+
+
+# ---------------------------------------------------------------------------
+# Task 2.5: guard rail 2 - commit beats must be single-membership
+# ---------------------------------------------------------------------------
+
+
+def test_apply_seed_mutations_rejects_dual_on_commit_beat() -> None:
+    """Guard rail 2: a beat with ``effect=commits`` must have only one belongs_to."""
+    from questfoundry.graph.mutations import apply_seed_mutations
+
+    graph = _trust_graph()
+    # Provide valid commit beats for each path (so validation passes),
+    # then the bad_commit beat with dual membership + commits effect hits guard rail 2.
+    seed = _trust_seed_output(
+        initial_beats=[
+            {
+                "beat_id": "bad_commit",
+                "summary": "A commit beat cannot be pre-commit.",
+                "path_id": "trust_protector_or_manipulator__protector",
+                "also_belongs_to": "trust_protector_or_manipulator__manipulator",
+                "dilemma_impacts": [
+                    {
+                        "dilemma_id": "trust_protector_or_manipulator",
+                        "effect": "commits",
+                        "note": "Bad: commit with dual.",
+                    },
+                ],
+            },
+            # Valid single-membership commit beats so the per-path validation passes.
+            {
+                "beat_id": "commit_protector",
+                "summary": "Protector commits.",
+                "path_id": "trust_protector_or_manipulator__protector",
+                "dilemma_impacts": [
+                    {
+                        "dilemma_id": "trust_protector_or_manipulator",
+                        "effect": "commits",
+                        "note": "locked",
+                    }
+                ],
+            },
+            {
+                "beat_id": "post_protector",
+                "summary": "Protector aftermath.",
+                "path_id": "trust_protector_or_manipulator__protector",
+                "dilemma_impacts": [
+                    {
+                        "dilemma_id": "trust_protector_or_manipulator",
+                        "effect": "advances",
+                        "note": "fallout",
+                    }
+                ],
+            },
+            {
+                "beat_id": "commit_manipulator",
+                "summary": "Manipulator commits.",
+                "path_id": "trust_protector_or_manipulator__manipulator",
+                "dilemma_impacts": [
+                    {
+                        "dilemma_id": "trust_protector_or_manipulator",
+                        "effect": "commits",
+                        "note": "locked",
+                    }
+                ],
+            },
+            {
+                "beat_id": "post_manipulator",
+                "summary": "Manipulator aftermath.",
+                "path_id": "trust_protector_or_manipulator__manipulator",
+                "dilemma_impacts": [
+                    {
+                        "dilemma_id": "trust_protector_or_manipulator",
+                        "effect": "advances",
+                        "note": "fallout",
+                    }
+                ],
+            },
+        ]
+    )
+    with pytest.raises(ValueError, match="guard rail 2"):
+        apply_seed_mutations(graph, seed)

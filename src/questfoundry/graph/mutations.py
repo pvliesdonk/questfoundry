@@ -1851,6 +1851,14 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
         if prefixed_path_id and graph.has_node(prefixed_path_id):
             graph.add_edge("has_consequence", prefixed_path_id, consequence_id)
 
+    # Build a raw path -> dilemma map for guard-rail 1 enforcement.
+    _path_to_dilemma: dict[str, str] = {}
+    for p in output.get("paths", []):
+        pid = p.get("path_id")
+        did = p.get("dilemma_id")
+        if pid and did:
+            _path_to_dilemma[pid] = did
+
     # Create initial beats
     for i, beat in enumerate(output.get("initial_beats", [])):
         raw_id = _require_field(beat, "beat_id", f"Beat at index {i}")
@@ -1910,6 +1918,35 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
         # Link beat to its path(s). Post-commit beats emit one belongs_to;
         # pre-commit (Y-shape) beats with ``also_belongs_to`` emit two.
         raw_path_ids = _get_path_ids_from_beat(beat)
+
+        # Guard rail 1 (Story Graph Ontology §8 "Path Membership"):
+        # dual belongs_to must reference paths of the same dilemma.
+        if len(raw_path_ids) == 2:
+            d0 = _path_to_dilemma.get(raw_path_ids[0])
+            d1 = _path_to_dilemma.get(raw_path_ids[1])
+            if d0 is None or d1 is None or d0 != d1:
+                msg = (
+                    "cross-dilemma dual belongs_to is forbidden (guard rail 1). "
+                    f"Beat {raw_id!r} has path_id={raw_path_ids[0]!r} (dilemma={d0!r}) and "
+                    f"also_belongs_to={raw_path_ids[1]!r} (dilemma={d1!r})."
+                )
+                raise ValueError(msg)
+
+        # Guard rail 2: commit beats are single-membership. A commit beat is
+        # the first beat exclusive to its path - it cannot also belong to the
+        # sibling path.
+        if len(raw_path_ids) == 2:
+            has_commit = any(
+                imp.get("effect") == "commits" for imp in beat.get("dilemma_impacts", [])
+            )
+            if has_commit:
+                msg = (
+                    "guard rail 2: a beat with effect=commits must have a single "
+                    f"belongs_to (no also_belongs_to). Beat {raw_id!r} has both "
+                    f"a commits impact and also_belongs_to={raw_path_ids[1]!r}."
+                )
+                raise ValueError(msg)
+
         for raw_path_id in raw_path_ids:
             prefixed_path_id = _prefix_id("path", raw_path_id)
             graph.add_edge("belongs_to", beat_id, prefixed_path_id)
