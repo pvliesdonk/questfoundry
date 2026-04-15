@@ -537,15 +537,6 @@ def _check_divergences_have_choices(
     for beat_id, children in children_by_beat.items():
         if len(children) < 2:
             continue
-        # Children sit on different path sets if the UNION of their path
-        # memberships spans more than one distinct path. Under Y-shape, a
-        # pre-commit child has 2 paths and a post-commit child has 1; a
-        # genuine fork has ≥2 distinct paths across children.
-        child_paths: set[str] = set()
-        for c in children:
-            child_paths.update(beat_to_paths.get(c, frozenset()))
-        if len(child_paths) < 2:
-            continue
         # Exclude the non-divergence case: a pre-commit parent with a single
         # pre-commit child (shared-beat chain) — both have the same dual path
         # set. Only a parent whose children have DIFFERING single-membership
