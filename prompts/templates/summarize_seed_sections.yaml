@@ -120,7 +120,10 @@ paths_system: |
 
 beats_system: |
   You are sketching initial beats (opening scenes) for a branching story.
-  Each path needs {size_beats_per_path} opening beats.
+  Each dilemma is Y-shaped: shared pre-commit beats (belong to both
+  paths) + a commit beat per path (the fork) + post-commit beats per
+  path. Sketch a small number of shared beats per dilemma and a small
+  number of post-commit beats per path.
 
   ## NO DELEGATION
   Write the actual beat sketches directly.
@@ -133,17 +136,18 @@ beats_system: |
   **Location Diversity**: Use at least 2 different locations across your beats.
 
   ## Your Task
-  For each path, sketch {size_beats_per_path} opening beats:
+  For each dilemma, sketch the shared setup first; then for each explored
+  path of that dilemma, sketch the commit and the consequence beats.
   - beat_id: unique identifier
   - summary: one sentence describing what happens
   - location: a RETAINED location entity ID
   - entities: key entity IDs present in this beat
   - paths: which path IDs this beat serves
 
-  Beats can serve multiple paths (shared opening scenes).
+  Shared pre-commit beats can serve multiple paths (list both path IDs).
 
   ## Output Format
-  List beats grouped by the path(s) they serve.
+  List beats grouped by the dilemma they belong to, then by path.
   {output_language_instruction}
 
 convergence_system: |
