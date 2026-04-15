@@ -62,7 +62,9 @@ Each dilemma also carries a **role** and associated structural properties, discu
 
 One possible response to a dilemma. Exactly two per dilemma, linked by `has_answer` edges. Each answer has a description of what this response means narratively.
 
-One answer per dilemma is marked **canonical** — this is the first answer explored when FILL writes prose along its first complete arc. Canonical does not mean primary, default, or more important. It is an authoring convenience: the first path written establishes shared passages, and other paths write toward them. Every answer is narratively equal.
+One answer per dilemma is marked **canonical** — this is the first answer explored when FILL writes prose along its first complete arc. Canonical does not mean primary, default, or more important. Every answer is **narratively equal**: the player choosing the non-canonical answer experiences a story of equivalent depth and weight.
+
+Canonical is, however, **operationally privileged**: FILL writes the canonical arc first, and that arc's prose for shared passages becomes the established text. Other arcs' prose at convergence points must be consistent with that text — a non-canonical arc cannot rewrite a shared passage's content, only contribute its own variants (where applicable) and any non-shared passages it requires. This privilege is operational (a writing-order convenience), not narrative (the canonical answer is not better, more important, or more "right").
 
 **Working.** Consumed by SEED when creating paths.
 
@@ -178,7 +180,7 @@ Dilemmas interact with each other. SEED declares these pairwise relationships:
 
 **Wraps** — Dilemma A wraps dilemma B when A introduces before B and B resolves before A. The backbone wraps the subplots: the central question is present from the beginning and resolves at the climax, while secondary questions weave through the middle. Wrapping is a partial order — if A wraps B, A is the outer dilemma.
 
-**Concurrent** — Neither dilemma wraps the other. Both are active at the same time, interleaving but without a nesting relationship. Two hard dilemmas might be concurrent — both introduce early and commit late, their storylines intertwined.
+**Concurrent** — Neither dilemma wraps the other. Both are active at the same time, interleaving but without a nesting relationship. Two hard dilemmas might be concurrent — both introduce early and commit late, their storylines intertwined. Concurrent is a symmetric relationship: "A concurrent with B" and "B concurrent with A" mean the same thing. The graph stores the edge once, with the lexicographically smaller dilemma ID as `dilemma_a` (normalized at the model layer in `models/seed.py`). Code reading `concurrent` edges should not assume a particular ordering of the pair beyond this normalization rule.
 
 **Serial** — Dilemma A resolves (commits and converges) before dilemma B introduces. The two never interact structurally — they are independent subplots experienced in sequence. Serial soft dilemmas are a major complexity reducer: they never multiply each other's beat count.
 
@@ -696,7 +698,7 @@ Vision and Voice Document are singleton nodes with no incoming or outgoing edges
 | `choice` | Passage → Passage | POLISH | Player navigation with label, requires, grants |
 | `variant_of` | Passage → Passage | POLISH | This passage is a variant of the base passage |
 | `wraps` | Dilemma → Dilemma | SEED | A introduces before B, B resolves before A |
-| `concurrent` | Dilemma → Dilemma | SEED | Neither wraps the other; active simultaneously |
+| `concurrent` | Dilemma → Dilemma | SEED | Neither wraps the other; active simultaneously. **Symmetric**: stored once with the lexicographically smaller dilemma ID as `dilemma_a` (see Part 2). |
 | `serial` | Dilemma → Dilemma | SEED | A resolves before B introduces; no structural interaction |
 | `describes_visual` | Entity Visual → Entity | DRESS | Visual profile for this entity. Working. |
 | `targets` | Illustration Brief → Passage | DRESS | Which passage this brief illustrates. Working. |
@@ -792,7 +794,7 @@ This section documents where the current implementation (`docs/design/00-spec.md
 
 **Current:** One answer per dilemma is marked `is_default_path`, suggesting a primary or preferred answer.
 
-**This document:** The field is renamed `is_canonical` and explicitly defined as an authoring convenience (first-written in FILL's writing order), not a narrative preference. Every answer is equally valid.
+**This document:** The field is renamed `is_canonical` and explicitly defined as an authoring convenience (first-written in FILL's writing order), not a narrative preference. Every answer is **narratively equal**, but the canonical arc is **operationally privileged**: its prose for shared passages is established first, and other arcs accommodate it at convergence points. See Part 1 "Answer" for the full semantics.
 
 **Impact:** Rename in `Answer` model and all references. Minor but important for preventing LLM bias toward the "default" path.
 
