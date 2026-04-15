@@ -572,6 +572,18 @@ Intersection beats participate in scenes with beats from other paths, but they s
 
 **Same-dilemma pre-commit multi-`belongs_to` is permitted.** A pre-commit beat — one that occurs before the dilemma's commit point — belongs to both paths of its own dilemma. This is structurally correct: every player experiences pre-commit beats regardless of which path they will later choose. Pre-commit beats have two `belongs_to` edges (one to each path in the dilemma); post-commit beats have exactly one. This is not the same as cross-dilemma multi-assignment, which remains forbidden.
 
+#### Determining a beat's `belongs_to`
+
+A beat's `belongs_to` edges are a **narrative** statement: "this beat furthers the narrative of this dilemma." They are not a graph-shape statement about which path chains reach the beat. Three beat categories cover every legal beat:
+
+1. **Shared pre-commit** — the beat sets up the dilemma's tension for both possible answers. Two `belongs_to` edges, one to each explored path of the dilemma.
+2. **Commit and exclusive post-commit** — the beat locks in or plays out one answer's consequences. One `belongs_to` edge to the answer's path.
+3. **Setup, transition, and epilogue** — the beat furthers no dilemma's narrative. Zero `belongs_to` edges. Examples: a world-setup opening beat before any dilemma is introduced; a post-convergence connector beat that precedes the next dilemma's pre-commit chain; a closing epilogue after the final dilemma has committed.
+
+Cross-dilemma co-occurrence (a scene that serves two dilemmas at once) is **not** represented as a beat belonging to two dilemmas. It is represented as two distinct beats (one per dilemma) linked by an `intersection_group`. This preserves guard rail 1 below (no cross-dilemma dual `belongs_to`).
+
+**Grouping invariant:** a beat with zero `belongs_to` is a singleton passage during POLISH. It cannot collapse with any path-specific chain because the collapse rule requires exact path-set equality, and the empty set equals only itself, not any single-path set.
+
 Guard rails:
 
 1. **Same-dilemma constraint.** A beat with two `belongs_to` edges must reference two paths that belong to the same dilemma. Cross-dilemma multi-`belongs_to` is a hard-convergence violation.
