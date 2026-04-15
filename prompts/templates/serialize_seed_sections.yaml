@@ -122,29 +122,21 @@ dilemmas_prompt: |
   WRONG: `explored: ["opt_a"]` but path uses `answer_id: "opt_b"`
   RIGHT: `explored: ["opt_a", "opt_b"]` and paths use those exact IDs
 
-  ## Tension Balance: How Many Answers to Explore
+  ## When to Leave an Answer Unexplored
 
-  Exploring more answers creates more paths, more branching, and a larger story.
-  Leaving answers unexplored creates dramatic shadows — tensions that are felt
-  but never resolved, adding subtext and replayability.
+  "Soft" dilemmas (only the default explored) add flavor without adding branching arcs.
+  Use them sparingly — at most 30-50% of your dilemmas. The rest MUST be fully explored
+  to drive branching. Leaving the alternative unexplored is a deliberate scope reduction,
+  not a default behavior.
 
-  GOOD tension balance:
-  - Dilemma with 2 answers: explore BOTH (2 paths). This is the default —
-    binary dilemmas are designed to create two-path branching.
-  - Dilemma with 3+ answers: explore 2, leave 1 unexplored. The unexplored
-    answer becomes an intriguing "road not taken" that enriches the narrative.
+  GOOD branching distribution for 8 dilemmas:
+  - 4 fully explored (both answers in `explored`): creates 8 branching arcs
+  - 4 default-only (only default in `explored`): adds 4 flavor arcs
+  - TOTAL: 12 arcs, 8 branching — passes validation, rich story
 
-  BAD tension balance:
-  - Exploring ALL answers of every dilemma: creates too many paths, dilutes
-    each path's narrative weight. The story becomes wide but shallow.
-  - Exploring only 1 answer per dilemma: eliminates meaningful branching.
-    Players have no real choice, defeating the purpose of the dilemma.
-  - Leaving ALL answers unexplored: no paths are created. The dilemma has
-    no gameplay impact.
-
-  GUIDELINE: Aim for 2-4 total paths. For a vignette scope, 2 paths is
-  ideal. For a full story, 3-4 paths provide rich branching without
-  overwhelming the GROW stage.
+  BAD distribution for 8 dilemmas:
+  - 0 fully explored: 8 arcs total, all default-only, no branching
+  - 0 arcs with real choices → FAILS validation
 
   ## MINIMUM BRANCHING REQUIREMENT (HARD CONSTRAINT)
 
@@ -171,6 +163,12 @@ dilemmas_prompt: |
   - Do NOT leave `explored` empty if you plan to create paths for that dilemma
   - Do NOT omit the `dilemma::` prefix from dilemma_id
   - Do NOT put the `(default)` answer in `unexplored` — it MUST be in `explored`
+
+  ## FINAL CHECK before returning
+  Count how many of your dilemmas have ALL answers in `explored` (nothing in `unexplored`).
+  If that count is less than 2, GO BACK and fully explore at least 2 dilemmas
+  by moving ALL their answers from `unexplored` into `explored`.
+  A story with fewer than 2 fully-explored dilemmas is REJECTED by validation.
 
   ## Output
   Return ONLY valid JSON with the "dilemmas" array.
