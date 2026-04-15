@@ -8,22 +8,17 @@ DREAM, BRAINSTORM, SEED, GROW, FILL, SHIP.
 
 ## Review Focus Areas
 
-### 1. Design Conformance (CRITICAL for pipeline PRs)
+### 1. Pipeline Design Alignment (pipeline PRs only)
 
-PRs that modify files under `src/questfoundry/pipeline/stages/` or `src/questfoundry/graph/`
-MUST include a `## Design Conformance` section in the PR description. If this section is
-missing, flag it as a blocking issue.
+For PRs modifying files under `src/questfoundry/pipeline/stages/` or `src/questfoundry/graph/`,
+verify the change aligns with the authoritative design documents in `docs/design/` —
+especially `story-graph-ontology.md`, `how-branching-stories-work.md`, and
+`procedures/*.md`. Flag substantive divergence from the spec, not the absence of a
+particular PR-template section.
 
-The design conformance section should reference specific sections from the authoritative
-design documents in `docs/design/` and classify each requirement as:
-
-- CONFORMANT: Code implements the requirement (cite file and line)
-- PARTIAL: Code exists but diverges from spec
-- MISSING: No implementing code found
-- DEAD: Code exists but is unreachable (schema exists but nothing populates it)
-
-**DEAD is as bad as MISSING.** A model that the LLM never populates, or a consumer that
-never receives data, is not an implementation.
+**DEAD code is as bad as MISSING code.** A Pydantic field the LLM never populates,
+a graph consumer that never receives data, or a schema attribute with no reader is not
+an implementation — it is dead code. Call these out when reviewing pipeline changes.
 
 ### 2. Removal Discipline
 
