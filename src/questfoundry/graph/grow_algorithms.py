@@ -1981,6 +1981,9 @@ def apply_intersection_mark(
     pre_commits = [bid for bid, pids in beat_path_ids.items() if len(pids) >= 2]
     if len(pre_commits) >= 2:
         # Check whether any two share the exact same path set (same dilemma).
+        # Binary Y-shape: same frozenset of path IDs implies same dilemma
+        # (pre-commit beats of a dilemma belong to exactly its two explored paths).
+        # Non-binary dilemmas (3+ paths) would require explicit dilemma_id comparison.
         seen: dict[frozenset[str], str] = {}
         for bid in pre_commits:
             key = frozenset(beat_path_ids[bid])

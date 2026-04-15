@@ -1903,10 +1903,11 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
         # Link beat to its path(s). Post-commit beats emit one belongs_to;
         # pre-commit (Y-shape) beats with ``also_belongs_to`` emit two.
         raw_path_ids = _get_path_ids_from_beat(beat)
+        is_dual = len(raw_path_ids) == 2
 
         # Guard rail 1 (Story Graph Ontology §8 "Path Membership"):
         # dual belongs_to must reference paths of the same dilemma.
-        if len(raw_path_ids) == 2:
+        if is_dual:
             d0 = _path_to_dilemma.get(raw_path_ids[0])
             d1 = _path_to_dilemma.get(raw_path_ids[1])
             if d0 is None or d1 is None or d0 != d1:
@@ -1920,7 +1921,7 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
         # Guard rail 2: commit beats are single-membership. A commit beat is
         # the first beat exclusive to its path - it cannot also belong to the
         # sibling path.
-        if len(raw_path_ids) == 2:
+        if is_dual:
             has_commit = any(
                 imp.get("effect") == "commits" for imp in beat.get("dilemma_impacts", [])
             )
