@@ -38,6 +38,13 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
           plugins: 'code-review@claude-code-plugins'
-          prompt: '/code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }}'
+          # `--comment` tells the plugin to actually post (without it, the plugin
+          # runs the full review and stops silently — burning ~$3/PR for no output).
+          prompt: '/code-review:code-review --comment ${{ github.repository }}/pull/${{ github.event.pull_request.number }}'
+          # Surface progress so a silent failure is visible: a sticky tracking
+          # comment updates during the run, and the Claude Code Report appears
+          # in the job's GitHub Step Summary.
+          track_progress: true
+          display_report: true
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://code.claude.com/docs/en/cli-reference for available options
