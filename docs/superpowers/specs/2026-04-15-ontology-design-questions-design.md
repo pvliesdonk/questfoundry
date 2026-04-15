@@ -83,7 +83,7 @@ SGO implicitly assumes every beat has ≥1 `belongs_to`. The HBSW acknowledgment
 Audit three places that might assume ≥1 `belongs_to` per beat:
 
 1. `src/questfoundry/graph/algorithms.py` — `beat_to_paths: dict[str, frozenset[str]]` already handles empty frozensets (PR #1226). Verify `compute_active_flags_at_beat` does not KeyError on beats missing from `beat_to_paths`.
-2. `src/questfoundry/pipeline/stages/polish/deterministic.py` — `compute_beat_grouping` collapse rule uses frozenset equality. `frozenset() == frozenset()` is True, so two zero-path beats would wrongly collapse. **Fix**: add an explicit singleton rule — a beat with `frozenset()` never collapses.
+2. `src/questfoundry/pipeline/stages/polish/deterministic.py` — `compute_beat_grouping` collapse rule uses frozenset equality. The audit below confirms the code already has the right guard for this case; no fix needed.
 3. `src/questfoundry/graph/polish_validation.py` — `_check_divergences_have_choices` already discards `frozenset()` from `child_path_sets` (PR #1226 fix). Verify no other polish validator assumes ≥1 path.
 
 Audit result (confirmed during PR #1238 implementation): `compute_beat_grouping` at `src/questfoundry/pipeline/stages/polish/deterministic.py:291-292` already skips zero-path beats during collapse (`if not path_set: continue`), and `_check_divergences_have_choices` already discards `frozenset()` from `child_path_sets` (PR #1226). No code change is required. The regression test `test_zero_belongs_to_beats_do_not_collapse` added in PR #1238 locks in the current correct behavior.
