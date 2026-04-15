@@ -480,11 +480,10 @@ BRAINSTORM populates the world. The cast and the dramatic questions.
 
 | | |
 |---|---|
-| **Creates** | Path nodes, consequence nodes, beat nodes |
-| **Edges created** | `explores` (path → answer), `has_consequence` (path → consequence), `belongs_to` (beat → path), entity flexibility edges (beat → alternative entities) |
+| **Creates** | Path nodes, consequence nodes, beat nodes (annotated with temporal hints for GROW) |
+| **Edges created** | `explores` (path → answer), `has_consequence` (path → consequence), `belongs_to` (beat → path), entity flexibility edges (beat → alternative entities), dilemma pairwise relationship edges (`wraps` / `serial` / `concurrent` / `shared_entity`) |
 | **Reads** | All BRAINSTORM output (entities, dilemmas, answers) |
 | **Modifies** | Entity nodes (disposition: retained/cut), dilemma nodes (role, residue weight, ending salience) |
-| **Declares** | Dilemma pairwise relationships (wraps/serial/concurrent/shared_entity), temporal hints on beats |
 
 SEED is the heaviest mutation stage. It triages, scaffolds, orders, and sketches convergence. Its output is the raw material for GROW: independent paths with complete beat scaffolds, annotated with flexibility and temporal hints.
 
@@ -653,6 +652,8 @@ The danger: creating separate entity nodes for each state combination (`mentor_t
 
 ## Part 9: Minimal Ontology Summary
 
+Vision and Voice Document are singleton nodes with no incoming or outgoing edges — retrieval is by node-type lookup (e.g., "fetch the vision node"), not by edge traversal. All other node types are connected through the edges in the table below.
+
 ### Node Types
 
 | Node | Created by | Persistent | Description |
@@ -687,7 +688,7 @@ The danger: creating separate entity nodes for each state combination (`mentor_t
 | `explores` | Path → Answer | SEED | Which answer this path develops |
 | `has_consequence` | Path → Consequence | SEED | Narrative outcomes of this path |
 | `belongs_to` | Beat → Path | SEED | Which path this beat serves. Pre-commit beats have two edges (both paths in the dilemma); post-commit beats have one. |
-| `flexibility` | Beat → Entity | SEED | Substitutable entity with role annotation. Working — consumed by GROW. |
+| `flexibility` | Beat → Entity | SEED | Substitutable entity. Carries a `role` property on the edge itself (e.g., `role: "mentor"` when the spy could play the mentor role). Working — consumed by GROW. |
 | `predecessor` | Beat → Beat | GROW | Ordering in the beat DAG (B comes after A) |
 | `intersection` | Beat → Intersection Group | GROW | This beat participates in this co-occurrence group |
 | `derived_from` | State Flag → Consequence | GROW | Which consequence this flag represents |
