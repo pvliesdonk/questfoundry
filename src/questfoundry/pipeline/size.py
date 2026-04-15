@@ -52,6 +52,11 @@ class SizeProfile:
     # Beat structure
     beats_per_path_min: int
     beats_per_path_max: int
+    # Y-shape beat structure (shared pre-commit + per-path post-commit)
+    shared_beats_per_dilemma_min: int
+    shared_beats_per_dilemma_max: int
+    post_commit_beats_per_path_min: int
+    post_commit_beats_per_path_max: int
     convergence_points_min: int
     convergence_points_max: int
 
@@ -100,6 +105,10 @@ PRESETS: dict[str, SizeProfile] = {
         entities_max=10,
         beats_per_path_min=2,
         beats_per_path_max=3,
+        shared_beats_per_dilemma_min=1,
+        shared_beats_per_dilemma_max=1,
+        post_commit_beats_per_path_min=1,
+        post_commit_beats_per_path_max=2,
         convergence_points_min=0,
         convergence_points_max=1,
         est_passages_min=5,
@@ -125,6 +134,10 @@ PRESETS: dict[str, SizeProfile] = {
         entities_max=18,
         beats_per_path_min=2,
         beats_per_path_max=4,
+        shared_beats_per_dilemma_min=1,
+        shared_beats_per_dilemma_max=2,
+        post_commit_beats_per_path_min=1,
+        post_commit_beats_per_path_max=2,
         convergence_points_min=1,
         convergence_points_max=2,
         est_passages_min=15,
@@ -150,6 +163,10 @@ PRESETS: dict[str, SizeProfile] = {
         entities_max=25,
         beats_per_path_min=2,
         beats_per_path_max=4,
+        shared_beats_per_dilemma_min=1,
+        shared_beats_per_dilemma_max=2,
+        post_commit_beats_per_path_min=2,
+        post_commit_beats_per_path_max=3,
         convergence_points_min=1,
         convergence_points_max=2,
         est_passages_min=30,
@@ -175,6 +192,10 @@ PRESETS: dict[str, SizeProfile] = {
         entities_max=35,
         beats_per_path_min=3,
         beats_per_path_max=5,
+        shared_beats_per_dilemma_min=1,
+        shared_beats_per_dilemma_max=2,
+        post_commit_beats_per_path_min=2,
+        post_commit_beats_per_path_max=3,
         convergence_points_min=2,
         convergence_points_max=4,
         est_passages_min=60,
@@ -251,6 +272,8 @@ def size_template_vars(profile: SizeProfile | None = None) -> dict[str, str]:
         "size_dilemmas": p.range_str("dilemmas"),
         "size_entities": p.range_str("entities"),
         "size_beats_per_path": p.range_str("beats_per_path"),
+        "size_shared_beats_per_dilemma": p.range_str("shared_beats_per_dilemma"),
+        "size_post_commit_beats_per_path": p.range_str("post_commit_beats_per_path"),
         "size_convergence_points": p.range_str("convergence_points"),
         "size_est_passages": p.range_str("est_passages"),
         "size_est_words": p.range_str("est_words"),

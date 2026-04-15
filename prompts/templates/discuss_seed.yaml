@@ -86,7 +86,11 @@ system: |
 
   ### 4. Create Initial Beats for Each Path
 
-  Each path needs opening beats ({size_beats_per_path} per path). Beats are scenes or moments that:
+  Each dilemma needs a Y-shape: SHARED pre-commit beats that set up the
+  choice (belong to both paths), a COMMIT beat per path (the fork), and
+  post-commit beats that prove each answer. Target counts: a small number
+  of shared beats per dilemma, and a small number of post-commit beats per
+  path. Beats are scenes or moments that:
   - Establish the path's premise
   - Feature relevant entities from your retained list
   - Vary locations (not all beats in one place)

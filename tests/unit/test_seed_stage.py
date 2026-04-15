@@ -953,3 +953,76 @@ class TestPathBeatsSectionValidation:
         ]
         with pytest.raises(ValidationError, match="Duplicates found for beat_id"):
             PathBeatsSection(initial_beats=beats)
+
+
+def test_seed_advisory_warning_splits_shared_vs_post_commit(caplog) -> None:
+    """The low-beat warning reports shared and post-commit separately."""
+    import logging
+
+    from questfoundry.pipeline.stages.seed import _log_beat_summary_stats
+
+    # 2 dilemmas x 2 paths = 4 paths, 2 shared beats per dilemma, 2 post
+    # per path. Expected: shared_avg=2.0 per dilemma, post_avg=2.0 per path.
+    artifact_data = {
+        "entities": [],
+        "dilemmas": [{"dilemma_id": "d_a"}, {"dilemma_id": "d_b"}],
+        "paths": [
+            {"path_id": "p_a1"},
+            {"path_id": "p_a2"},
+            {"path_id": "p_b1"},
+            {"path_id": "p_b2"},
+        ],
+        "initial_beats": [
+            {
+                "beat_id": "b1",
+                "path_id": "p_a1",
+                "also_belongs_to": "p_a2",
+                "dilemma_impacts": [{"dilemma_id": "d_a", "effect": "advances"}],
+            },
+            {
+                "beat_id": "b2",
+                "path_id": "p_a1",
+                "also_belongs_to": "p_a2",
+                "dilemma_impacts": [{"dilemma_id": "d_a", "effect": "advances"}],
+            },
+            {
+                "beat_id": "b3",
+                "path_id": "p_b1",
+                "also_belongs_to": "p_b2",
+                "dilemma_impacts": [{"dilemma_id": "d_b", "effect": "advances"}],
+            },
+            {
+                "beat_id": "b4",
+                "path_id": "p_b1",
+                "also_belongs_to": "p_b2",
+                "dilemma_impacts": [{"dilemma_id": "d_b", "effect": "advances"}],
+            },
+            # 2 post-commit per path (only for p_a1 here — light fixture):
+            {
+                "beat_id": "b5",
+                "path_id": "p_a1",
+                "dilemma_impacts": [{"dilemma_id": "d_a", "effect": "commits"}],
+            },
+            {
+                "beat_id": "b6",
+                "path_id": "p_a1",
+                "dilemma_impacts": [{"dilemma_id": "d_a", "effect": "advances"}],
+            },
+        ],
+    }
+
+    with caplog.at_level(logging.WARNING):
+        _log_beat_summary_stats(artifact_data)
+
+    # post_avg = 2 post-commit beats / 4 paths = 0.5 → below threshold (< 2.0)
+    assert any("seed_low_post_commit_beat_count" in r.message for r in caplog.records), (
+        "Expected advisory warning for low post-commit beat count"
+    )
+
+    # shared_avg = 4 shared beats / 2 dilemmas = 2.0 → above threshold (< 1.0)
+    assert not any("seed_low_shared_beat_count" in r.message for r in caplog.records), (
+        "Did not expect advisory warning for shared beat count"
+    )
+
+    # No errors should be raised
+    assert not any(r.levelno >= logging.ERROR for r in caplog.records)

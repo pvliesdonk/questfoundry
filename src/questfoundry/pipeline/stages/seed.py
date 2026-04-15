@@ -526,20 +526,7 @@ class SeedStage:
         path_count = len(artifact_data.get("paths", []))
         beat_count = len(artifact_data.get("initial_beats", []))
 
-        # Advisory warning: check beats-per-path ratio
-        if path_count > 0:
-            avg_beats = beat_count / path_count
-            if avg_beats < 3:
-                log.warning(
-                    "seed_low_beat_count",
-                    total_beats=beat_count,
-                    paths=path_count,
-                    avg_per_path=round(avg_beats, 1),
-                    message=(
-                        f"Average {avg_beats:.1f} beats/path (expected ~4). "
-                        f"Some models under-produce beats due to brevity optimization."
-                    ),
-                )
+        _log_beat_summary_stats(artifact_data)
 
         log.info(
             "seed_stage_completed",
@@ -552,6 +539,53 @@ class SeedStage:
         )
 
         return artifact_data, total_llm_calls, total_tokens
+
+
+def _log_beat_summary_stats(artifact_data: dict[str, Any]) -> None:
+    """Advisory warnings about Y-shape beat counts.
+
+    Under Y-shape, beats come in two kinds:
+    - Shared pre-commit beats (``also_belongs_to`` set) — one per dilemma.
+    - Post-commit beats (``also_belongs_to`` null) — one per path, including
+      the commit and its consequences.
+
+    A healthy SEED output has ~1-2 shared beats per dilemma and ~2-3
+    post-commit beats per path. Warn below these thresholds.
+    """
+    beats = artifact_data.get("initial_beats", [])
+    dilemma_count = len(artifact_data.get("dilemmas", []))
+    path_count = len(artifact_data.get("paths", []))
+
+    shared = [b for b in beats if b.get("also_belongs_to")]
+    post_commit = [b for b in beats if not b.get("also_belongs_to")]
+
+    shared_avg = (len(shared) / dilemma_count) if dilemma_count else 0.0
+    post_avg = (len(post_commit) / path_count) if path_count else 0.0
+
+    if shared_avg < 1.0 and dilemma_count > 0:
+        log.warning(
+            "seed_low_shared_beat_count",
+            shared_beats=len(shared),
+            dilemmas=dilemma_count,
+            shared_avg=round(shared_avg, 2),
+            message=(
+                f"{shared_avg:.1f} shared pre-commit beats/dilemma "
+                f"(expected ≥1). Every dilemma should set up the choice "
+                f"with at least one shared beat before the commit."
+            ),
+        )
+    if post_avg < 2.0 and path_count > 0:
+        log.warning(
+            "seed_low_post_commit_beat_count",
+            post_commit_beats=len(post_commit),
+            paths=path_count,
+            post_avg=round(post_avg, 2),
+            message=(
+                f"{post_avg:.1f} post-commit beats/path (expected ≥2). "
+                f"Every path needs the commit beat plus at least one "
+                f"consequence beat to prove the answer."
+            ),
+        )
 
 
 # Factory function to create stage with project path

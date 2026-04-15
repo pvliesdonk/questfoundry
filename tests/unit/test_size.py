@@ -110,6 +110,20 @@ class TestSizeProfile:
                 hi = getattr(profile, f"{prefix}_max")
                 assert lo <= hi, f"{name}.{prefix}: {lo} > {hi}"
 
+    def test_standard_has_y_shape_beat_fields(self) -> None:
+        s = get_size_profile("standard")
+        assert s.shared_beats_per_dilemma_min == 1
+        assert s.shared_beats_per_dilemma_max == 2
+        assert s.post_commit_beats_per_path_min == 2
+        assert s.post_commit_beats_per_path_max == 3
+
+    def test_all_presets_have_consistent_y_shape_ranges(self) -> None:
+        for name, profile in PRESETS.items():
+            for prefix in ("shared_beats_per_dilemma", "post_commit_beats_per_path"):
+                lo = getattr(profile, f"{prefix}_min")
+                hi = getattr(profile, f"{prefix}_max")
+                assert lo <= hi, f"{name}.{prefix}: {lo} > {hi}"
+
 
 class TestResolveSizeFromGraph:
     def test_with_story_size_in_scope(self) -> None:
@@ -254,6 +268,8 @@ class TestSizeTemplateVars:
             "size_dilemmas",
             "size_entities",
             "size_beats_per_path",
+            "size_shared_beats_per_dilemma",
+            "size_post_commit_beats_per_path",
             "size_convergence_points",
             "size_est_passages",
             "size_est_words",
@@ -261,3 +277,9 @@ class TestSizeTemplateVars:
             "size_preset",
         }
         assert set(vars_.keys()) == expected
+
+    def test_standard_y_shape_template_vars(self) -> None:
+        profile = get_size_profile("standard")
+        vars_ = size_template_vars(profile)
+        assert vars_["size_shared_beats_per_dilemma"] == "1-2"
+        assert vars_["size_post_commit_beats_per_path"] == "2-3"

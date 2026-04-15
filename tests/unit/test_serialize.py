@@ -2026,28 +2026,45 @@ class TestSizeProfileInjectedIntoBeatPrompts:
     """Test that size_profile controls beat count range in prompts."""
 
     def test_size_profile_renders_beats_range_in_prompts(self) -> None:
-        """Beat prompts should use size_beats_per_path from size profile."""
+        """Beat prompts should use the correct size placeholder per prompt type.
+
+        - beats: uses {size_beats_per_path} (legacy monolithic prompt)
+        - per_path_beats: uses {size_post_commit_beats_per_path} (Y-shape two-call)
+        - shared_beats: uses {size_shared_beats_per_dilemma} (Y-shape two-call)
+        """
         from questfoundry.agents.serialize import _load_seed_section_prompts
         from questfoundry.pipeline.size import get_size_profile, size_template_vars
 
         prompts = _load_seed_section_prompts()
 
-        # Verify the template placeholder exists before rendering
+        # Verify the template placeholders exist before rendering
         assert "{size_beats_per_path}" in prompts["beats"]
-        assert "{size_beats_per_path}" in prompts["per_path_beats"]
+        assert "{size_post_commit_beats_per_path}" in prompts["per_path_beats"]
+        assert "{size_shared_beats_per_dilemma}" in prompts["shared_beats"]
 
-        # Render with 'long' preset (3-5 beats)
+        # Render with 'long' preset
         long_profile = get_size_profile("long")
         size_vars = size_template_vars(long_profile)
         beats_range = size_vars["size_beats_per_path"]
+        post_range = size_vars["size_post_commit_beats_per_path"]
+        shared_range = size_vars["size_shared_beats_per_dilemma"]
 
         rendered_beats = prompts["beats"].replace("{size_beats_per_path}", beats_range)
-        rendered_per_path = prompts["per_path_beats"].replace("{size_beats_per_path}", beats_range)
+        rendered_per_path = prompts["per_path_beats"].replace(
+            "{size_post_commit_beats_per_path}", post_range
+        )
+        rendered_shared = prompts["shared_beats"].replace(
+            "{size_shared_beats_per_dilemma}", shared_range
+        )
 
         assert "3-5" in rendered_beats
-        assert "3-5" in rendered_per_path
         assert "{size_beats_per_path}" not in rendered_beats
-        assert "{size_beats_per_path}" not in rendered_per_path
+        # per_path_beats uses post_range (2-3 for long)
+        assert "2-3" in rendered_per_path
+        assert "{size_post_commit_beats_per_path}" not in rendered_per_path
+        # shared_beats uses shared_range (1-2 for long)
+        assert "1-2" in rendered_shared
+        assert "{size_shared_beats_per_dilemma}" not in rendered_shared
 
     def test_default_profile_uses_standard_range(self) -> None:
         """Without explicit size_profile, standard preset (2-4) is used."""

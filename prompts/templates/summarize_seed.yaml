@@ -81,7 +81,7 @@ system: |
   - description: what happens narratively
   - ripples: story effects this implies
 
-  ### Initial Beats ({size_beats_per_path} per path)
+  ### Initial Beats (Y-shape: {size_shared_beats_per_dilemma} shared per dilemma + {size_post_commit_beats_per_path} post-commit per path)
   For each opening beat, provide a beat sketch:
   - beat_id: unique beat identifier
   - summary: one sentence describing what happens
