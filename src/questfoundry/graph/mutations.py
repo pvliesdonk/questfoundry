@@ -1341,14 +1341,15 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
                     )
                 )
 
-        # 6. Path reference (singular — each beat belongs to exactly one path)
-        raw_path_id = _get_path_id_from_beat(beat)
-        if raw_path_id:
+        # 6. Path references (Y-shape: path_id + optional also_belongs_to).
+        raw_path_ids = _get_path_ids_from_beat(beat)
+        for idx, raw_path_id in enumerate(raw_path_ids):
+            field_name = "path_id" if idx == 0 else "also_belongs_to"
             _validate_id(
                 raw_path_id,
                 "path",
                 seed_path_ids,
-                f"initial_beats.{i}.path_id",
+                f"initial_beats.{i}.{field_name}",
                 errors,
                 sorted_path_ids,
                 cross_type_sets=cross_type_sets,
@@ -1558,10 +1559,13 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
     # Per-path: list of (beat_index, effects_set) for parent dilemma impacts
     path_beat_effects: dict[str, list[tuple[int, set[str]]]] = {}
     for i, beat in enumerate(output.get("initial_beats", [])):
-        # Resolve beat's path (singular path_id, with legacy paths fallback)
-        raw_pid = _get_path_id_from_beat(beat)
-        if not raw_pid:
+        # Resolve beat's primary path; pre-commit beats have a second membership
+        # (also_belongs_to) but the commits-per-path accumulator is only
+        # concerned with single-membership commit beats (guard rail 2).
+        raw_path_ids = _get_path_ids_from_beat(beat)
+        if not raw_path_ids:
             continue  # Missing path — already caught by check 6
+        raw_pid = raw_path_ids[0]
         normalized_pid, _ = _normalize_id(raw_pid, "path")
 
         # Collect normalized dilemma_ids referenced in this beat's impacts
