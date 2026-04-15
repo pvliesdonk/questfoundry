@@ -223,7 +223,7 @@ A beat with two successors (one per path of a dilemma) represents a **divergence
 A beat passes through several stages, accumulating and shedding metadata:
 
 **Created by SEED:**
-- Summary, dilemma impacts, path membership (`belongs_to` edges — dual for pre-commit beats within one dilemma, singular for commit and post-commit beats), entity references
+- Summary, dilemma impacts, path membership (`belongs_to` edges — dual for pre-commit beats within one dilemma, singular for commit and exclusive post-commit beats, zero for setup/transition/epilogue beats; see Part 8 "Determining a beat's `belongs_to`"), entity references
 - **Working annotations** consumed by GROW:
   - Entity flexibility (substitution edges to alternative entities — "the spy could be the informant")
   - Temporal hints (position relative to other dilemmas — "should come before dilemma B commits")
@@ -328,7 +328,7 @@ GROW identifies intersection candidates using the signals SEED provided:
 
 ### Intersection and Convergence Policy
 
-Intersections must respect dilemma roles. Two beats from the same hard dilemma's paths must never be grouped into an intersection — they are mutually exclusive by definition (the player is on one path or the other, never both). Beats from different dilemmas can always intersect, regardless of those dilemmas' roles. For a soft dilemma, two beats can co-occur in one intersection only when both are pre-commit beats of that dilemma — and guard rail 3 in Part 8 forbids intersection-grouping two *same-dilemma* pre-commit beats even then. Post-convergence beats are not "from" the soft dilemma (see Part 8 "Determining a beat's `belongs_to`"), so the same-dilemma constraint does not apply to them.
+Intersections must respect dilemma roles. Two beats from the same hard dilemma's paths must never be grouped into an intersection — they are mutually exclusive by definition (the player is on one path or the other, never both). Beats from different dilemmas can always intersect, regardless of those dilemmas' roles. Two beats from the same soft dilemma can never share an intersection group: the only region where they could narratively co-occur is the pre-commit chain, and guard rail 3 in Part 8 forbids intersection-grouping two same-dilemma pre-commit beats. Post-convergence beats are not "from" the soft dilemma (see Part 8 "Determining a beat's `belongs_to`"), so the same-dilemma constraint does not apply to them.
 
 This constraint is structural, not a guideline. Violating it produces a scene that is impossible to reach — the player cannot be on both paths of a hard dilemma simultaneously.
 
@@ -587,7 +587,7 @@ Cross-dilemma co-occurrence (a scene that serves two dilemmas at once) is **not*
 Guard rails:
 
 1. **Same-dilemma constraint.** A beat with two `belongs_to` edges must reference two paths that belong to the same dilemma. Cross-dilemma multi-`belongs_to` is a hard-convergence violation.
-2. **Pre-commit only.** Only beats before the dilemma's commit may have two `belongs_to` edges. The commit beat itself has one (it is the first beat exclusive to its path). Post-commit beats always have one.
+2. **Pre-commit only.** Only beats before the dilemma's commit may have two `belongs_to` edges. The commit beat itself has one (it is the first beat exclusive to its path). Post-commit beats of a dilemma have exactly one `belongs_to` edge; beats that serve no dilemma have zero (see "Determining a beat's `belongs_to`" above, category 3).
 3. **Same-dilemma pre-commit exclusion.** An intersection group must not contain two pre-commit beats of the same dilemma (identified by identical dual `belongs_to` path sets). Such beats are already sequentially ordered in the dilemma's pre-commit chain; grouping them into an intersection implies simultaneity, contradicting the chain ordering. Cross-dilemma pre-commit co-occurrence IS the intended use of intersection groups and remains allowed.
 
 ### Beat Ordering ≠ Temporal Position Relative to Commits

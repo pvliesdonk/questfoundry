@@ -38,7 +38,7 @@ SGO currently leaves the post-convergence `belongs_to` question silent. Three in
 - **SGO Part 3 "Beat Lifecycle":** add a paragraph stating that soft-dilemma paths terminate at their last exclusive beat. Clarify that "convergence point" is a graph-shape shorthand, not a narrative role.
 - **SGO Part 4 / line 331** (`"beats from the same soft dilemma can intersect only if they are in the shared region (before commit or after convergence)"`): rewrite to use the narrative principle — pre-commit beats of the soft dilemma MAY intersect across dilemmas; beats post-convergence are no longer "from" the dilemma at all, so the constraint doesn't apply to them.
 - **SGO line 219** (`"The first shared beat after payoff beats IS the convergence point"`): clarify "shared" means "graph-reachable from both chains", not "`belongs_to` both paths."
-- **SGO Part 8:** add an explicit subsection `### Determining a beat's belongs_to` stating the narrative principle and listing the four beat categories and their `belongs_to` counts.
+- **SGO Part 8:** add an explicit subsection `### Determining a beat's belongs_to` stating the narrative principle and listing the three beat categories and their `belongs_to` counts.
 
 ### Code implications
 
@@ -86,7 +86,7 @@ Audit three places that might assume ≥1 `belongs_to` per beat:
 2. `src/questfoundry/pipeline/stages/polish/deterministic.py` — `compute_beat_grouping` collapse rule uses frozenset equality. `frozenset() == frozenset()` is True, so two zero-path beats would wrongly collapse. **Fix**: add an explicit singleton rule — a beat with `frozenset()` never collapses.
 3. `src/questfoundry/graph/polish_validation.py` — `_check_divergences_have_choices` already discards `frozenset()` from `child_path_sets` (PR #1226 fix). Verify no other polish validator assumes ≥1 path.
 
-The audit goes in the Group B implementation PR alongside the doc changes. If any real code change is needed (most likely only the `deterministic.py` collapse rule fix), it ships in the same PR; otherwise the PR is doc-only.
+Audit result (confirmed during PR #1238 implementation): `compute_beat_grouping` at `src/questfoundry/pipeline/stages/polish/deterministic.py:291-292` already skips zero-path beats during collapse (`if not path_set: continue`), and `_check_divergences_have_choices` already discards `frozenset()` from `child_path_sets` (PR #1226). No code change is required. The regression test `test_zero_belongs_to_beats_do_not_collapse` added in PR #1238 locks in the current correct behavior.
 
 ---
 
@@ -143,6 +143,6 @@ Testing:
 
 ## Verification
 
-- After the Group B PR merges, re-read SGO Part 8. The four beat categories in the new `Determining a beat's belongs_to` subsection should cover every beat a conformant SEED output can produce.
+- After the Group B PR merges, re-read SGO Part 8. The three beat categories in the new `Determining a beat's belongs_to` subsection should cover every beat a conformant SEED output can produce.
 - Cross-check `tests/integration/test_y_shape_end_to_end.py` fixture against the new doc: every fixture beat should fall into one of the four categories and its `belongs_to` should match the rule.
 - Eyeball `projects/*/graph.db` from the next real run (whenever test-new3 / test-new4 / etc. is run) for any beat that has `belongs_to` inconsistent with the rule. These are LLM conformance issues, not ontology bugs, but finding them this early is cheap.
