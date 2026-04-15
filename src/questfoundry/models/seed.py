@@ -708,6 +708,32 @@ class PathBeatsSection(BaseModel):
         return self
 
 
+class SharedBeatsSection(BaseModel):
+    """Wrapper for serializing shared pre-commit beats for a single dilemma.
+
+    Used by per-dilemma shared-beat serialization (Y-shape, issue #1227).
+    One LLM call per dilemma generates the pre-commit beats that both explored
+    paths share.  Each beat MUST have both ``path_id`` and ``also_belongs_to``
+    set to the two explored paths of the dilemma (Story Graph Ontology Part 8).
+
+    A minimum of 1 beat is required so that every dilemma has at least one
+    shared setup scene.  The maximum of 4 prevents over-stuffing the shared
+    section before the Y-fork.
+    """
+
+    initial_beats: list[InitialBeat] = Field(
+        min_length=1,
+        max_length=4,
+        description="1-4 shared pre-commit beats for this dilemma (range set by size preset)",
+    )
+
+    @model_validator(mode="after")
+    def _deduplicate_beats(self) -> SharedBeatsSection:
+        """Drop identical duplicate beats; raise on conflicting ones."""
+        self.initial_beats = _deduplicate_and_check(self.initial_beats, "beat_id", "beat_id")
+        return self
+
+
 class DilemmaAnalysisSection(BaseModel):
     """Wrapper for serializing dilemma analyses separately (Section 7)."""
 
