@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -16,6 +17,10 @@ from questfoundry.agents.summarize import (
     summarize_discussion,
     summarize_seed_chunked,
 )
+
+# Minimum fully-explored dilemmas required for the SEED stage to pass validation
+# (mirrors the threshold cited in src/questfoundry/pipeline/stages/seed.py).
+MIN_FULLY_EXPLORED_DILEMMAS = 2
 
 
 class TestGetSummarizePrompt:
@@ -619,21 +624,35 @@ class TestDilemmasSummarizePromptStructure:
         assert "REJECTED" in prompt or "FAILS" in prompt or "pipeline fails" in prompt
 
     def test_output_format_example_shows_fully_explored_dilemmas(self) -> None:
-        """The output-format example must demonstrate ≥2 fully-explored dilemmas.
+        """The output-format example must demonstrate ≥MIN_FULLY_EXPLORED_DILEMMAS
+        fully-explored dilemmas.
 
         Small models anchor on the most recent example; an example dominated
         by single-answer-explored entries normalizes the failure mode.
+
+        Scopes the search to the `## Output Format` section so the assertion
+        reflects the test name — instructional `unexplored=[]` mentions
+        elsewhere in the prompt do not satisfy this check.
         """
         prompt = self._get_dilemmas_prompt()
-        # Find the output-format code block and count entries with `unexplored=[]`
-        # vs entries with a non-empty unexplored.
-        import re
 
-        # Look for explored=[a, b], unexplored=[] pattern (fully explored)
-        fully_explored = len(re.findall(r"unexplored=\[\]", prompt))
-        # We expect at least 2 fully-explored entries in the visible example.
-        assert fully_explored >= 2, (
-            f"Output-format example must show ≥2 fully-explored entries; found {fully_explored}"
+        # Extract the "## Output Format" section (up to the next "##" header
+        # or end of prompt).
+        section_match = re.search(
+            r"## Output Format\b(.*?)(?=\n  ## |\Z)",
+            prompt,
+            flags=re.DOTALL,
+        )
+        assert section_match is not None, "Output Format section is missing"
+        output_format_section = section_match.group(1)
+
+        # Count list-item entries (`- dilemma::...`) with `unexplored=[]`.
+        # Anchoring on `- dilemma::` excludes prose mentions of `unexplored=[]`.
+        fully_explored = len(re.findall(r"- dilemma::[^\n]*unexplored=\[\]", output_format_section))
+        assert fully_explored >= MIN_FULLY_EXPLORED_DILEMMAS, (
+            f"Output-format example must show "
+            f"≥{MIN_FULLY_EXPLORED_DILEMMAS} fully-explored entries; "
+            f"found {fully_explored}"
         )
 
 
