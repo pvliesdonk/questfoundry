@@ -2443,9 +2443,56 @@ class TestSerializeSharedBeatsForDilemma:
 
         assert len(captured) == 1
         assert "dilemma::host_benevolent_or_selfish" in captured[0]
-        assert "Is the host truly benevolent or secretly selfish?" in captured[0]
+        # dilemma_question placeholder must render non-empty so the LLM has
+        # context for the "MEMORIZE THIS" block; an empty Q= means the graph
+        # enrichment failed to reach this call (see fix in #1232).
+        assert "Q=Is the host truly benevolent or secretly selfish?" in captured[0]
         assert "path::host_benevolent_or_selfish__benevolent" in captured[0]
         assert "path::host_benevolent_or_selfish__selfish" in captured[0]
+
+    @pytest.mark.asyncio
+    async def test_prompt_dilemma_question_empty_when_not_enriched(self) -> None:
+        """Regression guard: when the dilemma dict lacks 'question', the prompt
+        renders an empty {dilemma_question} placeholder.  This documents the
+        pre-fix behaviour and ensures the enrichment ordering fix in
+        serialize_seed_as_function (enrichment AFTER _early_validate_dilemma_answers)
+        is the only path that guarantees a populated question."""
+        from questfoundry.agents.serialize import _serialize_shared_beats_for_dilemma
+
+        dilemma_no_question = {
+            "dilemma_id": "dilemma::host_benevolent_or_selfish",
+            "explored": ["benevolent", "selfish"],
+            "unexplored": [],
+            # no "question" key — simulates missing enrichment
+        }
+
+        captured: list[str] = []
+
+        async def _capture(**kw: Any) -> tuple[Any, int]:
+            captured.append(kw.get("system_prompt", ""))
+            sec = MagicMock()
+            sec.model_dump.return_value = {"initial_beats": []}
+            return sec, 5
+
+        with patch("questfoundry.agents.serialize.serialize_to_artifact", side_effect=_capture):
+            await _serialize_shared_beats_for_dilemma(
+                model=MagicMock(),
+                dilemma_decision=dilemma_no_question,
+                paths=[],
+                shared_beats_prompt_template=_SHARED_BEAT_PROMPT,
+                entity_context="",
+                provider_name=None,
+                max_retries=1,
+                callbacks=None,
+            )
+
+        assert len(captured) == 1
+        # Without enrichment, the question is empty — Q= renders with no value.
+        assert "Q=" in captured[0]
+        assert "Q=Is the host" not in captured[0], (
+            "question should be absent when dict lacks 'question'; "
+            "enrichment must happen before calling this function"
+        )
 
 
 class TestSerializeSharedBeatsPerDilemma:

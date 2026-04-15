@@ -2215,14 +2215,6 @@ async def serialize_seed_as_function(
                     dilemma_count=len(collected["dilemmas"]),
                 )
 
-            # Enrich dilemma decisions with question from graph for prompt
-            if graph is not None:
-                for d in collected["dilemmas"]:
-                    node_id = normalize_scoped_id(d.get("dilemma_id", ""), SCOPE_DILEMMA)
-                    node = graph.get_node(node_id)
-                    if node:
-                        d["question"] = node.get("question", "")
-
             # Early validation: check answer IDs against brainstorm truth.
             # Catches hallucinated answer IDs (e.g., "trust_strength" instead of
             # "strength") before they cascade to path generation.
@@ -2240,6 +2232,17 @@ async def serialize_seed_as_function(
                     brainstorm_answers=brainstorm_answers,
                 )
                 total_tokens += early_tokens
+
+            # Enrich dilemma decisions with question from graph for prompt.
+            # Must run AFTER _early_validate_dilemma_answers because that
+            # function may replace the dilemma dicts with fresh model_dump()
+            # output (which strips any extra fields added before the call).
+            if graph is not None:
+                for d in collected["dilemmas"]:
+                    node_id = normalize_scoped_id(d.get("dilemma_id", ""), SCOPE_DILEMMA)
+                    node = graph.get_node(node_id)
+                    if node:
+                        d["question"] = node.get("question", "")
 
             # Generate paths per-dilemma
             paths, paths_tokens = await _serialize_paths_per_dilemma(
