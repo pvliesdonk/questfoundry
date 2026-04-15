@@ -480,11 +480,10 @@ BRAINSTORM populates the world. The cast and the dramatic questions.
 
 | | |
 |---|---|
-| **Creates** | Path nodes, consequence nodes, beat nodes |
-| **Edges created** | `explores` (path → answer), `has_consequence` (path → consequence), `belongs_to` (beat → path), entity flexibility edges (beat → alternative entities) |
+| **Creates** | Path nodes, consequence nodes, beat nodes (annotated with temporal hints for GROW) |
+| **Edges created** | `explores` (path → answer), `has_consequence` (path → consequence), `belongs_to` (beat → path), entity flexibility edges (beat → alternative entities), dilemma pairwise relationship edges (`wraps` / `serial` / `concurrent`). The `shared_entity` signal is derivable from `anchored_to` edges and is not a declared edge type — see Part 9 "Dilemma Signals" |
 | **Reads** | All BRAINSTORM output (entities, dilemmas, answers) |
 | **Modifies** | Entity nodes (disposition: retained/cut), dilemma nodes (role, residue weight, ending salience) |
-| **Declares** | Dilemma pairwise relationships (wraps/serial/concurrent/shared_entity), temporal hints on beats |
 
 SEED is the heaviest mutation stage. It triages, scaffolds, orders, and sketches convergence. Its output is the raw material for GROW: independent paths with complete beat scaffolds, annotated with flexibility and temporal hints.
 
@@ -493,9 +492,9 @@ SEED is the heaviest mutation stage. It triages, scaffolds, orders, and sketches
 | | |
 |---|---|
 | **Creates** | Ordering edges (beat → beat), intersection groups, state flags |
-| **Edges created** | Predecessor/successor edges in the beat DAG, intersection grouping edges, entity overlay nodes with state flag activation |
+| **Edges created** | Predecessor/successor edges in the beat DAG, intersection grouping edges, `derived_from` (state flag → consequence) |
 | **Reads** | All SEED output (paths, beats, consequences, dilemma relationships, temporal hints) |
-| **Modifies** | Beat nodes (enriched with intersection membership) |
+| **Modifies** | Beat nodes (enriched with intersection membership), entity nodes (activates overlays with state flags — overlays are an embedded list on the entity, not a separate node type; see Part 6) |
 | **Consumes** | Entity flexibility annotations (used to find intersections, then discarded), temporal hints (used for interleaving, then discarded) |
 | **Validates** | Every computed arc traversal is complete and has no dead ends |
 
@@ -521,6 +520,7 @@ POLISH operates in two phases:
 | **Creates** | Passage nodes, choice edges, variant passages |
 | **Edges created** | Beat → passage (grouping), passage → passage (choices with labels/gates/grants), `variant_of` (variant → base passage) |
 | **Reads** | Finalized beat DAG, intersection groups, state flags |
+| **Modifies** | Entity nodes (annotates with character arc metadata — an annotation on entity nodes, not a separate node type; see Part 1 "Character Arc Metadata") |
 | **Decides** | Passage grouping (collapse + intersection), prose feasibility, variant vs shared vs residue beat, false branch placement, character arc metadata |
 
 POLISH transforms the beat DAG into the passage graph. After POLISH, every passage is defined, every choice is wired, and every variant is created. The structure is ready for prose.
@@ -540,7 +540,8 @@ FILL is primarily a consumer. It reads the complete graph and writes prose into 
 
 | | |
 |---|---|
-| **Creates** | Art direction node (singleton), entity visual nodes, illustration nodes, codex entry nodes |
+| **Creates** | Art direction node (singleton), entity visual nodes, illustration brief nodes, illustration nodes, codex entry nodes |
+| **Edges created** | `describes_visual` (entity visual → entity), `targets` (illustration brief → passage), `from_brief` (illustration → illustration brief), `HasEntry` (codex entry → entity), `Depicts` (illustration → passage) |
 | **Reads** | Passages (prose), entities, vision |
 | **Modifies** | Nothing structural |
 
@@ -651,6 +652,8 @@ The danger: creating separate entity nodes for each state combination (`mentor_t
 
 ## Part 9: Minimal Ontology Summary
 
+Vision and Voice Document are singleton nodes with no incoming or outgoing edges — retrieval is by node-type lookup (e.g., "fetch the vision node"), not by edge traversal. All other node types are connected through the edges in the table below.
+
 ### Node Types
 
 | Node | Created by | Persistent | Description |
@@ -665,7 +668,6 @@ The danger: creating separate entity nodes for each state combination (`mentor_t
 | Beat | SEED, POLISH | No | Story moment. Regular, micro-beat, or residue beat. |
 | Intersection Group | GROW | No | Declaration that beats from different paths co-occur |
 | State Flag | GROW | Yes | Boolean world-state marker derived from consequence |
-| Character Arc Metadata | POLISH | No | Per-entity trajectory summary for FILL context (start → pivot → end per path) |
 | Passage | POLISH | Yes (partial) | Prose container holding 1+ beats |
 | Scene Blueprint | FILL | No | Per-passage writing plan (sensory palette, opening move) |
 | Codeword | SHIP | Yes | Player-facing projection of a state flag (gamebook formats) |
@@ -686,7 +688,7 @@ The danger: creating separate entity nodes for each state combination (`mentor_t
 | `explores` | Path → Answer | SEED | Which answer this path develops |
 | `has_consequence` | Path → Consequence | SEED | Narrative outcomes of this path |
 | `belongs_to` | Beat → Path | SEED | Which path this beat serves. Pre-commit beats have two edges (both paths in the dilemma); post-commit beats have one. |
-| `flexibility` | Beat → Entity | SEED | Substitutable entity with role annotation. Working — consumed by GROW. |
+| `flexibility` | Beat → Entity | SEED | Substitutable entity. Carries a `role` property on the edge itself (e.g., `role: "mentor"` when the spy could play the mentor role). Working — consumed by GROW. |
 | `predecessor` | Beat → Beat | GROW | Ordering in the beat DAG (B comes after A) |
 | `intersection` | Beat → Intersection Group | GROW | This beat participates in this co-occurrence group |
 | `derived_from` | State Flag → Consequence | GROW | Which consequence this flag represents |
@@ -838,7 +840,7 @@ This section documents where the current implementation (`docs/design/00-spec.md
 
 **Current:** No explicit representation of dilemma ordering. Hard/soft role is partially captured in `convergence_policy` but the wraps/serial/concurrent pairwise relationships do not exist. `InteractionConstraint` covers shared_entity, causal_chain, and resource_conflict — related but not the same concepts.
 
-**This document:** Dilemma pairwise relationships (wraps, serial, concurrent, shared_entity) are first-class declarations by SEED. `causal_chain` is subsumed by serial. `resource_conflict` is removed.
+**This document:** Dilemma pairwise relationships (wraps, serial, concurrent) are first-class declarations by SEED. The `shared_entity` signal is derivable from `anchored_to` edges (see Part 9 "Dilemma Signals"), not an explicit edge. `causal_chain` is subsumed by serial. `resource_conflict` is removed.
 
 **Impact:** New model and edge types for dilemma pairwise relationships. `InteractionConstraint` is redesigned.
 
