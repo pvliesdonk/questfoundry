@@ -541,7 +541,8 @@ FILL is primarily a consumer. It reads the complete graph and writes prose into 
 
 | | |
 |---|---|
-| **Creates** | Art direction node (singleton), entity visual nodes, illustration nodes, codex entry nodes |
+| **Creates** | Art direction node (singleton), entity visual nodes, illustration brief nodes, illustration nodes, codex entry nodes |
+| **Edges created** | `describes_visual` (entity visual → entity), `targets` (illustration brief → passage), `from_brief` (illustration → illustration brief), `HasEntry` (codex entry → entity), `Depicts` (illustration → passage) |
 | **Reads** | Passages (prose), entities, vision |
 | **Modifies** | Nothing structural |
 
