@@ -1907,9 +1907,10 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
         beat_data = _clean_dict(beat_data)
         graph.create_node(beat_id, beat_data)
 
-        # Link beat to its path (singular belongs_to edge)
-        raw_path_id = _get_path_id_from_beat(beat)
-        if raw_path_id:
+        # Link beat to its path(s). Post-commit beats emit one belongs_to;
+        # pre-commit (Y-shape) beats with ``also_belongs_to`` emit two.
+        raw_path_ids = _get_path_ids_from_beat(beat)
+        for raw_path_id in raw_path_ids:
             prefixed_path_id = _prefix_id("path", raw_path_id)
             graph.add_edge("belongs_to", beat_id, prefixed_path_id)
 

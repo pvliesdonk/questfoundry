@@ -5271,3 +5271,297 @@ def test_get_path_ids_from_beat_empty_returns_empty_tuple() -> None:
     from questfoundry.graph.mutations import _get_path_ids_from_beat
 
     assert _get_path_ids_from_beat({}) == ()
+
+
+# ---------------------------------------------------------------------------
+# Shared helpers for Y-shape guard rail tests
+# ---------------------------------------------------------------------------
+
+
+def _trust_graph() -> Graph:
+    """Return a graph pre-populated with BRAINSTORM state for the trust dilemma.
+
+    Dilemma: ``trust_protector_or_manipulator`` with answers ``protector`` and
+    ``manipulator``. Entity: ``mentor``.  Matches the seed returned by
+    :func:`_trust_seed_output`.
+    """
+    g = Graph.empty()
+    g.create_node("entity::mentor", {"type": "entity", "raw_id": "mentor"})
+    g.create_node(
+        "dilemma::trust_protector_or_manipulator",
+        {"type": "dilemma", "raw_id": "trust_protector_or_manipulator"},
+    )
+    g.create_node(
+        "dilemma::trust_protector_or_manipulator::alt::protector",
+        {"type": "answer", "raw_id": "protector", "is_canonical": True},
+    )
+    g.add_edge(
+        "has_answer",
+        "dilemma::trust_protector_or_manipulator",
+        "dilemma::trust_protector_or_manipulator::alt::protector",
+    )
+    g.create_node(
+        "dilemma::trust_protector_or_manipulator::alt::manipulator",
+        {"type": "answer", "raw_id": "manipulator", "is_canonical": False},
+    )
+    g.add_edge(
+        "has_answer",
+        "dilemma::trust_protector_or_manipulator",
+        "dilemma::trust_protector_or_manipulator::alt::manipulator",
+    )
+    g.add_edge("anchored_to", "dilemma::trust_protector_or_manipulator", "entity::mentor")
+    return g
+
+
+def _trust_seed_output(initial_beats: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    """SEED output for the trust dilemma with two explored paths.
+
+    Callers supply ``initial_beats``; defaults to two commit beats (one per
+    path) so the output is structurally valid and all paths have a commits beat.
+    """
+    if initial_beats is None:
+        initial_beats = [
+            {
+                "beat_id": "commit_protector",
+                "summary": "Protector path commits.",
+                "path_id": "trust_protector_or_manipulator__protector",
+                "dilemma_impacts": [
+                    {
+                        "dilemma_id": "trust_protector_or_manipulator",
+                        "effect": "commits",
+                        "note": "locked",
+                    }
+                ],
+            },
+            {
+                "beat_id": "commit_manipulator",
+                "summary": "Manipulator path commits.",
+                "path_id": "trust_protector_or_manipulator__manipulator",
+                "dilemma_impacts": [
+                    {
+                        "dilemma_id": "trust_protector_or_manipulator",
+                        "effect": "commits",
+                        "note": "locked",
+                    }
+                ],
+            },
+        ]
+    return {
+        "entities": [{"entity_id": "mentor", "disposition": "retained"}],
+        "dilemmas": [
+            {
+                "dilemma_id": "trust_protector_or_manipulator",
+                "explored": ["protector", "manipulator"],
+                "unexplored": [],
+            }
+        ],
+        "paths": [
+            {
+                "path_id": "trust_protector_or_manipulator__protector",
+                "dilemma_id": "trust_protector_or_manipulator",
+                "answer_id": "protector",
+                "name": "Protector",
+                "description": "The protector arc.",
+            },
+            {
+                "path_id": "trust_protector_or_manipulator__manipulator",
+                "dilemma_id": "trust_protector_or_manipulator",
+                "answer_id": "manipulator",
+                "name": "Manipulator",
+                "description": "The manipulator arc.",
+            },
+        ],
+        "consequences": [
+            {
+                "consequence_id": "mentor_trusted",
+                "path_id": "trust_protector_or_manipulator__protector",
+                "description": "Trust.",
+                "narrative_effects": ["x"],
+            },
+            {
+                "consequence_id": "mentor_distrusted",
+                "path_id": "trust_protector_or_manipulator__manipulator",
+                "description": "Distrust.",
+                "narrative_effects": ["x"],
+            },
+        ],
+        "initial_beats": initial_beats,
+    }
+
+
+def _two_dilemma_graph() -> Graph:
+    """Return a graph pre-populated with two unrelated BRAINSTORM dilemmas."""
+    g = Graph.empty()
+    g.create_node("entity::mentor", {"type": "entity", "raw_id": "mentor"})
+    # Dilemma A
+    g.create_node("dilemma::dilemma_a", {"type": "dilemma", "raw_id": "dilemma_a"})
+    g.create_node(
+        "dilemma::dilemma_a::alt::answer_a1",
+        {"type": "answer", "raw_id": "answer_a1", "is_canonical": True},
+    )
+    g.add_edge("has_answer", "dilemma::dilemma_a", "dilemma::dilemma_a::alt::answer_a1")
+    g.create_node(
+        "dilemma::dilemma_a::alt::answer_a2",
+        {"type": "answer", "raw_id": "answer_a2", "is_canonical": False},
+    )
+    g.add_edge("has_answer", "dilemma::dilemma_a", "dilemma::dilemma_a::alt::answer_a2")
+    g.add_edge("anchored_to", "dilemma::dilemma_a", "entity::mentor")
+    # Dilemma B
+    g.create_node("dilemma::dilemma_b", {"type": "dilemma", "raw_id": "dilemma_b"})
+    g.create_node(
+        "dilemma::dilemma_b::alt::answer_b1",
+        {"type": "answer", "raw_id": "answer_b1", "is_canonical": True},
+    )
+    g.add_edge("has_answer", "dilemma::dilemma_b", "dilemma::dilemma_b::alt::answer_b1")
+    g.create_node(
+        "dilemma::dilemma_b::alt::answer_b2",
+        {"type": "answer", "raw_id": "answer_b2", "is_canonical": False},
+    )
+    g.add_edge("has_answer", "dilemma::dilemma_b", "dilemma::dilemma_b::alt::answer_b2")
+    g.add_edge("anchored_to", "dilemma::dilemma_b", "entity::mentor")
+    return g
+
+
+def _two_dilemma_seed_output(initial_beats: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    """SEED output for two unrelated dilemmas with one explored path each."""
+    if initial_beats is None:
+        initial_beats = [
+            {
+                "beat_id": "commit_a",
+                "summary": "Dilemma A commits.",
+                "path_id": "dilemma_a__answer_a1",
+                "dilemma_impacts": [{"dilemma_id": "dilemma_a", "effect": "commits", "note": "x"}],
+            },
+            {
+                "beat_id": "commit_b",
+                "summary": "Dilemma B commits.",
+                "path_id": "dilemma_b__answer_b1",
+                "dilemma_impacts": [{"dilemma_id": "dilemma_b", "effect": "commits", "note": "x"}],
+            },
+        ]
+    return {
+        "entities": [{"entity_id": "mentor", "disposition": "retained"}],
+        "dilemmas": [
+            {"dilemma_id": "dilemma_a", "explored": ["answer_a1"], "unexplored": ["answer_a2"]},
+            {"dilemma_id": "dilemma_b", "explored": ["answer_b1"], "unexplored": ["answer_b2"]},
+        ],
+        "paths": [
+            {
+                "path_id": "dilemma_a__answer_a1",
+                "dilemma_id": "dilemma_a",
+                "answer_id": "answer_a1",
+                "name": "A1",
+                "description": "a",
+            },
+            {
+                "path_id": "dilemma_b__answer_b1",
+                "dilemma_id": "dilemma_b",
+                "answer_id": "answer_b1",
+                "name": "B1",
+                "description": "b",
+            },
+        ],
+        "consequences": [
+            {
+                "consequence_id": "c_a",
+                "path_id": "dilemma_a__answer_a1",
+                "description": "ca",
+                "narrative_effects": ["x"],
+            },
+            {
+                "consequence_id": "c_b",
+                "path_id": "dilemma_b__answer_b1",
+                "description": "cb",
+                "narrative_effects": ["x"],
+            },
+        ],
+        "initial_beats": initial_beats,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Task 2.3: dual belongs_to edge emission
+# ---------------------------------------------------------------------------
+
+
+def test_apply_seed_mutations_emits_dual_belongs_to_for_pre_commit_beat() -> None:
+    """Pre-commit beats with ``also_belongs_to`` get two ``belongs_to`` edges."""
+    from questfoundry.graph.mutations import apply_seed_mutations
+
+    graph = _trust_graph()
+    seed = _trust_seed_output(
+        initial_beats=[
+            {
+                "beat_id": "shared_setup",
+                "summary": "Both players see this setup.",
+                "path_id": "trust_protector_or_manipulator__protector",
+                "also_belongs_to": "trust_protector_or_manipulator__manipulator",
+                "dilemma_impacts": [
+                    {
+                        "dilemma_id": "trust_protector_or_manipulator",
+                        "effect": "advances",
+                        "note": "x",
+                    },
+                ],
+            },
+            # Each path still needs a commit beat and a post-commit beat.
+            {
+                "beat_id": "commit_protector",
+                "summary": "Protector path commits.",
+                "path_id": "trust_protector_or_manipulator__protector",
+                "dilemma_impacts": [
+                    {
+                        "dilemma_id": "trust_protector_or_manipulator",
+                        "effect": "commits",
+                        "note": "locked",
+                    }
+                ],
+            },
+            {
+                "beat_id": "post_protector",
+                "summary": "Protector aftermath.",
+                "path_id": "trust_protector_or_manipulator__protector",
+                "dilemma_impacts": [
+                    {
+                        "dilemma_id": "trust_protector_or_manipulator",
+                        "effect": "advances",
+                        "note": "fallout",
+                    }
+                ],
+            },
+            {
+                "beat_id": "commit_manipulator",
+                "summary": "Manipulator path commits.",
+                "path_id": "trust_protector_or_manipulator__manipulator",
+                "dilemma_impacts": [
+                    {
+                        "dilemma_id": "trust_protector_or_manipulator",
+                        "effect": "commits",
+                        "note": "locked",
+                    }
+                ],
+            },
+            {
+                "beat_id": "post_manipulator",
+                "summary": "Manipulator aftermath.",
+                "path_id": "trust_protector_or_manipulator__manipulator",
+                "dilemma_impacts": [
+                    {
+                        "dilemma_id": "trust_protector_or_manipulator",
+                        "effect": "advances",
+                        "note": "fallout",
+                    }
+                ],
+            },
+        ]
+    )
+    apply_seed_mutations(graph, seed)
+
+    edges = [
+        e for e in graph.get_edges(edge_type="belongs_to") if e["from"] == "beat::shared_setup"
+    ]
+    to_ids = {e["to"] for e in edges}
+    assert to_ids == {
+        "path::trust_protector_or_manipulator__protector",
+        "path::trust_protector_or_manipulator__manipulator",
+    }
