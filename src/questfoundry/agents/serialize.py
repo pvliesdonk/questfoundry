@@ -787,11 +787,13 @@ def _build_per_path_beat_context(
     path_data: dict[str, Any],
     entity_context: str,
     all_paths: list[dict[str, Any]] | None = None,
+    shared_beats_by_dilemma: dict[str, list[dict[str, Any]]] | None = None,
 ) -> str:
     """Build a brief for generating beats for a single path.
 
     Creates a minimal context containing only:
     - The path's ID and parent dilemma
+    - Shared pre-commit beats already established for this dilemma (if any)
     - Entity IDs for character/location references
     - Sibling path summaries (when all_paths is provided) for location inference
 
@@ -800,6 +802,10 @@ def _build_per_path_beat_context(
         entity_context: Entity IDs section from the full brief.
         all_paths: All paths in the serialization run; used to inject sibling
             summaries that help the LLM populate location_alternatives.
+        shared_beats_by_dilemma: Mapping of dilemma_id (raw, without scope prefix)
+            to list of shared beat dicts already generated for that dilemma. When
+            provided, the beats for this path's dilemma are rendered as a context
+            section so the LLM can narratively continue from the shared setup.
 
     Returns:
         Per-path brief for beat generation.
@@ -821,6 +827,48 @@ def _build_per_path_beat_context(
     ]
     if description:
         lines.append(f"- Description: {description}")
+
+    # Inject shared pre-commit beats for this path's dilemma so the LLM can
+    # write per-path commit/post-commit beats that continue from the shared setup.
+    # Only injected when shared beats actually exist — no empty header otherwise.
+    if shared_beats_by_dilemma is not None:
+        # Look up by raw dilemma name (strip prefix for lookup key)
+        raw_dilemma = dilemma_id.removeprefix(f"{SCOPE_DILEMMA}::")
+        dilemma_shared = shared_beats_by_dilemma.get(raw_dilemma, [])
+        if not dilemma_shared:
+            # Also try with prefix in case caller stored with prefix
+            dilemma_shared = shared_beats_by_dilemma.get(dilemma_id, [])
+        if dilemma_shared:
+            lines.append("")
+            lines.append(
+                "### Shared pre-commit beats already established for this dilemma\n"
+                "\n"
+                "These beats were generated in a prior step and belong to BOTH paths of "
+                "this dilemma.\n"
+                "Your per-path beats MUST narratively continue from these. "
+                "Do not contradict or repeat them."
+            )
+            for beat in dilemma_shared:
+                beat_id = beat.get("beat_id", "")
+                summary = beat.get("summary", "")
+                location = beat.get("location") or "no location"
+                entities = beat.get("entities", [])
+                entities_str = ", ".join(f"`{e}`" for e in entities) if entities else "none"
+                impacts = beat.get("dilemma_impacts", [])
+                # Render the first impact's effect/note (most beats have one impact)
+                if impacts:
+                    first = impacts[0]
+                    effect = first.get("effect", "")
+                    note = first.get("note", "")
+                    effect_str = f"{effect} — {note}" if note else effect
+                else:
+                    effect_str = "no dilemma impact"
+                lines.append(
+                    f"\n- `{beat_id}`: {summary}\n"
+                    f"  - Location: {location}\n"
+                    f"  - Entities: {entities_str}\n"
+                    f"  - Effect: {effect_str}"
+                )
 
     # Inject sibling path summaries to support location_alternatives decisions.
     # The LLM uses these to identify locations that appear in other paths and
@@ -867,6 +915,7 @@ async def _serialize_path_beats(
     max_retries: int,
     callbacks: list[BaseCallbackHandler] | None,
     all_paths: list[dict[str, Any]] | None = None,
+    shared_beats_by_dilemma: dict[str, list[dict[str, Any]]] | None = None,
 ) -> tuple[list[dict[str, Any]], int]:
     """Serialize beats for a single path.
 
@@ -881,6 +930,9 @@ async def _serialize_path_beats(
         max_retries: Maximum Pydantic validation retries.
         callbacks: LangChain callback handlers.
         all_paths: All paths for sibling context injection.
+        shared_beats_by_dilemma: Mapping of dilemma_id → shared beat dicts so the
+            LLM can narratively continue from the shared pre-commit setup
+            (criterion 3 of #1227).
 
     Returns:
         Tuple of (list of beat dicts, tokens used).
@@ -903,8 +955,13 @@ async def _serialize_path_beats(
         path_name=path_name,
     )
 
-    # Build per-path brief
-    brief = _build_per_path_beat_context(path_data, entity_context, all_paths=all_paths)
+    # Build per-path brief, injecting shared beats for narrative continuity
+    brief = _build_per_path_beat_context(
+        path_data,
+        entity_context,
+        all_paths=all_paths,
+        shared_beats_by_dilemma=shared_beats_by_dilemma,
+    )
 
     log.debug(
         "serialize_path_beats_started",
@@ -945,6 +1002,7 @@ async def _serialize_beats_per_path(
     callbacks: list[BaseCallbackHandler] | None,
     on_phase_progress: PhaseProgressFn | None = None,
     max_concurrency: int = 2,
+    shared_beats_by_dilemma: dict[str, list[dict[str, Any]]] | None = None,
 ) -> tuple[list[dict[str, Any]], int]:
     """Serialize beats for all paths with bounded concurrency.
 
@@ -963,6 +1021,10 @@ async def _serialize_beats_per_path(
         callbacks: LangChain callback handlers.
         on_phase_progress: Callback for progress reporting.
         max_concurrency: Max parallel LLM requests (default 2).
+        shared_beats_by_dilemma: Mapping of raw dilemma_id → shared beat dicts
+            (generated in the prior step). Each per-path call receives the shared
+            beats for its own dilemma so the LLM can narratively continue from
+            the pre-commit setup (#1227 criterion 3).
 
     Returns:
         Tuple of (all beats merged, total tokens used).
@@ -987,6 +1049,7 @@ async def _serialize_beats_per_path(
                 max_retries=max_retries,
                 callbacks=callbacks,
                 all_paths=paths,
+                shared_beats_by_dilemma=shared_beats_by_dilemma,
             )
 
     # Create tasks for all paths (semaphore limits actual concurrency)
@@ -2203,6 +2266,7 @@ async def serialize_seed_as_function(
             # Shared beats belong to BOTH explored paths of a dilemma and must
             # come BEFORE per-path post-commit beats in the final artifact so
             # consumers see the shared setup first.
+            shared_beats_by_dilemma: dict[str, list[dict[str, Any]]] = {}
             if collected.get("paths") and collected.get("dilemmas"):
                 shared_beats, shared_beats_tokens = await _serialize_shared_beats_per_dilemma(
                     model=model,
@@ -2218,9 +2282,28 @@ async def serialize_seed_as_function(
                 collected["initial_beats"] = shared_beats
                 total_tokens += shared_beats_tokens
 
+                # Group shared beats by raw dilemma ID so per-path calls receive
+                # only the beats relevant to their own dilemma (#1227 criterion 3).
+                # Each shared beat's primary dilemma is taken from its first
+                # dilemma_impacts entry (the shared-beats prompt pins this to the
+                # generating dilemma).
+                for beat in shared_beats:
+                    impacts = beat.get("dilemma_impacts", [])
+                    if impacts:
+                        raw_did = strip_scope_prefix(impacts[0].get("dilemma_id", ""))
+                    else:
+                        # Fall back: infer from path_id (format: path::dilemma__answer)
+                        path_ref = beat.get("path_id", "")
+                        raw_pid = strip_scope_prefix(path_ref)
+                        # path ID format is <dilemma>__<answer>; take the dilemma part
+                        raw_did = raw_pid.rsplit("__", 1)[0] if "__" in raw_pid else raw_pid
+                    shared_beats_by_dilemma.setdefault(raw_did, []).append(beat)
+
             # Generate per-path post-commit beats (Y-shape — one call per path).
             # Results are appended AFTER shared beats so the artifact ordering is
             # consistent: shared setup first, then path-specific post-commit beats.
+            # shared_beats_by_dilemma is passed so each per-path call knows what
+            # the shared setup established (#1227 criterion 3).
             if collected.get("paths"):
                 beats, beats_tokens = await _serialize_beats_per_path(
                     model=model,
@@ -2231,6 +2314,9 @@ async def serialize_seed_as_function(
                     max_retries=max_retries,
                     callbacks=callbacks,
                     on_phase_progress=on_phase_progress,
+                    shared_beats_by_dilemma=shared_beats_by_dilemma
+                    if shared_beats_by_dilemma
+                    else None,
                 )
                 # Extend (not replace) so shared beats are preserved at the front
                 existing_beats = collected.get("initial_beats", [])

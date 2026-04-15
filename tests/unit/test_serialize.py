@@ -2150,6 +2150,134 @@ class TestBuildPerPathBeatContext:
         assert "Sibling paths" in result
         assert "path::dilemma_a__answer_y" in result
 
+    # ------------------------------------------------------------------
+    # Tests for shared_beats_by_dilemma injection (criterion 3 of #1227)
+    # ------------------------------------------------------------------
+
+    def _make_shared_beat(
+        self,
+        beat_id: str = "shared_beat_01",
+        summary: str = "The hero enters the tavern.",
+        dilemma_id: str = "dilemma::dilemma_a",
+        path_id: str = "path::dilemma_a__answer_x",
+        also_belongs_to: str = "path::dilemma_a__answer_y",
+        location: str | None = "location::tavern",
+        entities: list[str] | None = None,
+        effect: str = "advances",
+        note: str = "Sets up the dilemma.",
+    ) -> dict:
+        return {
+            "beat_id": beat_id,
+            "summary": summary,
+            "path_id": path_id,
+            "also_belongs_to": also_belongs_to,
+            "location": location,
+            "entities": entities or ["character::hero"],
+            "dilemma_impacts": [{"dilemma_id": dilemma_id, "effect": effect, "note": note}],
+        }
+
+    def test_shared_beats_section_present_when_dilemma_has_shared_beats(self) -> None:
+        """When shared beats exist for the path's dilemma, the section header appears."""
+        from questfoundry.agents.serialize import _build_per_path_beat_context
+
+        path = self._make_path(
+            path_id="path::dilemma_a__answer_x",
+            dilemma_id="dilemma::dilemma_a",
+        )
+        shared_beat = self._make_shared_beat()
+        shared_beats_by_dilemma = {"dilemma_a": [shared_beat]}
+
+        result = _build_per_path_beat_context(
+            path,
+            "entity_ctx",
+            shared_beats_by_dilemma=shared_beats_by_dilemma,
+        )
+
+        assert "Shared pre-commit beats already established" in result
+        assert "shared_beat_01" in result
+        assert "The hero enters the tavern." in result
+
+    def test_shared_beats_includes_location_entities_effect(self) -> None:
+        """Shared beat renders location, entities, and effect/note correctly."""
+        from questfoundry.agents.serialize import _build_per_path_beat_context
+
+        path = self._make_path(
+            path_id="path::dilemma_a__answer_x",
+            dilemma_id="dilemma::dilemma_a",
+        )
+        shared_beat = self._make_shared_beat(
+            location="location::market",
+            entities=["character::alice", "character::bob"],
+            effect="commits",
+            note="Alice commits to trust.",
+        )
+        shared_beats_by_dilemma = {"dilemma_a": [shared_beat]}
+
+        result = _build_per_path_beat_context(
+            path,
+            "entity_ctx",
+            shared_beats_by_dilemma=shared_beats_by_dilemma,
+        )
+
+        assert "location::market" in result
+        assert "`character::alice`" in result
+        assert "`character::bob`" in result
+        assert "commits" in result
+        assert "Alice commits to trust." in result
+
+    def test_shared_beats_section_absent_when_no_shared_beats_for_dilemma(self) -> None:
+        """When shared_beats_by_dilemma exists but has no entry for this dilemma, no header."""
+        from questfoundry.agents.serialize import _build_per_path_beat_context
+
+        path = self._make_path(
+            path_id="path::dilemma_a__answer_x",
+            dilemma_id="dilemma::dilemma_a",
+        )
+        # Different dilemma's shared beats — should NOT appear for dilemma_a
+        shared_beats_by_dilemma = {"dilemma_b": [self._make_shared_beat()]}
+
+        result = _build_per_path_beat_context(
+            path,
+            "entity_ctx",
+            shared_beats_by_dilemma=shared_beats_by_dilemma,
+        )
+
+        assert "Shared pre-commit beats already established" not in result
+
+    def test_no_shared_beats_section_when_dict_is_none(self) -> None:
+        """When shared_beats_by_dilemma is None (not provided), no section header appears."""
+        from questfoundry.agents.serialize import _build_per_path_beat_context
+
+        path = self._make_path()
+
+        result = _build_per_path_beat_context(
+            path,
+            "entity_ctx",
+            shared_beats_by_dilemma=None,
+        )
+
+        assert "Shared pre-commit beats already established" not in result
+
+    def test_shared_beats_no_location_renders_no_location(self) -> None:
+        """Beat with no location renders 'no location' rather than 'None'."""
+        from questfoundry.agents.serialize import _build_per_path_beat_context
+
+        path = self._make_path(
+            path_id="path::dilemma_a__answer_x",
+            dilemma_id="dilemma::dilemma_a",
+        )
+        shared_beat = self._make_shared_beat(location=None)
+        shared_beats_by_dilemma = {"dilemma_a": [shared_beat]}
+
+        result = _build_per_path_beat_context(
+            path,
+            "entity_ctx",
+            shared_beats_by_dilemma=shared_beats_by_dilemma,
+        )
+
+        assert "no location" in result
+        assert "None" not in result
+
 
 # ---------------------------------------------------------------------------
 # Tests for _serialize_shared_beats_for_dilemma and
