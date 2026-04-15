@@ -1263,7 +1263,7 @@ class TestCheckNoPreCommitIntersections:
         assert check.severity == "pass"
 
     def test_passes_when_group_has_one_shared_beat(self) -> None:
-        """A group with only one shared pre-commit beat is valid (cross-dilemma intersection)."""
+        """A group with one dual-path beat and one single-path beat is valid — only one beat qualifies as dual, so no same-dilemma collision."""
         from questfoundry.graph.grow_validation import check_no_pre_commit_intersections
 
         graph = Graph.empty()

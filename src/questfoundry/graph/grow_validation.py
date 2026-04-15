@@ -711,7 +711,7 @@ def check_no_cross_dilemma_belongs_to(graph: Graph) -> ValidationCheck:
         if len(paths) < 2:
             continue
         dilemmas = {path_to_dilemma.get(p) for p in paths}
-        dilemmas.discard(None)
+        dilemmas.discard(None)  # paths without dilemma_id are caught by earlier checks
         if len(dilemmas) > 1:
             violations.append(
                 f"{beat_id} -> {sorted(paths)} across dilemmas {sorted(d for d in dilemmas if d)}"
