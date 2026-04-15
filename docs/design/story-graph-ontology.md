@@ -493,9 +493,9 @@ SEED is the heaviest mutation stage. It triages, scaffolds, orders, and sketches
 | | |
 |---|---|
 | **Creates** | Ordering edges (beat → beat), intersection groups, state flags |
-| **Edges created** | Predecessor/successor edges in the beat DAG, intersection grouping edges, entity overlay nodes with state flag activation |
+| **Edges created** | Predecessor/successor edges in the beat DAG, intersection grouping edges, `derived_from` (state flag → consequence) |
 | **Reads** | All SEED output (paths, beats, consequences, dilemma relationships, temporal hints) |
-| **Modifies** | Beat nodes (enriched with intersection membership) |
+| **Modifies** | Beat nodes (enriched with intersection membership), entity nodes (activates overlays with state flags — overlays are an embedded list on the entity, not a separate node type; see Part 6) |
 | **Consumes** | Entity flexibility annotations (used to find intersections, then discarded), temporal hints (used for interleaving, then discarded) |
 | **Validates** | Every computed arc traversal is complete and has no dead ends |
 
@@ -521,6 +521,7 @@ POLISH operates in two phases:
 | **Creates** | Passage nodes, choice edges, variant passages |
 | **Edges created** | Beat → passage (grouping), passage → passage (choices with labels/gates/grants), `variant_of` (variant → base passage) |
 | **Reads** | Finalized beat DAG, intersection groups, state flags |
+| **Modifies** | Entity nodes (annotates with character arc metadata — an annotation on entity nodes, not a separate node type; see Part 1 "Character Arc Metadata") |
 | **Decides** | Passage grouping (collapse + intersection), prose feasibility, variant vs shared vs residue beat, false branch placement, character arc metadata |
 
 POLISH transforms the beat DAG into the passage graph. After POLISH, every passage is defined, every choice is wired, and every variant is created. The structure is ready for prose.
@@ -665,7 +666,6 @@ The danger: creating separate entity nodes for each state combination (`mentor_t
 | Beat | SEED, POLISH | No | Story moment. Regular, micro-beat, or residue beat. |
 | Intersection Group | GROW | No | Declaration that beats from different paths co-occur |
 | State Flag | GROW | Yes | Boolean world-state marker derived from consequence |
-| Character Arc Metadata | POLISH | No | Per-entity trajectory summary for FILL context (start → pivot → end per path) |
 | Passage | POLISH | Yes (partial) | Prose container holding 1+ beats |
 | Scene Blueprint | FILL | No | Per-passage writing plan (sensory palette, opening move) |
 | Codeword | SHIP | Yes | Player-facing projection of a state flag (gamebook formats) |
