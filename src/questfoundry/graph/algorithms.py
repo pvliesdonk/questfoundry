@@ -80,17 +80,19 @@ def compute_active_flags_at_beat(graph: Graph, beat_id: str) -> set[frozenset[st
 
     # Step 3: Find commit beats among ancestors and group by dilemma
     # A commit beat has dilemma_impacts with effect="commits"
+    # Y-shape (Story Graph Ontology §8): pre-commit beats have two belongs_to edges (same
+    # dilemma, both paths); post-commit beats have exactly one. A beat's
+    # state-flag contribution depends on which path the player is on, not on
+    # which belongs_to edge we happen to read first.
     belongs_to_edges = graph.get_edges(edge_type="belongs_to")
-    beat_to_path: dict[str, str] = {}
+    _accum: dict[str, set[str]] = {}
     for edge in belongs_to_edges:
         from_id = edge["from"]
         if from_id in beat_nodes:
-            if from_id in beat_to_path:
-                # Entry contract (validate_grow_output) enforces exactly-one belongs_to
-                # per beat, so this should never happen on valid GROW output.
-                msg = f"Beat {from_id!r} has multiple belongs_to edges"
-                raise ValueError(msg)
-            beat_to_path[from_id] = edge["to"]
+            _accum.setdefault(from_id, set()).add(edge["to"])
+    beat_to_paths: dict[str, frozenset[str]] = {
+        bid: frozenset(paths) for bid, paths in _accum.items()
+    }
 
     # Include beat_id itself as a candidate (it may be a commit beat)
     candidates = ancestors | {beat_id}
@@ -102,13 +104,27 @@ def compute_active_flags_at_beat(graph: Graph, beat_id: str) -> set[frozenset[st
         candidate_data = beat_nodes[candidate_id]
         impacts = candidate_data.get("dilemma_impacts", [])
         for impact in impacts:
-            if impact.get("effect") == "commits":
-                dilemma_id = impact.get("dilemma_id", "")
-                path_id = beat_to_path.get(candidate_id, "")
-                if dilemma_id and path_id:
-                    # State flag: "{dilemma_id}:{path_id}"
-                    flag = f"{dilemma_id}:{path_id}"
-                    dilemma_flags.setdefault(dilemma_id, []).append(flag)
+            if impact.get("effect") != "commits":
+                continue
+            dilemma_id = impact.get("dilemma_id", "")
+            if not dilemma_id:
+                continue
+            # Commit beats are single-membership (guard rail 2), so
+            # beat_to_paths[candidate] has exactly one element. If code
+            # elsewhere produces a multi-membership commit beat, that is a
+            # guard-rail violation and we raise instead of guessing.
+            paths = beat_to_paths.get(candidate_id, frozenset())
+            if len(paths) == 0:
+                continue
+            if len(paths) > 1:
+                msg = (
+                    f"commit beat {candidate_id!r} has multiple belongs_to edges "
+                    f"(guard rail 2 violation): {sorted(paths)!r}"
+                )
+                raise ValueError(msg)
+            (path_id,) = paths
+            flag = f"{dilemma_id}:{path_id}"
+            dilemma_flags.setdefault(dilemma_id, []).append(flag)
 
     if not dilemma_flags:
         return {frozenset()}
