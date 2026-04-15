@@ -1726,12 +1726,22 @@ async def serialize_seed_as_function(
 
     prompts = dict(_load_seed_section_prompts())  # Copy — cached original is immutable
 
-    # Inject size-aware beat count range into beat prompts
+    # Inject size-aware beat count ranges into beat prompts
     size_vars = size_template_vars(size_profile)
     beats_range = size_vars["size_beats_per_path"]
+    shared_range = size_vars["size_shared_beats_per_dilemma"]
+    post_range = size_vars["size_post_commit_beats_per_path"]
     for key in ("beats", "per_path_beats"):
         if key in prompts:
             prompts[key] = prompts[key].replace("{size_beats_per_path}", beats_range)
+    if "shared_beats" in prompts:
+        prompts["shared_beats"] = prompts["shared_beats"].replace(
+            "{size_shared_beats_per_dilemma}", shared_range
+        )
+    if "per_path_beats" in prompts:
+        prompts["per_path_beats"] = prompts["per_path_beats"].replace(
+            "{size_post_commit_beats_per_path}", post_range
+        )
 
     total_tokens = 0
 
