@@ -1005,3 +1005,44 @@ class TestInitialBeatPathId:
         """Empty paths list raises ValueError — beats must belong to a path."""
         with pytest.raises(ValidationError, match="must belong to a path"):
             InitialBeat(beat_id="b1", summary="Test", paths=[])
+
+
+def test_initial_beat_pre_commit_dual_belongs_to() -> None:
+    """Pre-commit beats carry ``also_belongs_to`` pointing at the sibling path."""
+    from questfoundry.models.seed import InitialBeat
+
+    beat = InitialBeat(
+        beat_id="b1",
+        summary="Shared setup before the fork.",
+        path_id="path::trust__protector",
+        also_belongs_to="path::trust__manipulator",
+    )
+    assert beat.path_id == "path::trust__protector"
+    assert beat.also_belongs_to == "path::trust__manipulator"
+
+
+def test_initial_beat_post_commit_single_belongs_to_default() -> None:
+    """Post-commit beats default to ``also_belongs_to = None``."""
+    from questfoundry.models.seed import InitialBeat
+
+    beat = InitialBeat(
+        beat_id="b1",
+        summary="Payoff beat.",
+        path_id="path::trust__protector",
+    )
+    assert beat.also_belongs_to is None
+
+
+def test_initial_beat_also_belongs_to_equal_path_id_is_rejected() -> None:
+    """``also_belongs_to`` must differ from ``path_id`` — dual membership needs two paths."""
+    import pytest
+
+    from questfoundry.models.seed import InitialBeat
+
+    with pytest.raises(ValueError, match="also_belongs_to must differ from path_id"):
+        InitialBeat(
+            beat_id="b1",
+            summary="Broken dual.",
+            path_id="path::trust__protector",
+            also_belongs_to="path::trust__protector",
+        )
