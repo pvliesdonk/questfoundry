@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -16,6 +17,10 @@ from questfoundry.agents.summarize import (
     summarize_discussion,
     summarize_seed_chunked,
 )
+
+# Minimum fully-explored dilemmas required for the SEED stage to pass validation
+# (mirrors the threshold cited in src/questfoundry/pipeline/stages/seed.py).
+MIN_FULLY_EXPLORED_DILEMMAS = 2
 
 
 class TestGetSummarizePrompt:
@@ -540,6 +545,115 @@ class TestGetSeedSectionSummarizePrompts:
         for section, prompt in prompts.items():
             assert isinstance(prompt, str), f"{section} should be a string"
             assert len(prompt) > 50, f"{section} should be non-trivial"
+
+
+class TestDilemmasSummarizePromptStructure:
+    """Structural tests for the summarize dilemmas_system prompt (#1241).
+
+    Mirrors TestDilemmasPromptStructure in test_serialize.py. The summarize
+    prompt is upstream of serialize — if it produces a single-answer-explored
+    brief, no serialize-time guard rail can recover. These tests enforce the
+    same sandwich pattern (hard constraint at top, FINAL CHECK at bottom).
+    """
+
+    def _get_dilemmas_prompt(self) -> str:
+        prompts = get_seed_section_summarize_prompts(
+            dilemma_count=8,
+            dilemma_manifest="- dilemma::trust_or_betray",
+            dilemma_answers="- `dilemma::trust_or_betray` -> [trust (default), betray]",
+        )
+        return prompts["dilemmas"]
+
+    def test_dilemmas_prompt_is_nonempty(self) -> None:
+        """Summarize dilemmas prompt must load and be non-trivially long."""
+        prompt = self._get_dilemmas_prompt()
+        assert isinstance(prompt, str)
+        assert len(prompt) > 200
+
+    def test_hard_constraint_appears_before_default_rule(self) -> None:
+        """MINIMUM BRANCHING REQUIREMENT must appear before DEFAULT ANSWER RULE.
+
+        Sandwich-top pattern: hard constraints first, not buried.
+        """
+        prompt = self._get_dilemmas_prompt()
+        assert "MINIMUM BRANCHING REQUIREMENT" in prompt
+        assert "DEFAULT ANSWER RULE" in prompt
+        idx_constraint = prompt.index("MINIMUM BRANCHING REQUIREMENT")
+        idx_default = prompt.index("DEFAULT ANSWER RULE")
+        assert idx_constraint < idx_default, (
+            "MINIMUM BRANCHING REQUIREMENT must appear before DEFAULT ANSWER RULE"
+        )
+
+    def test_final_check_section_present(self) -> None:
+        """FINAL CHECK section must be present (sandwich-bottom pattern)."""
+        prompt = self._get_dilemmas_prompt()
+        assert "FINAL CHECK" in prompt
+
+    def test_final_check_appears_after_hard_constraint(self) -> None:
+        """FINAL CHECK must appear after the main hard constraint."""
+        prompt = self._get_dilemmas_prompt()
+        idx_constraint = prompt.index("MINIMUM BRANCHING REQUIREMENT")
+        idx_final = prompt.index("FINAL CHECK")
+        assert idx_final > idx_constraint
+
+    def test_extraction_fidelity_directive_present(self) -> None:
+        """Prompt must instruct the model to preserve EXPLORE BOTH decisions
+        from the discussion — not downgrade them to single-answer-explored.
+
+        Regression for #1241: the discuss phase correctly identified 6 of 8
+        dilemmas as EXPLORE BOTH, but summarize ignored that and emitted
+        single-answer-explored for all 8.
+        """
+        prompt = self._get_dilemmas_prompt()
+        assert "EXTRACTION FIDELITY" in prompt
+        assert "EXPLORE BOTH" in prompt
+
+    def test_alternative_may_also_be_explored_language_present(self) -> None:
+        """Prompt must clarify that the alternative answer MAY ALSO be in explored.
+
+        Prevents the old framing where 'default in explored' implied
+        'alternative goes in unexplored'.
+        """
+        prompt = self._get_dilemmas_prompt()
+        assert "MAY ALSO be in `explored`" in prompt
+
+    def test_bad_distribution_example_links_to_failure(self) -> None:
+        """BAD example must explicitly link single-answer-explored to pipeline failure."""
+        prompt = self._get_dilemmas_prompt()
+        assert "BAD" in prompt
+        assert "REJECTED" in prompt or "FAILS" in prompt or "pipeline fails" in prompt
+
+    def test_output_format_example_shows_fully_explored_dilemmas(self) -> None:
+        """The output-format example must demonstrate ≥MIN_FULLY_EXPLORED_DILEMMAS
+        fully-explored dilemmas.
+
+        Small models anchor on the most recent example; an example dominated
+        by single-answer-explored entries normalizes the failure mode.
+
+        Scopes the search to the `## Output Format` section so the assertion
+        reflects the test name — instructional `unexplored=[]` mentions
+        elsewhere in the prompt do not satisfy this check.
+        """
+        prompt = self._get_dilemmas_prompt()
+
+        # Extract the "## Output Format" section (up to the next "##" header
+        # or end of prompt).
+        section_match = re.search(
+            r"## Output Format\b(.*?)(?=\n  ## |\Z)",
+            prompt,
+            flags=re.DOTALL,
+        )
+        assert section_match is not None, "Output Format section is missing"
+        output_format_section = section_match.group(1)
+
+        # Count list-item entries (`- dilemma::...`) with `unexplored=[]`.
+        # Anchoring on `- dilemma::` excludes prose mentions of `unexplored=[]`.
+        fully_explored = len(re.findall(r"- dilemma::[^\n]*unexplored=\[\]", output_format_section))
+        assert fully_explored >= MIN_FULLY_EXPLORED_DILEMMAS, (
+            f"Output-format example must show "
+            f"≥{MIN_FULLY_EXPLORED_DILEMMAS} fully-explored entries; "
+            f"found {fully_explored}"
+        )
 
 
 class TestSummarizeSeedChunked:
