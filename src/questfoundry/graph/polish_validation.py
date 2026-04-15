@@ -517,9 +517,10 @@ def _check_divergences_have_choices(
     """Beats with 2+ children on different paths must live in a passage with 2+ outgoing choices."""
     # Find beats that have 2+ outgoing next/branch edges leading to beats on different paths
     belongs_to_edges = graph.get_edges(edge_type="belongs_to")
-    beat_to_path: dict[str, str] = {}
+    _accum: dict[str, set[str]] = {}
     for edge in belongs_to_edges:
-        beat_to_path[edge["from"]] = edge["to"]
+        _accum.setdefault(edge["from"], set()).add(edge["to"])
+    beat_to_paths: dict[str, frozenset[str]] = {bid: frozenset(ps) for bid, ps in _accum.items()}
 
     next_edges = graph.get_edges(edge_type="next")
     branch_edges = graph.get_edges(edge_type="branch")
@@ -536,10 +537,21 @@ def _check_divergences_have_choices(
     for beat_id, children in children_by_beat.items():
         if len(children) < 2:
             continue
-        # Check if children are on different paths
-        child_paths = {beat_to_path.get(c) for c in children}
-        child_paths.discard(None)
+        # Children sit on different path sets if the UNION of their path
+        # memberships spans more than one distinct path. Under Y-shape, a
+        # pre-commit child has 2 paths and a post-commit child has 1; a
+        # genuine fork has ≥2 distinct paths across children.
+        child_paths: set[str] = set()
+        for c in children:
+            child_paths.update(beat_to_paths.get(c, frozenset()))
         if len(child_paths) < 2:
+            continue
+        # Exclude the non-divergence case: a pre-commit parent with a single
+        # pre-commit child (shared-beat chain) — both have the same dual path
+        # set. Only a parent whose children have DIFFERING single-membership
+        # (commit beats) is a divergence point.
+        child_path_sets = {beat_to_paths.get(c, frozenset()) for c in children}
+        if len(child_path_sets) < 2:
             continue
         # This beat is a divergence point — its passage must have 2+ outgoing choices
         passages = beat_to_passages.get(beat_id, [])
