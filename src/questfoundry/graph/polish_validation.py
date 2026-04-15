@@ -542,6 +542,8 @@ def _check_divergences_have_choices(
         # set. Only a parent whose children have DIFFERING single-membership
         # (commit beats) is a divergence point.
         child_path_sets = {beat_to_paths.get(c, frozenset()) for c in children}
+        # Discard beats with no path assignment — they don't indicate divergence.
+        child_path_sets.discard(frozenset())
         if len(child_path_sets) < 2:
             continue
         # This beat is a divergence point — its passage must have 2+ outgoing choices

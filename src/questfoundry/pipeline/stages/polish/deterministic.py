@@ -655,10 +655,6 @@ def compute_choice_edges(
         bid: frozenset(ps) for bid, ps in _ce_accum.items()
     }
 
-    def _primary_path_ce(bid: str) -> str:
-        """First-by-sort-order path membership. Stable pick for grouping."""
-        return next(iter(sorted(beat_to_paths_ce.get(bid, frozenset()))), "")
-
     # Build beat → passage mapping
     beat_to_passage: dict[str, str] = {}
     for spec in specs:
@@ -705,11 +701,14 @@ def compute_choice_edges(
         if len(child_ids) < 2:
             continue
 
-        # Group children by their primary path (commit beats have single belongs_to)
+        # Group children by all their path memberships to detect any divergence.
+        # Pre-commit beats share multiple paths; commit beats have a single path.
+        # Using all memberships avoids missing divergence when a shared path sorts
+        # first alphabetically under the old primary-path heuristic.
         child_paths: dict[str, list[str]] = {}
         for cid in child_ids:
-            path_id = _primary_path_ce(cid)
-            child_paths.setdefault(path_id, []).append(cid)
+            for path_id in beat_to_paths_ce.get(cid, frozenset()):
+                child_paths.setdefault(path_id, []).append(cid)
 
         if len(child_paths) < 2:
             continue
