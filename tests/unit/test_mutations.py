@@ -2266,8 +2266,8 @@ class TestBeatDilemmaAlignment:
 class TestSeedArcStructureValidation:
     """Test SEED validation checks 14-15: arc structure warnings.
 
-    Doc 1 Part 2: "This scaffold must be complete — the arc from beginning
-    to end must be present." Checks:
+    "How Branching Stories Work", Part 2: "This scaffold must be complete —
+    the arc from beginning to end must be present." Checks:
     14. Each path has advances/reveals before its commit beat.
     15. Each path has at least one beat after its commit beat.
 

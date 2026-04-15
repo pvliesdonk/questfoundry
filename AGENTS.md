@@ -247,20 +247,20 @@ log.error("provider_error", provider="ollama", message=str(e))
 
 ### Model Workflow (Ontology → Pydantic → Graph)
 
-**[Document 3](docs/design/document-3-ontology.md) defines the authoritative ontology.** The design specification (`docs/design/00-spec.md`) provides supplementary context. Pydantic models in `src/questfoundry/models/` are hand-written implementations of that ontology. The graph (`graph.db`) is the runtime source of truth for story state.
+**The [Story Graph Ontology](docs/design/story-graph-ontology.md) defines the authoritative ontology.** The design specification (`docs/design/00-spec.md`) provides supplementary context. Pydantic models in `src/questfoundry/models/` are hand-written implementations of that ontology. The graph (`graph.db`) is the runtime source of truth for story state.
 
 ```
-docs/design/document-3-ontology.md  ← Authoritative ontology (node types, relationships)
+docs/design/story-graph-ontology.md  ← Authoritative ontology (node types, relationships)
         ↓
-src/questfoundry/models/*.py        ← Hand-written Pydantic models (validate LLM output)
+src/questfoundry/models/*.py         ← Hand-written Pydantic models (validate LLM output)
         ↓
-graph/mutations.py                  ← Semantic validation against graph state
+graph/mutations.py                   ← Semantic validation against graph state
         ↓
-graph.db                            ← Runtime source of truth (SQLite, nodes + edges)
+graph.db                             ← Runtime source of truth (SQLite, nodes + edges)
 ```
 
 **When adding new stage models:**
-1. Check the ontology in `docs/design/document-3-ontology.md` for the node types and fields
+1. Check the ontology in `docs/design/story-graph-ontology.md` for the node types and fields
 2. Create/update Pydantic models in `src/questfoundry/models/`
 3. Add semantic validation in `graph/mutations.py` if needed
 4. Export from `models/__init__.py`

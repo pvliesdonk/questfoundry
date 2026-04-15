@@ -4,7 +4,7 @@
 **Last Updated**: 2026-02-24
 **Status**: Reference (partially complete)
 
-> **Note (2026-02-24):** Slices 1–3 are complete. GROW is substantially implemented. This document remains useful as a reference for the implementation approach but does not track current progress. For the authoritative story model, see [Document 1](how-branching-stories-work.md) and [Document 3](document-3-ontology.md). Note that Documents 1/3 introduce a POLISH stage (between GROW and FILL) not reflected in this guide's slice structure.
+> **Note (2026-02-24):** Slices 1–3 are complete. GROW is substantially implemented. This document remains useful as a reference for the implementation approach but does not track current progress. For the authoritative story model, see ["How Branching Stories Work"](how-branching-stories-work.md) and the [Story Graph Ontology](story-graph-ontology.md). Note that those two docs introduce a POLISH stage (between GROW and FILL) not reflected in this guide's slice structure.
 
 ---
 
@@ -18,7 +18,7 @@ This guide describes the recommended implementation order for a v5 cleanroom bui
 
 Before starting:
 
-1. Read [Document 1](./how-branching-stories-work.md) and [Document 3](./document-3-ontology.md) — Authoritative story model and graph ontology
+1. Read ["How Branching Stories Work"](./how-branching-stories-work.md) and the [Story Graph Ontology](./story-graph-ontology.md) — Authoritative story model and graph ontology
 2. Read [00-spec.md](./00-spec.md) — Supplementary specification
 3. Read [procedures/](./procedures/) — Stage algorithm specifications
 4. Set up development environment (see [06-proposed-dependencies.md](./06-proposed-dependencies.md))

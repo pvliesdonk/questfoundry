@@ -91,7 +91,7 @@ def validate_grow_output(graph: Graph) -> list[str]:
         # GROW may omit status for dilemmas it fully explored; treat None as "explored".
         if ddata.get("status") in ("explored", None)
     }
-    # Build consequence → state_flag map via derived_from edges (Doc 3 Part 9).
+    # Build consequence → state_flag map via derived_from edges (Story Graph Ontology, Part 9).
     # state_flag nodes have no dilemma_id field; the association is:
     #   state_flag --derived_from--> consequence <--has_consequence-- path.dilemma_id
     _flagged_consequences: set[str] = {

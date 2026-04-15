@@ -276,7 +276,7 @@ async def phase_enumerate_arcs(
     - Exactly one spine arc exists (containing all canonical paths).
     - Arc count bounded by 4x size_profile.max_arcs (if provided).
     - No arc nodes or arc_contains edges are stored — arcs are computed
-      traversals per Document 3 ontology.
+      traversals per the Story Graph Ontology.
 
     Invariants:
     - Deterministic: same graph always produces same arcs.
@@ -340,7 +340,7 @@ async def phase_divergence(graph: Graph, model: BaseChatModel) -> GrowPhaseResul
     Postconditions:
     - Divergence points computed and validated.
     - No graph writes — divergence metadata is computed on-the-fly
-      by downstream consumers per Document 3 ontology.
+      by downstream consumers per the Story Graph Ontology.
 
     Invariants:
     - Deterministic: divergence points derived from sequence comparison.
@@ -387,7 +387,7 @@ async def phase_convergence(graph: Graph, model: BaseChatModel) -> GrowPhaseResu
     Postconditions:
     - Convergence points computed and validated.
     - No graph writes — convergence metadata is computed on-the-fly
-      by downstream consumers per Document 3 ontology.
+      by downstream consumers per the Story Graph Ontology.
 
     Invariants:
     - Deterministic: convergence derived from dilemma policies and beat sequences.

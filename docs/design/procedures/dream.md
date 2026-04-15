@@ -1,6 +1,6 @@
 # DREAM Procedure
 
-> For the narrative description of the DREAM stage, see [Document 1, Part 1](../how-branching-stories-work.md). This document provides the detailed algorithm specification.
+> For the narrative description of the DREAM stage, see ["How Branching Stories Work", Part 1](../how-branching-stories-work.md). This document provides the detailed algorithm specification.
 
 ## Summary
 

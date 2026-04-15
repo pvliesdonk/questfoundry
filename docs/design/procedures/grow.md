@@ -4,14 +4,14 @@
 **Parent:** questfoundry-v5-spec.md
 **Purpose:** Detailed specification of the GROW stage mechanics
 
-> For the narrative description of the GROW stage, see [Document 1, Part 3](../how-branching-stories-work.md). This document provides the detailed algorithm specification.
+> For the narrative description of the GROW stage, see ["How Branching Stories Work", Part 3](../how-branching-stories-work.md). This document provides the detailed algorithm specification.
 
-> **Major scope change (2026-02-24):** [Documents 1 and 3](../how-branching-stories-work.md) split the original GROW scope into **GROW** (beat DAG creation) and **POLISH** (passage layer creation). Phases 8a–9 (passage creation, codeword creation, overlay creation, choice derivation) move to POLISH. See Document 1, Part 4 for the POLISH specification. The code has not yet been reorganized.
+> **Major scope change (2026-02-24):** "How Branching Stories Work" and the [Story Graph Ontology](../story-graph-ontology.md) split the original GROW scope into **GROW** (beat DAG creation) and **POLISH** (passage layer creation). Phases 8a–9 (passage creation, codeword creation, overlay creation, choice derivation) move to POLISH. See "How Branching Stories Work", Part 4 for the POLISH specification. The code has not yet been reorganized.
 >
 > **Additional terminology transitions:**
 > - `convergence_policy` (hard/soft/flavor) → `dilemma_role` (hard/soft). `flavor` is removed — handled by POLISH as false branches.
-> - Intersection model: Document 3 redefines intersections as co-occurrence groupings. Beats retain their single `belongs_to` edge; an intersection group node declares scene sharing. The current implementation uses cross-assigned `belongs_to` edges.
-> - Arc model: Document 3 treats arcs as computed DAG traversals, not stored graph nodes.
+> - Intersection model: the Story Graph Ontology redefines intersections as co-occurrence groupings. Beats retain their single `belongs_to` edge; an intersection group node declares scene sharing. The current implementation uses cross-assigned `belongs_to` edges.
+> - Arc model: the Story Graph Ontology treats arcs as computed DAG traversals, not stored graph nodes.
 > - `sequenced_after` → `predecessor`/`successor` edges.
 > - `location_alternatives` → entity flexibility edges (generalized to any entity category).
 
@@ -175,7 +175,7 @@ If the non-canonical answer is not promoted to a path in SEED, that dilemma has 
 
 ### Phase 3: Intersection Detection
 
-> **Intersection model change:** [Document 3, Part 4](../document-3-ontology.md) redefines intersections as co-occurrence groupings. Beats retain their single `belongs_to` edge; an intersection group node declares which beats share a scene. The current implementation uses cross-assigned `belongs_to` edges. See Document 3 for the new model.
+> **Intersection model change:** The [Story Graph Ontology, Part 4](../story-graph-ontology.md) redefines intersections as co-occurrence groupings. Beats retain their single `belongs_to` edge; an intersection group node declares which beats share a scene. The current implementation uses cross-assigned `belongs_to` edges. See the Story Graph Ontology for the new model.
 
 **Purpose:** Find beats from different paths (different dilemmas) that should be one scene.
 
@@ -359,7 +359,7 @@ After `resolve_temporal_hints` completes, the set of surviving temporal hints mu
 
 ### Phase 4f: Entity Arc Descriptors
 
-> **Moves to POLISH:** [Document 3, Part 1](../document-3-ontology.md) calls these "character arc metadata" and assigns their creation to the POLISH stage. The concept is preserved; the stage assignment changes.
+> **Moves to POLISH:** The [Story Graph Ontology, Part 1](../story-graph-ontology.md) calls these "character arc metadata" and assigns their creation to the POLISH stage. The concept is preserved; the stage assignment changes.
 
 **Purpose:** Derive per-entity arc trajectories for each path.
 
@@ -403,7 +403,7 @@ pivot beats are preferred.
 
 ### Phase 5: Arc Enumeration
 
-> **Arc model change:** [Document 3, Part 3](../document-3-ontology.md) treats arcs as computed DAG traversals, not stored graph nodes. Arc enumeration becomes a validation/diagnostic utility rather than a graph-building step.
+> **Arc model change:** The [Story Graph Ontology, Part 3](../story-graph-ontology.md) treats arcs as computed DAG traversals, not stored graph nodes. Arc enumeration becomes a validation/diagnostic utility rather than a graph-building step.
 
 **Purpose:** Enumerate all valid routes through the beat graph.
 
@@ -466,7 +466,7 @@ arc:
 
 ### Phase 7: Convergence Identification (Policy-Aware)
 
-> **Terminology transition:** [Document 3, Part 2](../document-3-ontology.md) replaces `convergence_policy` (hard/soft/flavor) with `dilemma_role` (hard/soft). Convergence behavior is derived from the role. `flavor` is removed — flavor-level choices are handled by POLISH as false branches. The code currently still uses `convergence_policy`.
+> **Terminology transition:** The [Story Graph Ontology, Part 2](../story-graph-ontology.md) replaces `convergence_policy` (hard/soft/flavor) with `dilemma_role` (hard/soft). Convergence behavior is derived from the role. `flavor` is removed — flavor-level choices are handled by POLISH as false branches. The code currently still uses `convergence_policy`.
 
 **Purpose:** Find where arcs can rejoin, respecting the branching contract.
 
@@ -493,7 +493,7 @@ arc:
 
 ### Phase 8: Passage and State Derivation
 
-> **Moves to POLISH:** [Document 1, Part 4](../how-branching-stories-work.md) assigns passage creation (8a), state flag/codeword creation (8b), overlay creation (8c), and choice derivation (Phase 9) to the POLISH stage. See also [Document 3, Part 5](../document-3-ontology.md) (The Passage Layer) and [Document 3, Part 6](../document-3-ontology.md) (Entity Overlays and State). The code has not yet been reorganized.
+> **Moves to POLISH:** ["How Branching Stories Work", Part 4](../how-branching-stories-work.md) assigns passage creation (8a), state flag/codeword creation (8b), overlay creation (8c), and choice derivation (Phase 9) to the POLISH stage. See also the [Story Graph Ontology, Part 5](../story-graph-ontology.md) (The Passage Layer) and [Part 6](../story-graph-ontology.md) (Entity Overlays and State). The code has not yet been reorganized.
 
 **Purpose:** Create player-facing passages from beats, and derive codewords and overlays from consequences.
 

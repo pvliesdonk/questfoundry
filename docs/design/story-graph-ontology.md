@@ -1,12 +1,12 @@
 # Story Graph Ontology — Data Model for Branching Fiction
 
-> **Status: Authoritative.** This document, together with [Document 1](how-branching-stories-work.md), is the authoritative source of truth for QuestFoundry's graph ontology. Where other design documents contradict this one, this document takes precedence. See [Issue #977](https://github.com/pvliesdonk/questfoundry/issues/977).
+> **Status: Authoritative.** This document, together with ["How Branching Stories Work"](how-branching-stories-work.md), is the authoritative source of truth for QuestFoundry's graph ontology. Where other design documents contradict this one, this document takes precedence. See [Issue #977](https://github.com/pvliesdonk/questfoundry/issues/977).
 
 ## Guiding Principle
 
-The graph serves the story. Every node type, edge type, and property in this ontology exists because a narrative concept from [Document 1](how-branching-stories-work.md) requires it. If a graph concept cannot be traced to a narrative purpose, it does not belong.
+The graph serves the story. Every node type, edge type, and property in this ontology exists because a narrative concept from ["How Branching Stories Work"](how-branching-stories-work.md) requires it. If a graph concept cannot be traced to a narrative purpose, it does not belong.
 
-This document translates Document 1's storytelling language into a formal data model. It is not a replacement for Document 1 — it is a companion. Document 1 describes what authors are trying to accomplish. This document describes how the graph represents their work.
+This document translates the narrative guide's storytelling language into a formal data model. It is not a replacement for "How Branching Stories Work" — it is a companion. "How Branching Stories Work" describes what authors are trying to accomplish. This document describes how the graph represents their work.
 
 The direction is always: **narrative concept first, graph representation second.** The current ontology was built partly in the other direction (graph structure first, narrative meaning mapped onto it). Where this document diverges from the current implementation, the narrative intent takes precedence.
 
@@ -14,14 +14,14 @@ The direction is always: **narrative concept first, graph representation second.
 
 ## Part 1: Primitive Concepts
 
-These are the fundamental building blocks of the graph. Each traces directly to a Document 1 narrative concept.
+These are the fundamental building blocks of the graph. Each traces directly to a narrative concept from "How Branching Stories Work".
 
 ### Vision
 
 A singleton configuration node. Stores the creative contract established in DREAM: genre, subgenre, tone, themes, audience, scope, style preferences, content guidance, and an optional point-of-view hint.
 
 The vision's fields include:
-- **Genre and subgenre** — the primary genre (e.g., "mystery") and a more specific subgenre (e.g., "cozy mystery," "noir detective"). Document 1 discusses subgenre narratively; this document formalizes it as a distinct field.
+- **Genre and subgenre** — the primary genre (e.g., "mystery") and a more specific subgenre (e.g., "cozy mystery," "noir detective"). "How Branching Stories Work" discusses subgenre narratively; this document formalizes it as a distinct field.
 - **Point-of-view style** — a hint, not a binding constraint. Expressed as one of four narrative perspectives (first person, second person, third person limited, third person omniscient). FILL's voice document makes the final decision — the vision's `pov_style` is advisory context.
 - **Content notes** — explicit guidance on what the story should include or exclude (themes to embrace, topics to avoid, content boundaries). This is a substantive creative constraint, not a filter — it shapes what BRAINSTORM generates and what SEED retains.
 - **Scope** — expressed as a named preset (e.g., "vignette," "short story," "novella") that implies approximate sizes for the cast, dilemma count, beat count, and passage count. The preset system provides BRAINSTORM and SEED with concrete targets.
@@ -102,7 +102,7 @@ Beat subtypes (distinguished by a role marker):
 
 The narrative outcome of a path choice. Created by SEED, linked to a path via `has_consequence` edge. "The mentor becomes your adversary" is a consequence of the distrust path.
 
-Consequences are the bridge between narrative stakes (Document 1's "why it matters") and mechanical state tracking (state flags). Each consequence becomes one or more state flags in GROW.
+Consequences are the bridge between narrative stakes (the "why it matters" described in "How Branching Stories Work") and mechanical state tracking (state flags). Each consequence becomes one or more state flags in GROW.
 
 **Working.** Consumed when state flags are derived.
 
@@ -154,7 +154,7 @@ Scene blueprints are working data for FILL's own process — they structure the 
 
 ## Part 2: Dilemma Ordering and Relationships
 
-Not all dilemmas play the same role in a story. Document 1 distinguishes hard dilemmas (the backbone) from soft dilemmas (the subplots), and notes that the ordering of dilemmas has profound structural consequences. This section defines how the graph represents these roles and relationships.
+Not all dilemmas play the same role in a story. "How Branching Stories Work" distinguishes hard dilemmas (the backbone) from soft dilemmas (the subplots), and notes that the ordering of dilemmas has profound structural consequences. This section defines how the graph represents these roles and relationships.
 
 ### Dilemma Role
 
@@ -170,7 +170,7 @@ This replaces the current `convergence_policy` field. Rather than declaring conv
 
 ### Flavor Choices
 
-Document 1 also describes flavor-level choices that barely diverge — the choice affects tone and details but not which beats the player experiences. These are not full dilemmas in the ontological sense. They are handled by cosmetic state flags and minor prose variation, without the structural machinery of paths, commits, and convergence. POLISH creates them as false branches or minor passage variants.
+"How Branching Stories Work" also describes flavor-level choices that barely diverge — the choice affects tone and details but not which beats the player experiences. These are not full dilemmas in the ontological sense. They are handled by cosmetic state flags and minor prose variation, without the structural machinery of paths, commits, and convergence. POLISH creates them as false branches or minor passage variants.
 
 ### Pairwise Relationships
 
@@ -274,7 +274,7 @@ Temporal hints are optional. A beat with no hint has no constraint on its placem
 
 ### The 2^N Law in Graph Terms
 
-Document 1's central structural insight: any beat placed after N committed dilemmas exists in up to 2^N versions. In the DAG, this is visible as the branching factor:
+The central structural insight of "How Branching Stories Work": any beat placed after N committed dilemmas exists in up to 2^N versions. In the DAG, this is visible as the branching factor:
 
 - A beat before any commit has one predecessor path through the DAG — it exists once.
 - A beat after one commit has predecessors from two branches — it exists in two versions (or is shared if it belongs to both paths).
@@ -294,7 +294,7 @@ If pre-computed arc data is stored for debugging purposes, it uses a `materializ
 
 ## Part 4: Intersections
 
-Document 1 describes intersections as "where independent storylines share a scene." If the mentor path has "the mentor gives cryptic advice" and the artifact path has "study the artifact's markings," and both could happen in the mentor's study — that is a natural intersection. One scene where both storylines advance simultaneously.
+"How Branching Stories Work" describes intersections as "where independent storylines share a scene." If the mentor path has "the mentor gives cryptic advice" and the artifact path has "study the artifact's markings," and both could happen in the mentor's study — that is a natural intersection. One scene where both storylines advance simultaneously.
 
 ### What an Intersection Is
 
@@ -617,7 +617,7 @@ An LLM will naturally write "if the player chose X" when the correct formulation
 
 State flags are internal implementation machinery — the full set of boolean markers used by GROW, POLISH, entity overlays, and the runtime engine. Codewords are a player-facing subset surfaced in gamebook formats for manual state tracking.
 
-The current codebase uses "codeword" for both concepts. Document 3 defines them as distinct: every codeword is a state flag, but not every state flag is a codeword. Code that manipulates state flags for routing or overlay purposes must not be confused with code that presents codewords to the player.
+The current codebase uses "codeword" for both concepts. This ontology defines them as distinct: every codeword is a state flag, but not every state flag is a codeword. Code that manipulates state flags for routing or overlay purposes must not be confused with code that presents codewords to the player.
 
 ### Entity Overlays ≠ Entity Variants
 
@@ -730,7 +730,7 @@ Two patterns were identified during design but deferred from the minimal ontolog
 
 ## Appendix: Comparison with Current Ontology
 
-This section documents where the current implementation (`docs/design/00-spec.md`, `src/questfoundry/models/`, `src/questfoundry/graph/`) diverges from the ontology defined in this document. It is a diagnostic — a map of what needs to change, not a criticism of the current code, which was built before Document 1 existed.
+This section documents where the current implementation (`docs/design/00-spec.md`, `src/questfoundry/models/`, `src/questfoundry/graph/`) diverges from the ontology defined in this document. It is a diagnostic — a map of what needs to change, not a criticism of the current code, which was built before "How Branching Stories Work" existed.
 
 ### Intersection — Fundamental Redefinition
 

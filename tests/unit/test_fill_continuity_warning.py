@@ -79,7 +79,7 @@ def test_continuity_warning_suppressed_for_micro_beat() -> None:
 
 def test_continuity_warning_suppressed_for_intersection_hint() -> None:
     graph, arc_id = _make_two_passages_graph(shared_entity=False)
-    # Create intersection group node and edges (Doc 3 model)
+    # Create intersection group node and edges (Story Graph Ontology model)
     graph.create_node(
         "intersection_group::a--b",
         {"type": "intersection_group", "raw_id": "a--b", "beat_ids": ["beat::a", "beat::b"]},

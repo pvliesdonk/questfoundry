@@ -2293,7 +2293,7 @@ class TestApplyKnotMark:
         assert mentor_edges[0]["to"] == artifact_edges[0]["to"]  # Same group
 
     def test_no_cross_path_belongs_to_edges(self) -> None:
-        """Intersection does NOT add cross-path belongs_to edges (Doc 3)."""
+        """Intersection does NOT add cross-path belongs_to edges (Story Graph Ontology)."""
         from questfoundry.graph.grow_algorithms import apply_intersection_mark
         from tests.fixtures.grow_fixtures import make_intersection_candidate_graph
 

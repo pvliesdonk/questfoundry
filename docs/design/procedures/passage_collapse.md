@@ -5,7 +5,7 @@
 **Issue:** #634
 **Purpose:** Detailed design for passage-level collapse and transition handling
 
-> **Superseded (2026-02-24).** [Document 1, Part 4](../how-branching-stories-work.md) (Passage Collapse section) and [Document 3, Part 5](../document-3-ontology.md) (The Passage Layer) move passage collapse from GROW to the POLISH stage. The concepts described here are largely preserved but the stage assignment changes. Retained for historical reference. The code has not yet been reorganized.
+> **Superseded (2026-02-24).** ["How Branching Stories Work", Part 4](../how-branching-stories-work.md) (Passage Collapse section) and the [Story Graph Ontology, Part 5](../story-graph-ontology.md) (The Passage Layer) move passage collapse from GROW to the POLISH stage. The concepts described here are largely preserved but the stage assignment changes. Retained for historical reference. The code has not yet been reorganized.
 
 ---
 

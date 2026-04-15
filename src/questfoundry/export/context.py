@@ -130,7 +130,7 @@ def _extract_entities(graph: Graph) -> list[ExportEntity]:
 def _project_state_flags_to_codewords(graph: Graph) -> list[ExportCodeword]:
     """Project state flags to player-facing codewords based on dilemma role.
 
-    Per Document 3 ontology: soft dilemma state flags become codewords
+    Per the Story Graph Ontology: soft dilemma state flags become codewords
     (the player carries state across convergence points). Hard dilemma
     state flags remain internal routing machinery and are not exported.
 

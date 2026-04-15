@@ -25,7 +25,8 @@ from pydantic import BaseModel, Field, model_validator
 
 # Type aliases for clarity
 EntityDisposition = Literal["retained", "cut"]
-# PathTier has no direct Document 1/3 counterpart but serves a real purpose:
+# PathTier has no direct counterpart in "How Branching Stories Work" or the
+# Story Graph Ontology, but serves a real purpose:
 # dilemma scoring uses it to weight non-canonical paths, and context formatting
 # displays it to guide LLM prose generation. Kept as-is.
 PathTier = Literal["major", "minor"]
@@ -212,7 +213,7 @@ class TemporalHint(BaseModel):
     Hints are advisory — GROW resolves conflicts in favor of dilemma ordering
     relationships (wraps/serial/concurrent).
 
-    See docs/design/document-3-ontology.md § Temporal Hints.
+    See docs/design/story-graph-ontology.md § Temporal Hints.
 
     Attributes:
         relative_to: The dilemma ID this hint is relative to.
@@ -293,7 +294,7 @@ class InitialBeat(BaseModel):
     location_alternatives: list[str] = Field(
         default_factory=list,
         description="Alternate location entities for intersection flexibility. "
-        "Stored as flexibility edges in graph (Doc 3), not as node property.",
+        "Stored as flexibility edges in graph (Story Graph Ontology), not as node property.",
     )
     temporal_hint: TemporalHint | None = Field(
         default=None,
@@ -403,7 +404,7 @@ class DilemmaAnalysis(BaseModel):
 
 
 class DilemmaRelationship(BaseModel):
-    """Pairwise dilemma ordering relationship from SEED (Document 3, Part 2).
+    """Pairwise dilemma ordering relationship from SEED (Story Graph Ontology, Part 2).
 
     Serialized as Section 8 (after prune). Tells GROW how two dilemmas
     relate temporally: one wrapping the other, running concurrently, or

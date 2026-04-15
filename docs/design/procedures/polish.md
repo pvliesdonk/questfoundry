@@ -1,11 +1,11 @@
 # QuestFoundry v5 — POLISH Algorithm Specification
 
 **Status:** Specification Complete
-**Parent:** [Document 1, Part 4](../how-branching-stories-work.md)
+**Parent:** ["How Branching Stories Work", Part 4](../how-branching-stories-work.md)
 **ADR:** [ADR-019](../../architecture/decisions.md#adr-019-polish-stage-supersedes-grow-routing) (supersedes ADR-017; created in parallel PR #1020)
 **Purpose:** Detailed specification of the POLISH stage mechanics
 
-> For the narrative description of the POLISH stage, see [Document 1, Part 4](../how-branching-stories-work.md). For the formal ontology of passages, choices, and variants, see [Document 3, Parts 5-6](../document-3-ontology.md). This document provides the algorithm specification.
+> For the narrative description of the POLISH stage, see ["How Branching Stories Work", Part 4](../how-branching-stories-work.md). For the formal ontology of passages, choices, and variants, see the [Story Graph Ontology, Parts 5-6](../story-graph-ontology.md). This document provides the algorithm specification.
 
 ---
 
@@ -502,8 +502,8 @@ The following GROW phases move to POLISH:
 
 ## References
 
-- [Document 1, Part 4: Shaping the Story](../how-branching-stories-work.md) — narrative description
-- [Document 3, Parts 5-6](../document-3-ontology.md) — passage layer and overlay ontology
+- ["How Branching Stories Work", Part 4: Shaping the Story](../how-branching-stories-work.md) — narrative description
+- [Story Graph Ontology, Parts 5-6](../story-graph-ontology.md) — passage layer and overlay ontology
 - [ADR-019: POLISH Stage Supersedes GROW Routing](../../architecture/decisions.md#adr-019-polish-stage-supersedes-grow-routing)
 - [ADR-017: Unified Routing Plan (superseded)](../../architecture/decisions.md#adr-017-unified-routing-plan-for-grow-variant-routing) — plan-then-execute architecture origin
 - [Discussion #980: Design Review](https://github.com/pvliesdonk/questfoundry/discussions/980) — three-round deliberation establishing this algorithm

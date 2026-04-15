@@ -1,8 +1,8 @@
 # SEED Procedure
 
-> For the narrative description of the SEED stage, see [Document 1, Part 2](../how-branching-stories-work.md). This document provides the detailed algorithm specification.
+> For the narrative description of the SEED stage, see ["How Branching Stories Work", Part 2](../how-branching-stories-work.md). This document provides the detailed algorithm specification.
 >
-> **Terminology transitions (2026-02-24):** [Document 3](../document-3-ontology.md) replaces several terms used in this document. The code has not yet been updated.
+> **Terminology transitions (2026-02-24):** The [Story Graph Ontology](../story-graph-ontology.md) replaces several terms used in this document. The code has not yet been updated.
 > - `convergence_policy` (hard/soft/flavor) → `dilemma_role` (hard/soft). Convergence behavior is derived from the role, not declared directly. `flavor` is removed — flavor-level choices are handled by POLISH as false branches.
 > - `InteractionConstraint` (shared_entity/causal_chain/resource_conflict) → dilemma ordering relationships. The three declared relationships are `wraps`, `concurrent`, and `serial`. `shared_entity` is derived from `anchored_to` edges (not explicitly declared). `causal_chain` is subsumed by `serial`. `resource_conflict` is removed.
 > - `central_entity_ids` (list field on dilemmas) → `anchored_to` edges in the graph.
