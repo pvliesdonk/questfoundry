@@ -681,21 +681,21 @@ def compute_choice_edges(
     # Build passage_id_to_spec once outside the loop (not per-divergence-point)
     passage_id_to_spec: dict[str, PassageSpec] = {s.passage_id: s for s in specs}
 
-    # Find divergence points: commit beats with children on different paths
-    # of the SAME dilemma (#1197). Only commits create player choices — see
-    # docs/design/procedures/polish.md Phase 4c step 1.
+    # Find divergence points — two cases:
+    #
+    # Case A (classic): A commit beat that itself has 2+ successors on different
+    #   same-dilemma paths.  This arises in old-style (non-Y-shape) DAGs where
+    #   the branching beat carries effect=commits.
+    #
+    # Case B (Y-shape, #1220): A pre-commit beat with dual belongs_to (shared
+    #   across both paths of a dilemma) whose successors are single-membership
+    #   commit beats on different paths.  The player's choice happens at the end
+    #   of the shared passage, so the shared beat is the divergence point.
+    #
+    # In both cases the from_passage is the passage of the diverging beat and
+    # the to_passages are the passages of the first exclusive beats per path.
     for bid in sorted(beat_nodes.keys()):
         data = beat_nodes.get(bid, {})
-
-        # Extract dilemma IDs this beat commits — only commit beats diverge
-        committing_dilemmas: set[str] = set()
-        for impact in data.get("dilemma_impacts", []):
-            if impact.get("effect") == "commits":
-                did = impact.get("dilemma_id", "")
-                if did:
-                    committing_dilemmas.add(normalize_scoped_id(did, "dilemma"))
-        if not committing_dilemmas:
-            continue
 
         child_ids = children[bid]
         if len(child_ids) < 2:
@@ -711,6 +711,36 @@ def compute_choice_edges(
                 child_paths.setdefault(path_id, []).append(cid)
 
         if len(child_paths) < 2:
+            continue
+
+        # --- Determine committing dilemmas for this divergence point ---
+        #
+        # Case A: beat itself carries effect=commits → use those dilemma IDs.
+        committing_dilemmas: set[str] = set()
+        for impact in data.get("dilemma_impacts", []):
+            if impact.get("effect") == "commits":
+                did = impact.get("dilemma_id", "")
+                if did:
+                    committing_dilemmas.add(normalize_scoped_id(did, "dilemma"))
+
+        # Case B (Y-shape): beat has dual belongs_to (pre-commit, multi-path)
+        # and its children are single-membership commit beats. Derive the
+        # dilemma from the children's commit impacts rather than from this beat.
+        if not committing_dilemmas:
+            own_paths = beat_to_paths_ce.get(bid, frozenset())
+            if len(own_paths) >= 2:
+                # Collect dilemmas that children commit to
+                child_committing_dilemmas: set[str] = set()
+                for cid in child_ids:
+                    cdata = beat_nodes.get(cid, {})
+                    for impact in cdata.get("dilemma_impacts", []):
+                        if impact.get("effect") == "commits":
+                            cdid = impact.get("dilemma_id", "")
+                            if cdid:
+                                child_committing_dilemmas.add(normalize_scoped_id(cdid, "dilemma"))
+                committing_dilemmas = child_committing_dilemmas
+
+        if not committing_dilemmas:
             continue
 
         from_passage = beat_to_passage.get(bid, "")
