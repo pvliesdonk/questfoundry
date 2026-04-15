@@ -65,7 +65,11 @@ def validate_grow_output(graph: Graph) -> list[str]:
     if beat_nodes:
         _check_predecessor_cycles(graph, beat_nodes, errors)
 
-    # 3. Every beat has exactly one belongs_to edge
+    # 3. Every beat has at least one belongs_to edge.
+    # Pre-commit beats may have multiple belongs_to edges (Y-shape: one edge per path
+    # of their dilemma). Guard rails for dual-belongs_to correctness are enforced by
+    # check_no_cross_dilemma_belongs_to and check_no_dual_on_commit_beat in
+    # grow_validation.py.
     belongs_to_edges = graph.get_edges(edge_type="belongs_to")
     beats_with_path: dict[str, list[str]] = {}
     for edge in belongs_to_edges:
@@ -78,10 +82,6 @@ def validate_grow_output(graph: Graph) -> list[str]:
         paths = beats_with_path.get(beat_id, [])
         if len(paths) == 0:
             errors.append(f"Beat {beat_id} has no belongs_to edge (no path assignment)")
-        elif len(paths) > 1:
-            errors.append(
-                f"Beat {beat_id} has {len(paths)} belongs_to edges (must have exactly 1): {', '.join(paths)}"
-            )
 
     # 4. State flag nodes exist for explored dilemmas
     dilemma_nodes = graph.get_nodes_by_type("dilemma")
