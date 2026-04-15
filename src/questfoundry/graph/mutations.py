@@ -765,16 +765,34 @@ def _prefix_entity_id(category: str, raw_id: str) -> str:
     return format_entity_id(category, raw_id)
 
 
-def _get_path_id_from_beat(beat: dict[str, Any]) -> str | None:
-    """Extract path ID from a beat dict, supporting both current and legacy formats.
+def _get_path_ids_from_beat(beat: dict[str, Any]) -> tuple[str, ...]:
+    """Extract path IDs from a beat dict, supporting current and legacy formats.
+
+    Supports:
+    - Y-shape current: ``path_id`` + optional ``also_belongs_to``.
+    - Legacy single: ``path_id`` alone.
+    - Legacy list: ``paths: [p]`` or ``paths: [p_a, p_b]`` (pre-Y-shape).
 
     Args:
-        beat: Beat dict with ``path_id`` (current) or ``paths`` (legacy).
+        beat: Beat dict, either model-dumped or raw LLM output.
 
     Returns:
-        Raw path ID string, or None if not present.
+        Tuple of 0, 1, or 2 raw path IDs in declaration order (``path_id``
+        first, then ``also_belongs_to``). A return of 2 always represents a
+        pre-commit Y-shape beat. A return of 0 means the beat has no path
+        reference (caught by validation).
     """
-    return beat.get("path_id") or (beat.get("paths", [None])[0] if beat.get("paths") else None)
+    if beat.get("path_id"):
+        primary = str(beat["path_id"])
+        also = beat.get("also_belongs_to")
+        if also:
+            return (primary, str(also))
+        return (primary,)
+    # Legacy fallback.
+    paths = beat.get("paths")
+    if isinstance(paths, list) and paths:
+        return tuple(str(p) for p in paths[:2])
+    return ()
 
 
 def _resolve_entity_ref(graph: Graph, entity_ref: str) -> str:
@@ -1308,14 +1326,15 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
                     )
                 )
 
-        # 6. Path reference (singular — each beat belongs to exactly one path)
-        raw_path_id = _get_path_id_from_beat(beat)
-        if raw_path_id:
+        # 6. Path references (Y-shape: path_id + optional also_belongs_to).
+        raw_path_ids = _get_path_ids_from_beat(beat)
+        for idx, raw_path_id in enumerate(raw_path_ids):
+            field_name = "path_id" if idx == 0 else "also_belongs_to"
             _validate_id(
                 raw_path_id,
                 "path",
                 seed_path_ids,
-                f"initial_beats.{i}.path_id",
+                f"initial_beats.{i}.{field_name}",
                 errors,
                 sorted_path_ids,
                 cross_type_sets=cross_type_sets,
@@ -1525,10 +1544,13 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
     # Per-path: list of (beat_index, effects_set) for parent dilemma impacts
     path_beat_effects: dict[str, list[tuple[int, set[str]]]] = {}
     for i, beat in enumerate(output.get("initial_beats", [])):
-        # Resolve beat's path (singular path_id, with legacy paths fallback)
-        raw_pid = _get_path_id_from_beat(beat)
-        if not raw_pid:
+        # Resolve beat's primary path; pre-commit beats have a second membership
+        # (also_belongs_to) but the commits-per-path accumulator is only
+        # concerned with single-membership commit beats (guard rail 2).
+        raw_path_ids = _get_path_ids_from_beat(beat)
+        if not raw_path_ids:
             continue  # Missing path — already caught by check 6
+        raw_pid = raw_path_ids[0]
         normalized_pid, _ = _normalize_id(raw_pid, "path")
 
         # Collect normalized dilemma_ids referenced in this beat's impacts
@@ -1814,6 +1836,14 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
         if prefixed_path_id and graph.has_node(prefixed_path_id):
             graph.add_edge("has_consequence", prefixed_path_id, consequence_id)
 
+    # Build a raw path -> dilemma map for guard-rail 1 enforcement.
+    _path_to_dilemma: dict[str, str] = {}
+    for p in output.get("paths", []):
+        pid = p.get("path_id")
+        did = p.get("dilemma_id")
+        if pid and did:
+            _path_to_dilemma[strip_scope_prefix(str(pid))] = strip_scope_prefix(str(did))
+
     # Create initial beats
     for i, beat in enumerate(output.get("initial_beats", [])):
         raw_id = _require_field(beat, "beat_id", f"Beat at index {i}")
@@ -1870,9 +1900,58 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
         beat_data = _clean_dict(beat_data)
         graph.create_node(beat_id, beat_data)
 
-        # Link beat to its path (singular belongs_to edge)
-        raw_path_id = _get_path_id_from_beat(beat)
-        if raw_path_id:
+        # Link beat to its path(s). Post-commit beats emit one belongs_to;
+        # pre-commit (Y-shape) beats with ``also_belongs_to`` emit two.
+        raw_path_ids = _get_path_ids_from_beat(beat)
+        is_dual = len(raw_path_ids) == 2
+
+        # Guard rail 1 (Story Graph Ontology §8 "Path Membership"):
+        # dual belongs_to must reference paths of the same dilemma.
+        if is_dual:
+            d0 = _path_to_dilemma.get(strip_scope_prefix(raw_path_ids[0]))
+            d1 = _path_to_dilemma.get(strip_scope_prefix(raw_path_ids[1]))
+            if d0 is None:
+                msg = (
+                    f"beat {raw_id!r}: path_id={raw_path_ids[0]!r} has no known dilemma "
+                    "(not in output paths); cannot enforce guard rail 1."
+                )
+                raise ValueError(msg)
+            if d1 is None:
+                msg = (
+                    f"beat {raw_id!r}: also_belongs_to={raw_path_ids[1]!r} has no known dilemma "
+                    "(not in output paths); cannot enforce guard rail 1."
+                )
+                raise ValueError(msg)
+            if d0 != d1:
+                msg = (
+                    "cross-dilemma dual belongs_to is forbidden (guard rail 1). "
+                    f"Beat {raw_id!r} has path_id={raw_path_ids[0]!r} (dilemma={d0!r}) and "
+                    f"also_belongs_to={raw_path_ids[1]!r} (dilemma={d1!r})."
+                )
+                raise ValueError(msg)
+            if strip_scope_prefix(raw_path_ids[0]) == strip_scope_prefix(raw_path_ids[1]):
+                msg = (
+                    f"beat {raw_id!r}: path_id and also_belongs_to must be distinct paths "
+                    f"({raw_path_ids[0]!r} == {raw_path_ids[1]!r})."
+                )
+                raise ValueError(msg)
+
+        # Guard rail 2: commit beats are single-membership. A commit beat is
+        # the first beat exclusive to its path - it cannot also belong to the
+        # sibling path.
+        if is_dual:
+            has_commit = any(
+                imp.get("effect") == "commits" for imp in beat.get("dilemma_impacts", [])
+            )
+            if has_commit:
+                msg = (
+                    "guard rail 2: a beat with effect=commits must have a single "
+                    f"belongs_to (no also_belongs_to). Beat {raw_id!r} has both "
+                    f"a commits impact and also_belongs_to={raw_path_ids[1]!r}."
+                )
+                raise ValueError(msg)
+
+        for raw_path_id in raw_path_ids:
             prefixed_path_id = _prefix_id("path", raw_path_id)
             graph.add_edge("belongs_to", beat_id, prefixed_path_id)
 

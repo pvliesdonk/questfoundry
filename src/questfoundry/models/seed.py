@@ -235,13 +235,28 @@ class TemporalHint(BaseModel):
 class InitialBeat(BaseModel):
     """Initial beat created by SEED.
 
-    Each beat belongs to exactly one path (single ``belongs_to`` edge in the
-    graph).  SEED creates initial beats per path; GROW mutates and adds more.
+    Beats carry either a single or a dual ``belongs_to`` edge to path nodes:
+
+    * **Post-commit beats** (the default) belong to exactly one path via
+      ``path_id``; ``also_belongs_to`` is ``None``. These beats prove one
+      answer and are exclusive to the path they belong to.
+    * **Pre-commit beats** (shared dilemma setup) belong to *both* paths of
+      their dilemma via ``path_id`` and ``also_belongs_to``. This is the
+      Y-shape ratified in #1206/#1208: every player experiences pre-commit
+      beats regardless of which answer they later choose.
+
+    The commit beat itself is single-``belongs_to`` — it is the first beat
+    exclusive to its path.
 
     Attributes:
         beat_id: Unique identifier for the beat.
         summary: What happens in this beat.
-        path_id: The single path this beat belongs to.
+        path_id: Primary path this beat belongs to.
+        also_belongs_to: Sibling path for pre-commit (shared) beats. ``None``
+            for post-commit beats. MUST reference a path that shares the same
+            parent dilemma with ``path_id`` — cross-dilemma dual membership
+            is a Part-8 guard-rail violation and is rejected by the mutation
+            layer.
         dilemma_impacts: How this beat affects dilemmas.
         entities: Entity IDs present in this beat.
         location: Primary location entity ID.
@@ -253,31 +268,63 @@ class InitialBeat(BaseModel):
     summary: str = Field(min_length=1, description="What happens in this beat")
     path_id: str = Field(
         min_length=1,
-        description="Path ID this beat belongs to (single belongs_to edge)",
+        description="Primary path this beat belongs to (first belongs_to edge)",
+    )
+    also_belongs_to: str | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "Sibling path for pre-commit (Y-shape) beats: creates a second "
+            "belongs_to edge. Must be null for post-commit beats. Must "
+            "reference a path with the same parent dilemma as path_id."
+        ),
     )
 
     @model_validator(mode="before")
     @classmethod
     def _migrate_paths_to_path_id(cls, data: Any) -> Any:
-        """Accept legacy ``paths: [single_id]`` and convert to ``path_id``."""
+        """Accept legacy ``paths`` and convert to Y-shape (``path_id`` + optional ``also_belongs_to``).
+
+        - ``paths: [single_id]`` → ``path_id = single_id`` (post-commit beat).
+        - ``paths: [p_a, p_b]`` → ``path_id = p_a``, ``also_belongs_to = p_b``
+          (pre-commit beat, Y-shape dual membership).
+        - ``paths: []`` is rejected — every beat must reference at least one path.
+        - ``paths`` with 3+ entries is rejected — dual membership is bounded to
+          the two paths of one dilemma (Part 8 guard rail 1).
+        """
         if not isinstance(data, dict):
             return data
         if "paths" in data and "path_id" not in data:
             paths = data.pop("paths")
-            if isinstance(paths, list) and len(paths) == 1:
-                data["path_id"] = paths[0]
-            elif isinstance(paths, list) and len(paths) > 1:
+            if not isinstance(paths, list):
+                return data  # Let Pydantic reject the non-list type.
+            if len(paths) == 0:
+                msg = "InitialBeat.paths is empty — each beat must belong to at least one path."
+                raise ValueError(msg)
+            if len(paths) > 2:
+                msg = (
+                    "InitialBeat.paths has at most 2 entries (Y-shape guard rail 1). "
+                    f"Got {len(paths)}: {paths!r}."
+                )
+                raise ValueError(msg)
+            data["path_id"] = paths[0]
+            if len(paths) == 2:
                 warnings.warn(
-                    f"InitialBeat.paths had {len(paths)} entries; using first. "
-                    "Multi-path beats are handled via intersection groups.",
+                    f"InitialBeat.paths=[{paths[0]!r}, {paths[1]!r}] is deprecated — use "
+                    "path_id and also_belongs_to directly.",
                     DeprecationWarning,
                     stacklevel=2,
                 )
-                data["path_id"] = paths[0]
-            elif isinstance(paths, list) and len(paths) == 0:
-                msg = "InitialBeat.paths is empty — each beat must belong to a path."
-                raise ValueError(msg)
+                data["also_belongs_to"] = paths[1]
         return data
+
+    @model_validator(mode="after")
+    def _also_belongs_to_differs_from_path_id(self) -> InitialBeat:
+        """Dual membership requires two distinct path IDs."""
+        if self.also_belongs_to is not None and self.also_belongs_to == self.path_id:
+            msg = "also_belongs_to must differ from path_id — dual membership needs two paths."
+            raise ValueError(msg)
+        return self
 
     dilemma_impacts: list[DilemmaImpact] = Field(
         default_factory=list,

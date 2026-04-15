@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from typing import ClassVar
 
 import pytest
@@ -988,14 +989,15 @@ class TestInitialBeatPathId:
         assert beat.path_id == "path::trust__yes"
 
     def test_legacy_multi_paths_warns(self) -> None:
-        """Multi-element paths list triggers deprecation warning, uses first."""
-        with pytest.warns(DeprecationWarning, match="had 2 entries"):
+        """Two-element paths list triggers deprecation warning and maps to Y-shape dual."""
+        with pytest.warns(DeprecationWarning, match="also_belongs_to"):
             beat = InitialBeat(
                 beat_id="b1",
                 summary="Test",
                 paths=["path::a__x", "path::b__y"],
             )
         assert beat.path_id == "path::a__x"
+        assert beat.also_belongs_to == "path::b__y"
 
     def test_empty_path_id_rejected(self) -> None:
         with pytest.raises(ValidationError, match="path_id"):
@@ -1003,5 +1005,73 @@ class TestInitialBeatPathId:
 
     def test_legacy_empty_paths_rejected(self) -> None:
         """Empty paths list raises ValueError — beats must belong to a path."""
-        with pytest.raises(ValidationError, match="must belong to a path"):
+        with pytest.raises(ValidationError, match="must belong to at least one path"):
             InitialBeat(beat_id="b1", summary="Test", paths=[])
+
+
+def test_initial_beat_pre_commit_dual_belongs_to() -> None:
+    """Pre-commit beats carry ``also_belongs_to`` pointing at the sibling path."""
+    beat = InitialBeat(
+        beat_id="b1",
+        summary="Shared setup before the fork.",
+        path_id="path::trust__protector",
+        also_belongs_to="path::trust__manipulator",
+    )
+    assert beat.path_id == "path::trust__protector"
+    assert beat.also_belongs_to == "path::trust__manipulator"
+
+
+def test_initial_beat_post_commit_single_belongs_to_default() -> None:
+    """Post-commit beats default to ``also_belongs_to = None``."""
+    beat = InitialBeat(
+        beat_id="b1",
+        summary="Payoff beat.",
+        path_id="path::trust__protector",
+    )
+    assert beat.also_belongs_to is None
+
+
+def test_initial_beat_also_belongs_to_equal_path_id_is_rejected() -> None:
+    """``also_belongs_to`` must differ from ``path_id`` — dual membership needs two paths."""
+    with pytest.raises(ValidationError, match="also_belongs_to must differ from path_id"):
+        InitialBeat(
+            beat_id="b1",
+            summary="Broken dual.",
+            path_id="path::trust__protector",
+            also_belongs_to="path::trust__protector",
+        )
+
+
+def test_initial_beat_legacy_paths_two_elements_becomes_dual() -> None:
+    """Legacy ``paths: [p_a, p_b]`` migrates to Y-shape dual membership."""
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        beat = InitialBeat(
+            beat_id="b1",
+            summary="Legacy dual.",
+            paths=["path::trust__protector", "path::trust__manipulator"],
+        )
+
+    assert beat.path_id == "path::trust__protector"
+    assert beat.also_belongs_to == "path::trust__manipulator"
+    assert any(issubclass(w.category, DeprecationWarning) for w in caught)
+
+
+def test_initial_beat_legacy_paths_three_elements_is_rejected() -> None:
+    """A list of three or more paths is a schema error — not a migration target."""
+    with pytest.raises(ValidationError, match="at most 2 entries"):
+        InitialBeat(
+            beat_id="b1",
+            summary="Bad.",
+            paths=["p_a", "p_b", "p_c"],
+        )
+
+
+def test_initial_beat_also_belongs_to_empty_string_is_rejected() -> None:
+    with pytest.raises(ValidationError):
+        InitialBeat(
+            beat_id="b1",
+            summary="Test.",
+            path_id="path::trust__protector",
+            also_belongs_to="",
+        )

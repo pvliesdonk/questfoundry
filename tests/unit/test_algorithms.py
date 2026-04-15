@@ -930,3 +930,89 @@ class TestComputePassageTraversalsFallback:
         result = compute_passage_traversals(graph)
         # Should use grouped_in only, ignoring passage_from
         assert result == {"alpha": ["passage::p1"]}
+
+
+# ---------------------------------------------------------------------------
+# Task 2.7: compute_active_flags_at_beat handles dual belongs_to (Y-shape)
+# ---------------------------------------------------------------------------
+
+
+class TestComputeActiveFlagsDualBelongsTo:
+    """Tests for Y-shape pre-commit beats with dual belongs_to edges."""
+
+    def test_dual_belongs_to_pre_commit_ancestor_does_not_raise(self) -> None:
+        """Pre-commit ancestors with dual belongs_to do not crash flag derivation."""
+        graph = Graph.empty()
+        # Manually construct a minimal Y-shape:
+        # shared_setup (pre-commit, dual) -> commit_a (commits trust, path A)
+        # shared_setup                    -> commit_b (commits trust, path B)
+        graph.create_node("path::trust__a", {"type": "path", "dilemma_id": "trust"})
+        graph.create_node("path::trust__b", {"type": "path", "dilemma_id": "trust"})
+        graph.create_node(
+            "beat::shared_setup",
+            {
+                "type": "beat",
+                "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
+            },
+        )
+        graph.create_node(
+            "beat::commit_a",
+            {
+                "type": "beat",
+                "dilemma_impacts": [{"dilemma_id": "trust", "effect": "commits"}],
+            },
+        )
+        graph.create_node(
+            "beat::commit_b",
+            {
+                "type": "beat",
+                "dilemma_impacts": [{"dilemma_id": "trust", "effect": "commits"}],
+            },
+        )
+        graph.add_edge("belongs_to", "beat::shared_setup", "path::trust__a")
+        graph.add_edge("belongs_to", "beat::shared_setup", "path::trust__b")
+        graph.add_edge("belongs_to", "beat::commit_a", "path::trust__a")
+        graph.add_edge("belongs_to", "beat::commit_b", "path::trust__b")
+        graph.add_edge("predecessor", "beat::commit_a", "beat::shared_setup")
+        graph.add_edge("predecessor", "beat::commit_b", "beat::shared_setup")
+
+        # Flags at beat::commit_a should not raise and should yield exactly one
+        # flag: "trust:path::trust__a".
+        flags = compute_active_flags_at_beat(graph, "beat::commit_a")
+        assert flags == {frozenset({"trust:path::trust__a"})}
+
+    def test_dual_belongs_to_pre_commit_ancestor_commit_b_path(self) -> None:
+        """Flags at commit_b resolve to path B, not path A."""
+        graph = Graph.empty()
+        graph.create_node("path::trust__a", {"type": "path", "dilemma_id": "trust"})
+        graph.create_node("path::trust__b", {"type": "path", "dilemma_id": "trust"})
+        graph.create_node(
+            "beat::shared_setup",
+            {
+                "type": "beat",
+                "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
+            },
+        )
+        graph.create_node(
+            "beat::commit_a",
+            {
+                "type": "beat",
+                "dilemma_impacts": [{"dilemma_id": "trust", "effect": "commits"}],
+            },
+        )
+        graph.create_node(
+            "beat::commit_b",
+            {
+                "type": "beat",
+                "dilemma_impacts": [{"dilemma_id": "trust", "effect": "commits"}],
+            },
+        )
+        graph.add_edge("belongs_to", "beat::shared_setup", "path::trust__a")
+        graph.add_edge("belongs_to", "beat::shared_setup", "path::trust__b")
+        graph.add_edge("belongs_to", "beat::commit_a", "path::trust__a")
+        graph.add_edge("belongs_to", "beat::commit_b", "path::trust__b")
+        graph.add_edge("predecessor", "beat::commit_a", "beat::shared_setup")
+        graph.add_edge("predecessor", "beat::commit_b", "beat::shared_setup")
+
+        flags = compute_active_flags_at_beat(graph, "beat::commit_b")
+        assert flags == {frozenset({"trust:path::trust__b"})}
