@@ -1970,6 +1970,30 @@ def apply_intersection_mark(
         shared_entities: Entity IDs shared between the intersecting beats.
         rationale: One-sentence explanation of why these beats form a natural scene.
     """
+    # Guard rail 3 (Story Graph Ontology §8 "Path Membership"):
+    # an intersection group must not contain two pre-commit beats from the same
+    # dilemma -- those beats already co-occur by definition.
+    belongs_to = graph.get_edges(edge_type="belongs_to")
+    beat_path_ids: dict[str, set[str]] = {}
+    for e in belongs_to:
+        if e["from"] in beat_ids:
+            beat_path_ids.setdefault(e["from"], set()).add(e["to"])
+    pre_commits = [bid for bid, pids in beat_path_ids.items() if len(pids) >= 2]
+    if len(pre_commits) >= 2:
+        # Check whether any two share the exact same path set (same dilemma).
+        seen: dict[frozenset[str], str] = {}
+        for bid in pre_commits:
+            key = frozenset(beat_path_ids[bid])
+            if key in seen:
+                msg = (
+                    "guard rail 3: intersection group would contain two "
+                    f"pre-commit beats from the same dilemma ({seen[key]!r}, {bid!r}). "
+                    "Pre-commit beats of the same dilemma already co-occur; "
+                    "declaring them as an intersection is forbidden."
+                )
+                raise ValueError(msg)
+            seen[key] = bid
+
     # Derive a stable group ID from the sorted beat IDs
     sorted_ids = sorted(beat_ids)
     raw_group_id = "--".join(strip_scope_prefix(b) for b in sorted_ids)

@@ -7485,3 +7485,182 @@ class TestBuildHintConflictGraph:
         assert still_cyclic == [], (
             f"verify_hints_acyclic must return [] after MDS; got {still_cyclic}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Task 2.6: guard rail 3 - intersection pre-commit exclusion
+# ---------------------------------------------------------------------------
+
+
+class TestApplyIntersectionMarkGuardRail3:
+    """Guard rail 3: two pre-commit beats from same dilemma cannot form an intersection."""
+
+    def _seed_with_two_pre_commit_beats(self) -> Graph:
+        """Build a graph with two pre-commit beats sharing the same dilemma."""
+        from questfoundry.graph.mutations import apply_seed_mutations
+        from tests.unit.test_mutations import _trust_graph, _trust_seed_output
+
+        graph = _trust_graph()
+        seed = _trust_seed_output(
+            initial_beats=[
+                {
+                    "beat_id": "shared_setup",
+                    "summary": "Both players see this setup.",
+                    "path_id": "trust_protector_or_manipulator__protector",
+                    "also_belongs_to": "trust_protector_or_manipulator__manipulator",
+                    "dilemma_impacts": [
+                        {
+                            "dilemma_id": "trust_protector_or_manipulator",
+                            "effect": "advances",
+                            "note": "x",
+                        },
+                    ],
+                },
+                {
+                    "beat_id": "shared_reveal",
+                    "summary": "Both players see this reveal.",
+                    "path_id": "trust_protector_or_manipulator__protector",
+                    "also_belongs_to": "trust_protector_or_manipulator__manipulator",
+                    "dilemma_impacts": [
+                        {
+                            "dilemma_id": "trust_protector_or_manipulator",
+                            "effect": "advances",
+                            "note": "y",
+                        },
+                    ],
+                },
+                {
+                    "beat_id": "commit_protector",
+                    "summary": "Protector commits.",
+                    "path_id": "trust_protector_or_manipulator__protector",
+                    "dilemma_impacts": [
+                        {
+                            "dilemma_id": "trust_protector_or_manipulator",
+                            "effect": "commits",
+                            "note": "locked",
+                        }
+                    ],
+                },
+                {
+                    "beat_id": "post_protector",
+                    "summary": "Protector aftermath.",
+                    "path_id": "trust_protector_or_manipulator__protector",
+                    "dilemma_impacts": [
+                        {
+                            "dilemma_id": "trust_protector_or_manipulator",
+                            "effect": "advances",
+                            "note": "fallout",
+                        }
+                    ],
+                },
+                {
+                    "beat_id": "commit_manipulator",
+                    "summary": "Manipulator commits.",
+                    "path_id": "trust_protector_or_manipulator__manipulator",
+                    "dilemma_impacts": [
+                        {
+                            "dilemma_id": "trust_protector_or_manipulator",
+                            "effect": "commits",
+                            "note": "locked",
+                        }
+                    ],
+                },
+                {
+                    "beat_id": "post_manipulator",
+                    "summary": "Manipulator aftermath.",
+                    "path_id": "trust_protector_or_manipulator__manipulator",
+                    "dilemma_impacts": [
+                        {
+                            "dilemma_id": "trust_protector_or_manipulator",
+                            "effect": "advances",
+                            "note": "fallout",
+                        }
+                    ],
+                },
+            ]
+        )
+        apply_seed_mutations(graph, seed)
+        return graph
+
+    def test_rejects_two_pre_commit_beats_same_dilemma(self) -> None:
+        """Guard rail 3: two pre-commit beats from same dilemma cannot form an intersection."""
+        from questfoundry.graph.grow_algorithms import apply_intersection_mark
+
+        graph = self._seed_with_two_pre_commit_beats()
+
+        with pytest.raises(ValueError, match="guard rail 3"):
+            apply_intersection_mark(
+                graph,
+                beat_ids=["beat::shared_setup", "beat::shared_reveal"],
+                resolved_location=None,
+            )
+
+    def test_allows_pre_commit_beats_different_dilemmas(self) -> None:
+        """Guard rail 3 is NOT triggered for pre-commit beats from different dilemmas."""
+        from questfoundry.graph.grow_algorithms import apply_intersection_mark
+        from questfoundry.graph.mutations import apply_seed_mutations
+        from tests.unit.test_mutations import _two_dilemma_graph, _two_dilemma_seed_output
+
+        graph = _two_dilemma_graph()
+        seed = _two_dilemma_seed_output(
+            initial_beats=[
+                # One pre-commit beat per dilemma (different dilemmas, so guard rail 3 is fine)
+                {
+                    "beat_id": "pre_a",
+                    "summary": "Dilemma A advances.",
+                    "path_id": "dilemma_a__answer_a1",
+                    "dilemma_impacts": [
+                        {"dilemma_id": "dilemma_a", "effect": "advances", "note": "x"}
+                    ],
+                },
+                {
+                    "beat_id": "commit_a",
+                    "summary": "Dilemma A commits.",
+                    "path_id": "dilemma_a__answer_a1",
+                    "dilemma_impacts": [
+                        {"dilemma_id": "dilemma_a", "effect": "commits", "note": "x"}
+                    ],
+                },
+                {
+                    "beat_id": "post_a",
+                    "summary": "Dilemma A aftermath.",
+                    "path_id": "dilemma_a__answer_a1",
+                    "dilemma_impacts": [
+                        {"dilemma_id": "dilemma_a", "effect": "advances", "note": "x"}
+                    ],
+                },
+                {
+                    "beat_id": "pre_b",
+                    "summary": "Dilemma B advances.",
+                    "path_id": "dilemma_b__answer_b1",
+                    "dilemma_impacts": [
+                        {"dilemma_id": "dilemma_b", "effect": "advances", "note": "x"}
+                    ],
+                },
+                {
+                    "beat_id": "commit_b",
+                    "summary": "Dilemma B commits.",
+                    "path_id": "dilemma_b__answer_b1",
+                    "dilemma_impacts": [
+                        {"dilemma_id": "dilemma_b", "effect": "commits", "note": "x"}
+                    ],
+                },
+                {
+                    "beat_id": "post_b",
+                    "summary": "Dilemma B aftermath.",
+                    "path_id": "dilemma_b__answer_b1",
+                    "dilemma_impacts": [
+                        {"dilemma_id": "dilemma_b", "effect": "advances", "note": "x"}
+                    ],
+                },
+            ]
+        )
+        apply_seed_mutations(graph, seed)
+
+        # pre_a and pre_b are from different dilemmas - guard rail 3 should not fire.
+        # This should not raise.
+        apply_intersection_mark(
+            graph,
+            beat_ids=["beat::pre_a", "beat::pre_b"],
+            resolved_location=None,
+        )
