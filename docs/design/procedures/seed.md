@@ -254,7 +254,7 @@ initial_beats:
     dilemma_impacts:
       - dilemma_id: dilemma::mentor_trust
         effect: commits
-        path_id: path::mentor_trust__protector
+        note: "Mentor's confession locks in the protective reading"
     entities: [mentor, kay]
     location: archive_reading_room
 ```
