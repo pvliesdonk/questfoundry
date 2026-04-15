@@ -2242,3 +2242,42 @@ class TestAuditOverlayComposition:
 
         # all_flag_combos is empty (all beats raised ValueError) → passage skipped
         assert not any("structural split" in w for w in feasibility["warnings"])
+
+
+# ---------------------------------------------------------------------------
+# Y-shape collapse guard-rail tests (Task 3.3)
+# ---------------------------------------------------------------------------
+
+
+def _build_y_shape_for_collapse() -> Graph:
+    """Build a Y-shape: shared_setup (dual) → commit_a (single), linear chain."""
+    g = Graph.empty()
+    g.create_node("path::trust__a", {"type": "path", "raw_id": "trust__a"})
+    g.create_node("path::trust__b", {"type": "path", "raw_id": "trust__b"})
+
+    # shared_setup: pre-commit beat with dual belongs_to
+    _make_beat(g, "beat::shared_setup", "Shared setup beat.")
+    g.add_edge("belongs_to", "beat::shared_setup", "path::trust__a")
+    g.add_edge("belongs_to", "beat::shared_setup", "path::trust__b")
+
+    # commit_a: single belongs_to (path_a only)
+    _make_beat(g, "beat::commit_a", "Commit A beat.")
+    g.add_edge("belongs_to", "beat::commit_a", "path::trust__a")
+
+    # Linear chain: commit_a follows shared_setup
+    _add_predecessor(g, "beat::commit_a", "beat::shared_setup")
+
+    return g
+
+
+def test_collapse_chain_does_not_join_shared_with_post_commit() -> None:
+    """A shared pre-commit beat cannot collapse into a post-commit passage."""
+    graph = _build_y_shape_for_collapse()
+    specs = compute_beat_grouping(graph)
+
+    # Find the spec containing shared_setup and the spec containing commit_a.
+    shared_spec = next(s for s in specs if "beat::shared_setup" in s.beat_ids)
+    commit_a_spec = next(s for s in specs if "beat::commit_a" in s.beat_ids)
+    assert shared_spec.passage_id != commit_a_spec.passage_id, (
+        "shared pre-commit beat must not collapse into a post-commit passage (Y-shape guard rail 2)"
+    )
