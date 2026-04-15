@@ -1,10 +1,19 @@
 # QuestFoundry v5 — Unified Specification
 
-**Version:** 2.0
-**Status:** Working draft — partially superseded
-**Supersedes:** qf-v5-vision.md, qf-v5-vision-delta001.md, questfoundry-v5-graph-ontology-v1-1.md
+> **DEPRECATED (2026-04-14):** This document is retained for historical reference only.
+>
+> The authoritative sources for the QuestFoundry v5 design are:
+> - [How Branching Stories Work](./how-branching-stories-work.md) — narrative principles
+> - [Story Graph Ontology](./story-graph-ontology.md) — graph/data model
+> - [`procedures/*.md`](./procedures/) — per-stage algorithm specifications
+>
+> Content that appears only in this document (Anti-Patterns, Design Decisions,
+> Context Budget Analysis, Open Questions, Future Bolt-ons) has not yet been
+> migrated and may be outdated. Do not treat it as authoritative; migrate any
+> still-relevant content to the appropriate new doc before citing.
 
-> **Status update (2026-02-24):** ["How Branching Stories Work"](how-branching-stories-work.md) and the [Story Graph Ontology](story-graph-ontology.md) are now the authoritative source of truth for QuestFoundry's story model and graph ontology. Sections of this document marked "Superseded" below have been replaced by those documents. Unmarked sections remain valid. See [Issue #977](https://github.com/pvliesdonk/questfoundry/issues/977).
+**Version:** 2.0
+**Supersedes:** qf-v5-vision.md, qf-v5-vision-delta001.md, questfoundry-v5-graph-ontology-v1-1.md
 
 ---
 

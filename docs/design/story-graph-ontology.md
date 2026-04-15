@@ -85,7 +85,7 @@ A concrete story moment that advances a dilemma toward resolution. The fundament
 Each beat carries:
 - A **summary** of what happens
 - **Dilemma impacts** — which dilemma it serves, and how (advances, reveals, commits, or complicates)
-- **Path membership** — which path this beat belongs to (via `belongs_to` edge)
+- **Path membership** — which path(s) this beat serves (via `belongs_to` edges). Pre-commit beats belong to every path of their dilemma (two edges for a binary dilemma); commit and post-commit beats belong to exactly one path. See Part 8, "Path Membership ≠ Scene Participation" for the full invariant.
 - **Entity references** — which entities are present
 - **Working annotations** that are consumed during the pipeline and do not persist (see Part 3)
 
@@ -216,14 +216,14 @@ The beat DAG (directed acyclic graph) is the central artifact of the pipeline. S
 
 Each node in the DAG is a beat. Each directed edge means "this beat comes before that beat" — a predecessor/successor relationship. The DAG encodes every valid ordering of story moments across all possible playthroughs.
 
-A beat with two successors (one per path of a dilemma) represents a **divergence**: the story splits at the commit. A beat with two predecessors (from different paths) represents a **convergence**: the storylines rejoin. These structural moments are not separate node types — they are visible in the DAG's topology. The commit beat IS the divergence point. The first shared beat after payoff beats IS the convergence point.
+A beat with two successors (one per path of a dilemma) represents a **divergence**: the story splits at the commit. A beat with two predecessors (from different paths) represents a **convergence**: the storylines rejoin. These structural moments are not separate node types — they are visible in the DAG's topology. Divergence happens *between* the last shared pre-commit beat (which has one successor per path) and the per-path commit beats that follow it — each commit beat is the first beat exclusive to its path. The first shared beat after payoff beats IS the convergence point.
 
 ### Beat Lifecycle
 
 A beat passes through several stages, accumulating and shedding metadata:
 
 **Created by SEED:**
-- Summary, dilemma impacts, path membership (`belongs_to` edge), entity references
+- Summary, dilemma impacts, path membership (`belongs_to` edges — dual for pre-commit beats within one dilemma, singular for commit and post-commit beats), entity references
 - **Working annotations** consumed by GROW:
   - Entity flexibility (substitution edges to alternative entities — "the spy could be the informant")
   - Temporal hints (position relative to other dilemmas — "should come before dilemma B commits")
@@ -274,13 +274,13 @@ Temporal hints are optional. A beat with no hint has no constraint on its placem
 
 ### The 2^N Law in Graph Terms
 
-The central structural insight of "How Branching Stories Work": any beat placed after N committed dilemmas exists in up to 2^N versions. In the DAG, this is visible as the branching factor:
+The central structural insight of "How Branching Stories Work": after N commits have been made, the player is on one of up to 2^N distinct paths through the story. In the DAG, this is visible as the branching factor:
 
-- A beat before any commit has one predecessor path through the DAG — it exists once.
-- A beat after one commit has predecessors from two branches — it exists in two versions (or is shared if it belongs to both paths).
-- A beat after two commits has predecessors from four branches — up to four versions.
+- A beat before any commit is shared: every player experiences it, and it belongs to every path of its dilemma.
+- After one commit, the player is on one of two paths. Each post-commit beat belongs to exactly one of those paths.
+- After two commits, the player is on one of up to four paths; each post-commit beat belongs to one of them.
 
-This is not a property of the beat itself but of its **position in the DAG relative to commit beats**. The same beat, moved earlier in the DAG (before a commit), would exist in fewer versions. This is why dilemma ordering matters: hard dilemmas committing late keeps most beats in the shared region, minimizing multiplication.
+Beats are not cloned per reachable state — each beat is one node with one set of `belongs_to` edges. The multiplication is in the number of distinct traversals through the DAG, not in the number of beat nodes. This is why dilemma ordering matters: hard dilemmas committing late keeps most beats in the shared region (where they belong to every path of their dilemma), minimizing the fraction of the story that is path-specific.
 
 ### Total Order Per Arc
 
