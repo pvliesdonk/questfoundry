@@ -1020,6 +1020,253 @@ async def _serialize_beats_per_path(
     return all_beats, total_tokens
 
 
+def _build_shared_beat_context(
+    dilemma_decision: dict[str, Any],
+    paths: list[dict[str, Any]],
+    entity_context: str,
+) -> str:
+    """Build a brief for generating shared pre-commit beats for one dilemma.
+
+    Injects the dilemma context and the two explored paths so the LLM knows
+    which paths to dual-assign each shared beat to.  The entity context gives
+    the LLM the character/location vocabulary from the manifest.
+
+    Args:
+        dilemma_decision: Dilemma decision dict with dilemma_id, explored, question.
+        paths: All serialized paths (used to find sibling path descriptions).
+        entity_context: Entity IDs section for character/location references.
+
+    Returns:
+        Brief string for shared beat generation.
+    """
+    dilemma_id = dilemma_decision.get("dilemma_id", "")
+    question = dilemma_decision.get("question", "")
+    explored = dilemma_decision.get("explored", [])
+
+    prefixed_dilemma_id = normalize_scoped_id(dilemma_id, SCOPE_DILEMMA)
+    dilemma_name = prefixed_dilemma_id.removeprefix(f"{SCOPE_DILEMMA}::")
+
+    # Build the two explored path IDs (needed for context)
+    path_ids = [f"path::{dilemma_name}__{a}" for a in explored[:2]]
+
+    lines = [
+        "## Dilemma Context",
+        f"Dilemma: `{prefixed_dilemma_id}`",
+        f"Question: {question}",
+        "",
+        "## Explored Paths (shared beats belong to BOTH)",
+    ]
+    for pid in path_ids:
+        # Enrich with path name/description from serialized paths if available
+        matching = next(
+            (p for p in paths if normalize_scoped_id(p.get("path_id", ""), SCOPE_PATH) == pid), None
+        )
+        if matching:
+            pname = matching.get("name", "")
+            pdesc = matching.get("description", "")
+            label = f"- `{pid}` ({pname})"
+            if pdesc:
+                label += f": {pdesc}"
+            lines.append(label)
+        else:
+            lines.append(f"- `{pid}`")
+
+    lines.append("")
+    lines.append(entity_context)
+
+    return "\n".join(lines)
+
+
+async def _serialize_shared_beats_for_dilemma(
+    model: BaseChatModel,
+    dilemma_decision: dict[str, Any],
+    paths: list[dict[str, Any]],
+    shared_beats_prompt_template: str,
+    entity_context: str,
+    provider_name: str | None,
+    max_retries: int,
+    callbacks: list[BaseCallbackHandler] | None,
+) -> tuple[list[dict[str, Any]], int]:
+    """Serialize shared pre-commit beats for a single dilemma (Y-shape, #1227).
+
+    Issues ONE LLM call that generates the pre-commit beats both explored paths
+    of the dilemma share.  Each returned beat will have ``path_id`` set to the
+    primary explored path and ``also_belongs_to`` set to the sibling path.
+
+    Per Story Graph Ontology Part 8: multi-``belongs_to`` is ONLY valid for
+    pre-commit beats within a single dilemma.
+
+    Args:
+        model: Chat model to use.
+        dilemma_decision: Dilemma decision dict with dilemma_id, explored, question.
+        paths: All serialized paths (for context enrichment).
+        shared_beats_prompt_template: Prompt template with {dilemma_id}, {path_id},
+            {also_belongs_to}, and {dilemma_question} placeholders.
+        entity_context: Entity IDs context for character/location references.
+        provider_name: Provider name for strategy selection.
+        max_retries: Maximum Pydantic validation retries.
+        callbacks: LangChain callback handlers.
+
+    Returns:
+        Tuple of (list of shared beat dicts, tokens used).
+    """
+    from questfoundry.models.seed import SharedBeatsSection
+
+    dilemma_id = dilemma_decision.get("dilemma_id", "")
+    explored = dilemma_decision.get("explored", [])
+    question = dilemma_decision.get("question", "")
+
+    if len(explored) < 2:
+        log.warning(
+            "serialize_shared_beats_skipped",
+            dilemma_id=dilemma_id,
+            reason="fewer_than_2_explored_answers",
+            explored_count=len(explored),
+        )
+        return [], 0
+
+    prefixed_dilemma_id = normalize_scoped_id(dilemma_id, SCOPE_DILEMMA)
+    dilemma_name = prefixed_dilemma_id.removeprefix(f"{SCOPE_DILEMMA}::")
+
+    # First explored path is primary; second is the sibling (also_belongs_to)
+    primary_path_id = f"path::{dilemma_name}__{explored[0]}"
+    sibling_path_id = f"path::{dilemma_name}__{explored[1]}"
+
+    # Format the prompt with dilemma-specific values
+    prompt = shared_beats_prompt_template.format(
+        dilemma_id=prefixed_dilemma_id,
+        dilemma_question=question,
+        path_id=primary_path_id,
+        also_belongs_to=sibling_path_id,
+    )
+
+    brief = _build_shared_beat_context(dilemma_decision, paths, entity_context)
+
+    log.debug(
+        "serialize_shared_beats_started",
+        dilemma_id=dilemma_id,
+        primary_path_id=primary_path_id,
+        sibling_path_id=sibling_path_id,
+    )
+
+    result, tokens = await serialize_to_artifact(
+        model=model,
+        brief=brief,
+        schema=SharedBeatsSection,
+        provider_name=provider_name,
+        max_retries=max_retries,
+        system_prompt=prompt,
+        callbacks=callbacks,
+        stage="seed",
+    )
+
+    beats = result.model_dump().get("initial_beats", [])
+
+    log.debug(
+        "serialize_shared_beats_completed",
+        dilemma_id=dilemma_id,
+        beat_count=len(beats),
+        tokens=tokens,
+    )
+
+    return beats, tokens
+
+
+async def _serialize_shared_beats_per_dilemma(
+    model: BaseChatModel,
+    dilemma_decisions: list[dict[str, Any]],
+    paths: list[dict[str, Any]],
+    shared_beats_prompt_template: str,
+    entity_context: str,
+    provider_name: str | None,
+    max_retries: int,
+    callbacks: list[BaseCallbackHandler] | None,
+    on_phase_progress: PhaseProgressFn | None = None,
+    max_concurrency: int = 2,
+) -> tuple[list[dict[str, Any]], int]:
+    """Serialize shared pre-commit beats for all dilemmas with bounded concurrency.
+
+    Filters to dilemmas with at least two explored answers (required for Y-shape
+    dual membership), then issues ONE LLM call per dilemma using a semaphore to
+    bound concurrency.
+
+    Per Story Graph Ontology Part 8, shared beats require exactly two same-dilemma
+    paths — dilemmas with fewer than two explored answers are silently skipped.
+
+    Args:
+        model: Chat model to use.
+        dilemma_decisions: List of dilemma decision dicts.
+        paths: All serialized paths (for context enrichment).
+        shared_beats_prompt_template: Prompt template for shared beat generation.
+        entity_context: Entity IDs context for character/location references.
+        provider_name: Provider name for strategy selection.
+        max_retries: Maximum Pydantic validation retries per dilemma.
+        callbacks: LangChain callback handlers.
+        on_phase_progress: Callback for progress reporting.
+        max_concurrency: Max parallel LLM requests (default 2).
+
+    Returns:
+        Tuple of (all shared beats merged, total tokens used).
+    """
+    # Filter to dilemmas with 2+ explored answers (Y-shape requires dual membership)
+    active_dilemmas = [d for d in dilemma_decisions if len(d.get("explored", [])) >= 2]
+
+    log.info(
+        "serialize_shared_beats_per_dilemma_started",
+        dilemma_count=len(active_dilemmas),
+        skipped=len(dilemma_decisions) - len(active_dilemmas),
+        max_concurrency=max_concurrency,
+    )
+
+    if not active_dilemmas:
+        return [], 0
+
+    semaphore = asyncio.Semaphore(max_concurrency)
+
+    async def _limited_serialize(
+        dilemma: dict[str, Any],
+    ) -> tuple[list[dict[str, Any]], int]:
+        async with semaphore:
+            return await _serialize_shared_beats_for_dilemma(
+                model=model,
+                dilemma_decision=dilemma,
+                paths=paths,
+                shared_beats_prompt_template=shared_beats_prompt_template,
+                entity_context=entity_context,
+                provider_name=provider_name,
+                max_retries=max_retries,
+                callbacks=callbacks,
+            )
+
+    tasks = [asyncio.create_task(_limited_serialize(d)) for d in active_dilemmas]
+    dilemma_ids = [str(d.get("dilemma_id", "")) for d in active_dilemmas]
+
+    results = await asyncio.gather(*tasks)
+
+    all_shared_beats: list[dict[str, Any]] = []
+    total_tokens = 0
+    dilemma_count = len(active_dilemmas)
+
+    for i, (beats, tokens) in enumerate(results, start=1):
+        all_shared_beats.extend(beats)
+        total_tokens += tokens
+        if on_phase_progress is not None:
+            did = dilemma_ids[i - 1]
+            detail = f"{did} ({len(beats)} beats)" if did else f"{len(beats)} beats"
+            on_phase_progress(
+                f"serialize shared beats (dilemma {i}/{dilemma_count})", "completed", detail
+            )
+
+    log.info(
+        "serialize_shared_beats_per_dilemma_completed",
+        dilemma_count=len(active_dilemmas),
+        total_beats=len(all_shared_beats),
+        total_tokens=total_tokens,
+    )
+
+    return all_shared_beats, total_tokens
+
+
 @traceable(
     name="Serialize SEED Iteratively", run_type="chain", tags=["phase:serialize", "stage:seed"]
 )
@@ -1737,10 +1984,6 @@ async def serialize_seed_as_function(
         if key in prompts:
             prompts[key] = prompts[key].replace("{size_beats_per_path}", beats_range)
     if "shared_beats" in prompts:
-        # NOTE: shared_beats prompt is loaded and substituted here but has no LLM
-        # dispatch call site yet. The two-call Y-shape orchestration (one call per
-        # dilemma for shared pre-commit beats, one per path for post-commit beats)
-        # is tracked in https://github.com/pvliesdonk/questfoundry/issues/1227
         prompts["shared_beats"] = prompts["shared_beats"].replace(
             "{size_shared_beats_per_dilemma}", shared_range
         )
@@ -1956,7 +2199,28 @@ async def serialize_seed_as_function(
                     brief_with_paths = f"{enhanced_brief}\n\n{path_ids_context}"
                     log.debug("path_ids_context_injected", path_count=len(collected["paths"]))
 
-            # Generate beats per-path
+            # Generate shared pre-commit beats per dilemma (Y-shape, #1227).
+            # Shared beats belong to BOTH explored paths of a dilemma and must
+            # come BEFORE per-path post-commit beats in the final artifact so
+            # consumers see the shared setup first.
+            if collected.get("paths") and collected.get("dilemmas"):
+                shared_beats, shared_beats_tokens = await _serialize_shared_beats_per_dilemma(
+                    model=model,
+                    dilemma_decisions=collected["dilemmas"],
+                    paths=collected["paths"],
+                    shared_beats_prompt_template=prompts["shared_beats"],
+                    entity_context=entity_context,
+                    provider_name=provider_name,
+                    max_retries=max_retries,
+                    callbacks=callbacks,
+                    on_phase_progress=on_phase_progress,
+                )
+                collected["initial_beats"] = shared_beats
+                total_tokens += shared_beats_tokens
+
+            # Generate per-path post-commit beats (Y-shape — one call per path).
+            # Results are appended AFTER shared beats so the artifact ordering is
+            # consistent: shared setup first, then path-specific post-commit beats.
             if collected.get("paths"):
                 beats, beats_tokens = await _serialize_beats_per_path(
                     model=model,
@@ -1968,7 +2232,9 @@ async def serialize_seed_as_function(
                     callbacks=callbacks,
                     on_phase_progress=on_phase_progress,
                 )
-                collected["initial_beats"] = beats
+                # Extend (not replace) so shared beats are preserved at the front
+                existing_beats = collected.get("initial_beats", [])
+                collected["initial_beats"] = existing_beats + beats
                 total_tokens += beats_tokens
 
         log.debug(
