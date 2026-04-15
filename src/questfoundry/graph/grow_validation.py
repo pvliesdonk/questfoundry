@@ -766,17 +766,19 @@ def check_no_dual_on_commit_beat(graph: Graph) -> ValidationCheck:
 
 def check_no_pre_commit_intersections(graph: Graph) -> ValidationCheck:
     """Guard rail 3: intersection groups must not contain two pre-commit
-    beats from the same dilemma.
-
-    Such beats already co-occur by definition (Story Graph Ontology §8);
-    declaring them as an intersection is redundant and creates false
-    structural implications.
+    beats with identical dual ``belongs_to`` path sets (same dilemma).
 
     Implementation note: under the binary Y-shape assumption (guard rail 1),
     two pre-commit beats belong to the same dilemma if and only if they have
     identical `belongs_to` path frozensets. This check enforces that
     constraint by checking for beat pairs that share the same path set
     within an intersection group.
+
+    Rationale: two pre-commit beats of the same dilemma have identical dual
+    ``belongs_to`` path sets and are sequentially ordered in the dilemma's
+    pre-commit chain. An intersection group implies simultaneity, contradicting
+    that chain ordering. Cross-dilemma pre-commit co-occurrence is not affected.
+    See ``docs/design/story-graph-ontology.md`` Part 8 guard rail 3 for the ruling.
     """
     beat_nodes = graph.get_nodes_by_type("beat")
     group_nodes = graph.get_nodes_by_type("intersection_group")

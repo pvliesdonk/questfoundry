@@ -180,6 +180,31 @@ class TestComputeBeatGrouping:
         specs = compute_beat_grouping(graph)
         assert specs == []
 
+    def test_zero_belongs_to_beats_do_not_collapse(self) -> None:
+        """Two zero-belongs_to setup beats in sequence become two singleton passages.
+
+        Per ontology Part 8 "Determining a beat's `belongs_to`", a beat with zero
+        `belongs_to` edges cannot collapse with any path-specific chain, and the
+        empty path set does not match any non-empty set. Two adjacent zero-path
+        beats must therefore each become their own singleton passage, not a
+        two-beat collapse chain.
+
+        This locks in the B2 ruling from issue #1237 and prevents a silent
+        regression if the collapse rule is ever refactored.
+        """
+        graph = Graph.empty()
+        # Two setup beats — no belongs_to edges, linked by predecessor edge
+        _make_beat(graph, "beat::setup_1", "A")
+        _make_beat(graph, "beat::setup_2", "B")
+        _add_predecessor(graph, "beat::setup_2", "beat::setup_1")
+
+        specs = compute_beat_grouping(graph)
+
+        beat_to_spec = {bid: s for s in specs for bid in s.beat_ids}
+        assert beat_to_spec["beat::setup_1"].passage_id != beat_to_spec["beat::setup_2"].passage_id
+        assert beat_to_spec["beat::setup_1"].grouping_type == "singleton"
+        assert beat_to_spec["beat::setup_2"].grouping_type == "singleton"
+
 
 class TestComputeProseFeasibility:
     """Tests for Phase 4b: prose feasibility audit."""

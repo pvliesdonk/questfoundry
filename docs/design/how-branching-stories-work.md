@@ -23,6 +23,8 @@ Each beat describes its relationship to the dilemma it serves — it does one of
 
 These describe what a beat does to the dilemma, not its full narrative purpose. When SEED scaffolds a path, it assembles beats into a complete arc — typically introducing the dilemma, developing it through advances and complications, surfacing a reveal, reaching a commit, and playing out the consequences. But this is a common shape, not a formula. A path might need multiple reveals, a try-fail cycle before the commit, emotional reaction beats that process what just happened, or setup beats that establish context without directly touching the dilemma. The scaffold should serve the story, not a template.
 
+Setup beats that serve no dilemma carry zero `belongs_to` edges in the graph. The ontology (`story-graph-ontology.md` Part 8, "Determining a beat's `belongs_to`") defines the three beat categories: shared pre-commit (dual), commit and exclusive post-commit (single), and setup / transition / epilogue (zero).
+
 **Passage** — What the player actually reads. A passage is the player-facing version of one or more beats, turned into prose. The player sees passages; the author thinks in beats.
 
 **Commit** — The moment a choice becomes irreversible. Before the commit, the story can be the same regardless of what the player will choose. At the commit, the player acts — they draw their sword, sign the contract, kiss the spy. After the commit, the story must reflect the choice. Most commits are a single dramatic moment, but a commit can also be distributed — accumulated across several smaller choices that collectively determine the outcome (see *Future: Distributed Commits* in the SEED section).
