@@ -2149,3 +2149,510 @@ class TestBuildPerPathBeatContext:
 
         assert "Sibling paths" in result
         assert "path::dilemma_a__answer_y" in result
+
+
+# ---------------------------------------------------------------------------
+# Tests for _serialize_shared_beats_for_dilemma and
+# _serialize_shared_beats_per_dilemma (Y-shape shared pre-commit beats, #1227)
+# ---------------------------------------------------------------------------
+
+_MOCK_DILEMMA_BINARY = {
+    "dilemma_id": "dilemma::host_benevolent_or_selfish",
+    "explored": ["benevolent", "selfish"],
+    "unexplored": [],
+    "question": "Is the host truly benevolent or secretly selfish?",
+}
+
+_MOCK_DILEMMA_SINGLE = {
+    "dilemma_id": "dilemma::artifact_safe_or_dangerous",
+    "explored": ["safe"],
+    "unexplored": ["dangerous"],
+    "question": "Is the artifact safe or dangerous?",
+}
+
+_MOCK_PATHS_FOR_BINARY = [
+    {
+        "path_id": "path::host_benevolent_or_selfish__benevolent",
+        "dilemma_id": "dilemma::host_benevolent_or_selfish",
+        "answer_id": "benevolent",
+        "name": "Benevolent Host",
+        "description": "The host turns out to be genuinely kind.",
+        "path_importance": "major",
+        "unexplored_answer_ids": ["selfish"],
+    },
+    {
+        "path_id": "path::host_benevolent_or_selfish__selfish",
+        "dilemma_id": "dilemma::host_benevolent_or_selfish",
+        "answer_id": "selfish",
+        "name": "Selfish Host",
+        "description": "The host is revealed to be manipulative.",
+        "path_importance": "major",
+        "unexplored_answer_ids": ["benevolent"],
+    },
+]
+
+_SHARED_BEAT_PROMPT = "DID={dilemma_id} Q={dilemma_question} PID={path_id} SIB={also_belongs_to}"
+
+
+class TestSerializeSharedBeatsForDilemma:
+    """Unit tests for _serialize_shared_beats_for_dilemma."""
+
+    @pytest.mark.asyncio
+    async def test_skips_dilemma_with_fewer_than_two_explored(self) -> None:
+        """Should return empty list and 0 tokens when explored has fewer than 2 answers."""
+        from questfoundry.agents.serialize import _serialize_shared_beats_for_dilemma
+
+        mock_model = MagicMock()
+
+        beats, tokens = await _serialize_shared_beats_for_dilemma(
+            model=mock_model,
+            dilemma_decision=_MOCK_DILEMMA_SINGLE,
+            paths=[],
+            shared_beats_prompt_template=_SHARED_BEAT_PROMPT,
+            entity_context="",
+            provider_name=None,
+            max_retries=1,
+            callbacks=None,
+        )
+
+        assert beats == []
+        assert tokens == 0
+        mock_model.with_structured_output.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_issues_exactly_one_llm_call(self) -> None:
+        """Should issue exactly one LLM call for a dilemma with two explored answers."""
+        from questfoundry.agents.serialize import _serialize_shared_beats_for_dilemma
+
+        mock_section = MagicMock()
+        mock_section.model_dump.return_value = {"initial_beats": []}
+
+        with patch(
+            "questfoundry.agents.serialize.serialize_to_artifact",
+            new_callable=AsyncMock,
+            return_value=(mock_section, 42),
+        ) as mock_sat:
+            beats, tokens = await _serialize_shared_beats_for_dilemma(
+                model=MagicMock(),
+                dilemma_decision=_MOCK_DILEMMA_BINARY,
+                paths=_MOCK_PATHS_FOR_BINARY,
+                shared_beats_prompt_template=_SHARED_BEAT_PROMPT,
+                entity_context="",
+                provider_name=None,
+                max_retries=1,
+                callbacks=None,
+            )
+
+        assert mock_sat.call_count == 1
+        assert tokens == 42
+        assert beats == []
+
+    @pytest.mark.asyncio
+    async def test_beat_path_ids_returned_from_llm(self) -> None:
+        """Returned beats should carry path_id and also_belongs_to as set by the LLM."""
+        from questfoundry.agents.serialize import _serialize_shared_beats_for_dilemma
+
+        primary = "path::host_benevolent_or_selfish__benevolent"
+        sibling = "path::host_benevolent_or_selfish__selfish"
+        beat = {
+            "beat_id": "shared_setup_01",
+            "summary": "A shared scene",
+            "path_id": primary,
+            "also_belongs_to": sibling,
+            "dilemma_impacts": [],
+            "entities": [],
+            "location": None,
+            "location_alternatives": [],
+            "temporal_hint": None,
+        }
+        mock_section = MagicMock()
+        mock_section.model_dump.return_value = {"initial_beats": [beat]}
+
+        with patch(
+            "questfoundry.agents.serialize.serialize_to_artifact",
+            new_callable=AsyncMock,
+            return_value=(mock_section, 10),
+        ):
+            beats, _tokens = await _serialize_shared_beats_for_dilemma(
+                model=MagicMock(),
+                dilemma_decision=_MOCK_DILEMMA_BINARY,
+                paths=_MOCK_PATHS_FOR_BINARY,
+                shared_beats_prompt_template=_SHARED_BEAT_PROMPT,
+                entity_context="",
+                provider_name=None,
+                max_retries=1,
+                callbacks=None,
+            )
+
+        assert len(beats) == 1
+        assert beats[0]["path_id"] == primary
+        assert beats[0]["also_belongs_to"] == sibling
+
+    @pytest.mark.asyncio
+    async def test_prompt_interpolated_with_dilemma_context(self) -> None:
+        """The prompt template must be formatted with dilemma/path values."""
+        from questfoundry.agents.serialize import _serialize_shared_beats_for_dilemma
+
+        captured: list[str] = []
+
+        async def _capture(**kw: Any) -> tuple[Any, int]:
+            captured.append(kw.get("system_prompt", ""))
+            sec = MagicMock()
+            sec.model_dump.return_value = {"initial_beats": []}
+            return sec, 5
+
+        with patch("questfoundry.agents.serialize.serialize_to_artifact", side_effect=_capture):
+            await _serialize_shared_beats_for_dilemma(
+                model=MagicMock(),
+                dilemma_decision=_MOCK_DILEMMA_BINARY,
+                paths=[],
+                shared_beats_prompt_template=_SHARED_BEAT_PROMPT,
+                entity_context="",
+                provider_name=None,
+                max_retries=1,
+                callbacks=None,
+            )
+
+        assert len(captured) == 1
+        assert "dilemma::host_benevolent_or_selfish" in captured[0]
+        assert "Is the host truly benevolent or secretly selfish?" in captured[0]
+        assert "path::host_benevolent_or_selfish__benevolent" in captured[0]
+        assert "path::host_benevolent_or_selfish__selfish" in captured[0]
+
+
+class TestSerializeSharedBeatsPerDilemma:
+    """Unit tests for _serialize_shared_beats_per_dilemma (concurrency wrapper)."""
+
+    @pytest.mark.asyncio
+    async def test_issues_one_call_per_eligible_dilemma(self) -> None:
+        """Should dispatch one call per dilemma with 2+ explored; skip singles."""
+        from questfoundry.agents.serialize import _serialize_shared_beats_per_dilemma
+
+        dilemma_a = {
+            "dilemma_id": "dilemma::host_benevolent_or_selfish",
+            "explored": ["benevolent", "selfish"],
+            "unexplored": [],
+            "question": "Q?",
+        }
+        dilemma_b = {
+            "dilemma_id": "dilemma::artifact_natural_or_crafted",
+            "explored": ["natural", "crafted"],
+            "unexplored": [],
+            "question": "Q?",
+        }
+        dilemma_single = {
+            "dilemma_id": "dilemma::mood_happy_or_sad",
+            "explored": ["happy"],
+            "unexplored": ["sad"],
+            "question": "Q?",
+        }
+
+        call_count: list[int] = [0]
+
+        async def _mock_single(**_kw: Any) -> tuple[list[Any], int]:
+            call_count[0] += 1
+            return [], 10
+
+        with patch(
+            "questfoundry.agents.serialize._serialize_shared_beats_for_dilemma",
+            side_effect=_mock_single,
+        ):
+            beats, tokens = await _serialize_shared_beats_per_dilemma(
+                model=MagicMock(),
+                dilemma_decisions=[dilemma_a, dilemma_b, dilemma_single],
+                paths=[],
+                shared_beats_prompt_template=_SHARED_BEAT_PROMPT,
+                entity_context="",
+                provider_name=None,
+                max_retries=1,
+                callbacks=None,
+            )
+
+        assert call_count[0] == 2, "only binary dilemmas get a call"
+        assert beats == []
+        assert tokens == 20
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_when_no_eligible_dilemmas(self) -> None:
+        """Should return empty + 0 tokens when no dilemma has 2+ explored."""
+        from questfoundry.agents.serialize import _serialize_shared_beats_per_dilemma
+
+        beats, tokens = await _serialize_shared_beats_per_dilemma(
+            model=MagicMock(),
+            dilemma_decisions=[_MOCK_DILEMMA_SINGLE],
+            paths=[],
+            shared_beats_prompt_template=_SHARED_BEAT_PROMPT,
+            entity_context="",
+            provider_name=None,
+            max_retries=1,
+            callbacks=None,
+        )
+
+        assert beats == []
+        assert tokens == 0
+
+    @pytest.mark.asyncio
+    async def test_beats_from_all_dilemmas_merged(self) -> None:
+        """Beats from multiple dilemmas should all appear in the merged result."""
+        from questfoundry.agents.serialize import _serialize_shared_beats_per_dilemma
+
+        dilemma_a = {
+            "dilemma_id": "dilemma::host_benevolent_or_selfish",
+            "explored": ["benevolent", "selfish"],
+            "unexplored": [],
+            "question": "Q?",
+        }
+        dilemma_b = {
+            "dilemma_id": "dilemma::artifact_natural_or_crafted",
+            "explored": ["natural", "crafted"],
+            "unexplored": [],
+            "question": "Q?",
+        }
+
+        async def _mock_single(**kw: Any) -> tuple[list[Any], int]:
+            did = kw["dilemma_decision"]["dilemma_id"].replace("dilemma::", "")
+            return [{"beat_id": f"shared_{did}_01", "summary": "s"}], 5
+
+        with patch(
+            "questfoundry.agents.serialize._serialize_shared_beats_for_dilemma",
+            side_effect=_mock_single,
+        ):
+            beats, tokens = await _serialize_shared_beats_per_dilemma(
+                model=MagicMock(),
+                dilemma_decisions=[dilemma_a, dilemma_b],
+                paths=[],
+                shared_beats_prompt_template=_SHARED_BEAT_PROMPT,
+                entity_context="",
+                provider_name=None,
+                max_retries=1,
+                callbacks=None,
+            )
+
+        beat_ids = [b["beat_id"] for b in beats]
+        assert "shared_host_benevolent_or_selfish_01" in beat_ids
+        assert "shared_artifact_natural_or_crafted_01" in beat_ids
+        assert tokens == 10
+
+
+class TestSerializeSeedAsFunctionSharedBeats:
+    """Integration-style tests for shared beats wiring in serialize_seed_as_function."""
+
+    @pytest.mark.asyncio
+    async def test_shared_beats_called_before_per_path_beats(self) -> None:
+        """_serialize_shared_beats_per_dilemma must be called before _serialize_beats_per_path."""
+        from questfoundry.agents.serialize import serialize_seed_as_function
+
+        call_order: list[str] = []
+
+        async def _mock_shared(*_args: Any, **_kwargs: Any) -> tuple[list[Any], int]:
+            call_order.append("shared")
+            return [], 5
+
+        async def _mock_per_path(*_args: Any, **_kwargs: Any) -> tuple[list[Any], int]:
+            call_order.append("per_path")
+            return [], 5
+
+        mock_path = {
+            "path_id": "path::host_benevolent_or_selfish__benevolent",
+            "dilemma_id": "dilemma::host_benevolent_or_selfish",
+            "answer_id": "benevolent",
+            "name": "Benevolent",
+            "description": "desc",
+            "path_importance": "major",
+            "unexplored_answer_ids": [],
+        }
+        mock_dilemma_two = {
+            "dilemma_id": "dilemma::host_benevolent_or_selfish",
+            "explored": ["benevolent", "selfish"],
+            "unexplored": [],
+        }
+
+        with (
+            patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_serialize,
+            patch(
+                "questfoundry.agents.serialize._serialize_paths_per_dilemma",
+                return_value=([mock_path], 10),
+            ),
+            patch(
+                "questfoundry.agents.serialize._serialize_shared_beats_per_dilemma",
+                side_effect=_mock_shared,
+            ),
+            patch(
+                "questfoundry.agents.serialize._serialize_beats_per_path",
+                side_effect=_mock_per_path,
+            ),
+        ):
+            mock_serialize.side_effect = [
+                (MagicMock(model_dump=lambda: {"entities": []}), 10),
+                (MagicMock(model_dump=lambda: {"dilemmas": [mock_dilemma_two]}), 10),
+                (MagicMock(model_dump=lambda: {"consequences": []}), 10),
+            ]
+            with patch("questfoundry.agents.serialize.validate_seed_mutations", return_value=[]):
+                await serialize_seed_as_function(
+                    model=MagicMock(),
+                    brief="brief",
+                    graph=MagicMock(),
+                )
+
+        assert call_order == ["shared", "per_path"]
+
+    @pytest.mark.asyncio
+    async def test_shared_beats_appear_before_per_path_beats_in_artifact(self) -> None:
+        """Shared beats must precede per-path beats in the artifact's initial_beats list."""
+        from questfoundry.agents.serialize import serialize_seed_as_function
+
+        shared_beat = {
+            "beat_id": "shared_host_01",
+            "summary": "Shared setup",
+            "path_id": "path::host_benevolent_or_selfish__benevolent",
+            "also_belongs_to": "path::host_benevolent_or_selfish__selfish",
+            "dilemma_impacts": [],
+            "entities": [],
+            "location": None,
+            "location_alternatives": [],
+            "temporal_hint": None,
+        }
+        per_path_beat = {
+            "beat_id": "benevolent_beat_01",
+            "summary": "Post-commit beat",
+            "path_id": "path::host_benevolent_or_selfish__benevolent",
+            "also_belongs_to": None,
+            "dilemma_impacts": [],
+            "entities": [],
+            "location": None,
+            "location_alternatives": [],
+            "temporal_hint": None,
+        }
+        mock_path = {
+            "path_id": "path::host_benevolent_or_selfish__benevolent",
+            "dilemma_id": "dilemma::host_benevolent_or_selfish",
+            "answer_id": "benevolent",
+            "name": "Benevolent",
+            "description": "desc",
+            "path_importance": "major",
+            "unexplored_answer_ids": [],
+        }
+        mock_dilemma_two = {
+            "dilemma_id": "dilemma::host_benevolent_or_selfish",
+            "explored": ["benevolent", "selfish"],
+            "unexplored": [],
+        }
+
+        with (
+            patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_serialize,
+            patch(
+                "questfoundry.agents.serialize._serialize_paths_per_dilemma",
+                return_value=([mock_path], 10),
+            ),
+            patch(
+                "questfoundry.agents.serialize._serialize_shared_beats_per_dilemma",
+                return_value=([shared_beat], 5),
+            ),
+            patch(
+                "questfoundry.agents.serialize._serialize_beats_per_path",
+                return_value=([per_path_beat], 5),
+            ),
+        ):
+            mock_serialize.side_effect = [
+                (MagicMock(model_dump=lambda: {"entities": []}), 10),
+                (MagicMock(model_dump=lambda: {"dilemmas": [mock_dilemma_two]}), 10),
+                (MagicMock(model_dump=lambda: {"consequences": []}), 10),
+            ]
+            with patch("questfoundry.agents.serialize.validate_seed_mutations", return_value=[]):
+                result = await serialize_seed_as_function(
+                    model=MagicMock(),
+                    brief="brief",
+                    graph=MagicMock(),
+                )
+
+        beats = result.artifact.initial_beats
+        assert len(beats) == 2
+        assert beats[0].beat_id == "shared_host_01", "shared beat must be first"
+        assert beats[1].beat_id == "benevolent_beat_01", "per-path beat must follow"
+
+    @pytest.mark.asyncio
+    async def test_tokens_from_shared_beats_counted_in_total(self) -> None:
+        """Tokens from shared beats must appear in result.tokens_used."""
+        from questfoundry.agents.serialize import serialize_seed_as_function
+
+        mock_path = {
+            "path_id": "path::host_benevolent_or_selfish__benevolent",
+            "dilemma_id": "dilemma::host_benevolent_or_selfish",
+            "answer_id": "benevolent",
+            "name": "Benevolent",
+            "description": "desc",
+            "path_importance": "major",
+            "unexplored_answer_ids": [],
+        }
+        mock_dilemma_two = {
+            "dilemma_id": "dilemma::host_benevolent_or_selfish",
+            "explored": ["benevolent", "selfish"],
+            "unexplored": [],
+        }
+
+        with (
+            patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_serialize,
+            patch(
+                "questfoundry.agents.serialize._serialize_paths_per_dilemma",
+                return_value=([mock_path], 15),
+            ),
+            patch(
+                "questfoundry.agents.serialize._serialize_shared_beats_per_dilemma",
+                return_value=([], 77),
+            ),
+            patch(
+                "questfoundry.agents.serialize._serialize_beats_per_path",
+                return_value=([], 20),
+            ),
+        ):
+            mock_serialize.side_effect = [
+                (MagicMock(model_dump=lambda: {"entities": []}), 10),
+                (MagicMock(model_dump=lambda: {"dilemmas": [mock_dilemma_two]}), 10),
+                (MagicMock(model_dump=lambda: {"consequences": []}), 10),
+            ]
+            with patch("questfoundry.agents.serialize.validate_seed_mutations", return_value=[]):
+                result = await serialize_seed_as_function(
+                    model=MagicMock(),
+                    brief="brief",
+                    graph=MagicMock(),
+                )
+
+        # 3 sections * 10 + 15 paths + 77 shared + 20 per_path = 142
+        assert result.tokens_used == 142
+
+
+class TestBuildSharedBeatContext:
+    """Unit tests for _build_shared_beat_context."""
+
+    def test_includes_dilemma_id_and_question(self) -> None:
+        from questfoundry.agents.serialize import _build_shared_beat_context
+
+        result = _build_shared_beat_context(_MOCK_DILEMMA_BINARY, [], "entities here")
+
+        assert "dilemma::host_benevolent_or_selfish" in result
+        assert "Is the host truly benevolent or secretly selfish?" in result
+
+    def test_includes_both_explored_path_ids(self) -> None:
+        from questfoundry.agents.serialize import _build_shared_beat_context
+
+        result = _build_shared_beat_context(_MOCK_DILEMMA_BINARY, [], "")
+
+        assert "path::host_benevolent_or_selfish__benevolent" in result
+        assert "path::host_benevolent_or_selfish__selfish" in result
+
+    def test_includes_path_names_when_paths_provided(self) -> None:
+        from questfoundry.agents.serialize import _build_shared_beat_context
+
+        result = _build_shared_beat_context(_MOCK_DILEMMA_BINARY, _MOCK_PATHS_FOR_BINARY, "")
+
+        assert "Benevolent Host" in result
+        assert "Selfish Host" in result
+
+    def test_includes_entity_context(self) -> None:
+        from questfoundry.agents.serialize import _build_shared_beat_context
+
+        result = _build_shared_beat_context(
+            _MOCK_DILEMMA_BINARY, [], "## Entity IDs\n- character::butler"
+        )
+
+        assert "character::butler" in result
