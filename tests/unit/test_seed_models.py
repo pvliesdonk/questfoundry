@@ -20,6 +20,7 @@ from questfoundry.models.seed import (
     PathBeatsSection,
     PathsSection,
     SeedOutput,
+    SharedBeatsSection,
     TemporalHint,
     make_constrained_dilemmas_section,
 )
@@ -676,6 +677,103 @@ class TestDilemmaRelationshipsSectionDedup:
             DilemmaRelationshipsSection(
                 dilemma_relationships=[concurrent_kwargs, reversed_different]
             )
+
+
+# ---------------------------------------------------------------------------
+# Helpers for SharedBeatsSection tests
+# ---------------------------------------------------------------------------
+
+
+def _make_shared_beat_dict(
+    beat_id: str = "shared_01",
+    path_id: str = "path::trust_or_betray__trust",
+    also_belongs_to: str | None = "path::trust_or_betray__betray",
+    summary: str = "The hero meets the informant.",
+) -> dict:
+    """Build a minimal shared beat dict for testing."""
+    return {
+        "beat_id": beat_id,
+        "summary": summary,
+        "path_id": path_id,
+        "also_belongs_to": also_belongs_to,
+        "dilemma_impacts": [
+            {
+                "dilemma_id": "dilemma::trust_or_betray",
+                "effect": "advances",
+                "note": "Sets up the confrontation.",
+            }
+        ],
+    }
+
+
+class TestSharedBeatsSectionValidator:
+    """SharedBeatsSection must enforce also_belongs_to on every beat (Part 8 guard rail 2)."""
+
+    def test_valid_section_all_beats_have_also_belongs_to(self) -> None:
+        """Section with all beats having also_belongs_to passes validation."""
+        section = SharedBeatsSection(
+            initial_beats=[
+                _make_shared_beat_dict(beat_id="shared_01"),
+                _make_shared_beat_dict(
+                    beat_id="shared_02",
+                    path_id="path::trust_or_betray__trust",
+                    also_belongs_to="path::trust_or_betray__betray",
+                    summary="The hero learns the truth.",
+                ),
+            ]
+        )
+        assert len(section.initial_beats) == 2
+        assert all(b.also_belongs_to is not None for b in section.initial_beats)
+
+    def test_single_beat_with_also_belongs_to_accepted(self) -> None:
+        """Minimum valid case: one beat with also_belongs_to set."""
+        section = SharedBeatsSection(initial_beats=[_make_shared_beat_dict()])
+        assert len(section.initial_beats) == 1
+        assert section.initial_beats[0].also_belongs_to is not None
+
+    def test_beat_missing_also_belongs_to_raises_value_error(self) -> None:
+        """A beat with also_belongs_to=None violates Part 8 guard rail 2 and must raise."""
+        with pytest.raises(ValidationError) as exc_info:
+            SharedBeatsSection(
+                initial_beats=[
+                    _make_shared_beat_dict(also_belongs_to=None),
+                ]
+            )
+        error_text = str(exc_info.value)
+        assert "also_belongs_to" in error_text
+        assert "guard rail" in error_text.lower() or "Part 8" in error_text
+
+    def test_mixed_beats_some_missing_also_belongs_to_raises(self) -> None:
+        """If ANY beat in the section lacks also_belongs_to, validation fails.
+
+        The offending beat ID must be named in the error message.
+        """
+        with pytest.raises(ValidationError) as exc_info:
+            SharedBeatsSection(
+                initial_beats=[
+                    _make_shared_beat_dict(beat_id="good_beat"),
+                    _make_shared_beat_dict(beat_id="bad_beat", also_belongs_to=None),
+                ]
+            )
+        assert "bad_beat" in str(exc_info.value)
+
+    def test_all_beats_missing_also_belongs_to_names_all_offenders(self) -> None:
+        """When all beats are missing also_belongs_to, all beat IDs appear in the error."""
+        with pytest.raises(ValidationError) as exc_info:
+            SharedBeatsSection(
+                initial_beats=[
+                    _make_shared_beat_dict(beat_id="beat_a", also_belongs_to=None),
+                    _make_shared_beat_dict(beat_id="beat_b", also_belongs_to=None),
+                ]
+            )
+        error_text = str(exc_info.value)
+        assert "beat_a" in error_text
+        assert "beat_b" in error_text
+
+    def test_empty_beat_list_rejected_by_min_length(self) -> None:
+        """An empty beat list fails the min_length=1 constraint before reaching the validator."""
+        with pytest.raises(ValidationError):
+            SharedBeatsSection(initial_beats=[])
 
     def test_empty_accepted(self) -> None:
         section = DilemmaRelationshipsSection(dilemma_relationships=[])
