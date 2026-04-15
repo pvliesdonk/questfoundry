@@ -97,30 +97,34 @@ dilemmas_prompt: |
   Note: `explored` and `unexplored` contain raw answer IDs (no prefix) since
   they are local to each dilemma.
 
-  ## DEFAULT ANSWER RULE (MOST IMPORTANT RULE)
+  ## MINIMUM BRANCHING REQUIREMENT (HARD CONSTRAINT — READ FIRST)
+
+  At least 2 dilemmas MUST have ALL their answers in `explored` (nothing in `unexplored`).
+  This is required for the story to have meaningful branching. A story with fewer than
+  2 fully-explored dilemmas produces a near-linear story and WILL BE REJECTED by validation.
+
+  BAD (rejected): only default answers explored → no real branching → pipeline fails
+  ```json
+  {"dilemma_id": "dilemma::host_benevolent_or_selfish", "explored": ["protector"], "unexplored": ["manipulator"]},
+  {"dilemma_id": "dilemma::artifact_safe_or_dangerous", "explored": ["safe"], "unexplored": ["dangerous"]}
+  ```
+  GOOD (valid): 2 dilemmas fully explored → 4 arcs → passes
+  ```json
+  {"dilemma_id": "dilemma::host_benevolent_or_selfish", "explored": ["protector", "manipulator"], "unexplored": []},
+  {"dilemma_id": "dilemma::artifact_safe_or_dangerous", "explored": ["safe", "dangerous"], "unexplored": []}
+  ```
+
+  ## DEFAULT ANSWER RULE
   In the manifest, one answer per dilemma is marked `(default)`.
   `(default)` = the canonical story spine. It MUST ALWAYS be in `explored`.
   You may NEVER put the `(default)` answer in `unexplored`.
+  The alternative (non-default) answer MAY ALSO be in `explored` — and for binary
+  dilemmas (2 answers), it SHOULD be in `explored` most of the time.
 
   EXAMPLE: answers are [`reliable` (default), `falsified`]
-  - CORRECT: `"explored": ["reliable", "falsified"], "unexplored": []`
-  - CORRECT: `"explored": ["reliable"], "unexplored": ["falsified"]`
+  - CORRECT: `"explored": ["reliable", "falsified"], "unexplored": []`  ← PREFERRED for binary
+  - ALSO CORRECT: `"explored": ["reliable"], "unexplored": ["falsified"]`  ← only if you must limit scope
   - WRONG:   `"explored": ["falsified"], "unexplored": ["reliable"]`  <-- default NOT in explored!
-
-  ## Rules
-  - dilemma_id must include the `dilemma::` prefix and match EXACTLY an ID from the manifest
-  - explored: Answer IDs to explore as paths (the `(default)` answer MUST be here)
-  - unexplored: Answer IDs NOT explored (become shadows, NEVER the default)
-  - Generate a decision for EVERY dilemma in the manifest
-
-  ## CRITICAL INVARIANT: explored ↔ paths linkage
-  The `explored` array defines which answers will have paths created.
-  For EACH answer_id in `explored`, you MUST create a path later.
-  The path's `answer_id` field MUST match an entry in `explored`.
-
-  WRONG: `explored: []` with paths that have `answer_id` values
-  WRONG: `explored: ["opt_a"]` but path uses `answer_id: "opt_b"`
-  RIGHT: `explored: ["opt_a", "opt_b"]` and paths use those exact IDs
 
   ## When to Leave an Answer Unexplored
 
@@ -138,22 +142,20 @@ dilemmas_prompt: |
   - 0 fully explored: 8 arcs total, all default-only, no branching
   - 0 arcs with real choices → FAILS validation
 
-  ## MINIMUM BRANCHING REQUIREMENT (HARD CONSTRAINT)
+  ## Rules
+  - dilemma_id must include the `dilemma::` prefix and match EXACTLY an ID from the manifest
+  - explored: Answer IDs to explore as paths (the `(default)` answer MUST be here)
+  - unexplored: Answer IDs NOT explored (become shadows, NEVER the default)
+  - Generate a decision for EVERY dilemma in the manifest
 
-  At least 2 dilemmas MUST have BOTH answers in `explored`. A story where fewer
-  than 2 dilemmas are fully explored produces a linear story with no real player
-  choices and WILL BE REJECTED.
+  ## CRITICAL INVARIANT: explored ↔ paths linkage
+  The `explored` array defines which answers will have paths created.
+  For EACH answer_id in `explored`, you MUST create a path later.
+  The path's `answer_id` field MUST match an entry in `explored`.
 
-  BAD (rejected): only 1 dilemma has both answers explored → 1 arc → pipeline fails
-  ```json
-  {"dilemma_id": "dilemma::host_benevolent_or_selfish", "explored": ["protector"], "unexplored": ["manipulator"]},
-  {"dilemma_id": "dilemma::artifact_safe_or_dangerous", "explored": ["safe"], "unexplored": ["dangerous"]}
-  ```
-  GOOD (valid): 2 dilemmas fully explored → 4 arcs → passes
-  ```json
-  {"dilemma_id": "dilemma::host_benevolent_or_selfish", "explored": ["protector", "manipulator"], "unexplored": []},
-  {"dilemma_id": "dilemma::artifact_safe_or_dangerous", "explored": ["safe", "dangerous"], "unexplored": []}
-  ```
+  WRONG: `explored: []` with paths that have `answer_id` values
+  WRONG: `explored: ["opt_a"]` but path uses `answer_id: "opt_b"`
+  RIGHT: `explored: ["opt_a", "opt_b"]` and paths use those exact IDs
 
   ## What NOT to Do
   - Do NOT include the same dilemma_id more than once — each dilemma must appear EXACTLY once
@@ -163,6 +165,7 @@ dilemmas_prompt: |
   - Do NOT leave `explored` empty if you plan to create paths for that dilemma
   - Do NOT omit the `dilemma::` prefix from dilemma_id
   - Do NOT put the `(default)` answer in `unexplored` — it MUST be in `explored`
+  - Do NOT explore only the default answer for every dilemma — that produces no branching
 
   ## FINAL CHECK before returning
   Count how many of your dilemmas have ALL answers in `explored` (nothing in `unexplored`).

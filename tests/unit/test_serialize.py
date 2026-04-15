@@ -2074,6 +2074,78 @@ class TestSizeProfileInjectedIntoBeatPrompts:
         assert size_vars["size_beats_per_path"] == "2-4"
 
 
+class TestDilemmasPromptStructure:
+    """Structural tests for the dilemmas_prompt section (#1234).
+
+    These tests verify that the hard constraint and sandwich pattern are in place.
+    They cannot test the prompt's effect on a real LLM — that is an integration concern.
+    """
+
+    def _get_dilemmas_prompt(self) -> str:
+        from questfoundry.agents.serialize import _load_seed_section_prompts
+
+        _load_seed_section_prompts.cache_clear()
+        prompts = _load_seed_section_prompts()
+        return prompts["dilemmas"]
+
+    def test_dilemmas_prompt_is_nonempty(self) -> None:
+        """Dilemmas prompt must load and be non-trivially long."""
+        prompt = self._get_dilemmas_prompt()
+        assert isinstance(prompt, str)
+        assert len(prompt) > 200
+
+    def test_hard_constraint_appears_before_default_rule(self) -> None:
+        """MINIMUM BRANCHING REQUIREMENT must appear before DEFAULT ANSWER RULE.
+
+        This enforces the sandwich-top pattern: hard constraints first, not buried.
+        """
+        prompt = self._get_dilemmas_prompt()
+        assert "MINIMUM BRANCHING REQUIREMENT" in prompt
+        assert "DEFAULT ANSWER RULE" in prompt
+        idx_constraint = prompt.index("MINIMUM BRANCHING REQUIREMENT")
+        idx_default = prompt.index("DEFAULT ANSWER RULE")
+        assert idx_constraint < idx_default, (
+            "MINIMUM BRANCHING REQUIREMENT must appear before DEFAULT ANSWER RULE"
+        )
+
+    def test_final_check_section_present(self) -> None:
+        """FINAL CHECK section must be present (sandwich-bottom pattern)."""
+        prompt = self._get_dilemmas_prompt()
+        assert "FINAL CHECK" in prompt
+
+    def test_final_check_appears_after_hard_constraint(self) -> None:
+        """FINAL CHECK must appear after the main hard constraint (sandwich pattern)."""
+        prompt = self._get_dilemmas_prompt()
+        idx_constraint = prompt.index("MINIMUM BRANCHING REQUIREMENT")
+        idx_final = prompt.index("FINAL CHECK")
+        assert idx_final > idx_constraint
+
+    def test_alternative_may_also_be_explored_language_present(self) -> None:
+        """Prompt must clarify that the alternative answer MAY ALSO be in explored.
+
+        This prevents the old framing where 'default in explored' implied
+        'alternative goes in unexplored'.
+        """
+        prompt = self._get_dilemmas_prompt()
+        # The reframed rule says the alternative MAY ALSO be in explored
+        assert "MAY ALSO be in `explored`" in prompt
+
+    def test_no_dramatic_shadows_framing(self) -> None:
+        """Seductive 'dramatic shadows' framing must be removed.
+
+        That phrase biases small models toward leaving answers unexplored.
+        """
+        prompt = self._get_dilemmas_prompt()
+        assert "dramatic shadows" not in prompt
+
+    def test_bad_example_shows_default_only_is_rejected(self) -> None:
+        """BAD example must explicitly link default-only explored to pipeline failure."""
+        prompt = self._get_dilemmas_prompt()
+        # The bad example should show a pattern that maps to rejection
+        assert "BAD" in prompt
+        assert "REJECTED" in prompt or "FAILS" in prompt or "pipeline fails" in prompt
+
+
 class TestBuildPerPathBeatContext:
     """Tests for _build_per_path_beat_context sibling path injection."""
 
