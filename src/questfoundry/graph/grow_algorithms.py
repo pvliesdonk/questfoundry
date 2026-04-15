@@ -1973,11 +1973,10 @@ def apply_intersection_mark(
     # Guard rail 3 (Story Graph Ontology §8 "Path Membership"):
     # an intersection group must not contain two pre-commit beats from the same
     # dilemma -- those beats already co-occur by definition.
-    belongs_to = graph.get_edges(edge_type="belongs_to")
     beat_path_ids: dict[str, set[str]] = {}
-    for e in belongs_to:
-        if e["from"] in beat_ids:
-            beat_path_ids.setdefault(e["from"], set()).add(e["to"])
+    for bid in beat_ids:
+        for e in graph.get_edges(from_id=bid, edge_type="belongs_to"):
+            beat_path_ids.setdefault(bid, set()).add(e["to"])
     pre_commits = [bid for bid, pids in beat_path_ids.items() if len(pids) >= 2]
     if len(pre_commits) >= 2:
         # Check whether any two share the exact same path set (same dilemma).

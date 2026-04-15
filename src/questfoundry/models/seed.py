@@ -310,8 +310,8 @@ class InitialBeat(BaseModel):
             data["path_id"] = paths[0]
             if len(paths) == 2:
                 warnings.warn(
-                    "InitialBeat.paths=[p_a, p_b] is deprecated — use "
-                    "path_id=p_a and also_belongs_to=p_b directly.",
+                    f"InitialBeat.paths=[{paths[0]!r}, {paths[1]!r}] is deprecated — use "
+                    "path_id and also_belongs_to directly.",
                     DeprecationWarning,
                     stacklevel=2,
                 )

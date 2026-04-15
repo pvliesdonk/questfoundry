@@ -1842,7 +1842,7 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
         pid = p.get("path_id")
         did = p.get("dilemma_id")
         if pid and did:
-            _path_to_dilemma[pid] = did
+            _path_to_dilemma[strip_scope_prefix(str(pid))] = strip_scope_prefix(str(did))
 
     # Create initial beats
     for i, beat in enumerate(output.get("initial_beats", [])):
@@ -1908,9 +1908,21 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
         # Guard rail 1 (Story Graph Ontology §8 "Path Membership"):
         # dual belongs_to must reference paths of the same dilemma.
         if is_dual:
-            d0 = _path_to_dilemma.get(raw_path_ids[0])
-            d1 = _path_to_dilemma.get(raw_path_ids[1])
-            if d0 is None or d1 is None or d0 != d1:
+            d0 = _path_to_dilemma.get(strip_scope_prefix(raw_path_ids[0]))
+            d1 = _path_to_dilemma.get(strip_scope_prefix(raw_path_ids[1]))
+            if d0 is None:
+                msg = (
+                    f"beat {raw_id!r}: path_id={raw_path_ids[0]!r} has no known dilemma "
+                    "(not in output paths); cannot enforce guard rail 1."
+                )
+                raise ValueError(msg)
+            if d1 is None:
+                msg = (
+                    f"beat {raw_id!r}: also_belongs_to={raw_path_ids[1]!r} has no known dilemma "
+                    "(not in output paths); cannot enforce guard rail 1."
+                )
+                raise ValueError(msg)
+            if d0 != d1:
                 msg = (
                     "cross-dilemma dual belongs_to is forbidden (guard rail 1). "
                     f"Beat {raw_id!r} has path_id={raw_path_ids[0]!r} (dilemma={d0!r}) and "
