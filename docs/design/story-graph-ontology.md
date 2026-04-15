@@ -481,7 +481,7 @@ BRAINSTORM populates the world. The cast and the dramatic questions.
 | | |
 |---|---|
 | **Creates** | Path nodes, consequence nodes, beat nodes (annotated with temporal hints for GROW) |
-| **Edges created** | `explores` (path → answer), `has_consequence` (path → consequence), `belongs_to` (beat → path), entity flexibility edges (beat → alternative entities), dilemma pairwise relationship edges (`wraps` / `serial` / `concurrent` / `shared_entity`) |
+| **Edges created** | `explores` (path → answer), `has_consequence` (path → consequence), `belongs_to` (beat → path), entity flexibility edges (beat → alternative entities), dilemma pairwise relationship edges (`wraps` / `serial` / `concurrent`). The `shared_entity` signal is derivable from `anchored_to` edges and is not a declared edge type — see Part 9 "Dilemma Signals" |
 | **Reads** | All BRAINSTORM output (entities, dilemmas, answers) |
 | **Modifies** | Entity nodes (disposition: retained/cut), dilemma nodes (role, residue weight, ending salience) |
 
@@ -840,7 +840,7 @@ This section documents where the current implementation (`docs/design/00-spec.md
 
 **Current:** No explicit representation of dilemma ordering. Hard/soft role is partially captured in `convergence_policy` but the wraps/serial/concurrent pairwise relationships do not exist. `InteractionConstraint` covers shared_entity, causal_chain, and resource_conflict — related but not the same concepts.
 
-**This document:** Dilemma pairwise relationships (wraps, serial, concurrent, shared_entity) are first-class declarations by SEED. `causal_chain` is subsumed by serial. `resource_conflict` is removed.
+**This document:** Dilemma pairwise relationships (wraps, serial, concurrent) are first-class declarations by SEED. The `shared_entity` signal is derivable from `anchored_to` edges (see Part 9 "Dilemma Signals"), not an explicit edge. `causal_chain` is subsumed by serial. `resource_conflict` is removed.
 
 **Impact:** New model and edge types for dilemma pairwise relationships. `InteractionConstraint` is redesigned.
 
