@@ -771,6 +771,12 @@ def check_no_pre_commit_intersections(graph: Graph) -> ValidationCheck:
     Such beats already co-occur by definition (Story Graph Ontology §8);
     declaring them as an intersection is redundant and creates false
     structural implications.
+
+    Implementation note: under the binary Y-shape assumption (guard rail 1),
+    two pre-commit beats belong to the same dilemma if and only if they have
+    identical `belongs_to` path frozensets. This check enforces that
+    constraint by checking for beat pairs that share the same path set
+    within an intersection group.
     """
     beat_nodes = graph.get_nodes_by_type("beat")
     group_nodes = graph.get_nodes_by_type("intersection_group")
@@ -794,7 +800,7 @@ def check_no_pre_commit_intersections(graph: Graph) -> ValidationCheck:
             if len(bids) >= 2:
                 violations.append(
                     f"{gid} contains {len(bids)} pre-commit beats sharing paths "
-                    f"{sorted(pset)}: {bids}"
+                    f"{sorted(pset)}: {', '.join(bids)}"
                 )
 
     if not violations:
