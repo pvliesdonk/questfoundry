@@ -588,7 +588,7 @@ Guard rails:
 
 1. **Same-dilemma constraint.** A beat with two `belongs_to` edges must reference two paths that belong to the same dilemma. Cross-dilemma multi-`belongs_to` is a hard-convergence violation.
 2. **Pre-commit only.** Only beats before the dilemma's commit may have two `belongs_to` edges. The commit beat itself has one (it is the first beat exclusive to its path). Post-commit beats always have one.
-3. **Intersection exclusion.** An intersection group must not contain two pre-commit beats from the same dilemma — they already co-occur by definition; declaring them as an intersection is redundant and creates false structural implications.
+3. **Same-dilemma pre-commit exclusion.** An intersection group must not contain two pre-commit beats of the same dilemma (identified by identical dual `belongs_to` path sets). Such beats are already sequentially ordered in the dilemma's pre-commit chain; grouping them into an intersection implies simultaneity, contradicting the chain ordering. Cross-dilemma pre-commit co-occurrence IS the intended use of intersection groups and remains allowed.
 
 ### Beat Ordering ≠ Temporal Position Relative to Commits
 
