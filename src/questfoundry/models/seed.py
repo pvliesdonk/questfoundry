@@ -282,24 +282,39 @@ class InitialBeat(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _migrate_paths_to_path_id(cls, data: Any) -> Any:
-        """Accept legacy ``paths: [single_id]`` and convert to ``path_id``."""
+        """Accept legacy ``paths`` and convert to Y-shape (``path_id`` + optional ``also_belongs_to``).
+
+        - ``paths: [single_id]`` → ``path_id = single_id`` (post-commit beat).
+        - ``paths: [p_a, p_b]`` → ``path_id = p_a``, ``also_belongs_to = p_b``
+          (pre-commit beat, Y-shape dual membership).
+        - ``paths: []`` is rejected — every beat must reference at least one path.
+        - ``paths`` with 3+ entries is rejected — dual membership is bounded to
+          the two paths of one dilemma (Part 8 guard rail 1).
+        """
         if not isinstance(data, dict):
             return data
         if "paths" in data and "path_id" not in data:
             paths = data.pop("paths")
-            if isinstance(paths, list) and len(paths) == 1:
-                data["path_id"] = paths[0]
-            elif isinstance(paths, list) and len(paths) > 1:
+            if not isinstance(paths, list):
+                return data  # Let Pydantic reject the non-list type.
+            if len(paths) == 0:
+                msg = "InitialBeat.paths is empty — each beat must belong to at least one path."
+                raise ValueError(msg)
+            if len(paths) > 2:
+                msg = (
+                    "InitialBeat.paths has at most 2 entries (Y-shape guard rail 1). "
+                    f"Got {len(paths)}: {paths!r}."
+                )
+                raise ValueError(msg)
+            data["path_id"] = paths[0]
+            if len(paths) == 2:
                 warnings.warn(
-                    f"InitialBeat.paths had {len(paths)} entries; using first. "
-                    "Multi-path beats are handled via intersection groups.",
+                    "InitialBeat.paths=[p_a, p_b] is deprecated — use "
+                    "path_id=p_a and also_belongs_to=p_b directly.",
                     DeprecationWarning,
                     stacklevel=2,
                 )
-                data["path_id"] = paths[0]
-            elif isinstance(paths, list) and len(paths) == 0:
-                msg = "InitialBeat.paths is empty — each beat must belong to a path."
-                raise ValueError(msg)
+                data["also_belongs_to"] = paths[1]
         return data
 
     @model_validator(mode="after")
