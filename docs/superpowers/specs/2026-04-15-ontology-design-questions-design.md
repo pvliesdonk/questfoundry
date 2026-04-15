@@ -144,5 +144,5 @@ Testing:
 ## Verification
 
 - After the Group B PR merges, re-read SGO Part 8. The three beat categories in the new `Determining a beat's belongs_to` subsection should cover every beat a conformant SEED output can produce.
-- Cross-check `tests/integration/test_y_shape_end_to_end.py` fixture against the new doc: every fixture beat should fall into one of the four categories and its `belongs_to` should match the rule.
+- Cross-check `tests/integration/test_y_shape_end_to_end.py` fixture against the new doc: every fixture beat should fall into one of the three categories and its `belongs_to` should match the rule.
 - Eyeball `projects/*/graph.db` from the next real run (whenever test-new3 / test-new4 / etc. is run) for any beat that has `belongs_to` inconsistent with the rule. These are LLM conformance issues, not ontology bugs, but finding them this early is cheap.
