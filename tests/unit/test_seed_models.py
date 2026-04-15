@@ -678,6 +678,10 @@ class TestDilemmaRelationshipsSectionDedup:
                 dilemma_relationships=[concurrent_kwargs, reversed_different]
             )
 
+    def test_empty_accepted(self) -> None:
+        section = DilemmaRelationshipsSection(dilemma_relationships=[])
+        assert len(section.dilemma_relationships) == 0
+
 
 # ---------------------------------------------------------------------------
 # Helpers for SharedBeatsSection tests
@@ -774,10 +778,6 @@ class TestSharedBeatsSectionValidator:
         """An empty beat list fails the min_length=1 constraint before reaching the validator."""
         with pytest.raises(ValidationError):
             SharedBeatsSection(initial_beats=[])
-
-    def test_empty_accepted(self) -> None:
-        section = DilemmaRelationshipsSection(dilemma_relationships=[])
-        assert len(section.dilemma_relationships) == 0
 
 
 class TestSeedOutputBackwardCompat:
