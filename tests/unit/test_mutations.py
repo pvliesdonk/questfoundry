@@ -5620,6 +5620,57 @@ def test_apply_seed_mutations_rejects_cross_dilemma_dual_belongs_to() -> None:
         apply_seed_mutations(graph, seed)
 
 
+def test_apply_seed_mutations_rejects_also_belongs_to_equal_path_id() -> None:
+    """Raw-dict input with path_id == also_belongs_to must be rejected (defense-in-depth)."""
+    # Bypass Pydantic by constructing the seed dict directly.
+    from questfoundry.graph.mutations import apply_seed_mutations
+
+    graph = _two_dilemma_graph()
+    seed = _two_dilemma_seed_output(
+        initial_beats=[
+            {
+                "beat_id": "bad_beat",
+                "summary": "Same path twice.",
+                "path_id": "dilemma_a__answer_a1",
+                "also_belongs_to": "dilemma_a__answer_a1",
+                "dilemma_impacts": [
+                    {
+                        "dilemma_id": "dilemma_a",
+                        "effect": "advances",
+                        "note": "x",
+                    }
+                ],
+            },
+            {
+                "beat_id": "commit_a",
+                "summary": "Dilemma A commits.",
+                "path_id": "dilemma_a__answer_a1",
+                "dilemma_impacts": [{"dilemma_id": "dilemma_a", "effect": "commits", "note": "x"}],
+            },
+            {
+                "beat_id": "post_a",
+                "summary": "Dilemma A aftermath.",
+                "path_id": "dilemma_a__answer_a1",
+                "dilemma_impacts": [{"dilemma_id": "dilemma_a", "effect": "advances", "note": "x"}],
+            },
+            {
+                "beat_id": "commit_b",
+                "summary": "Dilemma B commits.",
+                "path_id": "dilemma_b__answer_b1",
+                "dilemma_impacts": [{"dilemma_id": "dilemma_b", "effect": "commits", "note": "x"}],
+            },
+            {
+                "beat_id": "post_b",
+                "summary": "Dilemma B aftermath.",
+                "path_id": "dilemma_b__answer_b1",
+                "dilemma_impacts": [{"dilemma_id": "dilemma_b", "effect": "advances", "note": "x"}],
+            },
+        ]
+    )
+    with pytest.raises(ValueError, match="must be distinct paths"):
+        apply_seed_mutations(graph, seed)
+
+
 # ---------------------------------------------------------------------------
 # Task 2.5: guard rail 2 - commit beats must be single-membership
 # ---------------------------------------------------------------------------

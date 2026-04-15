@@ -1929,6 +1929,12 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
                     f"also_belongs_to={raw_path_ids[1]!r} (dilemma={d1!r})."
                 )
                 raise ValueError(msg)
+            if strip_scope_prefix(raw_path_ids[0]) == strip_scope_prefix(raw_path_ids[1]):
+                msg = (
+                    f"beat {raw_id!r}: path_id and also_belongs_to must be distinct paths "
+                    f"({raw_path_ids[0]!r} == {raw_path_ids[1]!r})."
+                )
+                raise ValueError(msg)
 
         # Guard rail 2: commit beats are single-membership. A commit beat is
         # the first beat exclusive to its path - it cannot also belong to the
