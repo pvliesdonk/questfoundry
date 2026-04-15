@@ -152,9 +152,9 @@ class TestValidateGrowOutput:
         assert any("beat::orphan" in e and "belongs_to" in e for e in errors)
 
     def test_beat_multiple_belongs_to(self) -> None:
-        """Beat with multiple belongs_to edges fails validation."""
+        """Beat with multiple belongs_to edges is legal under Y-shape (pre-commit beats share paths)."""
         graph = _make_valid_grow_graph()
-        # Create second path and duplicate belongs_to
+        # Create second path and add a second belongs_to edge (simulates a pre-commit beat)
         graph.create_node(
             "path::coward",
             {"type": "path", "raw_id": "coward", "label": "Coward Path"},
@@ -163,8 +163,9 @@ class TestValidateGrowOutput:
 
         errors = validate_grow_output(graph)
         multi_errors = [e for e in errors if "beat::intro" in e and "belongs_to" in e]
-        assert multi_errors, f"Expected multiple belongs_to error for beat::intro, got: {errors}"
-        assert any("must have exactly 1" in e for e in multi_errors)
+        assert not multi_errors, (
+            f"Multiple belongs_to should be legal under Y-shape, got errors: {multi_errors}"
+        )
 
     def test_dilemma_missing_role(self) -> None:
         """Dilemma without dilemma_role fails validation."""
