@@ -773,8 +773,41 @@ def _get_path_id_from_beat(beat: dict[str, Any]) -> str | None:
 
     Returns:
         Raw path ID string, or None if not present.
+
+    .. deprecated::
+        Use :func:`_get_path_ids_from_beat` which supports Y-shape dual membership.
     """
     return beat.get("path_id") or (beat.get("paths", [None])[0] if beat.get("paths") else None)
+
+
+def _get_path_ids_from_beat(beat: dict[str, Any]) -> tuple[str, ...]:
+    """Extract path IDs from a beat dict, supporting current and legacy formats.
+
+    Supports:
+    - Y-shape current: ``path_id`` + optional ``also_belongs_to``.
+    - Legacy single: ``path_id`` alone.
+    - Legacy list: ``paths: [p]`` or ``paths: [p_a, p_b]`` (pre-Y-shape).
+
+    Args:
+        beat: Beat dict, either model-dumped or raw LLM output.
+
+    Returns:
+        Tuple of 0, 1, or 2 raw path IDs in declaration order (``path_id``
+        first, then ``also_belongs_to``). A return of 2 always represents a
+        pre-commit Y-shape beat. A return of 0 means the beat has no path
+        reference (caught by validation).
+    """
+    if beat.get("path_id"):
+        primary = str(beat["path_id"])
+        also = beat.get("also_belongs_to")
+        if also:
+            return (primary, str(also))
+        return (primary,)
+    # Legacy fallback.
+    paths = beat.get("paths")
+    if isinstance(paths, list) and paths:
+        return tuple(str(p) for p in paths[:2])
+    return ()
 
 
 def _resolve_entity_ref(graph: Graph, entity_ref: str) -> str:

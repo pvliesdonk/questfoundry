@@ -5239,3 +5239,35 @@ class TestApplySeedConvergenceAnalysis:
 
         node = graph.get_node("dilemma::trust_or_not")
         assert "residue_weight" not in node
+
+
+# ---------------------------------------------------------------------------
+# Phase 2 - Y-shape dual belongs_to tests (Tasks 2.1-2.7)
+# ---------------------------------------------------------------------------
+
+
+def test_get_path_ids_from_beat_post_commit_returns_one() -> None:
+    from questfoundry.graph.mutations import _get_path_ids_from_beat
+
+    beat = {"path_id": "path::a"}
+    assert _get_path_ids_from_beat(beat) == ("path::a",)
+
+
+def test_get_path_ids_from_beat_pre_commit_returns_both() -> None:
+    from questfoundry.graph.mutations import _get_path_ids_from_beat
+
+    beat = {"path_id": "path::a", "also_belongs_to": "path::b"}
+    assert _get_path_ids_from_beat(beat) == ("path::a", "path::b")
+
+
+def test_get_path_ids_from_beat_legacy_paths_list_returns_all() -> None:
+    from questfoundry.graph.mutations import _get_path_ids_from_beat
+
+    beat = {"paths": ["path::a", "path::b"]}
+    assert _get_path_ids_from_beat(beat) == ("path::a", "path::b")
+
+
+def test_get_path_ids_from_beat_empty_returns_empty_tuple() -> None:
+    from questfoundry.graph.mutations import _get_path_ids_from_beat
+
+    assert _get_path_ids_from_beat({}) == ()
