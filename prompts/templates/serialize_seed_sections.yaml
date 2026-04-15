@@ -745,7 +745,7 @@ per_path_beats_prompt: |
   4. Include at least one beat with `effect: "commits"` for `{dilemma_id}`
 
   ## Schema
-  Return a JSON object with an "initial_beats" array of {size_beats_per_path} beats:
+  Return a JSON object with an "initial_beats" array of {size_post_commit_beats_per_path} beats:
   ```json
   {{
     "initial_beats": [
@@ -806,7 +806,7 @@ per_path_beats_prompt: |
   Valid positions: `before_commit`, `after_commit`, `before_introduce`, `after_introduce`
 
   ## Rules
-  - Generate exactly {size_beats_per_path} beats for path `{path_id}`
+  - Generate exactly {size_post_commit_beats_per_path} beats for path `{path_id}`
   - Beat IDs MUST start with `{path_name}_beat_` (e.g., `{path_name}_beat_01`)
   - EVERY beat must have `path_id: "{path_id}"`
   - EVERY beat must have at least one dilemma_impact for `{dilemma_id}`
@@ -857,7 +857,7 @@ per_path_beats_prompt: |
   If you see a dilemma ID in your `path_id` value, YOU MADE A MISTAKE. Fix it.
 
   ## Output
-  Return ONLY valid JSON with the "initial_beats" array ({size_beats_per_path} beats).
+  Return ONLY valid JSON with the "initial_beats" array ({size_post_commit_beats_per_path} beats).
 
 # Section 7: Dilemma Convergence Analysis (post-prune)
 dilemma_analyses_prompt: |

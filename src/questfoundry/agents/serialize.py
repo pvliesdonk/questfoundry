@@ -501,6 +501,7 @@ _REQUIRED_SECTION_PROMPT_KEYS = [
     "per_dilemma_paths_prompt",
     "consequences_prompt",
     "beats_prompt",
+    "shared_beats_prompt",
     "per_path_beats_prompt",
     "dilemma_analyses_prompt",
     "dilemma_relationships_prompt",
@@ -550,6 +551,7 @@ def _load_seed_section_prompts() -> dict[str, str]:
         "paths": data["paths_prompt"],
         "consequences": data["consequences_prompt"],
         "beats": data["beats_prompt"],
+        "shared_beats": data["shared_beats_prompt"],
         "per_path_beats": data["per_path_beats_prompt"],
         "per_dilemma_paths": data["per_dilemma_paths_prompt"],
         "dilemma_analyses": data["dilemma_analyses_prompt"],
@@ -1731,10 +1733,14 @@ async def serialize_seed_as_function(
     beats_range = size_vars["size_beats_per_path"]
     shared_range = size_vars["size_shared_beats_per_dilemma"]
     post_range = size_vars["size_post_commit_beats_per_path"]
-    for key in ("beats", "per_path_beats"):
+    for key in ("beats",):
         if key in prompts:
             prompts[key] = prompts[key].replace("{size_beats_per_path}", beats_range)
     if "shared_beats" in prompts:
+        # NOTE: shared_beats prompt is loaded and substituted here but has no LLM
+        # dispatch call site yet. The two-call Y-shape orchestration (one call per
+        # dilemma for shared pre-commit beats, one per path for post-commit beats)
+        # is tracked in https://github.com/pvliesdonk/questfoundry/issues/1227
         prompts["shared_beats"] = prompts["shared_beats"].replace(
             "{size_shared_beats_per_dilemma}", shared_range
         )
