@@ -1013,5 +1013,16 @@ def test_seed_advisory_warning_splits_shared_vs_post_commit(caplog) -> None:
 
     with caplog.at_level(logging.WARNING):
         _log_beat_summary_stats(artifact_data)
-    # Not asserting exact text; asserting the helper runs without raising.
-    assert True  # If we got here, no exception was raised
+
+    # post_avg = 2 post-commit beats / 4 paths = 0.5 → below threshold (< 2.0)
+    assert any("seed_low_post_commit_beat_count" in r.message for r in caplog.records), (
+        "Expected advisory warning for low post-commit beat count"
+    )
+
+    # shared_avg = 4 shared beats / 2 dilemmas = 2.0 → above threshold (< 1.0)
+    assert not any("seed_low_shared_beat_count" in r.message for r in caplog.records), (
+        "Did not expect advisory warning for shared beat count"
+    )
+
+    # No errors should be raised
+    assert not any(r.levelno >= logging.ERROR for r in caplog.records)
