@@ -777,6 +777,12 @@ def check_no_pre_commit_intersections(graph: Graph) -> ValidationCheck:
     identical `belongs_to` path frozensets. This check enforces that
     constraint by checking for beat pairs that share the same path set
     within an intersection group.
+
+    Rationale: two pre-commit beats of the same dilemma have identical dual
+    ``belongs_to`` path sets and are sequentially ordered in the dilemma's
+    pre-commit chain. An intersection group implies simultaneity, contradicting
+    that chain ordering. Cross-dilemma pre-commit co-occurrence is not affected.
+    See ``docs/design/story-graph-ontology.md`` Part 8 guard rail 3 for the ruling.
     """
     beat_nodes = graph.get_nodes_by_type("beat")
     group_nodes = graph.get_nodes_by_type("intersection_group")
