@@ -708,6 +708,57 @@ class PathBeatsSection(BaseModel):
         return self
 
 
+class SharedBeatsSection(BaseModel):
+    """Wrapper for serializing shared pre-commit beats for a single dilemma.
+
+    Used by per-dilemma shared-beat serialization (Y-shape, issue #1227).
+    One LLM call per dilemma generates the pre-commit beats that both explored
+    paths share.  Each beat MUST have both ``path_id`` and ``also_belongs_to``
+    set to the two explored paths of the dilemma (Story Graph Ontology Part 8).
+
+    A minimum of 1 beat is required so that every dilemma has at least one
+    shared setup scene.  The maximum of 4 prevents over-stuffing the shared
+    section before the Y-fork.
+    """
+
+    initial_beats: list[InitialBeat] = Field(
+        min_length=1,
+        max_length=4,
+        description="1-4 shared pre-commit beats for this dilemma (range set by size preset)",
+    )
+
+    @model_validator(mode="after")
+    def _deduplicate_beats(self) -> SharedBeatsSection:
+        """Drop identical duplicate beats; raise on conflicting ones."""
+        self.initial_beats = _deduplicate_and_check(self.initial_beats, "beat_id", "beat_id")
+        return self
+
+    @model_validator(mode="after")
+    def _require_also_belongs_to(self) -> SharedBeatsSection:
+        """Assert every shared beat has also_belongs_to set (Part 8 guard rail 2).
+
+        Shared pre-commit beats MUST carry dual ``belongs_to`` edges — one to
+        each explored path of their dilemma.  A beat with ``also_belongs_to``
+        unset would silently become a single-membership post-commit beat,
+        violating the Y-shape invariant.
+
+        Story Graph Ontology Part 8 guard rail 2: multi-``belongs_to`` is ONLY
+        valid for pre-commit beats; ``also_belongs_to`` is the field that signals
+        pre-commit membership.
+        """
+        offending = [b.beat_id for b in self.initial_beats if b.also_belongs_to is None]
+        if offending:
+            beat_ids_str = ", ".join(f"`{bid}`" for bid in offending)
+            msg = (
+                "SharedBeatsSection: every shared beat must have `also_belongs_to` set "
+                "(Story Graph Ontology Part 8 guard rail 2 — pre-commit beats carry dual "
+                "belongs_to edges, one per explored path of their dilemma). "
+                f"Beats missing `also_belongs_to`: {beat_ids_str}"
+            )
+            raise ValueError(msg)
+        return self
+
+
 class DilemmaAnalysisSection(BaseModel):
     """Wrapper for serializing dilemma analyses separately (Section 7)."""
 

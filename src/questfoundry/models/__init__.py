@@ -142,6 +142,7 @@ from questfoundry.models.seed import (
     PathTier,
     ResidueWeight,
     SeedOutput,
+    SharedBeatsSection,
     TemporalHint,
     TemporalPosition,
 )
@@ -242,6 +243,7 @@ __all__ = [
     "SceneTypeTag",
     "Scope",
     "SeedOutput",
+    "SharedBeatsSection",
     "SpokeLabelUpdate",
     "StateFlag",
     "TemporalHint",
