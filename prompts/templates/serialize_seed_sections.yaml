@@ -623,7 +623,18 @@ beats_prompt: |
 
 # Section 5a: Shared Pre-Commit Beats (Y-shape — one call per dilemma)
 shared_beats_prompt: |
-  You are generating SHARED PRE-COMMIT BEATS for a dilemma.
+  You are generating SHARED PRE-COMMIT BEATS for one dilemma.
+
+  ## YOUR DILEMMA (MEMORIZE THIS)
+
+  Dilemma ID: `{dilemma_id}`
+  Question: {dilemma_question}
+
+  ## YOUR TWO EXPLORED PATHS
+
+  These beats MUST belong to BOTH of these paths:
+  - `path_id` (primary):     `{path_id}`
+  - `also_belongs_to` (sibling): `{also_belongs_to}`
 
   ## What Are Shared Pre-Commit Beats?
   In QuestFoundry v5, every dilemma is Y-shaped:
@@ -642,42 +653,50 @@ shared_beats_prompt: |
   pre-commit beats (1–2 is the sweet spot for most stories).
 
   Each shared beat:
-    - MUST have `effect` in {advances, reveals, complicates}. NEVER `commits`.
+    - MUST have `effect` in {{advances, reveals, complicates}}. NEVER `commits`.
     - MUST reference the current dilemma in `dilemma_impacts[0].dilemma_id`.
-    - MUST have `path_id` = the first explored path of this dilemma.
-    - MUST have `also_belongs_to` = the other explored path.
+    - MUST have `path_id` = `{path_id}` (the primary path above).
+    - MUST have `also_belongs_to` = `{also_belongs_to}` (the sibling path above).
     - SHOULD explore the dilemma's central tension without privileging either answer.
 
   ## Schema
   ```json
-  {
+  {{
     "initial_beats": [
-      {
-        "beat_id": "shared_setup_mentor_warning",
-        "summary": "The mentor delivers a cryptic warning.",
-        "path_id": "path::trust_protector_or_manipulator__protector",
-        "also_belongs_to": "path::trust_protector_or_manipulator__manipulator",
+      {{
+        "beat_id": "shared_setup_dilemma_name_01",
+        "summary": "A beat that sets up the choice without committing to either answer.",
+        "path_id": "{path_id}",
+        "also_belongs_to": "{also_belongs_to}",
         "dilemma_impacts": [
-          {
-            "dilemma_id": "dilemma::trust_protector_or_manipulator",
+          {{
+            "dilemma_id": "{dilemma_id}",
             "effect": "advances",
-            "note": "The warning is ambiguous — could be protective or manipulative."
-          }
+            "note": "Explanation of what this beat advances."
+          }}
         ],
-        "entities": ["character::mentor", "character::kay"],
-        "location": "location::archive_entrance",
+        "entities": ["character::some_character"],
+        "location": "location::some_location",
         "location_alternatives": []
-      }
+      }}
     ]
-  }
+  }}
   ```
 
   ## WHAT NOT TO DO
   - Do NOT set `effect: commits` on any shared beat.
-  - Do NOT leave `also_belongs_to` null.
+  - Do NOT leave `also_belongs_to` null — set it to `{also_belongs_to}`.
   - Do NOT set `also_belongs_to` to a path from a DIFFERENT dilemma
     (same-dilemma constraint; Story Graph Ontology Part 8 guard rail 1).
   - Do NOT omit a shared beat for this dilemma — every Y-shape needs at least one.
+  - Do NOT use path IDs from other dilemmas.
+
+  ## FINAL CHECK (verify before output)
+  For EACH beat you generate:
+  1. `path_id` is `{path_id}`
+  2. `also_belongs_to` is `{also_belongs_to}`
+  3. `dilemma_impacts[0].dilemma_id` is `{dilemma_id}`
+  4. `effect` is NOT `commits`
 
   ## Output
   Return ONLY valid JSON with the "initial_beats" array.
