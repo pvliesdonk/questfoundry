@@ -245,12 +245,13 @@ def compute_beat_grouping(graph: Graph) -> list[PassageSpec]:
             parents[from_id].append(to_id)
             children[to_id].append(from_id)
 
-    # Build beat → path mapping
+    # Build beat → path-set mapping (Y-shape: pre-commit beats have dual membership)
     belongs_to_edges = graph.get_edges(edge_type="belongs_to")
-    beat_to_path: dict[str, str] = {}
+    _bt_accum: dict[str, set[str]] = {}
     for edge in belongs_to_edges:
         if edge["from"] in beat_nodes:
-            beat_to_path[edge["from"]] = edge["to"]
+            _bt_accum.setdefault(edge["from"], set()).add(edge["to"])
+    beat_to_paths: dict[str, frozenset[str]] = {bid: frozenset(ps) for bid, ps in _bt_accum.items()}
 
     # Track which beats are already grouped
     grouped_beats: set[str] = set()
@@ -286,11 +287,15 @@ def compute_beat_grouping(graph: Graph) -> list[PassageSpec]:
         if bid in grouped_beats:
             continue
 
-        path_id = beat_to_path.get(bid)
-        if path_id is None:
+        path_set = beat_to_paths.get(bid, frozenset())
+        if not path_set:
             continue
 
-        # Walk forward collecting same-path, single-child, single-parent beats
+        # Walk forward collecting same-path-set, single-child, single-parent beats.
+        # Y-shape guard rail: beats collapse only when they share the EXACT same
+        # frozenset of path memberships. A shared pre-commit beat
+        # (frozenset{p_a, p_b}) does not collapse with a post-commit beat
+        # (frozenset{p_a}).
         chain = [bid]
         current = bid
         while True:
@@ -300,7 +305,7 @@ def compute_beat_grouping(graph: Graph) -> list[PassageSpec]:
             next_beat = c[0]
             if len(parents[next_beat]) != 1:
                 break
-            if beat_to_path.get(next_beat) != path_id:
+            if beat_to_paths.get(next_beat, frozenset()) != path_set:
                 break
             # Entity compatibility check: too many new entities = hard break
             if not _entities_compatible(beat_nodes, chain[-1], next_beat):
@@ -640,12 +645,15 @@ def compute_choice_edges(
         if from_id in beat_nodes and to_id in beat_nodes:
             children[to_id].append(from_id)
 
-    # Build beat → path mapping
+    # Build beat → path-set mapping (Y-shape: pre-commit beats have dual membership)
     belongs_to_edges = graph.get_edges(edge_type="belongs_to")
-    beat_to_path: dict[str, str] = {}
+    _ce_accum: dict[str, set[str]] = {}
     for edge in belongs_to_edges:
         if edge["from"] in beat_nodes:
-            beat_to_path[edge["from"]] = edge["to"]
+            _ce_accum.setdefault(edge["from"], set()).add(edge["to"])
+    beat_to_paths_ce: dict[str, frozenset[str]] = {
+        bid: frozenset(ps) for bid, ps in _ce_accum.items()
+    }
 
     # Build beat → passage mapping
     beat_to_passage: dict[str, str] = {}
@@ -693,11 +701,14 @@ def compute_choice_edges(
         if len(child_ids) < 2:
             continue
 
-        # Group children by path
+        # Group children by all their path memberships to detect any divergence.
+        # Pre-commit beats share multiple paths; commit beats have a single path.
+        # Using all memberships avoids missing divergence when a shared path sorts
+        # first alphabetically under the old primary-path heuristic.
         child_paths: dict[str, list[str]] = {}
         for cid in child_ids:
-            path_id = beat_to_path.get(cid, "")
-            child_paths.setdefault(path_id, []).append(cid)
+            for path_id in beat_to_paths_ce.get(cid, frozenset()):
+                child_paths.setdefault(path_id, []).append(cid)
 
         if len(child_paths) < 2:
             continue

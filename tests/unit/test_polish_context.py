@@ -182,3 +182,30 @@ class TestFormatEntityArcContext:
 
         assert ctx["entity_id"] == "entity::missing"
         assert ctx["entity_name"] == "entity::missing"
+
+
+def test_format_entity_context_lists_all_paths_for_pre_commit_beat() -> None:
+    """Pre-commit beats with dual belongs_to show both paths in appearance lines."""
+    graph = Graph.empty()
+    graph.create_node("entity::mentor", {"type": "entity", "name": "Mentor", "description": "x"})
+    graph.create_node("path::trust__a", {"type": "path", "raw_id": "trust__a"})
+    graph.create_node("path::trust__b", {"type": "path", "raw_id": "trust__b"})
+    graph.create_node(
+        "beat::shared",
+        {
+            "type": "beat",
+            "summary": "Shared setup.",
+            "scene_type": "scene",
+            "raw_id": "shared",
+            "dilemma_impacts": [],
+            "entities": ["entity::mentor"],
+        },
+    )
+    graph.add_edge("belongs_to", "beat::shared", "path::trust__a")
+    graph.add_edge("belongs_to", "beat::shared", "path::trust__b")
+    graph.add_edge("appears", "entity::mentor", "beat::shared")
+
+    ctx = format_entity_arc_context(graph, "entity::mentor", ["beat::shared"])
+    beat_appearances = ctx["beat_appearances"]
+    assert "path::trust__a" in beat_appearances
+    assert "path::trust__b" in beat_appearances

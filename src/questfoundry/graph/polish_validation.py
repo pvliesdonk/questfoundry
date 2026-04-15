@@ -516,10 +516,13 @@ def _check_divergences_have_choices(
 ) -> None:
     """Beats with 2+ children on different paths must live in a passage with 2+ outgoing choices."""
     # Find beats that have 2+ outgoing next/branch edges leading to beats on different paths
+    beat_nodes = graph.get_nodes_by_type("beat")
     belongs_to_edges = graph.get_edges(edge_type="belongs_to")
-    beat_to_path: dict[str, str] = {}
+    _accum: dict[str, set[str]] = {}
     for edge in belongs_to_edges:
-        beat_to_path[edge["from"]] = edge["to"]
+        if edge["from"] in beat_nodes:
+            _accum.setdefault(edge["from"], set()).add(edge["to"])
+    beat_to_paths: dict[str, frozenset[str]] = {bid: frozenset(ps) for bid, ps in _accum.items()}
 
     next_edges = graph.get_edges(edge_type="next")
     branch_edges = graph.get_edges(edge_type="branch")
@@ -536,10 +539,14 @@ def _check_divergences_have_choices(
     for beat_id, children in children_by_beat.items():
         if len(children) < 2:
             continue
-        # Check if children are on different paths
-        child_paths = {beat_to_path.get(c) for c in children}
-        child_paths.discard(None)
-        if len(child_paths) < 2:
+        # Exclude the non-divergence case: a pre-commit parent with a single
+        # pre-commit child (shared-beat chain) — both have the same dual path
+        # set. Only a parent whose children have DIFFERING single-membership
+        # (commit beats) is a divergence point.
+        child_path_sets = {beat_to_paths.get(c, frozenset()) for c in children}
+        # Discard beats with no path assignment — they don't indicate divergence.
+        child_path_sets.discard(frozenset())
+        if len(child_path_sets) < 2:
             continue
         # This beat is a divergence point — its passage must have 2+ outgoing choices
         passages = beat_to_passages.get(beat_id, [])

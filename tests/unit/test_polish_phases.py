@@ -256,7 +256,7 @@ class TestConsecutiveRuns:
             "c": {"scene_type": "scene"},
         }
         flags: list = []
-        _check_consecutive_runs(["a", "b", "c"], beat_nodes, {}, flags)
+        _check_consecutive_runs(["a", "b", "c"], beat_nodes, lambda _bid: "", flags)
         assert len(flags) == 1
         assert flags[0]["issue_type"] == "consecutive_scene"
 
@@ -267,13 +267,13 @@ class TestConsecutiveRuns:
             "c": {"scene_type": "sequel"},
         }
         flags: list = []
-        _check_consecutive_runs(["a", "b", "c"], beat_nodes, {}, flags)
+        _check_consecutive_runs(["a", "b", "c"], beat_nodes, lambda _bid: "", flags)
         assert len(flags) == 1
         assert flags[0]["issue_type"] == "consecutive_sequel"
 
     def test_short_chain_ignored(self) -> None:
         flags: list = []
-        _check_consecutive_runs(["a", "b"], {"a": {}, "b": {}}, {}, flags)
+        _check_consecutive_runs(["a", "b"], {"a": {}, "b": {}}, lambda _bid: "", flags)
         assert len(flags) == 0
 
 
@@ -289,7 +289,7 @@ class TestPostCommitSequel:
             "b": {"dilemma_impacts": [], "scene_type": "sequel"},
         }
         flags: list = []
-        _check_post_commit_sequel(["a", "b"], beat_nodes, {}, flags)
+        _check_post_commit_sequel(["a", "b"], beat_nodes, lambda _bid: "", flags)
         assert len(flags) == 0
 
     def test_commit_followed_by_scene_flagged(self) -> None:
@@ -301,7 +301,7 @@ class TestPostCommitSequel:
             "b": {"dilemma_impacts": [], "scene_type": "scene"},
         }
         flags: list = []
-        _check_post_commit_sequel(["a", "b"], beat_nodes, {}, flags)
+        _check_post_commit_sequel(["a", "b"], beat_nodes, lambda _bid: "", flags)
         assert len(flags) == 1
 
     def test_commit_at_end_of_chain_flagged(self) -> None:
@@ -314,7 +314,7 @@ class TestPostCommitSequel:
             },
         }
         flags: list = []
-        _check_post_commit_sequel(["a", "b"], beat_nodes, {}, flags)
+        _check_post_commit_sequel(["a", "b"], beat_nodes, lambda _bid: "", flags)
         assert len(flags) == 1
         assert flags[0]["issue_type"] == "no_sequel_after_commit"
 

@@ -44,6 +44,8 @@ from questfoundry.pipeline.stages.polish.deterministic import _load_plan_data
 from questfoundry.pipeline.stages.polish.registry import polish_phase
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from langchain_core.language_models import BaseChatModel
 
     from questfoundry.graph.graph import Graph
@@ -837,10 +839,15 @@ def _detect_pacing_flags(
     """
     # Build adjacency for path-local walks
     belongs_to_edges = graph.get_edges(edge_type="belongs_to")
-    beat_to_path: dict[str, str] = {}
+    _dp_accum: dict[str, set[str]] = {}
     for edge in belongs_to_edges:
         if edge["from"] in beat_nodes:
-            beat_to_path[edge["from"]] = edge["to"]
+            _dp_accum.setdefault(edge["from"], set()).add(edge["to"])
+    beat_to_paths: dict[str, frozenset[str]] = {bid: frozenset(ps) for bid, ps in _dp_accum.items()}
+
+    def _primary_path(bid: str) -> str:
+        """First-by-sort-order path membership. Stable for reporting."""
+        return next(iter(sorted(beat_to_paths.get(bid, frozenset()))), "")
 
     children: dict[str, list[str]] = {bid: [] for bid in beat_nodes}
     parents: dict[str, list[str]] = {bid: [] for bid in beat_nodes}
@@ -865,10 +872,10 @@ def _detect_pacing_flags(
             visited.add(b)
 
         # Check for consecutive scene/sequel runs
-        _check_consecutive_runs(chain, beat_nodes, beat_to_path, flags)
+        _check_consecutive_runs(chain, beat_nodes, _primary_path, flags)
 
         # Check for missing sequel after commits
-        _check_post_commit_sequel(chain, beat_nodes, beat_to_path, flags)
+        _check_post_commit_sequel(chain, beat_nodes, _primary_path, flags)
 
     return flags
 
@@ -896,7 +903,7 @@ def _walk_linear_chain(
 def _check_consecutive_runs(
     chain: list[str],
     beat_nodes: dict[str, dict[str, Any]],
-    beat_to_path: dict[str, str],
+    get_primary_path: Callable[[str], str],
     flags: list[dict[str, Any]],
 ) -> None:
     """Check for 3+ consecutive same-type beats in a chain."""
@@ -917,7 +924,7 @@ def _check_consecutive_runs(
                     {
                         "issue_type": f"consecutive_{run_type}",
                         "beat_ids": list(run_beats),
-                        "path_id": beat_to_path.get(run_beats[0], ""),
+                        "path_id": get_primary_path(run_beats[0]),
                     }
                 )
             run_type = scene_type
@@ -929,7 +936,7 @@ def _check_consecutive_runs(
             {
                 "issue_type": f"consecutive_{run_type}",
                 "beat_ids": list(run_beats),
-                "path_id": beat_to_path.get(run_beats[0], ""),
+                "path_id": get_primary_path(run_beats[0]),
             }
         )
 
@@ -937,7 +944,7 @@ def _check_consecutive_runs(
 def _check_post_commit_sequel(
     chain: list[str],
     beat_nodes: dict[str, dict[str, Any]],
-    beat_to_path: dict[str, str],
+    get_primary_path: Callable[[str], str],
     flags: list[dict[str, Any]],
 ) -> None:
     """Check for missing sequel beats after commit beats."""
@@ -956,7 +963,7 @@ def _check_post_commit_sequel(
                 {
                     "issue_type": "no_sequel_after_commit",
                     "beat_ids": chain[max(0, i - 1) : i + 1],
-                    "path_id": beat_to_path.get(bid, ""),
+                    "path_id": get_primary_path(bid),
                 }
             )
         else:
@@ -967,7 +974,7 @@ def _check_post_commit_sequel(
                     {
                         "issue_type": "no_sequel_after_commit",
                         "beat_ids": chain[max(0, i - 1) : i + 3],
-                        "path_id": beat_to_path.get(bid, ""),
+                        "path_id": get_primary_path(bid),
                     }
                 )
 

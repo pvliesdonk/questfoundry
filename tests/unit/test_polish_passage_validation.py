@@ -1782,3 +1782,114 @@ class TestProseNeutralityWithPlanMetadata:
         checks = check_prose_neutrality(g)
         assert len(checks) == 1
         assert checks[0].severity == "pass"
+
+
+# ---------------------------------------------------------------------------
+# Y-shape divergence check tests (Task 3.2)
+# ---------------------------------------------------------------------------
+
+
+def _build_y_shape_with_choices() -> Graph:
+    """Build a Y-shape graph where the passage containing shared_setup has 2 choices."""
+    graph = Graph.empty()
+    graph.create_node("path::trust__a", {"type": "path", "raw_id": "trust__a"})
+    graph.create_node("path::trust__b", {"type": "path", "raw_id": "trust__b"})
+
+    # shared_setup: pre-commit beat with dual belongs_to
+    graph.create_node(
+        "beat::shared_setup",
+        {"type": "beat", "raw_id": "shared_setup", "summary": "Shared."},
+    )
+    graph.add_edge("belongs_to", "beat::shared_setup", "path::trust__a")
+    graph.add_edge("belongs_to", "beat::shared_setup", "path::trust__b")
+
+    # commit beats: single belongs_to each
+    graph.create_node(
+        "beat::commit_a",
+        {"type": "beat", "raw_id": "commit_a", "summary": "Commit A."},
+    )
+    graph.add_edge("belongs_to", "beat::commit_a", "path::trust__a")
+    graph.add_edge("next", "beat::shared_setup", "beat::commit_a")
+
+    graph.create_node(
+        "beat::commit_b",
+        {"type": "beat", "raw_id": "commit_b", "summary": "Commit B."},
+    )
+    graph.add_edge("belongs_to", "beat::commit_b", "path::trust__b")
+    graph.add_edge("next", "beat::shared_setup", "beat::commit_b")
+
+    # Passages
+    graph.create_node("passage::p0", {"type": "passage", "raw_id": "p0", "summary": "S"})
+    graph.create_node("passage::p1", {"type": "passage", "raw_id": "p1", "summary": "A"})
+    graph.create_node("passage::p2", {"type": "passage", "raw_id": "p2", "summary": "B"})
+
+    # Choice edges: passage::p0 → passage::p1, passage::p0 → passage::p2
+    graph.add_edge("choice", "passage::p0", "passage::p1")
+    graph.add_edge("choice", "passage::p0", "passage::p2")
+
+    return graph
+
+
+def _build_y_shape_without_choices() -> Graph:
+    """Build a Y-shape graph where the passage containing shared_setup has NO choices."""
+    graph = Graph.empty()
+    graph.create_node("path::trust__a", {"type": "path", "raw_id": "trust__a"})
+    graph.create_node("path::trust__b", {"type": "path", "raw_id": "trust__b"})
+
+    graph.create_node(
+        "beat::shared_setup",
+        {"type": "beat", "raw_id": "shared_setup", "summary": "Shared."},
+    )
+    graph.add_edge("belongs_to", "beat::shared_setup", "path::trust__a")
+    graph.add_edge("belongs_to", "beat::shared_setup", "path::trust__b")
+
+    graph.create_node(
+        "beat::commit_a",
+        {"type": "beat", "raw_id": "commit_a", "summary": "Commit A."},
+    )
+    graph.add_edge("belongs_to", "beat::commit_a", "path::trust__a")
+    graph.add_edge("next", "beat::shared_setup", "beat::commit_a")
+
+    graph.create_node(
+        "beat::commit_b",
+        {"type": "beat", "raw_id": "commit_b", "summary": "Commit B."},
+    )
+    graph.add_edge("belongs_to", "beat::commit_b", "path::trust__b")
+    graph.add_edge("next", "beat::shared_setup", "beat::commit_b")
+
+    # Passages — NO choice edges from p0
+    graph.create_node("passage::p0", {"type": "passage", "raw_id": "p0", "summary": "S"})
+    graph.create_node("passage::p1", {"type": "passage", "raw_id": "p1", "summary": "A"})
+    graph.create_node("passage::p2", {"type": "passage", "raw_id": "p2", "summary": "B"})
+
+    return graph
+
+
+def test_check_divergences_have_choices_passes_for_y_shape() -> None:
+    """A correctly-constructed Y-shape with choice edges passes the check."""
+    from questfoundry.graph.polish_validation import _check_divergences_have_choices
+
+    graph = _build_y_shape_with_choices()
+    errors: list[str] = []
+    beat_to_passages = {
+        "beat::shared_setup": ["passage::p0"],
+        "beat::commit_a": ["passage::p1"],
+        "beat::commit_b": ["passage::p2"],
+    }
+    _check_divergences_have_choices(graph, beat_to_passages, errors)
+    assert errors == []
+
+
+def test_check_divergences_have_choices_flags_y_shape_without_choices() -> None:
+    """A Y-shape with no choice edges in the parent passage IS flagged."""
+    from questfoundry.graph.polish_validation import _check_divergences_have_choices
+
+    graph = _build_y_shape_without_choices()
+    errors: list[str] = []
+    beat_to_passages = {
+        "beat::shared_setup": ["passage::p0"],
+        "beat::commit_a": ["passage::p1"],
+        "beat::commit_b": ["passage::p2"],
+    }
+    _check_divergences_have_choices(graph, beat_to_passages, errors)
+    assert any("divergence point" in e for e in errors)

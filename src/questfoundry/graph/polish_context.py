@@ -190,12 +190,14 @@ def format_entity_arc_context(
     entity_name = entity_data.get("name", entity_id)
     entity_description = entity_data.get("description", "")
 
-    # Build beat appearance lines with path context
+    # Build beat appearance lines with path context. Pre-commit beats
+    # (Y-shape) belong to both paths of their dilemma — report both.
     belongs_to_edges = graph.get_edges(edge_type="belongs_to")
-    beat_to_path: dict[str, str] = {}
+    _accum: dict[str, set[str]] = {}
     for edge in belongs_to_edges:
         if edge["from"] in beat_nodes:
-            beat_to_path[edge["from"]] = edge["to"]
+            _accum.setdefault(edge["from"], set()).add(edge["to"])
+    beat_to_paths: dict[str, frozenset[str]] = {b: frozenset(p) for b, p in _accum.items()}
 
     beat_items: list[ContextItem] = []
     paths_seen: set[str] = set()
@@ -203,9 +205,8 @@ def format_entity_arc_context(
         data = beat_nodes.get(bid, {})
         summary = truncate_summary(data.get("summary", ""), 100)
         scene_type = data.get("scene_type", "unknown")
-        path_id = beat_to_path.get(bid)
-        if path_id:
-            paths_seen.add(path_id)
+        path_set = beat_to_paths.get(bid, frozenset())
+        paths_seen.update(path_set)
 
         impacts = data.get("dilemma_impacts", [])
         impact_str = ""
@@ -213,7 +214,12 @@ def format_entity_arc_context(
             effects = [imp.get("effect", "?") for imp in impacts]
             impact_str = f" dilemma_effects=[{', '.join(effects)}]"
 
-        path_label = path_id or "unknown"
+        if not path_set:
+            path_label = "unknown"
+        elif len(path_set) == 1:
+            (path_label,) = path_set
+        else:
+            path_label = ", ".join(sorted(path_set)) + " (shared pre-commit)"
         line = f"  - {bid} (path: {path_label}) [{scene_type}]: {summary}{impact_str}"
         beat_items.append(ContextItem(id=bid, text=line))
 
