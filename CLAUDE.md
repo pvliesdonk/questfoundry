@@ -207,7 +207,7 @@ Before pushing, ask: "What would a careful reviewer find wrong with this?" If yo
 Beyond the global GitHub workflow rules, these are project-specific:
 
 - Use `Closes #123` (or `Fixes #123`) in PR descriptions — bare `#123` references do NOT auto-close issues on merge.
-- Every "Not Included / Future PRs" item in a PR description MUST link to a GitHub issue. No silent deferrals.
+- **Deferred work MUST have a tracking issue.** No silent deferrals — ever. This applies to: "Not Included / Future PRs" items in PR descriptions, follow-ups from code review, known gaps flagged during implementation, TODO comments that survive a PR, and any scope cut from an in-flight task. Create the issue (or link an existing one) before merging the work that defers it.
 - **Always fetch main before creating a branch**: `git fetch origin main` before `git checkout -b feat/...`
 - **Removal issues MUST have a Verification section** with grep/shell commands confirming the old code is gone, AND test updates asserting the new expected state. Run verification before closing.
 - **Separate add from remove** — never bundle "add feature X" and "remove old feature Y" in one issue unless the removal is < 10 lines.
