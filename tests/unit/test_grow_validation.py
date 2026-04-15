@@ -1291,3 +1291,34 @@ class TestCheckNoPreCommitIntersections:
         graph = Graph.empty()
         check = check_no_pre_commit_intersections(graph)
         assert check.severity == "pass"
+
+    def test_passes_when_two_dual_beats_from_different_dilemmas(self) -> None:
+        """An intersection group may contain two dual-path beats if they're from DIFFERENT dilemmas."""
+        from questfoundry.graph.grow_validation import check_no_pre_commit_intersections
+
+        graph = Graph.empty()
+        # Dilemma A with two paths
+        graph.create_node("path::d_a__x", {"type": "path", "dilemma_id": "dilemma::d_a"})
+        graph.create_node("path::d_a__y", {"type": "path", "dilemma_id": "dilemma::d_a"})
+        # Dilemma B with two paths
+        graph.create_node("path::d_b__p", {"type": "path", "dilemma_id": "dilemma::d_b"})
+        graph.create_node("path::d_b__q", {"type": "path", "dilemma_id": "dilemma::d_b"})
+        # Pre-commit beat for dilemma A (dual belongs_to)
+        graph.create_node("beat::pre_a", {"type": "beat", "dilemma_impacts": []})
+        graph.add_edge("belongs_to", "beat::pre_a", "path::d_a__x")
+        graph.add_edge("belongs_to", "beat::pre_a", "path::d_a__y")
+        # Pre-commit beat for dilemma B (dual belongs_to)
+        graph.create_node("beat::pre_b", {"type": "beat", "dilemma_impacts": []})
+        graph.add_edge("belongs_to", "beat::pre_b", "path::d_b__p")
+        graph.add_edge("belongs_to", "beat::pre_b", "path::d_b__q")
+        # Intersection group containing both — legal because different dilemmas
+        graph.create_node(
+            "intersection_group::ig1",
+            {
+                "type": "intersection_group",
+                "beat_ids": ["beat::pre_a", "beat::pre_b"],
+            },
+        )
+
+        result = check_no_pre_commit_intersections(graph)
+        assert result.severity == "pass"

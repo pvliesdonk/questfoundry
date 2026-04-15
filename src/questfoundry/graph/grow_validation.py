@@ -749,7 +749,7 @@ def check_no_dual_on_commit_beat(graph: Graph) -> ValidationCheck:
             continue
         impacts = beat_nodes[bid].get("dilemma_impacts", [])
         if any(imp.get("effect") == "commits" for imp in impacts):
-            violations.append(f"{bid} commits AND has {len(pset)} belongs_to edges")
+            violations.append(f"{bid} commits AND has {len(pset)} belongs_to edges: {sorted(pset)}")
 
     if not violations:
         return ValidationCheck(
@@ -775,11 +775,11 @@ def check_no_pre_commit_intersections(graph: Graph) -> ValidationCheck:
     beat_nodes = graph.get_nodes_by_type("beat")
     group_nodes = graph.get_nodes_by_type("intersection_group")
 
-    _accum: dict[str, set[str]] = {}
+    raw_beat_paths: dict[str, set[str]] = {}
     for e in graph.get_edges(edge_type="belongs_to"):
         if e["from"] in beat_nodes:
-            _accum.setdefault(e["from"], set()).add(e["to"])
-    beat_paths: dict[str, frozenset[str]] = {b: frozenset(p) for b, p in _accum.items()}
+            raw_beat_paths.setdefault(e["from"], set()).add(e["to"])
+    beat_paths: dict[str, frozenset[str]] = {b: frozenset(p) for b, p in raw_beat_paths.items()}
 
     violations: list[str] = []
     for gid, gdata in group_nodes.items():
