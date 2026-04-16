@@ -221,6 +221,133 @@ def build_beat_dag(graph: Graph) -> BeatDag:
     )
 
 
+def render_plantuml(dag: BeatDag, *, no_labels: bool = False) -> str:
+    """Render a BeatDag as a PlantUML component diagram string.
+
+    Args:
+        dag: Beat DAG data from build_beat_dag().
+        no_labels: If True, omit the effects section from beat components.
+
+    Returns:
+        PlantUML diagram string (starts with @startuml, ends with @enduml).
+    """
+    lines: list[str] = [
+        "@startuml",
+        "!theme plain",
+        "left to right direction",
+        "skinparam componentStyle rectangle",
+        "skinparam defaultTextAlignment left",
+        "skinparam wrapWidth 200",
+        "",
+    ]
+
+    # Dilemma color skinparams — one block per dilemma, sorted for determinism.
+    for dilemma_id in sorted(dag.dilemma_colors):
+        stereo = strip_scope_prefix(dilemma_id)
+        color = dag.dilemma_colors[dilemma_id]
+        lines.append("skinparam component {")
+        lines.append(f"  BackgroundColor<<{stereo}>> {color}")
+        lines.append("}")
+        lines.append("")
+
+    # Index beats by id for lookup.
+    beat_map = {b.id: b for b in dag.beats}
+
+    # Collect which beats are inside a passage.
+    passage_beat_ids: set[str] = set()
+    for pg in dag.passages:
+        passage_beat_ids.update(pg.beat_ids)
+
+    # Collect which beats are inside an intersection group (and not in a passage).
+    # Build intersection_group → beats mapping.
+    ig_to_beats: dict[str, list[BeatVizNode]] = {}
+    for beat in dag.beats:
+        if beat.intersection_group and beat.id not in passage_beat_ids:
+            ig_to_beats.setdefault(beat.intersection_group, []).append(beat)
+
+    # Beats already rendered (in a container).
+    rendered_beats: set[str] = set()
+
+    # Passage containers.
+    for pg in sorted(dag.passages, key=lambda p: p.id):
+        raw_pid = strip_scope_prefix(pg.id)
+        # Use the grouping_type when it is a meaningful value, otherwise "collapse".
+        ptype = pg.grouping_type if pg.grouping_type not in ("grouped_in", "") else "collapse"
+        lines.append(f'rectangle "{raw_pid} [{ptype}]" {{')
+        for bid in pg.beat_ids:
+            pg_beat = beat_map.get(bid)
+            if pg_beat is not None:
+                lines.append(f"  {_beat_component_line(pg_beat, no_labels=no_labels)}")
+                rendered_beats.add(bid)
+        lines.append("}")
+        lines.append("")
+
+    # Intersection group containers (beats not already in a passage).
+    for ig_id in sorted(ig_to_beats):
+        ig_beats = ig_to_beats[ig_id]
+        ig_label = strip_scope_prefix(ig_id)
+        lines.append(f'rectangle "{ig_label}" #line.dashed {{')
+        for beat in ig_beats:
+            lines.append(f"  {_beat_component_line(beat, no_labels=no_labels)}")
+            rendered_beats.add(beat.id)
+        lines.append("}")
+        lines.append("")
+
+    # Standalone beats (not in any container).
+    for beat in dag.beats:
+        if beat.id not in rendered_beats:
+            lines.append(_beat_component_line(beat, no_labels=no_labels))
+
+    lines.append("")
+
+    # Predecessor edges: from_id (parent/earlier) --> to_id (child/later).
+    for edge in dag.edges:
+        src = _puml_alias(edge.from_id)
+        dst = _puml_alias(edge.to_id)
+        lines.append(f"{src} --> {dst}")
+
+    lines.append("")
+    lines.append("@enduml")
+    return "\n".join(lines)
+
+
+def _puml_alias(node_id: str) -> str:
+    """Convert a node ID to a PlantUML-safe alias.
+
+    Replaces `::`, `-`, and spaces with `_`.
+    """
+    return node_id.replace("::", "_").replace("-", "_").replace(" ", "_")
+
+
+def _beat_component_line(beat: BeatVizNode, *, no_labels: bool = False) -> str:
+    """Render a single beat as a PlantUML component line.
+
+    Format:
+        [label\\n---\\nsummary\\n---\\n[eff1]\\n[eff2]] as alias <<stereo>> #line.bold?
+
+    When no_labels=True, the effects section (third ---\\n... block) is omitted.
+    """
+    label = beat.label
+    summary = beat.summary
+
+    if no_labels or not beat.effects:
+        inner = f"{label}\\n---\\n{summary}"
+    else:
+        effects_block = "\\n".join(f"[{e}]" for e in beat.effects)
+        inner = f"{label}\\n---\\n{summary}\\n---\\n{effects_block}"
+
+    alias = _puml_alias(beat.id)
+
+    stereo_part = ""
+    if beat.dilemma_id:
+        stereo = strip_scope_prefix(beat.dilemma_id)
+        stereo_part = f" <<{stereo}>>"
+
+    bold_part = " #line.bold" if beat.is_shared else ""
+
+    return f"[{inner}] as {alias}{stereo_part}{bold_part}"
+
+
 def _truncate(text: str, max_len: int = 60) -> str:
     """Truncate text with ellipsis if too long."""
     if len(text) <= max_len:

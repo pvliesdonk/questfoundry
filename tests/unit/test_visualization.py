@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from questfoundry.graph.graph import Graph
-from questfoundry.visualization import build_beat_dag
+from questfoundry.visualization import BeatDag, build_beat_dag, render_plantuml
 
 
 def _make_y_shape_graph() -> Graph:
@@ -230,3 +230,61 @@ class TestBuildBeatDag:
         assert dag.edges == []
         assert dag.passages == []
         assert dag.dilemma_colors == {}
+
+
+class TestRenderPlantUml:
+    """Tests for render_plantuml()."""
+
+    def test_output_starts_with_startuml(self) -> None:
+        graph = _make_y_shape_graph()
+        dag = build_beat_dag(graph)
+        puml = render_plantuml(dag)
+        assert puml.startswith("@startuml")
+        assert puml.strip().endswith("@enduml")
+
+    def test_contains_beat_components(self) -> None:
+        graph = _make_y_shape_graph()
+        dag = build_beat_dag(graph)
+        puml = render_plantuml(dag)
+        assert "shared_d1_01" in puml
+        assert "d1_a_beat_01" in puml
+        assert "d2_b_beat_01" in puml
+
+    def test_contains_predecessor_arrows(self) -> None:
+        graph = _make_y_shape_graph()
+        dag = build_beat_dag(graph)
+        puml = render_plantuml(dag)
+        assert "-->" in puml
+
+    def test_passage_container_rendered(self) -> None:
+        graph = _make_y_shape_graph()
+        dag = build_beat_dag(graph)
+        puml = render_plantuml(dag)
+        assert "p1" in puml
+        assert "collapse" in puml
+
+    def test_dilemma_stereotypes_in_output(self) -> None:
+        graph = _make_y_shape_graph()
+        dag = build_beat_dag(graph)
+        puml = render_plantuml(dag)
+        assert "<<d1>>" in puml
+        assert "<<d2>>" in puml
+
+    def test_shared_beat_has_bold_border(self) -> None:
+        graph = _make_y_shape_graph()
+        dag = build_beat_dag(graph)
+        puml = render_plantuml(dag)
+        assert "#line.bold" in puml
+
+    def test_no_labels_omits_effects(self) -> None:
+        graph = _make_y_shape_graph()
+        dag = build_beat_dag(graph)
+        puml = render_plantuml(dag, no_labels=True)
+        assert "advances" not in puml
+        assert "commits" not in puml
+
+    def test_empty_dag(self) -> None:
+        dag = BeatDag(beats=[], edges=[], passages=[], dilemma_colors={})
+        puml = render_plantuml(dag)
+        assert "@startuml" in puml
+        assert "@enduml" in puml
