@@ -645,7 +645,6 @@ def compute_choice_edges(
     """
     beat_nodes = graph.get_nodes_by_type("beat")
     predecessor_edges = graph.get_edges(edge_type="predecessor")
-    grants_edges = graph.get_edges(edge_type="grants")
 
     # Build adjacency
     children: dict[str, list[str]] = {bid: [] for bid in beat_nodes}
@@ -654,6 +653,11 @@ def compute_choice_edges(
         to_id = edge["to"]
         if from_id in beat_nodes and to_id in beat_nodes:
             children[to_id].append(from_id)
+
+    # Build beat → grants targets index (state_flag node IDs)
+    beat_grants: dict[str, list[str]] = {}
+    for edge in graph.get_edges(edge_type="grants"):
+        beat_grants.setdefault(edge["from"], []).append(edge["to"])
 
     # Build beat → path-set mapping (Y-shape: pre-commit beats have dual membership)
     belongs_to_edges = graph.get_edges(edge_type="belongs_to")
@@ -798,10 +802,9 @@ def compute_choice_edges(
                         imp.get("effect") == "commits" for imp in cdata.get("dilemma_impacts", [])
                     )
                     if found_commit:
-                        # Resolve via grants edges to state_flag node IDs
-                        for ge in grants_edges:
-                            if ge["from"] == cid:
-                                grants.append(ge["to"])
+                        # Resolve via grants edge index to state_flag node IDs
+                        for sf_id in beat_grants.get(cid, []):
+                            grants.append(sf_id)
                     else:
                         # Continue to children on the same single path
                         for next_cid in children.get(cid, []):

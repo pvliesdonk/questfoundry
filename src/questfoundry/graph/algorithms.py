@@ -113,6 +113,13 @@ def compute_active_flags_at_beat(graph: Graph, beat_id: str) -> set[frozenset[st
                 continue
             # Resolve to actual state_flag node IDs via grants edges.
             flag_ids = beat_grants.get(candidate_id, [])
+            if not flag_ids:
+                log.warning(
+                    "commit_beat_no_grants",
+                    beat_id=candidate_id,
+                    dilemma_id=dilemma_id,
+                )
+                continue
             for flag_id in flag_ids:
                 dilemma_flags.setdefault(dilemma_id, []).append(flag_id)
 

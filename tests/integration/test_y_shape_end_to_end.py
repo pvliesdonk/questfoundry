@@ -227,12 +227,41 @@ def _add_predecessor_edges(graph: Graph) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _add_state_flags(graph: Graph) -> None:
+    """Add state_flag nodes + grants edges matching what GROW would produce.
+
+    The e2e fixture skips GROW, so state_flags (which GROW derives from
+    consequences) must be added manually for POLISH to populate grants
+    on choice edges.
+    """
+    graph.create_node(
+        "state_flag::protector_committed",
+        {
+            "type": "state_flag",
+            "raw_id": "protector_committed",
+            "dilemma_id": "dilemma::trust_protector_or_manipulator",
+        },
+    )
+    graph.add_edge("grants", "beat::commit_protector", "state_flag::protector_committed")
+
+    graph.create_node(
+        "state_flag::manipulator_committed",
+        {
+            "type": "state_flag",
+            "raw_id": "manipulator_committed",
+            "dilemma_id": "dilemma::trust_protector_or_manipulator",
+        },
+    )
+    graph.add_edge("grants", "beat::commit_manipulator", "state_flag::manipulator_committed")
+
+
 @pytest.fixture
 def y_shape_graph() -> Graph:
     """Graph after apply_seed_mutations + predecessor edges — no LLM required."""
     graph = _make_brainstorm_graph()
     apply_seed_mutations(graph, _make_seed_output())
     _add_predecessor_edges(graph)
+    _add_state_flags(graph)
     return graph
 
 
@@ -327,6 +356,6 @@ def test_polish_produces_two_choice_specs_for_y_shape(y_shape_graph: Graph) -> N
             f"ChoiceSpec {cs.from_passage} → {cs.to_passage} missing grants; "
             "Y-shape commit beats should produce state flags"
         )
-        assert any("trust_protector_or_manipulator" in g for g in cs.grants), (
-            f"grants {cs.grants!r} should reference the dilemma under test"
+        assert any("state_flag::" in g for g in cs.grants), (
+            f"grants {cs.grants!r} should be state_flag node IDs"
         )
