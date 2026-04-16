@@ -1673,7 +1673,7 @@ def _format_section_corrections(errors: list[SeedValidationError]) -> str:
         # actionable ("Path X has no beat after its commit beat... Add a beat
         # with effect 'advances' or 'complicates' after the commit beat.").
         # The generic COMPLETENESS handler would misformat these as "missing items".
-        if ".arc_structure" in error.field_path:
+        if error.field_path.endswith(".arc_structure"):
             corrections.append(f"- ARC FIX: {error.issue}")
             continue
 
