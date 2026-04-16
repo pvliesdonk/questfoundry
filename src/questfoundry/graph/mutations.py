@@ -1084,7 +1084,7 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
     12. Each beat references its path's parent dilemma in dilemma_impacts
     13. Each path has at least one beat with effect="commits" for its dilemma
     14. Each path has advances/reveals beat before commit (WARNING, non-blocking)
-    15. Each path has at least one beat after commit (WARNING, non-blocking)
+    15. Each path has at least one beat after commit (COMPLETENESS, blocking)
 
     Args:
         graph: Graph containing BRAINSTORM data (entities, dilemmas, answers).
@@ -1652,7 +1652,9 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
             expected_dilemma = path_dilemma_map[path_id]
             errors.append(
                 SeedValidationError(
-                    field_path=f"paths.{path_id}.arc_structure",
+                    # initial_beats prefix → routes to "beats" section for retry,
+                    # where the per_path_beats prompt can act on the feedback.
+                    field_path=f"initial_beats.{path_id}.arc_structure",
                     issue=(
                         f"Path '{path_id}' has no beat with effect 'advances' "
                         f"or 'reveals' before its commit beat for dilemma "
@@ -1671,7 +1673,9 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
             expected_dilemma = path_dilemma_map[path_id]
             errors.append(
                 SeedValidationError(
-                    field_path=f"paths.{path_id}.arc_structure",
+                    # initial_beats prefix → routes to "beats" section for retry,
+                    # where the per_path_beats prompt can act on the feedback.
+                    field_path=f"initial_beats.{path_id}.arc_structure",
                     issue=(
                         f"Path '{path_id}' has no beat after its commit beat "
                         f"for dilemma '{expected_dilemma}'. Every path MUST have "

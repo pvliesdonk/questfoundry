@@ -2406,7 +2406,7 @@ class TestSeedArcStructureValidation:
         assert "advances" in warnings[0].issue
         assert "reveals" in warnings[0].issue
         assert "before" in warnings[0].issue
-        assert warnings[0].field_path == "paths.trust_arc.arc_structure"
+        assert warnings[0].field_path == "initial_beats.trust_arc.arc_structure"
 
     def test_missing_post_commit_beat_warns(self) -> None:
         """Commit without any following beat produces a COMPLETENESS error."""
@@ -2440,7 +2440,7 @@ class TestSeedArcStructureValidation:
         assert blocking[0].category == SeedErrorCategory.COMPLETENESS
         assert "after" in blocking[0].issue
         assert "consequence" in blocking[0].issue
-        assert blocking[0].field_path == "paths.trust_arc.arc_structure"
+        assert blocking[0].field_path == "initial_beats.trust_arc.arc_structure"
         assert warnings == []
 
     def test_single_commit_beat_produces_both_warnings(self) -> None:

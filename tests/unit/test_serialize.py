@@ -1290,6 +1290,85 @@ class TestFormatSectionCorrections:
         assert "BUCKET MISPLACEMENT" in result
 
 
+class TestArcStructureErrorRouting:
+    """Tests for arc_structure error routing and formatting (#1243 fix).
+
+    Arc structure errors (e.g., 'no beat after commit') are about beat ordering,
+    not path descriptions. They must route to the "beats" section so correction
+    feedback reaches the per_path_beats prompt — not the paths prompt.
+    """
+
+    def test_arc_structure_errors_route_to_beats_section(self) -> None:
+        """arc_structure errors with initial_beats prefix must group into 'beats'."""
+        from questfoundry.agents.serialize import _group_errors_by_section
+        from questfoundry.graph.mutations import SeedErrorCategory, SeedValidationError
+
+        errors = [
+            SeedValidationError(
+                field_path="initial_beats.some_path.arc_structure",
+                issue="Path 'some_path' has no beat after its commit beat.",
+                available=[],
+                provided="",
+                category=SeedErrorCategory.COMPLETENESS,
+            ),
+        ]
+        grouped = _group_errors_by_section(errors)
+        assert "beats" in grouped
+        assert "paths" not in grouped
+
+    def test_arc_structure_corrections_are_actionable(self) -> None:
+        """arc_structure corrections must contain the full issue text, not 'missing items'."""
+        from questfoundry.agents.serialize import _format_section_corrections
+        from questfoundry.graph.mutations import SeedErrorCategory, SeedValidationError
+
+        errors = [
+            SeedValidationError(
+                field_path="initial_beats.trust_arc.arc_structure",
+                issue=(
+                    "Path 'trust_arc' has no beat after its commit beat for "
+                    "dilemma 'trust'. Add a beat with effect 'advances' or "
+                    "'complicates' after the commit beat."
+                ),
+                available=[],
+                provided="",
+                category=SeedErrorCategory.COMPLETENESS,
+            ),
+        ]
+        result = _format_section_corrections(errors)
+        assert "ARC FIX" in result
+        assert "trust_arc" in result
+        assert "after the commit beat" in result
+        # Must NOT be formatted as a "missing item"
+        assert "MISSING ITEMS" not in result
+
+    def test_arc_structure_not_misrouted_to_paths(self) -> None:
+        """Errors with initial_beats prefix must not land in the paths section."""
+        from questfoundry.agents.serialize import _group_errors_by_section
+        from questfoundry.graph.mutations import SeedErrorCategory, SeedValidationError
+
+        errors = [
+            SeedValidationError(
+                field_path="initial_beats.foo.arc_structure",
+                issue="No beat after commit.",
+                available=[],
+                provided="",
+                category=SeedErrorCategory.COMPLETENESS,
+            ),
+            SeedValidationError(
+                field_path="paths.bar.answer_id",
+                issue="Path answer mismatch.",
+                available=["x"],
+                provided="y",
+                category=SeedErrorCategory.SEMANTIC,
+            ),
+        ]
+        grouped = _group_errors_by_section(errors)
+        assert "beats" in grouped
+        assert len(grouped["beats"]) == 1
+        assert "paths" in grouped
+        assert len(grouped["paths"]) == 1
+
+
 class TestBeatRetryAndContextRefresh:
     """Tests for beat retry and path context refresh functionality."""
 
