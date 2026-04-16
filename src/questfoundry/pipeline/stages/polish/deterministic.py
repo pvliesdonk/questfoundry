@@ -446,12 +446,25 @@ def compute_prose_feasibility(
         if irrelevant_flags:
             annotations[spec.passage_id] = irrelevant_flags
 
-        # Categorize based on relevant flags
-        if len(relevant_flags) >= 4:
-            # Structural split: too many conflicting flags
+        # Categorize based on *conflicting* flags — flags from the same dilemma
+        # that represent mutually exclusive paths.  Multiple flags from different
+        # dilemmas are NOT conflicting: the player is on exactly one path per
+        # dilemma, so only one flag per dilemma is active at a time.  Conflicting
+        # means the passage must serve BOTH paths of a dilemma simultaneously
+        # (only possible after soft-dilemma convergence).
+        flags_by_dilemma: dict[str, list[str]] = {}
+        for flag in relevant_flags:
+            did = flag_to_dilemma.get(flag) or _parse_flag_dilemma_id(flag)
+            flags_by_dilemma.setdefault(did, []).append(flag)
+
+        conflicting_dilemmas = {
+            did: flags for did, flags in flags_by_dilemma.items() if len(flags) >= 2
+        }
+        if len(conflicting_dilemmas) >= 4:
+            # Structural split: too many conflicting dilemmas
             warnings.append(
-                f"Passage {spec.passage_id} has {len(relevant_flags)} "
-                f"narratively relevant flags — structural split recommended"
+                f"Passage {spec.passage_id} has {len(conflicting_dilemmas)} "
+                f"conflicting dilemmas — structural split recommended"
             )
             continue
 
