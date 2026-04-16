@@ -24,20 +24,22 @@ def compute_active_flags_at_beat(graph: Graph, beat_id: str) -> set[frozenset[st
     """Compute all valid state flag combinations at a beat position.
 
     Returns a set of frozensets, where each frozenset is one possible
-    combination of active state flags at this beat's position in the DAG.
+    combination of active ``state_flag::*`` node IDs at this beat's
+    position in the DAG.
 
-    A "state flag" here is a string identifier derived from a commit beat's
-    dilemma/path membership. When a player reaches beat B, they have
-    necessarily traversed some subset of commit beats. This function
-    computes all valid subsets respecting mutual exclusivity (cannot
-    have committed to both paths of the same dilemma).
+    When a player reaches beat B, they have necessarily traversed some
+    subset of commit beats. Each commit beat has ``grants`` edges to
+    ``state_flag::*`` nodes. This function resolves those real node IDs
+    (not synthetic dilemma:path strings) so that downstream consumers
+    (prose feasibility, overlays) can cross-reference against entity
+    overlay ``when`` fields, which also use ``state_flag::*`` IDs.
 
     Algorithm:
         1. Build predecessor adjacency and reverse-BFS from beat_id
            to find all ancestor beats (including beat_id itself).
         2. Filter ancestors to commit beats (effect="commits").
-        3. Group commit beats by dilemma, using belongs_to path as flag.
-        4. Compute Cartesian product of per-dilemma flag options.
+        3. Resolve each commit beat's ``grants`` edges to state_flag node IDs.
+        4. Group by dilemma and compute Cartesian product (mutual exclusivity).
 
     Args:
         graph: Graph containing beat DAG with predecessor edges.
@@ -78,26 +80,26 @@ def compute_active_flags_at_beat(graph: Graph, beat_id: str) -> set[frozenset[st
         ancestors.add(current)
         queue.extend(parents.get(current, []))
 
-    # Step 3: Find commit beats among ancestors and group by dilemma
-    # A commit beat has dilemma_impacts with effect="commits"
-    # Y-shape (Story Graph Ontology §8): pre-commit beats have two belongs_to edges (same
-    # dilemma, both paths); post-commit beats have exactly one. A beat's
-    # state-flag contribution depends on which path the player is on, not on
-    # which belongs_to edge we happen to read first.
-    belongs_to_edges = graph.get_edges(edge_type="belongs_to")
-    _accum: dict[str, set[str]] = {}
-    for edge in belongs_to_edges:
-        from_id = edge["from"]
-        if from_id in beat_nodes:
-            _accum.setdefault(from_id, set()).add(edge["to"])
-    beat_to_paths: dict[str, frozenset[str]] = {
-        bid: frozenset(paths) for bid, paths in _accum.items()
-    }
+    # Step 3: Find commit beats among ancestors and resolve their state flags.
+    #
+    # Each commit beat has a ``grants`` edge to a ``state_flag::*`` node.
+    # We use those real node IDs (not synthetic dilemma:path strings) so that
+    # downstream consumers (prose feasibility, overlays) can cross-reference
+    # state flags against entity overlay ``when`` fields, which also use
+    # ``state_flag::*`` IDs.
+    #
+    # Group by dilemma so the Cartesian product respects mutual exclusivity:
+    # a player can only be on one path per dilemma.
+
+    # Build beat → grants targets (state flag IDs) from grants edges.
+    beat_grants: dict[str, list[str]] = {}
+    for edge in graph.get_edges(edge_type="grants"):
+        beat_grants.setdefault(edge["from"], []).append(edge["to"])
 
     # Include beat_id itself as a candidate (it may be a commit beat)
     candidates = ancestors | {beat_id}
 
-    # dilemma_id → list of state flag identifiers from different paths
+    # dilemma_id → list of state_flag node IDs (one per path of that dilemma)
     dilemma_flags: dict[str, list[str]] = {}
 
     for candidate_id in candidates:
@@ -109,22 +111,10 @@ def compute_active_flags_at_beat(graph: Graph, beat_id: str) -> set[frozenset[st
             dilemma_id = impact.get("dilemma_id", "")
             if not dilemma_id:
                 continue
-            # Commit beats are single-membership (guard rail 2), so
-            # beat_to_paths[candidate] has exactly one element. If code
-            # elsewhere produces a multi-membership commit beat, that is a
-            # guard-rail violation and we raise instead of guessing.
-            paths = beat_to_paths.get(candidate_id, frozenset())
-            if len(paths) == 0:
-                continue
-            if len(paths) > 1:
-                msg = (
-                    f"commit beat {candidate_id!r} has multiple belongs_to edges "
-                    f"(guard rail 2 violation): {sorted(paths)!r}"
-                )
-                raise ValueError(msg)
-            (path_id,) = paths
-            flag = f"{dilemma_id}:{path_id}"
-            dilemma_flags.setdefault(dilemma_id, []).append(flag)
+            # Resolve to actual state_flag node IDs via grants edges.
+            flag_ids = beat_grants.get(candidate_id, [])
+            for flag_id in flag_ids:
+                dilemma_flags.setdefault(dilemma_id, []).append(flag_id)
 
     if not dilemma_flags:
         return {frozenset()}

@@ -383,6 +383,16 @@ def compute_prose_feasibility(
     for did, ddata in dilemma_nodes.items():
         dilemma_residue[did] = ddata.get("residue_weight", "light")
 
+    # Build state_flag → dilemma mapping so that state_flag node IDs (the new
+    # format returned by compute_active_flags_at_beat) can be resolved to their
+    # dilemma for residue-weight lookup.
+    state_flag_nodes = graph.get_nodes_by_type("state_flag")
+    flag_to_dilemma: dict[str, str] = {}
+    for sf_id, sf_data in state_flag_nodes.items():
+        did = sf_data.get("dilemma_id", "")
+        if did:
+            flag_to_dilemma[sf_id] = did
+
     variant_counter = 0
 
     for spec in specs:
@@ -438,11 +448,10 @@ def compute_prose_feasibility(
         heavy_flags: list[str] = []
         light_flags: list[str] = []
         for flag in relevant_flags:
-            # Flag format: "{dilemma_id}:{path_id}" e.g. "dilemma::d1:path::brave"
-            # Extract dilemma_id: find the colon that separates dilemma from path.
-            # Both parts use "::" internally, so the separator is the ":" right
-            # before "path::" (or the first ":" if the old short format is used).
-            dilemma_id = _parse_flag_dilemma_id(flag)
+            # Resolve dilemma ID from either a state_flag node ID (new format,
+            # returned by compute_active_flags_at_beat) or the legacy synthetic
+            # "{dilemma_id}:path::{path_raw}" string (old format).
+            dilemma_id = flag_to_dilemma.get(flag) or _parse_flag_dilemma_id(flag)
             weight = dilemma_residue.get(dilemma_id, "light")
             if weight in ("heavy", "hard"):
                 heavy_flags.append(flag)
@@ -636,6 +645,7 @@ def compute_choice_edges(
     """
     beat_nodes = graph.get_nodes_by_type("beat")
     predecessor_edges = graph.get_edges(edge_type="predecessor")
+    grants_edges = graph.get_edges(edge_type="grants")
 
     # Build adjacency
     children: dict[str, list[str]] = {bid: [] for bid in beat_nodes}
@@ -772,10 +782,9 @@ def compute_choice_edges(
                 if not to_passage or to_passage == from_passage:
                     continue
 
-                # Compute grants: state flags activated by taking this path.
-                # The commits beat may not be the immediate child (Y-shape:
-                # advances → commits → aftermath).  Walk forward from each
-                # path child to find the first commits beat in the chain.
+                # Compute grants: state flag node IDs activated by taking this path.
+                # Walk forward from each path child to find the first commits
+                # beat, then resolve its ``grants`` edges to state_flag nodes.
                 grants: list[str] = []
                 visited_for_grants: set[str] = set()
                 search_queue = list(path_children)
@@ -785,16 +794,16 @@ def compute_choice_edges(
                         continue
                     visited_for_grants.add(cid)
                     cdata = beat_nodes.get(cid, {})
-                    found_commit = False
-                    for impact in cdata.get("dilemma_impacts", []):
-                        if impact.get("effect") == "commits":
-                            grant_did = impact.get("dilemma_id", "")
-                            if grant_did and path_id:
-                                grants.append(f"{grant_did}:{path_id}")
-                            found_commit = True
-                    # Stop walking once we find a commits beat; otherwise
-                    # continue to children that are on the same single path.
-                    if not found_commit:
+                    found_commit = any(
+                        imp.get("effect") == "commits" for imp in cdata.get("dilemma_impacts", [])
+                    )
+                    if found_commit:
+                        # Resolve via grants edges to state_flag node IDs
+                        for ge in grants_edges:
+                            if ge["from"] == cid:
+                                grants.append(ge["to"])
+                    else:
+                        # Continue to children on the same single path
                         for next_cid in children.get(cid, []):
                             if beat_to_paths_ce.get(next_cid, frozenset()) == frozenset({path_id}):
                                 search_queue.append(next_cid)

@@ -232,7 +232,7 @@ class TestComputeProseFeasibility:
             {"type": "dilemma", "raw_id": "d1", "dilemma_role": "soft", "residue_weight": "light"},
         )
 
-        # Commit beat as ancestor
+        # Commit beat as ancestor, with grants edge to a state_flag node
         _make_beat(
             graph,
             "beat::commit",
@@ -243,6 +243,11 @@ class TestComputeProseFeasibility:
         _add_belongs_to(graph, "beat::commit", "path::brave")
         _add_belongs_to(graph, "beat::target", "path::brave")
         _add_predecessor(graph, "beat::target", "beat::commit")
+        graph.create_node(
+            "state_flag::brave_committed",
+            {"type": "state_flag", "raw_id": "brave_committed"},
+        )
+        graph.add_edge("grants", "beat::commit", "state_flag::brave_committed")
 
         # Overlay for a DIFFERENT entity than the passage's entity (embedded on entity node)
         graph.create_node(
@@ -252,7 +257,7 @@ class TestComputeProseFeasibility:
                 "raw_id": "npc",
                 "overlays": [
                     {
-                        "when": ["dilemma::d1:path::brave"],
+                        "when": ["state_flag::brave_committed"],
                         "details": {"description": "NPC changes"},
                     }
                 ],
@@ -376,6 +381,13 @@ class TestComputeChoiceEdges:
 
         _add_predecessor(graph, "beat::commit_a", "beat::start")
         _add_predecessor(graph, "beat::b", "beat::start")
+
+        # state_flag nodes and grants edges for commit beats
+        graph.create_node(
+            "state_flag::pa_committed", {"type": "state_flag", "raw_id": "pa_committed"}
+        )
+        graph.add_edge("grants", "beat::start", "state_flag::pa_committed")
+        graph.add_edge("grants", "beat::commit_a", "state_flag::pa_committed")
 
         specs = [
             PassageSpec(passage_id="p_start", beat_ids=["beat::start"], summary="start"),
@@ -521,6 +533,17 @@ class TestChoiceEdgesIntersectionMultiBeat:
         _add_predecessor(graph, "beat::child_X2", "beat::b_p2")
         _add_predecessor(graph, "beat::child_B", "beat::b_p2")
 
+        # state_flag nodes and grants edges for commit beats
+        # child_X1 commits d1 on p1; child_X2 commits d2 on p1 — use distinct IDs
+        graph.create_node(
+            "state_flag::p1_d1_committed", {"type": "state_flag", "raw_id": "p1_d1_committed"}
+        )
+        graph.add_edge("grants", "beat::child_X1", "state_flag::p1_d1_committed")
+        graph.create_node(
+            "state_flag::p1_d2_committed", {"type": "state_flag", "raw_id": "p1_d2_committed"}
+        )
+        graph.add_edge("grants", "beat::child_X2", "state_flag::p1_d2_committed")
+
         # Both child_X1 and child_X2 land in the SAME target passage (passage::X)
         specs = [
             PassageSpec(
@@ -544,10 +567,10 @@ class TestChoiceEdgesIntersectionMultiBeat:
         to_X = [c for c in choices if c.to_passage == "passage::X"]
         assert len(to_X) == 1
 
-        # Grants: b_p1 contributed d1:p1 (from child_X1); b_p2 contributed d2:p1 (from child_X2)
+        # Grants: child_X1 contributed state_flag::p1_d1_committed; child_X2 contributed state_flag::p1_d2_committed
         # Merged union should contain both
         assert len(to_X[0].grants) == 2
-        assert set(to_X[0].grants) == {"dilemma::d1:path::p1", "dilemma::d2:path::p1"}
+        assert set(to_X[0].grants) == {"state_flag::p1_d1_committed", "state_flag::p1_d2_committed"}
 
 
 class TestChoiceEdgesGapBeatChild:
@@ -1148,6 +1171,16 @@ class TestChoiceEdgesYShapeAdvancesChild:
         graph.add_edge("predecessor", "beat::a_02", "beat::a_01")
         graph.add_edge("predecessor", "beat::b_02", "beat::b_01")
 
+        # state_flag nodes and grants edges for commit beats
+        graph.create_node(
+            "state_flag::d1_a_committed", {"type": "state_flag", "raw_id": "d1_a_committed"}
+        )
+        graph.add_edge("grants", "beat::a_02", "state_flag::d1_a_committed")
+        graph.create_node(
+            "state_flag::d1_b_committed", {"type": "state_flag", "raw_id": "d1_b_committed"}
+        )
+        graph.add_edge("grants", "beat::b_02", "state_flag::d1_b_committed")
+
         specs = [
             PassageSpec(
                 passage_id="passage::shared", beat_ids=["beat::shared"], grouping_type="single"
@@ -1475,6 +1508,15 @@ class TestChoiceSpecRequires:
         graph.create_node("path::pc", {"type": "path", "raw_id": "pc", "dilemma_id": "dilemma::d1"})
         graph.create_node("path::pd", {"type": "path", "raw_id": "pd", "dilemma_id": "dilemma::d1"})
         graph.create_node(
+            "state_flag::d1_pa",
+            {
+                "type": "state_flag",
+                "raw_id": "d1_pa",
+                "dilemma_id": "dilemma::d1",
+                "path_id": "path::pa",
+            },
+        )
+        graph.create_node(
             "state_flag::d1_pc",
             {
                 "type": "state_flag",
@@ -1507,6 +1549,8 @@ class TestChoiceSpecRequires:
             dilemma_impacts=[{"dilemma_id": "dilemma::d1", "effect": "commits"}],
         )
         graph.add_edge("belongs_to", "beat::merge", "path::pa")
+        # grants edge: beat::merge activates state_flag::d1_pa (its own path)
+        graph.add_edge("grants", "beat::merge", "state_flag::d1_pa")
         graph.create_node(
             "intersection_group::g1",
             {"type": "intersection_group", "raw_id": "g1", "beat_ids": ["beat::merge"]},
@@ -1592,7 +1636,12 @@ class TestAmbiguousFeasibilityDetection:
         beat_id: str,
         path_id: str,
         dilemma_id: str,
-    ) -> None:
+        state_flag_id: str | None = None,
+    ) -> str:
+        """Create a commit beat with an associated state_flag node and grants edge.
+
+        Returns the state_flag_id used (derived from path_id if not provided).
+        """
         graph.create_node(
             beat_id,
             {
@@ -1605,6 +1654,22 @@ class TestAmbiguousFeasibilityDetection:
             },
         )
         graph.add_edge("belongs_to", beat_id, path_id)
+        # Create state_flag node and grants edge so compute_active_flags_at_beat returns
+        # real state_flag::* node IDs instead of synthetic dilemma::*:path::* strings.
+        if state_flag_id is None:
+            path_raw = path_id.split("::")[-1]
+            state_flag_id = f"state_flag::{path_raw}_committed"
+        if not graph.get_node(state_flag_id):
+            graph.create_node(
+                state_flag_id,
+                {
+                    "type": "state_flag",
+                    "raw_id": state_flag_id.split("::")[-1],
+                    "dilemma_id": dilemma_id,
+                },
+            )
+        graph.add_edge("grants", beat_id, state_flag_id)
+        return state_flag_id
 
     def test_mixed_weights_produces_ambiguous_spec(self) -> None:
         """Passage with one heavy flag and one light flag → ambiguous_specs, NOT in variant or residue."""
@@ -1632,24 +1697,23 @@ class TestAmbiguousFeasibilityDetection:
         graph.create_node("path::ph", {"type": "path", "raw_id": "ph"})
         graph.create_node("path::pl", {"type": "path", "raw_id": "pl"})
 
-        # Entity that appears in the passage
+        # Commit beats first so state_flag nodes exist before entity references them
+        # Chain: commit_h → commit_l → target
+        sf_h = self._make_commit_beat(graph, "beat::commit_h", "path::ph", "dilemma::heavy")
+        sf_l = self._make_commit_beat(graph, "beat::commit_l", "path::pl", "dilemma::light")
+
+        # Entity that appears in the passage — overlays use state_flag node IDs
         graph.create_node(
             "entity::hero",
             {
                 "type": "entity",
                 "raw_id": "hero",
                 "overlays": [
-                    {"when": ["dilemma::heavy:path::ph"], "details": {"mood": "grim"}},
-                    {"when": ["dilemma::light:path::pl"], "details": {"mood": "relieved"}},
+                    {"when": [sf_h], "details": {"mood": "grim"}},
+                    {"when": [sf_l], "details": {"mood": "relieved"}},
                 ],
             },
         )
-
-        # Commit beats (ancestors of the target passage).
-        # Both need to be in the ancestor chain so both flags are active at beat::target.
-        # Chain: commit_h → commit_l → target
-        self._make_commit_beat(graph, "beat::commit_h", "path::ph", "dilemma::heavy")
-        self._make_commit_beat(graph, "beat::commit_l", "path::pl", "dilemma::light")
         _add_predecessor(graph, "beat::commit_l", "beat::commit_h")
 
         # Target beat referencing entity::hero
@@ -1692,20 +1756,22 @@ class TestAmbiguousFeasibilityDetection:
         graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
         graph.create_node("path::p2", {"type": "path", "raw_id": "p2"})
 
+        # Create commit beats first so state_flag IDs are available for overlays
+        sf_p1 = self._make_commit_beat(graph, "beat::c1", "path::p1", "dilemma::d1")
+        sf_p2 = self._make_commit_beat(graph, "beat::c2", "path::p2", "dilemma::d2")
+
         graph.create_node(
             "entity::hero",
             {
                 "type": "entity",
                 "raw_id": "hero",
                 "overlays": [
-                    {"when": ["dilemma::d1:path::p1"], "details": {"mood": "dark"}},
-                    {"when": ["dilemma::d2:path::p2"], "details": {"mood": "grim"}},
+                    {"when": [sf_p1], "details": {"mood": "dark"}},
+                    {"when": [sf_p2], "details": {"mood": "grim"}},
                 ],
             },
         )
 
-        self._make_commit_beat(graph, "beat::c1", "path::p1", "dilemma::d1")
-        self._make_commit_beat(graph, "beat::c2", "path::p2", "dilemma::d2")
         # Chain: c2 → c1 → target so both flags are ancestors of beat::target
         _add_predecessor(graph, "beat::c1", "beat::c2")
 
@@ -1735,18 +1801,20 @@ class TestAmbiguousFeasibilityDetection:
         )
         graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
 
+        # Create commit beat first so state_flag ID is available for overlay
+        sf_p1 = self._make_commit_beat(graph, "beat::c1", "path::p1", "dilemma::d1")
+
         graph.create_node(
             "entity::hero",
             {
                 "type": "entity",
                 "raw_id": "hero",
                 "overlays": [
-                    {"when": ["dilemma::d1:path::p1"], "details": {"mood": "dark"}},
+                    {"when": [sf_p1], "details": {"mood": "dark"}},
                 ],
             },
         )
 
-        self._make_commit_beat(graph, "beat::c1", "path::p1", "dilemma::d1")
         _make_beat(graph, "beat::target", "Target", entities=["entity::hero"])
         graph.add_edge("belongs_to", "beat::target", "path::p1")
         _add_predecessor(graph, "beat::target", "beat::c1")
@@ -2033,6 +2101,7 @@ class TestAuditOverlayComposition:
                 )
 
         # Create commit beats chained: last→...→first→target
+        # Also create a state_flag node and grants edge for each commit beat.
         prev_beat = None
         for path_id, dilemma_id, beat_id in commit_flags:
             graph.create_node(
@@ -2047,6 +2116,19 @@ class TestAuditOverlayComposition:
                 },
             )
             graph.add_edge("belongs_to", beat_id, path_id)
+            # state_flag: named after path raw ID so callers can predict the ID
+            path_raw = path_id.split("::")[-1]
+            sf_id = f"state_flag::{path_raw}_committed"
+            if not graph.get_node(sf_id):
+                graph.create_node(
+                    sf_id,
+                    {
+                        "type": "state_flag",
+                        "raw_id": f"{path_raw}_committed",
+                        "dilemma_id": dilemma_id,
+                    },
+                )
+            graph.add_edge("grants", beat_id, sf_id)
             if prev_beat is not None:
                 graph.add_edge("predecessor", beat_id, prev_beat)
             prev_beat = beat_id
@@ -2092,11 +2174,12 @@ class TestAuditOverlayComposition:
             ("path::pc", "dilemma::dc", "beat::cc"),
             ("path::pd", "dilemma::dd", "beat::cd"),
         ]
+        # Overlay when-flags use state_flag node IDs (state_flag::{path_raw}_committed)
         overlay_when_lists = [
-            ["dilemma::da:path::pa"],
-            ["dilemma::db:path::pb"],
-            ["dilemma::dc:path::pc"],
-            ["dilemma::dd:path::pd"],
+            ["state_flag::pa_committed"],
+            ["state_flag::pb_committed"],
+            ["state_flag::pc_committed"],
+            ["state_flag::pd_committed"],
         ]
         graph, spec = self._build_graph_with_overlays(overlay_when_lists, commit_flags)
 
@@ -2123,7 +2206,7 @@ class TestAuditOverlayComposition:
         graph.create_node("path::pc", {"type": "path", "raw_id": "pc"})
         graph.create_node("path::pd", {"type": "path", "raw_id": "pd"})
 
-        # One commit beat on path::pa only
+        # One commit beat on path::pa only, with state_flag node and grants edge
         graph.create_node(
             "beat::ca",
             {
@@ -2136,6 +2219,11 @@ class TestAuditOverlayComposition:
             },
         )
         graph.add_edge("belongs_to", "beat::ca", "path::pa")
+        graph.create_node(
+            "state_flag::pa_committed",
+            {"type": "state_flag", "raw_id": "pa_committed", "dilemma_id": "dilemma::d1"},
+        )
+        graph.add_edge("grants", "beat::ca", "state_flag::pa_committed")
 
         # Target beat
         graph.create_node(
@@ -2152,18 +2240,20 @@ class TestAuditOverlayComposition:
         graph.add_edge("belongs_to", "beat::target", "path::pa")
         graph.add_edge("predecessor", "beat::target", "beat::ca")
 
-        # Entity with 4 overlays, each requiring a different path of dilemma::d1
-        # Since they're mutually exclusive (only 1 can be committed), at most 1 active at once
+        # Entity with 4 overlays, each requiring a different path of dilemma::d1.
+        # Overlay when-flags use state_flag node IDs.
+        # Only state_flag::pa_committed is active (beat::ca on path::pa was committed).
+        # state_flag::pb/pc/pd_committed don't exist → 0 active overlays for those → not flagged.
         graph.create_node(
             "entity::hero",
             {
                 "type": "entity",
                 "raw_id": "hero",
                 "overlays": [
-                    {"when": ["dilemma::d1:path::pa"], "details": {}},
-                    {"when": ["dilemma::d1:path::pb"], "details": {}},
-                    {"when": ["dilemma::d1:path::pc"], "details": {}},
-                    {"when": ["dilemma::d1:path::pd"], "details": {}},
+                    {"when": ["state_flag::pa_committed"], "details": {}},
+                    {"when": ["state_flag::pb_committed"], "details": {}},
+                    {"when": ["state_flag::pc_committed"], "details": {}},
+                    {"when": ["state_flag::pd_committed"], "details": {}},
                 ],
             },
         )
@@ -2178,7 +2268,7 @@ class TestAuditOverlayComposition:
         feasibility: dict = {"warnings": []}
         _audit_overlay_composition(graph, [spec], feasibility)
 
-        # Only path::pa was committed → active flag combo is {dilemma::d1:path::pa}
+        # Only path::pa was committed → active flag combo is {state_flag::pa_committed}
         # Only 1 overlay matches that combo → not flagged
         assert feasibility["warnings"] == []
 
@@ -2191,10 +2281,11 @@ class TestAuditOverlayComposition:
             ("path::pb", "dilemma::db", "beat::cb"),
             ("path::pc", "dilemma::dc", "beat::cc"),
         ]
+        # Overlay when-flags use state_flag node IDs (state_flag::{path_raw}_committed)
         overlay_when_lists = [
-            ["dilemma::da:path::pa"],
-            ["dilemma::db:path::pb"],
-            ["dilemma::dc:path::pc"],
+            ["state_flag::pa_committed"],
+            ["state_flag::pb_committed"],
+            ["state_flag::pc_committed"],
         ]
         graph, spec = self._build_graph_with_overlays(overlay_when_lists, commit_flags)
 
@@ -2213,11 +2304,12 @@ class TestAuditOverlayComposition:
             ("path::pc", "dilemma::dc", "beat::cc"),
             ("path::pd", "dilemma::dd", "beat::cd"),
         ]
+        # Overlay when-flags use state_flag node IDs (state_flag::{path_raw}_committed)
         overlay_when_lists = [
-            ["dilemma::da:path::pa"],
-            ["dilemma::db:path::pb"],
-            ["dilemma::dc:path::pc"],
-            ["dilemma::dd:path::pd"],
+            ["state_flag::pa_committed"],
+            ["state_flag::pb_committed"],
+            ["state_flag::pc_committed"],
+            ["state_flag::pd_committed"],
         ]
         graph, spec = self._build_graph_with_overlays(overlay_when_lists, commit_flags)
 
