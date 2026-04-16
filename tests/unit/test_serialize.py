@@ -1455,6 +1455,129 @@ class TestBeatRetryAndContextRefresh:
             assert result.success is True
 
     @pytest.mark.asyncio
+    async def test_beats_retry_preserves_shared_beats(self) -> None:
+        """Shared pre-commit beats (with also_belongs_to) must survive beats retry.
+
+        Regression for #1246: the retry code replaced collected["initial_beats"]
+        with only per-path beats, dropping all shared beats and destroying the
+        Y-shape dual belongs_to structure.
+        """
+        from questfoundry.agents.serialize import serialize_seed_as_function
+        from questfoundry.graph.mutations import SeedValidationError
+
+        mock_model = MagicMock()
+        mock_graph = MagicMock()
+
+        # Beat error to trigger retry
+        beat_errors = [
+            SeedValidationError(
+                field_path="initial_beats.commit.arc_structure",
+                issue="No beat after commit.",
+                available=[],
+                provided="",
+            )
+        ]
+
+        # Per-path beats returned by retry (no also_belongs_to)
+        retried_per_path_beats = [
+            {
+                "beat_id": "path_beat_01",
+                "summary": "Post-commit beat",
+                "path_id": "path::test_dilemma__alt1",
+                "also_belongs_to": None,
+                "dilemma_impacts": [
+                    {"dilemma_id": "dilemma::test_dilemma", "effect": "commits", "note": "x"}
+                ],
+                "entities": [],
+                "location": "location::place",
+            },
+        ]
+
+        retry_count = [0]
+
+        def mock_beats_retry(*_args, **_kwargs):
+            retry_count[0] += 1
+            return (retried_per_path_beats, 20)
+
+        mock_beats = AsyncMock(side_effect=mock_beats_retry)
+
+        validation_call_count = [0]
+
+        def mock_validate(_graph, _output):
+            validation_call_count[0] += 1
+            if validation_call_count[0] == 1:
+                return beat_errors
+            return []
+
+        mock_path = {
+            "path_id": "path::test_dilemma__alt1",
+            "name": "Test Path",
+            "dilemma_id": "dilemma::test_dilemma",
+            "answer_id": "alt1",
+            "unexplored_answer_ids": [],
+            "path_importance": "major",
+            "description": "desc",
+        }
+
+        # Shared beat that must survive the retry
+        shared_beat = {
+            "beat_id": "shared_setup_01",
+            "summary": "Shared beat",
+            "path_id": "path::test_dilemma__alt1",
+            "also_belongs_to": "path::test_dilemma__alt2",
+            "dilemma_impacts": [
+                {"dilemma_id": "dilemma::test_dilemma", "effect": "reveals", "note": "x"}
+            ],
+            "entities": [],
+            "location": "location::place",
+        }
+
+        with (
+            patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_serialize,
+            patch(
+                "questfoundry.agents.serialize._serialize_paths_per_dilemma",
+                return_value=([mock_path], 15),
+            ),
+            patch(
+                "questfoundry.agents.serialize._serialize_beats_per_path",
+                new=mock_beats,
+            ),
+            patch(
+                "questfoundry.agents.serialize._serialize_shared_beats_per_dilemma",
+                return_value=([shared_beat], 10),
+            ),
+            patch(
+                "questfoundry.agents.serialize.validate_seed_mutations",
+                side_effect=mock_validate,
+            ),
+        ):
+            mock_serialize.side_effect = [
+                (MagicMock(model_dump=lambda: {"entities": []}), 10),
+                (MagicMock(model_dump=lambda: {"dilemmas": [_MOCK_DILEMMA]}), 10),
+                (MagicMock(model_dump=lambda: {"consequences": []}), 10),
+            ]
+
+            result = await serialize_seed_as_function(
+                model=mock_model,
+                brief="Test brief",
+                graph=mock_graph,
+                max_semantic_retries=2,
+            )
+
+            assert result.success is True
+            # The retry should have run
+            assert retry_count[0] == 2  # initial + retry
+
+            # Critical: shared beat must survive the retry
+            beats = result.artifact.model_dump()["initial_beats"]
+            shared_in_output = [b for b in beats if b.get("also_belongs_to")]
+            assert len(shared_in_output) == 1, (
+                f"Shared beat dropped during retry! "
+                f"Found {len(shared_in_output)} shared beats, expected 1"
+            )
+            assert shared_in_output[0]["beat_id"] == "shared_setup_01"
+
+    @pytest.mark.asyncio
     async def test_path_retry_refreshes_context(self) -> None:
         """Should refresh brief_with_paths when paths are retried via per-dilemma."""
         from questfoundry.agents.serialize import serialize_seed_as_function
