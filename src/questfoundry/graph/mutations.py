@@ -1084,7 +1084,7 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
     12. Each beat references its path's parent dilemma in dilemma_impacts
     13. Each path has at least one beat with effect="commits" for its dilemma
     14. Each path has advances/reveals beat before commit (WARNING, non-blocking)
-    15. Each path has at least one beat after commit (WARNING, non-blocking)
+    15. Each path has at least one beat after commit (COMPLETENESS, blocking)
 
     Args:
         graph: Graph containing BRAINSTORM data (entities, dilemmas, answers).

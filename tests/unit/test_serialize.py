@@ -1291,7 +1291,7 @@ class TestFormatSectionCorrections:
 
 
 class TestArcStructureErrorRouting:
-    """Tests for arc_structure error routing and formatting (#1241 follow-up).
+    """Tests for arc_structure error routing and formatting (#1243 fix).
 
     Arc structure errors (e.g., 'no beat after commit') are about beat ordering,
     not path descriptions. They must route to the "beats" section so correction
