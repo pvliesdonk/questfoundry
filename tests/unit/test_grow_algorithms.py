@@ -7912,26 +7912,34 @@ class TestFindDagConvergenceBeat:
         assert result is None
 
     def test_single_dilemma_returns_none(self) -> None:
-        """A graph with only one dilemma (< 2 paths reachable cross-dilemma) returns None.
+        """A graph with only one dilemma (no cross-dilemma successors) returns None.
 
         When there is only one dilemma and no cross-dilemma successors, the
         terminal exclusive beats have no reachable non-exclusive beats, so the
         function must return None.
         """
         from questfoundry.graph.grow_algorithms import find_dag_convergence_beat
-
-        # make_single_dilemma_graph builds mentor_trust with 2 paths and no cross-dilemma edges
         from tests.fixtures.grow_fixtures import make_single_dilemma_graph
 
         graph = make_single_dilemma_graph()
 
-        # The fixture doesn't have dilemma_role set; treat absence as soft for test
-        # (function should return None when no cross-dilemma successor exists)
-        node = graph.get_node("dilemma::mentor_trust")
-        assert node is not None
-        # Manually patch dilemma_role so the function doesn't short-circuit on hard
-        node["dilemma_role"] = "soft"
-        node["payoff_budget"] = 1
+        # Set dilemma_role via update_node so the function proceeds past the
+        # role check (the test intent is "no cross-dilemma successor → None").
+        graph.update_node("dilemma::mentor_trust", dilemma_role="soft", payoff_budget=1)
 
         result = find_dag_convergence_beat(graph, "dilemma::mentor_trust")
+        assert result is None
+
+    def test_missing_dilemma_role_returns_none(self) -> None:
+        """A dilemma with no dilemma_role returns None (not silently treated as soft)."""
+        from questfoundry.graph.grow_algorithms import find_dag_convergence_beat
+
+        graph = _make_convergence_test_graph()
+
+        # Remove dilemma_role from d1 to simulate a malformed graph
+        node = graph.get_node("dilemma::d1")
+        assert node is not None
+        node.pop("dilemma_role", None)
+
+        result = find_dag_convergence_beat(graph, "dilemma::d1")
         assert result is None

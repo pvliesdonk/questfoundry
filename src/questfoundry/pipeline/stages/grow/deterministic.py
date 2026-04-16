@@ -452,6 +452,10 @@ async def phase_convergence(graph: Graph, model: BaseChatModel) -> GrowPhaseResu
     Postconditions:
     - Soft dilemma nodes have ``converges_at`` and ``convergence_payoff`` set.
     - Hard dilemma nodes are unchanged.
+
+    Invariants:
+    - Deterministic: convergence derived from DAG topology and dilemma roles.
+    - Idempotent: calling twice produces the same node data.
     """
     from questfoundry.graph.grow_algorithms import (
         compute_divergence_points,
@@ -464,11 +468,28 @@ async def phase_convergence(graph: Graph, model: BaseChatModel) -> GrowPhaseResu
     dilemma_nodes = graph.get_nodes_by_type("dilemma")
     persisted = 0
 
+    # Pre-build dilemma → paths map to avoid repeated full-graph scans.
+    path_nodes = graph.get_nodes_by_type("path")
+    dilemma_paths_map: dict[str, set[str]] = {}
+    for path_id, pdata in path_nodes.items():
+        raw_did = pdata.get("dilemma_id", "")
+        if raw_did:
+            scoped = normalize_scoped_id(raw_did, "dilemma")
+            dilemma_paths_map.setdefault(scoped, set()).add(path_id)
+
     for dilemma_id, ddata in dilemma_nodes.items():
-        if ddata.get("dilemma_role") == "hard":
+        role = ddata.get("dilemma_role")
+        if role is None:
+            log.warning("convergence_dilemma_role_missing", dilemma_id=dilemma_id)
+            continue
+        if role == "hard":
             continue
 
-        result = find_dag_convergence_beat(graph, dilemma_id)
+        result = find_dag_convergence_beat(
+            graph,
+            dilemma_id,
+            dilemma_paths=dilemma_paths_map.get(dilemma_id),
+        )
         if result is not None:
             converges_at, payoff = result
             graph.update_node(

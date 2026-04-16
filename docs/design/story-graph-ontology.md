@@ -58,7 +58,7 @@ Each dilemma also carries a **role** and associated structural properties, discu
 
 After GROW interleaves the beat DAG, soft dilemmas gain two convergence fields:
 - **converges_at** — the beat ID where diverged paths rejoin (the first beat reachable from all terminal exclusive beats of the dilemma, typically the first shared setup beat of the next dilemma in sequence). `null` for hard dilemmas.
-- **convergence_payoff** — the minimum number of exclusive post-commit beats per path before convergence. `null` for hard dilemmas.
+- **convergence_payoff** — the minimum number of single-path-exclusive beats (commit + post-commit) per path before convergence. `null` for hard dilemmas.
 
 **Working.** Dilemmas are consumed by the pipeline. By SHIP, they have been absorbed into the story structure — paths, beats, choices. The player never sees "dilemma" as a concept.
 

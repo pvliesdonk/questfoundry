@@ -1205,28 +1205,36 @@ def find_convergence_points(
 def find_dag_convergence_beat(
     graph: Graph,
     dilemma_id: str,
+    dilemma_paths: set[str] | None = None,
 ) -> tuple[str, int] | None:
     """Find the convergence beat for a soft dilemma from the interleaved beat DAG.
 
     For a soft dilemma, the convergence beat is the earliest beat reachable from
-    ALL terminal exclusive beats of the dilemma that is NOT exclusive to this dilemma.
+    ALL terminal exclusive beats of the dilemma that is NOT exclusive to this
+    dilemma.
 
     Algorithm:
-    1. Return None if dilemma_role is "hard" or dilemma has < 2 paths.
-    2. Find terminal exclusive beats: beats whose belongs_to paths are a strict
+    1. Return ``None`` if ``dilemma_role`` is absent or ``"hard"``, or if the
+       dilemma has fewer than 2 explored paths.
+    2. Find terminal exclusive beats: beats whose ``belongs_to`` paths are a
        subset of this dilemma's paths, AND that have no successor that is also
-       exclusive to this dilemma.
-    3. BFS forward from each terminal beat (via predecessor edges: successor is the
-       beat with a predecessor edge whose ``to`` field is this beat).
+       exclusive to this dilemma.  A path may have multiple terminals (e.g.
+       when cross-dilemma beats from a ``wraps`` relationship split the
+       exclusive chain); all terminals participate in the BFS.
+    3. BFS forward from **every** terminal beat across all paths.
     4. Collect the non-exclusive beats reachable from each terminal.
-    5. Intersect all reachable sets; pick the earliest common beat (alphabetical
-       tiebreak).
-    6. convergence_payoff = minimum number of exclusive beats across all paths.
-    7. Return (converges_at, convergence_payoff) or None if no common beat found.
+    5. Intersect all reachable sets; pick the beat with the lowest maximum BFS
+       distance across all terminal runs (alphabetical tiebreak for ties).
+    6. ``convergence_payoff`` = minimum count of single-path-exclusive beats
+       (commit + post-commit) across paths.
+    7. Return ``(converges_at, convergence_payoff)`` or ``None``.
 
     Args:
         graph: The interleaved beat DAG.
         dilemma_id: Scoped dilemma ID (e.g. ``"dilemma::d1"``).
+        dilemma_paths: Pre-computed set of path IDs for this dilemma.  When
+            ``None``, looked up from the graph.  Passing this avoids repeated
+            full-graph scans when calling in a loop over dilemmas.
 
     Returns:
         ``(converges_at_beat_id, convergence_payoff)`` for soft dilemmas that
@@ -1238,18 +1246,22 @@ def find_dag_convergence_beat(
     if dilemma_node is None:
         return None
 
-    dilemma_role = dilemma_node.get("dilemma_role", "soft")
+    dilemma_role = dilemma_node.get("dilemma_role")
+    if dilemma_role is None:
+        log.warning("convergence_dilemma_role_missing", dilemma_id=dilemma_id)
+        return None
     if dilemma_role == "hard":
         return None
 
-    # Collect this dilemma's path IDs
-    path_nodes = graph.get_nodes_by_type("path")
-    dilemma_paths: set[str] = set()
-    for path_id, path_data in path_nodes.items():
-        raw_did = path_data.get("dilemma_id", "")
-        scoped_did = normalize_scoped_id(raw_did.split("::")[-1], "dilemma") if raw_did else ""
-        if scoped_did == dilemma_id:
-            dilemma_paths.add(path_id)
+    # Collect this dilemma's path IDs (use pre-computed set if provided)
+    if dilemma_paths is None:
+        path_nodes = graph.get_nodes_by_type("path")
+        dilemma_paths = set()
+        for path_id, path_data in path_nodes.items():
+            raw_did = path_data.get("dilemma_id", "")
+            scoped_did = normalize_scoped_id(raw_did.split("::")[-1], "dilemma") if raw_did else ""
+            if scoped_did == dilemma_id:
+                dilemma_paths.add(path_id)
 
     if len(dilemma_paths) < 2:
         return None
@@ -1293,20 +1305,20 @@ def find_dag_convergence_beat(
                 if path_id in dilemma_paths:
                     terminal_by_path[path_id].append(beat_id)
 
-    # Gather one representative terminal per path (for BFS)
-    # If any path has no terminal exclusive beat, we cannot compute convergence
-    terminal_beats: list[str] = []
+    # Gather ALL terminal exclusive beats across all paths (not one per path).
+    # A path may have multiple terminals when cross-dilemma beats from wraps
+    # relationships split the exclusive chain.  The convergence beat must be
+    # reachable from every terminal.
+    all_terminals: list[str] = []
     exclusive_count_per_path: dict[str, int] = {}
     for path_id in dilemma_paths:
         terminals = terminal_by_path[path_id]
         if not terminals:
             return None
-        # Use the first terminal alphabetically (stable selection)
-        terminal_beats.append(sorted(terminals)[0])
-        # Count path-exclusive beats: beats that belong to this path AND ONLY to paths
-        # of this dilemma, where the beat belongs to exactly this one path (not shared
-        # across all dilemma paths).  Shared pre-commit beats (belonging to all dilemma
-        # paths) are NOT counted because they are not exclusive to any single path.
+        all_terminals.extend(terminals)
+        # Count single-path-exclusive beats (commit + post-commit): beats that
+        # belong to exactly this one path.  Shared pre-commit beats (belonging
+        # to all dilemma paths) are NOT counted.
         exclusive_count_per_path[path_id] = sum(
             1 for bid in exclusive_beats if beat_paths.get(bid) == {path_id}
         )
@@ -1333,7 +1345,7 @@ def find_dag_convergence_beat(
                     frontier.append((successor, level + 1))
         return distances
 
-    distance_maps = [_bfs_distances(t) for t in terminal_beats]
+    distance_maps = [_bfs_distances(t) for t in all_terminals]
 
     if not distance_maps:
         return None
