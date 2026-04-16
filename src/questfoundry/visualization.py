@@ -1,15 +1,16 @@
-"""Story graph visualization.
+"""Beat DAG visualization.
 
-Extracts passage/choice structure from the graph and renders it as
-DOT (Graphviz) or Mermaid markup. Pure graph analysis — no LLM calls.
+Extracts the beat directed acyclic graph (DAG) from the story graph and
+returns structured data for rendering. Pure graph analysis — no LLM calls.
 """
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from questfoundry.graph.fill_context import get_arc_passage_order
+from questfoundry.graph.context import normalize_scoped_id, strip_scope_prefix
 from questfoundry.observability.logging import get_logger
 
 if TYPE_CHECKING:
@@ -17,374 +18,345 @@ if TYPE_CHECKING:
 
 log = get_logger(__name__)
 
-# Arc color palette: spine first, then branches.
-_ARC_COLORS = [
-    "#ADD8E6",  # light blue (spine)
+# Dilemma color palette — assigned by sorted dilemma ID, cycling through these.
+_DILEMMA_COLORS = [
+    "#ADD8E6",  # light blue
     "#FFD700",  # gold
     "#FFA07A",  # light salmon
     "#98FB98",  # pale green
     "#DDA0DD",  # plum
     "#87CEEB",  # sky blue
     "#F0E68C",  # khaki
+    "#FFB6C1",  # light pink
+    "#B0C4DE",  # light steel blue
+    "#FFDAB9",  # peach puff
 ]
-_SHARED_COLOR = "#D3D3D3"  # light grey for multi-arc passages
-_START_COLOR = "#90EE90"  # light green
-_ENDING_COLOR = "#FFB6C1"  # light pink
-_GRANTS_COLOR = "#6A5ACD"  # slate blue for state-changing choices
-_OVERLAY_BORDER = "#FF4500"  # orange-red border for overlay passages
-_ENTITY_PREFIXES = ("character::", "location::", "object::", "faction::")
 
 
 @dataclass
-class VizNode:
-    """A passage node in the visualization."""
+class BeatVizNode:
+    """A beat node in the visualization."""
 
     id: str
     label: str
-    arc_id: str | None = None
-    is_start: bool = False
-    is_ending: bool = False
-    is_hub: bool = False
-    has_overlays: bool = False
-    outgoing_count: int = 0
+    summary: str
+    dilemma_id: str | None
+    effects: list[str] = field(default_factory=list)
+    path_ids: list[str] = field(default_factory=list)
+    is_shared: bool = False
+    passage_id: str | None = None
+    intersection_group: str | None = None
 
 
 @dataclass
-class VizEdge:
-    """A choice edge in the visualization."""
+class BeatVizEdge:
+    """A predecessor edge reoriented for display (parent → child / earlier → later)."""
 
     from_id: str
     to_id: str
-    label: str = ""
-    is_return: bool = False
-    requires_state_flags: list[str] = field(default_factory=list)
-    grants: list[str] = field(default_factory=list)
 
 
 @dataclass
-class StoryGraph:
-    """Complete visualization data extracted from the story graph."""
+class PassageGroup:
+    """A passage node and the beats grouped into it."""
 
-    nodes: list[VizNode]
-    edges: list[VizEdge]
-    arc_names: dict[str, str] = field(default_factory=dict)
+    id: str
+    label: str
+    grouping_type: str = "single"
+    beat_ids: list[str] = field(default_factory=list)
 
 
-def build_story_graph(
-    graph: Graph,
-    *,
-    spine_only: bool = False,
-) -> StoryGraph:
-    """Extract visualization data from the story graph.
+@dataclass
+class BeatDag:
+    """Complete beat DAG visualization data extracted from the story graph."""
+
+    beats: list[BeatVizNode]
+    edges: list[BeatVizEdge]
+    passages: list[PassageGroup]
+    dilemma_colors: dict[str, str] = field(default_factory=dict)
+
+
+def build_beat_dag(graph: Graph) -> BeatDag:
+    """Extract beat DAG visualization data from the story graph.
 
     Args:
-        graph: Loaded story graph (must have passages and choices).
-        spine_only: If True, include only passages on the spine arc.
+        graph: Loaded story graph (must have beat nodes with predecessor and
+            belongs_to edges).
 
     Returns:
-        StoryGraph with nodes, edges, and arc metadata.
+        BeatDag with beats, predecessor edges, passage groups, and dilemma
+        color assignments.
     """
-    passages = graph.get_nodes_by_type("passage")
-    choices = graph.get_nodes_by_type("choice")
-    arcs = graph.get_nodes_by_type("arc")
+    beat_nodes = graph.get_nodes_by_type("beat")
+    if not beat_nodes:
+        return BeatDag(beats=[], edges=[], passages=[], dilemma_colors={})
 
-    # Build passage→arc mapping
-    passage_to_arc: dict[str, str | None] = {}
-    arc_names: dict[str, str] = {}
-    spine_passages: set[str] = set()
+    # 1. Build path → dilemma map from path nodes.
+    path_nodes = graph.get_nodes_by_type("path")
+    path_to_dilemma: dict[str, str] = {}
+    for path_id, path_data in path_nodes.items():
+        raw_dilemma = path_data.get("dilemma_id")
+        if raw_dilemma:
+            path_to_dilemma[path_id] = normalize_scoped_id(raw_dilemma, "dilemma")
 
-    for arc_id, arc_data in arcs.items():
-        arc_type = arc_data.get("arc_type", "branch")
-        arc_names[arc_id] = arc_type
-        arc_passage_ids = get_arc_passage_order(graph, arc_id)
+    # 2. Build beat → paths from belongs_to edges.
+    beat_to_paths: dict[str, list[str]] = {bid: [] for bid in beat_nodes}
+    for edge in graph.get_edges(edge_type="belongs_to"):
+        beat_id = edge["from"]
+        path_id = edge["to"]
+        if beat_id in beat_to_paths:
+            beat_to_paths[beat_id].append(path_id)
 
-        if arc_type == "spine":
-            spine_passages.update(arc_passage_ids)
+    # 3. Build beat → passage from grouped_in edges (beat is from, passage is to).
+    beat_to_passage: dict[str, str] = {}
+    for edge in graph.get_edges(edge_type="grouped_in"):
+        beat_id = edge["from"]
+        passage_id = edge["to"]
+        if beat_id in beat_nodes:
+            beat_to_passage[beat_id] = passage_id
 
-        for pid in arc_passage_ids:
-            if pid in passage_to_arc:
-                # Passage on multiple arcs — mark as shared
-                passage_to_arc[pid] = None
-            else:
-                passage_to_arc[pid] = arc_id
+    # 4. Build beat → intersection_group from intersection edges.
+    beat_to_intersection: dict[str, str] = {}
+    for edge in graph.get_edges(edge_type="intersection"):
+        beat_id = edge["from"]
+        group_id = edge["to"]
+        if beat_id in beat_nodes:
+            beat_to_intersection[beat_id] = group_id
 
-    # Identify entities with overlays (state-flag-dependent content)
-    entities = graph.get_nodes_by_type("entity")
-    overlay_entity_ids: set[str] = set()
-    for eid, edata in entities.items():
-        if edata.get("overlays"):
-            overlay_entity_ids.add(eid)
+    # 5. Collect dilemma IDs and assign colors (sorted for determinism).
+    dilemma_ids: set[str] = set(path_to_dilemma.values())
+    dilemma_colors: dict[str, str] = {}
+    for idx, did in enumerate(sorted(dilemma_ids)):
+        dilemma_colors[did] = _DILEMMA_COLORS[idx % len(_DILEMMA_COLORS)]
 
-    # Track which passages contain overlay-affected entities
-    overlay_passages: set[str] = set()
-    for pid, pdata in passages.items():
-        for ent in pdata.get("entities") or []:
-            # Check both raw ID and scoped forms
-            if ent in overlay_entity_ids:
-                overlay_passages.add(pid)
-                break
-            if any(f"{prefix}{ent}" in overlay_entity_ids for prefix in _ENTITY_PREFIXES):
-                overlay_passages.add(pid)
-                break
+    # 6. Build BeatVizNode for each beat.
+    beats: list[BeatVizNode] = []
+    for bid, bdata in beat_nodes.items():
+        label = strip_scope_prefix(bid)
+        raw_summary = bdata.get("summary") or ""
+        summary = _truncate(raw_summary, 60)
 
-    # Determine start/ending passages and outgoing counts
-    has_incoming: set[str] = set()
-    has_outgoing: set[str] = set()
-    hub_passages: set[str] = set()
-    outgoing_count: dict[str, int] = {}
+        # Determine dilemma_id from first dilemma_impacts entry.
+        impacts = bdata.get("dilemma_impacts") or []
+        dilemma_id: str | None = None
+        if impacts:
+            first_impact = impacts[0]
+            raw_did = first_impact.get("dilemma_id")
+            if raw_did:
+                dilemma_id = normalize_scoped_id(raw_did, "dilemma")
 
-    for _cid, cdata in choices.items():
-        from_p = cdata.get("from_passage")
-        to_p = cdata.get("to_passage")
-        if not from_p or not to_p:
-            log.warning("choice_missing_passage", choice_id=_cid, from_p=from_p, to_p=to_p)
-            continue
-        if cdata.get("is_return"):
-            hub_passages.add(to_p)
-        else:
-            has_incoming.add(to_p)
-            outgoing_count[from_p] = outgoing_count.get(from_p, 0) + 1
-        has_outgoing.add(from_p)
+        # Format effects as "<effect> <stripped_dilemma_id>".
+        effects: list[str] = []
+        for impact in impacts:
+            effect = impact.get("effect")
+            raw_did = impact.get("dilemma_id")
+            if effect and raw_did:
+                stripped = strip_scope_prefix(normalize_scoped_id(raw_did, "dilemma"))
+                effects.append(f"{effect} {stripped}")
 
-    # Filter passages if spine_only
-    visible_passages = spine_passages if spine_only else set(passages.keys())
+        path_ids = beat_to_paths.get(bid, [])
+        is_shared = len(path_ids) > 1
 
-    # Build nodes
-    nodes: list[VizNode] = []
-    for pid, pdata in sorted(passages.items()):
-        if pid not in visible_passages:
-            continue
-        summary = pdata.get("summary", pid)
-        label = _truncate(summary, 40)
-        nodes.append(
-            VizNode(
-                id=pid,
+        beats.append(
+            BeatVizNode(
+                id=bid,
                 label=label,
-                arc_id=passage_to_arc.get(pid),
-                is_start=pid not in has_incoming,
-                is_ending=pid not in has_outgoing,
-                is_hub=pid in hub_passages,
-                has_overlays=pid in overlay_passages,
-                outgoing_count=outgoing_count.get(pid, 0),
+                summary=summary,
+                dilemma_id=dilemma_id,
+                effects=effects,
+                path_ids=path_ids,
+                is_shared=is_shared,
+                passage_id=beat_to_passage.get(bid),
+                intersection_group=beat_to_intersection.get(bid),
             )
         )
 
-    # Build edges
-    edges: list[VizEdge] = []
-    for _cid, cdata in sorted(choices.items()):
-        from_p = cdata.get("from_passage")
-        to_p = cdata.get("to_passage")
-        if not from_p or not to_p:
-            continue  # Already warned above
-        if from_p not in visible_passages or to_p not in visible_passages:
-            continue
-        edges.append(
-            VizEdge(
-                from_id=from_p,
-                to_id=to_p,
-                label=cdata.get("label", ""),
-                is_return=cdata.get("is_return", False),
-                requires_state_flags=cdata.get("requires_state_flags", []),
-                grants=cdata.get("grants", []),
+    # 7. Build BeatVizEdge for each predecessor edge between beats.
+    # Predecessor edge semantics: from=child, to=parent.
+    # We emit edges as parent → child for DAG display.
+    edges: list[BeatVizEdge] = []
+    for edge in graph.get_edges(edge_type="predecessor"):
+        child_id = edge["from"]
+        parent_id = edge["to"]
+        if child_id in beat_nodes and parent_id in beat_nodes:
+            edges.append(BeatVizEdge(from_id=parent_id, to_id=child_id))
+
+    # 8. Build PassageGroup for each passage that has grouped_in beats.
+    passage_to_beats: dict[str, list[str]] = {}
+    for beat_id, passage_id in beat_to_passage.items():
+        passage_to_beats.setdefault(passage_id, []).append(beat_id)
+
+    passage_nodes = graph.get_nodes_by_type("passage")
+    passages: list[PassageGroup] = []
+    for passage_id, beat_ids in sorted(passage_to_beats.items()):
+        pdata = passage_nodes.get(passage_id) or {}
+        label = pdata.get("label") or strip_scope_prefix(passage_id)
+        grouping_type = pdata.get("grouping_type", "single")
+        passages.append(
+            PassageGroup(
+                id=passage_id,
+                label=label,
+                grouping_type=grouping_type,
+                beat_ids=beat_ids,
             )
         )
 
     log.info(
-        "story_graph_built",
-        nodes=len(nodes),
+        "beat_dag_built",
+        beats=len(beats),
         edges=len(edges),
-        arcs=len(arc_names),
-        spine_only=spine_only,
+        passages=len(passages),
+        dilemmas=len(dilemma_colors),
     )
 
-    return StoryGraph(nodes=nodes, edges=edges, arc_names=arc_names)
+    return BeatDag(
+        beats=beats,
+        edges=edges,
+        passages=passages,
+        dilemma_colors=dilemma_colors,
+    )
 
 
-def render_dot(sg: StoryGraph, *, no_labels: bool = False) -> str:
-    """Render a StoryGraph as DOT (Graphviz) markup.
+def render_plantuml(dag: BeatDag, *, no_labels: bool = False) -> str:
+    """Render a BeatDag as a PlantUML component diagram string.
 
     Args:
-        sg: Story graph data.
-        no_labels: If True, omit choice labels on edges.
+        dag: Beat DAG data from build_beat_dag().
+        no_labels: If True, omit the effects section from beat components.
 
     Returns:
-        DOT format string.
+        PlantUML diagram string (starts with @startuml, ends with @enduml).
     """
-    # Assign colors to arcs
-    arc_color = _assign_arc_colors(sg.arc_names)
-
-    lines = [
-        "digraph story {",
-        "  rankdir=LR;",
-        '  node [fontname="Helvetica" fontsize=10 style="filled,solid"];',
-        '  edge [fontname="Helvetica" fontsize=8];',
+    lines: list[str] = [
+        "@startuml",
+        "!theme plain",
+        "left to right direction",
+        "skinparam componentStyle rectangle",
+        "skinparam defaultTextAlignment left",
+        "skinparam wrapWidth 200",
         "",
     ]
 
-    # Nodes
-    for node in sg.nodes:
-        attrs = _dot_node_attrs(node, arc_color)
-        attr_str = " ".join(f"{k}={v}" for k, v in attrs.items())
-        lines.append(f'  "{node.id}" [{attr_str}];')
+    # Dilemma color skinparams — one block per dilemma, sorted for determinism.
+    for dilemma_id in sorted(dag.dilemma_colors):
+        stereo = _puml_alias(strip_scope_prefix(dilemma_id))
+        color = dag.dilemma_colors[dilemma_id]
+        lines.append("skinparam component {")
+        lines.append(f"  BackgroundColor<<{stereo}>> {color}")
+        lines.append("}")
+        lines.append("")
+
+    # Index beats by id for lookup.
+    beat_map = {b.id: b for b in dag.beats}
+
+    # Collect which beats are inside a passage.
+    passage_beat_ids: set[str] = set()
+    for pg in dag.passages:
+        passage_beat_ids.update(pg.beat_ids)
+
+    # Collect which beats are inside an intersection group but not already in a
+    # passage container.  Beats in a passage are grouped there; they are excluded
+    # from intersection containers to avoid rendering a beat in two places.
+    # If all members of an intersection are in passages, the intersection container
+    # is simply not emitted — the co-occurrence is still visible from the beat's
+    # intersection_group field in the data model.
+    ig_to_beats: dict[str, list[BeatVizNode]] = {}
+    for beat in dag.beats:
+        if beat.intersection_group and beat.id not in passage_beat_ids:
+            ig_to_beats.setdefault(beat.intersection_group, []).append(beat)
+
+    # Beats already rendered (in a container).
+    rendered_beats: set[str] = set()
+
+    # Passage containers.
+    for pg in sorted(dag.passages, key=lambda p: p.id):
+        plabel = _sanitize_puml(pg.label)
+        ptype = _sanitize_puml(pg.grouping_type)
+        lines.append(f'rectangle "{plabel} [{ptype}]" {{')
+        for bid in pg.beat_ids:
+            pg_beat = beat_map.get(bid)
+            if pg_beat is not None:
+                lines.append(f"  {_beat_component_line(pg_beat, no_labels=no_labels)}")
+                rendered_beats.add(bid)
+        lines.append("}")
+        lines.append("")
+
+    # Intersection group containers (beats not already in a passage).
+    for ig_id in sorted(ig_to_beats):
+        ig_beats = ig_to_beats[ig_id]
+        ig_label = _sanitize_puml(strip_scope_prefix(ig_id))
+        lines.append(f'rectangle "{ig_label}" #line.dashed {{')
+        for beat in ig_beats:
+            lines.append(f"  {_beat_component_line(beat, no_labels=no_labels)}")
+            rendered_beats.add(beat.id)
+        lines.append("}")
+        lines.append("")
+
+    # Standalone beats (not in any container).
+    for beat in dag.beats:
+        if beat.id not in rendered_beats:
+            lines.append(_beat_component_line(beat, no_labels=no_labels))
 
     lines.append("")
 
-    # Edges
-    for edge in sg.edges:
-        edge_attrs: dict[str, str] = {}
-        if not no_labels and edge.label:
-            edge_attrs["label"] = f'"{_dot_escape(edge.label)}"'
-        if edge.is_return:
-            edge_attrs["style"] = '"dashed"'
-            edge_attrs["color"] = '"grey"'
-        # Requires (gated) takes precedence over grants (state-changing).
-        # Return edges keep their dashed grey style in both renderers.
-        if edge.requires_state_flags:
-            edge_attrs["color"] = '"orange"'
-            edge_attrs["penwidth"] = '"2"'
-        elif edge.grants and not edge.is_return:
-            edge_attrs["color"] = f'"{_GRANTS_COLOR}"'
-            edge_attrs["penwidth"] = '"2"'
-        edge_attr_str = " ".join(f"{k}={v}" for k, v in edge_attrs.items())
-        suffix = f" [{edge_attr_str}]" if edge_attr_str else ""
-        lines.append(f'  "{edge.from_id}" -> "{edge.to_id}"{suffix};')
+    # Predecessor edges: from_id (parent/earlier) --> to_id (child/later).
+    for edge in dag.edges:
+        src = _puml_alias(edge.from_id)
+        dst = _puml_alias(edge.to_id)
+        lines.append(f"{src} --> {dst}")
 
-    lines.append("}")
+    lines.append("")
+    lines.append("@enduml")
     return "\n".join(lines)
 
 
-def render_mermaid(sg: StoryGraph, *, no_labels: bool = False) -> str:
-    """Render a StoryGraph as Mermaid markup.
+def _puml_alias(node_id: str) -> str:
+    """Convert a node ID to a PlantUML-safe alias.
 
-    Args:
-        sg: Story graph data.
-        no_labels: If True, omit choice labels on edges.
-
-    Returns:
-        Mermaid format string.
+    Replaces any non-alphanumeric/underscore character with ``_``.
     """
-    lines = ["graph LR"]
-
-    # Node definitions
-    for node in sg.nodes:
-        safe_id = _mermaid_id(node.id)
-        label = _mermaid_escape(node.label)
-        if node.is_start:
-            cls = ":::startOverlay" if node.has_overlays else ":::start"
-            lines.append(f'  {safe_id}["{label}"]{cls}')
-        elif node.is_ending:
-            cls = ":::endingOverlay" if node.has_overlays else ":::ending"
-            lines.append(f'  {safe_id}["{label}"]{cls}')
-        elif node.is_hub:
-            lines.append(f"  {safe_id}{{{{{label}}}}}")
-            if node.has_overlays:
-                lines.append(f"  class {safe_id} overlay")
-        elif node.has_overlays:
-            lines.append(f'  {safe_id}["{label}"]:::overlay')
-        else:
-            lines.append(f'  {safe_id}["{label}"]')
-
-    lines.append("")
-
-    # Edges
-    for edge in sg.edges:
-        src = _mermaid_id(edge.from_id)
-        dst = _mermaid_id(edge.to_id)
-        arrow = "-.->" if edge.is_return else "-->"
-        if not no_labels and edge.label:
-            label = _mermaid_escape(edge.label)
-            lines.append(f'  {src} {arrow}|"{label}"| {dst}')
-        else:
-            lines.append(f"  {src} {arrow} {dst}")
-
-    # Style classes
-    lines.append("")
-    lines.append("  classDef start fill:#90EE90,stroke:#333")
-    lines.append("  classDef ending fill:#FFB6C1,stroke:#333")
-    lines.append(f"  classDef overlay stroke:{_OVERLAY_BORDER},stroke-width:3px")
-    lines.append(f"  classDef startOverlay fill:#90EE90,stroke:{_OVERLAY_BORDER},stroke-width:3px")
-    lines.append(f"  classDef endingOverlay fill:#FFB6C1,stroke:{_OVERLAY_BORDER},stroke-width:3px")
-    # Mermaid has limited edge styling; grants edges use linkStyle below
-    grants_indices = [
-        i
-        for i, e in enumerate(sg.edges)
-        if e.grants and not e.is_return and not e.requires_state_flags
-    ]
-    if grants_indices:
-        idx_list = ",".join(str(i) for i in grants_indices)
-        lines.append(f"  linkStyle {idx_list} stroke:{_GRANTS_COLOR},stroke-width:2px")
-
-    return "\n".join(lines)
+    return re.sub(r"[^a-zA-Z0-9_]", "_", node_id)
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
+def _sanitize_puml(text: str) -> str:
+    """Escape characters that break PlantUML component or rectangle syntax.
+
+    ``]`` closes component labels; ``"`` breaks rectangle label strings.
+    """
+    return text.replace("[", "(").replace("]", ")").replace('"', "'")
 
 
-def _truncate(text: str, max_len: int) -> str:
+def _beat_component_line(beat: BeatVizNode, *, no_labels: bool = False) -> str:
+    """Render a single beat as a PlantUML component line.
+
+    Format:
+        [label\\n---\\nsummary\\n---\\n[eff1]\\n[eff2]] as alias <<stereo>> #line.bold?
+
+    When no_labels=True, the effects section (third ---\\n... block) is omitted.
+    """
+    label = _sanitize_puml(beat.label)
+    summary = _sanitize_puml(beat.summary)
+
+    if no_labels or not beat.effects:
+        inner = f"{label}\\n---\\n{summary}"
+    else:
+        effects_block = "\\n".join(f"({_sanitize_puml(e)})" for e in beat.effects)
+        inner = f"{label}\\n---\\n{summary}\\n---\\n{effects_block}"
+
+    alias = _puml_alias(beat.id)
+
+    stereo_part = ""
+    if beat.dilemma_id:
+        stereo = _puml_alias(strip_scope_prefix(beat.dilemma_id))
+        stereo_part = f" <<{stereo}>>"
+
+    bold_part = " #line.bold" if beat.is_shared else ""
+
+    return f"[{inner}] as {alias}{stereo_part}{bold_part}"
+
+
+def _truncate(text: str, max_len: int = 60) -> str:
     """Truncate text with ellipsis if too long."""
     if len(text) <= max_len:
         return text
     return text[: max_len - 3] + "..."
-
-
-def _assign_arc_colors(arc_names: dict[str, str]) -> dict[str, str]:
-    """Assign a color to each arc ID. Spine gets index 0."""
-    color_map: dict[str, str] = {}
-    branch_colors = _ARC_COLORS[1:]
-
-    branch_idx = 0
-    for arc_id, arc_type in sorted(arc_names.items()):
-        if arc_type == "spine":
-            color_map[arc_id] = _ARC_COLORS[0]
-        else:
-            if branch_colors:
-                color_map[arc_id] = branch_colors[branch_idx % len(branch_colors)]
-                branch_idx += 1
-            else:
-                color_map[arc_id] = _SHARED_COLOR
-    return color_map
-
-
-def _dot_node_attrs(node: VizNode, arc_color: dict[str, str]) -> dict[str, str]:
-    """Build DOT attribute dict for a node."""
-    attrs: dict[str, str] = {}
-
-    if node.is_start:
-        attrs["shape"] = "doubleoctagon"
-        attrs["fillcolor"] = f'"{_START_COLOR}"'
-    elif node.is_ending:
-        attrs["shape"] = "octagon"
-        attrs["fillcolor"] = f'"{_ENDING_COLOR}"'
-    elif node.is_hub:
-        attrs["shape"] = "diamond"
-        color = arc_color.get(node.arc_id or "", _SHARED_COLOR)
-        attrs["fillcolor"] = f'"{color}"'
-    else:
-        attrs["shape"] = "box"
-        color = arc_color.get(node.arc_id, _SHARED_COLOR) if node.arc_id else _SHARED_COLOR
-        attrs["fillcolor"] = f'"{color}"'
-
-    # Overlay passages get a thick orange-red border
-    if node.has_overlays:
-        attrs["color"] = f'"{_OVERLAY_BORDER}"'
-        attrs["penwidth"] = '"2.5"'
-
-    attrs["label"] = f'"{_dot_escape(node.label)}"'
-    return attrs
-
-
-def _dot_escape(text: str) -> str:
-    """Escape special characters for DOT labels."""
-    return text.replace('"', '\\"').replace("\n", "\\n")
-
-
-def _mermaid_id(node_id: str) -> str:
-    """Convert a node ID to a Mermaid-safe identifier."""
-    return node_id.replace("::", "_").replace(" ", "_").replace("-", "_")
-
-
-def _mermaid_escape(text: str) -> str:
-    """Escape special characters for Mermaid labels."""
-    return text.replace('"', "&quot;").replace("\n", " ")
