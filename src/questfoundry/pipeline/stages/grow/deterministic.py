@@ -150,7 +150,7 @@ async def phase_intra_path_predecessors(
     for path_id, pdata in path_nodes.items():
         did = pdata.get("dilemma_id", "")
         if did:
-            path_dilemma[path_id] = did
+            path_dilemma[path_id] = normalize_scoped_id(did, "dilemma")
 
     def _is_intra_dilemma_shared(beat_id: str) -> bool:
         """True if beat belongs to >1 path but all paths share the same dilemma.
@@ -158,11 +158,21 @@ async def phase_intra_path_predecessors(
         Y-shape shared pre-commit beats satisfy this — they belong to both
         paths of one dilemma.  Cross-dilemma shared beats (e.g., a fixture's
         opening/finale beat that belongs to paths from 2+ dilemmas) do NOT.
+
+        Raises ValueError if a path is missing its dilemma mapping — this
+        indicates a broken graph (SEED always sets dilemma_id on paths).
         """
         paths = beat_paths.get(beat_id, set())
         if len(paths) <= 1:
             return False
-        dilemmas = {path_dilemma.get(p) for p in paths} - {None}
+        dilemmas: set[str] = set()
+        for p in paths:
+            if p not in path_dilemma:
+                raise ValueError(
+                    f"Path {p!r} has no dilemma_id — cannot determine "
+                    f"whether beat {beat_id!r} is intra-dilemma shared."
+                )
+            dilemmas.add(path_dilemma[p])
         return len(dilemmas) == 1
 
     # Determine which beats to include per path.
