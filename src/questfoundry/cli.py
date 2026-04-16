@@ -2516,9 +2516,7 @@ def _check_project(project_path: Path) -> bool:
 class _GraphFormat(StrEnum):
     """Output format for the graph command."""
 
-    dot = "dot"
-    mermaid = "mermaid"
-    json = "json"
+    plantuml = "plantuml"
 
 
 @app.command(name="graph")
@@ -2538,39 +2536,28 @@ def graph_cmd(
             "-f",
             help="Output format.",
         ),
-    ] = _GraphFormat.dot,
+    ] = _GraphFormat.plantuml,
     output: Annotated[
         Path | None,
         typer.Option("--output", "-o", help="Output file (stdout if not specified)."),
     ] = None,
-    spine_only: Annotated[
-        bool,
-        typer.Option("--spine-only", help="Only show passages on the spine arc."),
-    ] = False,
     no_labels: Annotated[
         bool,
-        typer.Option("--no-labels", help="Omit choice labels on edges."),
+        typer.Option("--no-labels", help="Omit effect tags from beat boxes."),
     ] = False,
 ) -> None:
-    """Visualize story graph as DOT, Mermaid, or JSON."""
+    """Visualize beat DAG as PlantUML component diagram."""
     project_path = _resolve_project_path(project)
     _require_project(project_path)
 
     from questfoundry.graph.graph import Graph
-    from questfoundry.visualization import build_story_graph, render_dot, render_mermaid
+    from questfoundry.visualization import build_beat_dag, render_plantuml
 
     graph = Graph.load(project_path)
-    sg = build_story_graph(graph, spine_only=spine_only)
+    dag = build_beat_dag(graph)
 
-    if fmt == _GraphFormat.dot:
-        result = render_dot(sg, no_labels=no_labels)
-    elif fmt == _GraphFormat.mermaid:
-        result = render_mermaid(sg, no_labels=no_labels)
-    else:
-        import dataclasses
-        import json
-
-        result = json.dumps(dataclasses.asdict(sg), indent=2)
+    if fmt == _GraphFormat.plantuml:
+        result = render_plantuml(dag, no_labels=no_labels)
 
     if output:
         output.write_text(result)
