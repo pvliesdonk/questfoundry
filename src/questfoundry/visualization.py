@@ -6,6 +6,7 @@ returns structured data for rendering. Pure graph analysis — no LLM calls.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -310,8 +311,6 @@ def _puml_alias(node_id: str) -> str:
 
     Replaces any non-alphanumeric/underscore character with ``_``.
     """
-    import re
-
     return re.sub(r"[^a-zA-Z0-9_]", "_", node_id)
 
 
@@ -320,7 +319,7 @@ def _sanitize_puml(text: str) -> str:
 
     ``]`` closes component labels; ``"`` breaks rectangle label strings.
     """
-    return text.replace("]", ")").replace('"', "'")
+    return text.replace("[", "(").replace("]", ")").replace('"', "'")
 
 
 def _beat_component_line(beat: BeatVizNode, *, no_labels: bool = False) -> str:

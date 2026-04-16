@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from questfoundry.graph.graph import Graph
-from questfoundry.visualization import BeatDag, build_beat_dag, render_plantuml
+from questfoundry.visualization import BeatDag, BeatVizNode, build_beat_dag, render_plantuml
 
 
 def _make_y_shape_graph() -> Graph:
@@ -283,6 +283,25 @@ class TestRenderPlantUml:
         puml = render_plantuml(dag, no_labels=True)
         assert "advances" not in puml
         assert "commits" not in puml
+
+    def test_sanitizes_bracket_in_summary(self) -> None:
+        """Beat summary with ] must not break PlantUML component syntax."""
+        dag = BeatDag(
+            beats=[
+                BeatVizNode(
+                    id="beat::x",
+                    label="x",
+                    summary="The soldier [finally] retreats",
+                    dilemma_id=None,
+                )
+            ],
+            edges=[],
+            passages=[],
+            dilemma_colors={},
+        )
+        puml = render_plantuml(dag)
+        assert "[finally]" not in puml
+        assert "(finally)" in puml
 
     def test_empty_dag(self) -> None:
         dag = BeatDag(beats=[], edges=[], passages=[], dilemma_colors={})

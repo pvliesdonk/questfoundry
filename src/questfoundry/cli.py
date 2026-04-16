@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import atexit
 import sys
-from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any
 
@@ -2511,12 +2510,6 @@ def _check_project(project_path: Path) -> bool:
 
     console.print()
     return all_ok
-
-
-class _GraphFormat(StrEnum):
-    """Output format for the graph command."""
-
-    plantuml = "plantuml"
 
 
 @app.command(name="graph")
