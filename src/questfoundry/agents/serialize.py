@@ -1669,6 +1669,14 @@ def _format_section_corrections(errors: list[SeedValidationError]) -> str:
     cross_ref_items: list[str] = []
 
     for error in errors:
+        # Handle arc_structure errors first — their issue text is already
+        # actionable ("Path X has no beat after its commit beat... Add a beat
+        # with effect 'advances' or 'complicates' after the commit beat.").
+        # The generic COMPLETENESS handler would misformat these as "missing items".
+        if ".arc_structure" in error.field_path:
+            corrections.append(f"- ARC FIX: {error.issue}")
+            continue
+
         category = categorize_error(error)
 
         # Handle CROSS_REFERENCE errors (bucket misplacement, answer not in explored)
