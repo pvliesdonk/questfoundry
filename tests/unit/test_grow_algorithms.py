@@ -7645,3 +7645,294 @@ class TestApplyIntersectionMarkGuardRail3:
             beat_ids=["beat::pre_dilemma1", "beat::pre_dilemma2"],
             resolved_location=None,
         )
+
+
+# ---------------------------------------------------------------------------
+# TestFindDagConvergenceBeat
+# ---------------------------------------------------------------------------
+
+
+def _make_convergence_test_graph() -> Graph:
+    """Build a two-dilemma interleaved graph for convergence tests.
+
+    Structure (Y-shape per dilemma, interleaved into a single DAG):
+
+    d1 (soft, payoff_budget=2):
+        shared_d1_01 → shared_d1_02 → commit_d1_a → post_d1_a_01
+                                     ↘ commit_d1_b → post_d1_b_01
+
+    d2 (hard):
+        shared_d2_01 → shared_d2_02 → commit_d2_a
+                                     ↘ commit_d2_b
+
+    Cross-dilemma interleave edges:
+        post_d1_a_01 → shared_d2_01
+        post_d1_b_01 → shared_d2_01
+
+    d1 terminal exclusive beats: post_d1_a_01 (path d1_a), post_d1_b_01 (path d1_b)
+    Both reach shared_d2_01 as first non-exclusive successor → converges_at = shared_d2_01
+    convergence_payoff = min(exclusive beats per path) = min(2, 2) = 2
+      (d1_a exclusive: commit_d1_a, post_d1_a_01; d1_b exclusive: commit_d1_b, post_d1_b_01)
+    """
+    graph = Graph.empty()
+
+    # --- Dilemma d1 (soft) ---
+    graph.create_node(
+        "dilemma::d1",
+        {"type": "dilemma", "raw_id": "d1", "dilemma_role": "soft", "payoff_budget": 2},
+    )
+    graph.create_node(
+        "path::d1_a",
+        {"type": "path", "raw_id": "d1_a", "dilemma_id": "dilemma::d1", "is_canonical": True},
+    )
+    graph.create_node(
+        "path::d1_b",
+        {"type": "path", "raw_id": "d1_b", "dilemma_id": "dilemma::d1", "is_canonical": False},
+    )
+
+    # --- Dilemma d2 (hard) ---
+    graph.create_node(
+        "dilemma::d2",
+        {"type": "dilemma", "raw_id": "d2", "dilemma_role": "hard", "payoff_budget": 0},
+    )
+    graph.create_node(
+        "path::d2_a",
+        {"type": "path", "raw_id": "d2_a", "dilemma_id": "dilemma::d2", "is_canonical": True},
+    )
+    graph.create_node(
+        "path::d2_b",
+        {"type": "path", "raw_id": "d2_b", "dilemma_id": "dilemma::d2", "is_canonical": False},
+    )
+
+    # --- d1 beats ---
+    # Pre-commit shared beats (belong to both d1 paths)
+    graph.create_node(
+        "beat::shared_d1_01",
+        {"type": "beat", "raw_id": "shared_d1_01", "summary": "D1 setup 1", "dilemma_impacts": []},
+    )
+    graph.add_edge("belongs_to", "beat::shared_d1_01", "path::d1_a")
+    graph.add_edge("belongs_to", "beat::shared_d1_01", "path::d1_b")
+
+    graph.create_node(
+        "beat::shared_d1_02",
+        {"type": "beat", "raw_id": "shared_d1_02", "summary": "D1 setup 2", "dilemma_impacts": []},
+    )
+    graph.add_edge("belongs_to", "beat::shared_d1_02", "path::d1_a")
+    graph.add_edge("belongs_to", "beat::shared_d1_02", "path::d1_b")
+
+    # Commit beats (exclusive per path)
+    graph.create_node(
+        "beat::commit_d1_a",
+        {
+            "type": "beat",
+            "raw_id": "commit_d1_a",
+            "summary": "D1 commit a",
+            "dilemma_impacts": [{"dilemma_id": "dilemma::d1", "effect": "commits"}],
+        },
+    )
+    graph.add_edge("belongs_to", "beat::commit_d1_a", "path::d1_a")
+
+    graph.create_node(
+        "beat::commit_d1_b",
+        {
+            "type": "beat",
+            "raw_id": "commit_d1_b",
+            "summary": "D1 commit b",
+            "dilemma_impacts": [{"dilemma_id": "dilemma::d1", "effect": "commits"}],
+        },
+    )
+    graph.add_edge("belongs_to", "beat::commit_d1_b", "path::d1_b")
+
+    # Post-commit beats (1 per path, exclusive)
+    graph.create_node(
+        "beat::post_d1_a_01",
+        {"type": "beat", "raw_id": "post_d1_a_01", "summary": "D1 post-a 1", "dilemma_impacts": []},
+    )
+    graph.add_edge("belongs_to", "beat::post_d1_a_01", "path::d1_a")
+
+    graph.create_node(
+        "beat::post_d1_b_01",
+        {"type": "beat", "raw_id": "post_d1_b_01", "summary": "D1 post-b 1", "dilemma_impacts": []},
+    )
+    graph.add_edge("belongs_to", "beat::post_d1_b_01", "path::d1_b")
+
+    # --- d2 beats ---
+    # Pre-commit shared beats (belong to both d2 paths)
+    graph.create_node(
+        "beat::shared_d2_01",
+        {"type": "beat", "raw_id": "shared_d2_01", "summary": "D2 setup 1", "dilemma_impacts": []},
+    )
+    graph.add_edge("belongs_to", "beat::shared_d2_01", "path::d2_a")
+    graph.add_edge("belongs_to", "beat::shared_d2_01", "path::d2_b")
+
+    graph.create_node(
+        "beat::shared_d2_02",
+        {"type": "beat", "raw_id": "shared_d2_02", "summary": "D2 setup 2", "dilemma_impacts": []},
+    )
+    graph.add_edge("belongs_to", "beat::shared_d2_02", "path::d2_a")
+    graph.add_edge("belongs_to", "beat::shared_d2_02", "path::d2_b")
+
+    graph.create_node(
+        "beat::commit_d2_a",
+        {
+            "type": "beat",
+            "raw_id": "commit_d2_a",
+            "summary": "D2 commit a",
+            "dilemma_impacts": [{"dilemma_id": "dilemma::d2", "effect": "commits"}],
+        },
+    )
+    graph.add_edge("belongs_to", "beat::commit_d2_a", "path::d2_a")
+
+    graph.create_node(
+        "beat::commit_d2_b",
+        {
+            "type": "beat",
+            "raw_id": "commit_d2_b",
+            "summary": "D2 commit b",
+            "dilemma_impacts": [{"dilemma_id": "dilemma::d2", "effect": "commits"}],
+        },
+    )
+    graph.add_edge("belongs_to", "beat::commit_d2_b", "path::d2_b")
+
+    # --- Predecessor edges (from=later, to=earlier) ---
+    # d1 internal chain
+    graph.add_edge("predecessor", "beat::shared_d1_02", "beat::shared_d1_01")
+    graph.add_edge("predecessor", "beat::commit_d1_a", "beat::shared_d1_02")
+    graph.add_edge("predecessor", "beat::commit_d1_b", "beat::shared_d1_02")
+    graph.add_edge("predecessor", "beat::post_d1_a_01", "beat::commit_d1_a")
+    graph.add_edge("predecessor", "beat::post_d1_b_01", "beat::commit_d1_b")
+
+    # d2 internal chain
+    graph.add_edge("predecessor", "beat::shared_d2_02", "beat::shared_d2_01")
+    graph.add_edge("predecessor", "beat::commit_d2_a", "beat::shared_d2_02")
+    graph.add_edge("predecessor", "beat::commit_d2_b", "beat::shared_d2_02")
+
+    # Cross-dilemma interleave: d1 terminals → d2 entry
+    graph.add_edge("predecessor", "beat::shared_d2_01", "beat::post_d1_a_01")
+    graph.add_edge("predecessor", "beat::shared_d2_01", "beat::post_d1_b_01")
+
+    return graph
+
+
+class TestFindDagConvergenceBeat:
+    """Tests for find_dag_convergence_beat."""
+
+    def test_soft_dilemma_converges_at_next_dilemma_entry(self) -> None:
+        """Soft d1 with two exclusive chains converges at shared_d2_01.
+
+        Both chains end in their respective terminal beat (post_d1_a_01 / post_d1_b_01)
+        which each have shared_d2_01 as their only successor.  shared_d2_01 belongs to
+        d2 paths so it is non-exclusive to d1 → convergence point.
+        Payoff = min(exclusive beats per path) = min(2, 2) = 2.
+          d1_a exclusive: commit_d1_a, post_d1_a_01
+          d1_b exclusive: commit_d1_b, post_d1_b_01
+        """
+        from questfoundry.graph.grow_algorithms import find_dag_convergence_beat
+
+        graph = _make_convergence_test_graph()
+        result = find_dag_convergence_beat(graph, "dilemma::d1")
+
+        assert result is not None
+        converges_at, payoff = result
+        assert converges_at == "beat::shared_d2_01"
+        assert payoff == 2
+
+    def test_hard_dilemma_returns_none(self) -> None:
+        """Hard dilemma (d2) must return None regardless of successors."""
+        from questfoundry.graph.grow_algorithms import find_dag_convergence_beat
+
+        graph = _make_convergence_test_graph()
+        result = find_dag_convergence_beat(graph, "dilemma::d2")
+
+        assert result is None
+
+    def test_last_dilemma_no_successor_returns_none(self) -> None:
+        """A soft dilemma whose terminal beats have no cross-dilemma successors returns None."""
+        from questfoundry.graph.grow_algorithms import find_dag_convergence_beat
+
+        graph = Graph.empty()
+
+        graph.create_node(
+            "dilemma::only",
+            {"type": "dilemma", "raw_id": "only", "dilemma_role": "soft", "payoff_budget": 1},
+        )
+        graph.create_node(
+            "path::only_a",
+            {
+                "type": "path",
+                "raw_id": "only_a",
+                "dilemma_id": "dilemma::only",
+                "is_canonical": True,
+            },
+        )
+        graph.create_node(
+            "path::only_b",
+            {
+                "type": "path",
+                "raw_id": "only_b",
+                "dilemma_id": "dilemma::only",
+                "is_canonical": False,
+            },
+        )
+
+        # Shared pre-commit beat
+        graph.create_node(
+            "beat::shared",
+            {"type": "beat", "raw_id": "shared", "summary": "Setup", "dilemma_impacts": []},
+        )
+        graph.add_edge("belongs_to", "beat::shared", "path::only_a")
+        graph.add_edge("belongs_to", "beat::shared", "path::only_b")
+
+        # Commit beats (exclusive, no successors after them)
+        graph.create_node(
+            "beat::commit_a",
+            {
+                "type": "beat",
+                "raw_id": "commit_a",
+                "summary": "Commit A",
+                "dilemma_impacts": [{"dilemma_id": "dilemma::only", "effect": "commits"}],
+            },
+        )
+        graph.add_edge("belongs_to", "beat::commit_a", "path::only_a")
+
+        graph.create_node(
+            "beat::commit_b",
+            {
+                "type": "beat",
+                "raw_id": "commit_b",
+                "summary": "Commit B",
+                "dilemma_impacts": [{"dilemma_id": "dilemma::only", "effect": "commits"}],
+            },
+        )
+        graph.add_edge("belongs_to", "beat::commit_b", "path::only_b")
+
+        graph.add_edge("predecessor", "beat::commit_a", "beat::shared")
+        graph.add_edge("predecessor", "beat::commit_b", "beat::shared")
+
+        result = find_dag_convergence_beat(graph, "dilemma::only")
+        assert result is None
+
+    def test_single_dilemma_returns_none(self) -> None:
+        """A graph with only one dilemma (< 2 paths reachable cross-dilemma) returns None.
+
+        When there is only one dilemma and no cross-dilemma successors, the
+        terminal exclusive beats have no reachable non-exclusive beats, so the
+        function must return None.
+        """
+        from questfoundry.graph.grow_algorithms import find_dag_convergence_beat
+
+        # make_single_dilemma_graph builds mentor_trust with 2 paths and no cross-dilemma edges
+        from tests.fixtures.grow_fixtures import make_single_dilemma_graph
+
+        graph = make_single_dilemma_graph()
+
+        # The fixture doesn't have dilemma_role set; treat absence as soft for test
+        # (function should return None when no cross-dilemma successor exists)
+        node = graph.get_node("dilemma::mentor_trust")
+        assert node is not None
+        # Manually patch dilemma_role so the function doesn't short-circuit on hard
+        node["dilemma_role"] = "soft"
+        node["payoff_budget"] = 1
+
+        result = find_dag_convergence_beat(graph, "dilemma::mentor_trust")
+        assert result is None
