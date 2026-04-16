@@ -723,22 +723,28 @@ def compute_choice_edges(
                 if did:
                     committing_dilemmas.add(normalize_scoped_id(did, "dilemma"))
 
-        # Case B (Y-shape): beat has dual belongs_to (pre-commit, multi-path)
-        # and its children are single-membership commit beats. Derive the
-        # dilemma from the children's commit impacts rather than from this beat.
+        # Case B (Y-shape, #1254): A shared pre-commit beat whose immediate
+        # children include single-path beats from the same dilemma on different
+        # paths.  The commit beat may be deeper in the chain (e.g., beat_01 is
+        # advances, beat_02 is commits), so we detect divergence from *path
+        # membership* rather than effect=commits.
         if not committing_dilemmas:
             own_paths = beat_to_paths_ce.get(bid, frozenset())
             if len(own_paths) >= 2:
-                # Collect dilemmas that children commit to
-                child_committing_dilemmas: set[str] = set()
-                for cid in child_ids:
-                    cdata = beat_nodes.get(cid, {})
-                    for impact in cdata.get("dilemma_impacts", []):
-                        if impact.get("effect") == "commits":
-                            cdid = impact.get("dilemma_id", "")
-                            if cdid:
-                                child_committing_dilemmas.add(normalize_scoped_id(cdid, "dilemma"))
-                committing_dilemmas = child_committing_dilemmas
+                # Identify this beat's dilemma
+                own_dilemmas = {path_to_dilemma[p] for p in own_paths if p in path_to_dilemma}
+                if len(own_dilemmas) == 1:
+                    own_dilemma = next(iter(own_dilemmas))
+                    # Find immediate children that are single-path and same-dilemma
+                    same_dilemma_child_paths: dict[str, list[str]] = {}
+                    for cid in child_ids:
+                        cpaths = beat_to_paths_ce.get(cid, frozenset())
+                        if len(cpaths) == 1:
+                            cpath = next(iter(cpaths))
+                            if path_to_dilemma.get(cpath) == own_dilemma:
+                                same_dilemma_child_paths.setdefault(cpath, []).append(cid)
+                    if len(same_dilemma_child_paths) >= 2:
+                        committing_dilemmas = {own_dilemma}
 
         if not committing_dilemmas:
             continue
@@ -766,15 +772,32 @@ def compute_choice_edges(
                 if not to_passage or to_passage == from_passage:
                     continue
 
-                # Compute grants: state flags activated by taking this path
+                # Compute grants: state flags activated by taking this path.
+                # The commits beat may not be the immediate child (Y-shape:
+                # advances → commits → aftermath).  Walk forward from each
+                # path child to find the first commits beat in the chain.
                 grants: list[str] = []
-                for cid in path_children:
+                visited_for_grants: set[str] = set()
+                search_queue = list(path_children)
+                while search_queue:
+                    cid = search_queue.pop(0)
+                    if cid in visited_for_grants:
+                        continue
+                    visited_for_grants.add(cid)
                     cdata = beat_nodes.get(cid, {})
+                    found_commit = False
                     for impact in cdata.get("dilemma_impacts", []):
                         if impact.get("effect") == "commits":
                             grant_did = impact.get("dilemma_id", "")
                             if grant_did and path_id:
                                 grants.append(f"{grant_did}:{path_id}")
+                            found_commit = True
+                    # Stop walking once we find a commits beat; otherwise
+                    # continue to children that are on the same single path.
+                    if not found_commit:
+                        for next_cid in children.get(cid, []):
+                            if beat_to_paths_ce.get(next_cid, frozenset()) == frozenset({path_id}):
+                                search_queue.append(next_cid)
 
                 # Compute requires: for choices from intersection passages,
                 # populate the required state flags for the target passage.
