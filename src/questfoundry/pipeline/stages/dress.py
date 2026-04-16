@@ -407,7 +407,7 @@ class DressStage:
         if self._interactive:
             mode_section = ""
         else:
-            non_interactive = getattr(discuss_template, "non_interactive_section", None)
+            non_interactive = discuss_template.extra.get("non_interactive_section")
             if non_interactive:
                 mode_section = non_interactive
             else:

@@ -748,7 +748,7 @@ class FillStage:
         if self._interactive:
             mode_section = ""
         else:
-            raw_mode_section = getattr(template, "non_interactive_section", None)
+            raw_mode_section = template.extra.get("non_interactive_section")
             if raw_mode_section is None:
                 log.warning(
                     "template_missing_field",
@@ -1282,7 +1282,7 @@ class FillStage:
             is_spine = _is_spine_arc(graph, arc_id) if arc_id else False
 
             if entity_updates and not is_spine and arc_id is not None:
-                log.warning(
+                log.debug(
                     "entity_update_non_spine",
                     passage_id=passage_id,
                     arc_id=arc_id,

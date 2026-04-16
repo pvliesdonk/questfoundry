@@ -8,6 +8,8 @@ from typing import Any
 
 from ruamel.yaml import YAML
 
+_KNOWN_FIELDS = {"name", "description", "system", "user", "components"}
+
 
 @dataclass
 class PromptTemplate:
@@ -18,10 +20,16 @@ class PromptTemplate:
     system: str
     user: str
     components: list[str] = field(default_factory=list)
+    extra: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any], name: str) -> PromptTemplate:
         """Create a template from dictionary data.
+
+        Extra fields beyond the standard schema (name, description, system,
+        user, components) are preserved in the ``extra`` dict.  Templates
+        like ``fill_phase0_discuss`` use ``non_interactive_section`` which
+        would otherwise be silently dropped.
 
         Args:
             data: Dictionary containing template fields.
@@ -30,12 +38,14 @@ class PromptTemplate:
         Returns:
             PromptTemplate instance.
         """
+        extra = {k: v for k, v in data.items() if k not in _KNOWN_FIELDS}
         return cls(
             name=data.get("name", name),
             description=data.get("description", ""),
             system=data.get("system", ""),
             user=data.get("user", ""),
             components=data.get("components", []),
+            extra=extra,
         )
 
 
