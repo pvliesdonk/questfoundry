@@ -969,6 +969,210 @@ class TestChoiceEdgesMultiDilemma:
         )
 
 
+class TestChoiceEdgesYShapeAdvancesChild:
+    """Tests for #1254: Y-shape where commit beat is NOT the immediate child.
+
+    SEED produces: shared_02 → beat_01 (advances) → beat_02 (commits) → beat_03
+    The fork is at shared_02, but the commits effect is on beat_02 (grandchild).
+    compute_choice_edges must detect the fork from path membership and walk
+    deeper for grants.
+    """
+
+    def test_y_shape_with_advances_child_produces_choices(self) -> None:
+        """Shared beat → advances child → commits grandchild must still produce choices."""
+        graph = Graph.empty()
+
+        graph.create_node("path::d1_a", {"type": "path", "raw_id": "d1_a"})
+        graph.create_node("path::d1_b", {"type": "path", "raw_id": "d1_b"})
+        _setup_dilemma(graph, "dilemma::d1", ["path::d1_a", "path::d1_b"])
+
+        # Shared pre-commit beat (dual belongs_to)
+        graph.create_node(
+            "beat::shared_02",
+            {
+                "type": "beat",
+                "raw_id": "shared_02",
+                "summary": "Last shared",
+                "dilemma_impacts": [{"dilemma_id": "dilemma::d1", "effect": "reveals"}],
+            },
+        )
+        _add_belongs_to(graph, "beat::shared_02", "path::d1_a")
+        _add_belongs_to(graph, "beat::shared_02", "path::d1_b")
+
+        # First exclusive beats — advances, NOT commits
+        graph.create_node(
+            "beat::d1_a_01",
+            {
+                "type": "beat",
+                "raw_id": "d1_a_01",
+                "summary": "Path A setup",
+                "dilemma_impacts": [{"dilemma_id": "dilemma::d1", "effect": "advances"}],
+            },
+        )
+        _add_belongs_to(graph, "beat::d1_a_01", "path::d1_a")
+        graph.create_node(
+            "beat::d1_b_01",
+            {
+                "type": "beat",
+                "raw_id": "d1_b_01",
+                "summary": "Path B setup",
+                "dilemma_impacts": [{"dilemma_id": "dilemma::d1", "effect": "advances"}],
+            },
+        )
+        _add_belongs_to(graph, "beat::d1_b_01", "path::d1_b")
+
+        # Commit beats — deeper in the chain
+        graph.create_node(
+            "beat::d1_a_02",
+            {
+                "type": "beat",
+                "raw_id": "d1_a_02",
+                "summary": "Path A commits",
+                "dilemma_impacts": [{"dilemma_id": "dilemma::d1", "effect": "commits"}],
+            },
+        )
+        _add_belongs_to(graph, "beat::d1_a_02", "path::d1_a")
+        graph.create_node(
+            "beat::d1_b_02",
+            {
+                "type": "beat",
+                "raw_id": "d1_b_02",
+                "summary": "Path B commits",
+                "dilemma_impacts": [{"dilemma_id": "dilemma::d1", "effect": "commits"}],
+            },
+        )
+        _add_belongs_to(graph, "beat::d1_b_02", "path::d1_b")
+
+        # Predecessor chain: shared_02 → a_01 → a_02, shared_02 → b_01 → b_02
+        graph.add_edge("predecessor", "beat::d1_a_01", "beat::shared_02")
+        graph.add_edge("predecessor", "beat::d1_b_01", "beat::shared_02")
+        graph.add_edge("predecessor", "beat::d1_a_02", "beat::d1_a_01")
+        graph.add_edge("predecessor", "beat::d1_b_02", "beat::d1_b_01")
+
+        # Passages: shared_02 in its own, each path beat in its own
+        specs = [
+            PassageSpec(
+                passage_id="passage::shared", beat_ids=["beat::shared_02"], grouping_type="single"
+            ),
+            PassageSpec(
+                passage_id="passage::a_setup", beat_ids=["beat::d1_a_01"], grouping_type="single"
+            ),
+            PassageSpec(
+                passage_id="passage::b_setup", beat_ids=["beat::d1_b_01"], grouping_type="single"
+            ),
+            PassageSpec(
+                passage_id="passage::a_commit", beat_ids=["beat::d1_a_02"], grouping_type="single"
+            ),
+            PassageSpec(
+                passage_id="passage::b_commit", beat_ids=["beat::d1_b_02"], grouping_type="single"
+            ),
+        ]
+
+        choices = compute_choice_edges(graph, specs)
+
+        # Should produce 2 choices: shared → a_setup, shared → b_setup
+        assert len(choices) == 2, (
+            f"Expected 2 choices, got {len(choices)}: "
+            f"{[(c.from_passage, c.to_passage) for c in choices]}"
+        )
+        to_passages = {c.to_passage for c in choices}
+        assert "passage::a_setup" in to_passages
+        assert "passage::b_setup" in to_passages
+        # All choices should originate from the shared passage
+        assert all(c.from_passage == "passage::shared" for c in choices)
+
+    def test_grants_found_via_deep_walk(self) -> None:
+        """Grants should be populated even when commits beat is a grandchild."""
+        graph = Graph.empty()
+
+        graph.create_node("path::d1_a", {"type": "path", "raw_id": "d1_a"})
+        graph.create_node("path::d1_b", {"type": "path", "raw_id": "d1_b"})
+        _setup_dilemma(graph, "dilemma::d1", ["path::d1_a", "path::d1_b"])
+
+        graph.create_node(
+            "beat::shared",
+            {
+                "type": "beat",
+                "raw_id": "shared",
+                "summary": "Shared",
+                "dilemma_impacts": [{"dilemma_id": "dilemma::d1", "effect": "reveals"}],
+            },
+        )
+        _add_belongs_to(graph, "beat::shared", "path::d1_a")
+        _add_belongs_to(graph, "beat::shared", "path::d1_b")
+
+        graph.create_node(
+            "beat::a_01",
+            {
+                "type": "beat",
+                "raw_id": "a_01",
+                "summary": "A advances",
+                "dilemma_impacts": [{"dilemma_id": "dilemma::d1", "effect": "advances"}],
+            },
+        )
+        _add_belongs_to(graph, "beat::a_01", "path::d1_a")
+        graph.create_node(
+            "beat::a_02",
+            {
+                "type": "beat",
+                "raw_id": "a_02",
+                "summary": "A commits",
+                "dilemma_impacts": [{"dilemma_id": "dilemma::d1", "effect": "commits"}],
+            },
+        )
+        _add_belongs_to(graph, "beat::a_02", "path::d1_a")
+
+        graph.create_node(
+            "beat::b_01",
+            {
+                "type": "beat",
+                "raw_id": "b_01",
+                "summary": "B advances",
+                "dilemma_impacts": [{"dilemma_id": "dilemma::d1", "effect": "advances"}],
+            },
+        )
+        _add_belongs_to(graph, "beat::b_01", "path::d1_b")
+        graph.create_node(
+            "beat::b_02",
+            {
+                "type": "beat",
+                "raw_id": "b_02",
+                "summary": "B commits",
+                "dilemma_impacts": [{"dilemma_id": "dilemma::d1", "effect": "commits"}],
+            },
+        )
+        _add_belongs_to(graph, "beat::b_02", "path::d1_b")
+
+        graph.add_edge("predecessor", "beat::a_01", "beat::shared")
+        graph.add_edge("predecessor", "beat::b_01", "beat::shared")
+        graph.add_edge("predecessor", "beat::a_02", "beat::a_01")
+        graph.add_edge("predecessor", "beat::b_02", "beat::b_01")
+
+        specs = [
+            PassageSpec(
+                passage_id="passage::shared", beat_ids=["beat::shared"], grouping_type="single"
+            ),
+            PassageSpec(passage_id="passage::a", beat_ids=["beat::a_01"], grouping_type="single"),
+            PassageSpec(passage_id="passage::b", beat_ids=["beat::b_01"], grouping_type="single"),
+            PassageSpec(
+                passage_id="passage::a_commit", beat_ids=["beat::a_02"], grouping_type="single"
+            ),
+            PassageSpec(
+                passage_id="passage::b_commit", beat_ids=["beat::b_02"], grouping_type="single"
+            ),
+        ]
+
+        choices = compute_choice_edges(graph, specs)
+
+        assert len(choices) == 2
+        # Each choice should have grants from the commits beat downstream
+        for choice in choices:
+            assert len(choice.grants) > 0, (
+                f"Choice {choice.from_passage}→{choice.to_passage} has no grants; "
+                f"commits beat should have been found via deep walk"
+            )
+
+
 class TestFindFalseBranchCandidates:
     """Tests for Phase 4d: false branch identification."""
 
