@@ -145,7 +145,7 @@ def _make_y_shape_graph() -> Graph:
     # Passage node + grouped_in edges
     graph.create_node(
         "passage::p1",
-        {"type": "passage", "label": "Opening"},
+        {"type": "passage", "label": "Opening", "grouping_type": "collapse"},
     )
     graph.add_edge("grouped_in", "beat::shared_d1_01", "passage::p1")
     graph.add_edge("grouped_in", "beat::shared_d1_02", "passage::p1")
@@ -254,7 +254,8 @@ class TestRenderPlantUml:
         graph = _make_y_shape_graph()
         dag = build_beat_dag(graph)
         puml = render_plantuml(dag)
-        assert "-->" in puml
+        # Specific arrow: shared_d1_01 (parent) --> shared_d1_02 (child)
+        assert "beat__shared_d1_01 --> beat__shared_d1_02" in puml
 
     def test_passage_container_rendered(self) -> None:
         graph = _make_y_shape_graph()

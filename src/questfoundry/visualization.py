@@ -49,13 +49,7 @@ class BeatVizNode:
 
 @dataclass
 class BeatVizEdge:
-    """A directed predecessor edge in the beat DAG.
-
-    Represents the *successor* direction: from_id comes *after* to_id
-    in narrative order (predecessor edge semantics: from=child, to=parent).
-    We store it as from_id → to_id in the DAG display sense (parent → child),
-    i.e., ``from_id`` is the *parent* beat and ``to_id`` is the *child* beat.
-    """
+    """A predecessor edge reoriented for display (parent → child / earlier → later)."""
 
     from_id: str
     to_id: str
@@ -67,7 +61,7 @@ class PassageGroup:
 
     id: str
     label: str
-    grouping_type: str = "grouped_in"
+    grouping_type: str = "single"
     beat_ids: list[str] = field(default_factory=list)
 
 
@@ -196,11 +190,12 @@ def build_beat_dag(graph: Graph) -> BeatDag:
     for passage_id, beat_ids in sorted(passage_to_beats.items()):
         pdata = passage_nodes.get(passage_id) or {}
         label = pdata.get("label") or strip_scope_prefix(passage_id)
+        grouping_type = pdata.get("grouping_type", "single")
         passages.append(
             PassageGroup(
                 id=passage_id,
                 label=label,
-                grouping_type="grouped_in",
+                grouping_type=grouping_type,
                 beat_ids=beat_ids,
             )
         )
@@ -243,7 +238,7 @@ def render_plantuml(dag: BeatDag, *, no_labels: bool = False) -> str:
 
     # Dilemma color skinparams — one block per dilemma, sorted for determinism.
     for dilemma_id in sorted(dag.dilemma_colors):
-        stereo = strip_scope_prefix(dilemma_id)
+        stereo = _puml_alias(strip_scope_prefix(dilemma_id))
         color = dag.dilemma_colors[dilemma_id]
         lines.append("skinparam component {")
         lines.append(f"  BackgroundColor<<{stereo}>> {color}")
@@ -270,9 +265,8 @@ def render_plantuml(dag: BeatDag, *, no_labels: bool = False) -> str:
 
     # Passage containers.
     for pg in sorted(dag.passages, key=lambda p: p.id):
-        raw_pid = strip_scope_prefix(pg.id)
-        # Use the grouping_type when it is a meaningful value, otherwise "collapse".
-        ptype = pg.grouping_type if pg.grouping_type not in ("grouped_in", "") else "collapse"
+        raw_pid = _sanitize_puml(strip_scope_prefix(pg.id))
+        ptype = _sanitize_puml(pg.grouping_type)
         lines.append(f'rectangle "{raw_pid} [{ptype}]" {{')
         for bid in pg.beat_ids:
             pg_beat = beat_map.get(bid)
@@ -285,7 +279,7 @@ def render_plantuml(dag: BeatDag, *, no_labels: bool = False) -> str:
     # Intersection group containers (beats not already in a passage).
     for ig_id in sorted(ig_to_beats):
         ig_beats = ig_to_beats[ig_id]
-        ig_label = strip_scope_prefix(ig_id)
+        ig_label = _sanitize_puml(strip_scope_prefix(ig_id))
         lines.append(f'rectangle "{ig_label}" #line.dashed {{')
         for beat in ig_beats:
             lines.append(f"  {_beat_component_line(beat, no_labels=no_labels)}")
@@ -314,9 +308,19 @@ def render_plantuml(dag: BeatDag, *, no_labels: bool = False) -> str:
 def _puml_alias(node_id: str) -> str:
     """Convert a node ID to a PlantUML-safe alias.
 
-    Replaces `::`, `-`, and spaces with `_`.
+    Replaces any non-alphanumeric/underscore character with ``_``.
     """
-    return node_id.replace("::", "_").replace("-", "_").replace(" ", "_")
+    import re
+
+    return re.sub(r"[^a-zA-Z0-9_]", "_", node_id)
+
+
+def _sanitize_puml(text: str) -> str:
+    """Escape characters that break PlantUML component or rectangle syntax.
+
+    ``]`` closes component labels; ``"`` breaks rectangle label strings.
+    """
+    return text.replace("]", ")").replace('"', "'")
 
 
 def _beat_component_line(beat: BeatVizNode, *, no_labels: bool = False) -> str:
@@ -327,20 +331,20 @@ def _beat_component_line(beat: BeatVizNode, *, no_labels: bool = False) -> str:
 
     When no_labels=True, the effects section (third ---\\n... block) is omitted.
     """
-    label = beat.label
-    summary = beat.summary
+    label = _sanitize_puml(beat.label)
+    summary = _sanitize_puml(beat.summary)
 
     if no_labels or not beat.effects:
         inner = f"{label}\\n---\\n{summary}"
     else:
-        effects_block = "\\n".join(f"[{e}]" for e in beat.effects)
+        effects_block = "\\n".join(f"({_sanitize_puml(e)})" for e in beat.effects)
         inner = f"{label}\\n---\\n{summary}\\n---\\n{effects_block}"
 
     alias = _puml_alias(beat.id)
 
     stereo_part = ""
     if beat.dilemma_id:
-        stereo = strip_scope_prefix(beat.dilemma_id)
+        stereo = _puml_alias(strip_scope_prefix(beat.dilemma_id))
         stereo_part = f" <<{stereo}>>"
 
     bold_part = " #line.bold" if beat.is_shared else ""

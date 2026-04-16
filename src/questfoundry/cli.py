@@ -2529,14 +2529,6 @@ def graph_cmd(
             help="Project directory. Can be a path or name (looks in --projects-dir).",
         ),
     ] = None,
-    fmt: Annotated[
-        _GraphFormat,
-        typer.Option(
-            "--format",
-            "-f",
-            help="Output format.",
-        ),
-    ] = _GraphFormat.plantuml,
     output: Annotated[
         Path | None,
         typer.Option("--output", "-o", help="Output file (stdout if not specified)."),
@@ -2556,8 +2548,7 @@ def graph_cmd(
     graph = Graph.load(project_path)
     dag = build_beat_dag(graph)
 
-    if fmt == _GraphFormat.plantuml:
-        result = render_plantuml(dag, no_labels=no_labels)
+    result = render_plantuml(dag, no_labels=no_labels)
 
     if output:
         output.write_text(result)
