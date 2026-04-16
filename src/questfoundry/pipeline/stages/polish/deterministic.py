@@ -369,6 +369,17 @@ def compute_prose_feasibility(
     ambiguous_specs: list[AmbiguousFeasibilityCase] = []
     warnings: list[str] = []
 
+    # Build state_flag → path_id lookup via derived_from → consequence → path_id.
+    flag_to_path: dict[str, str] = {}
+    consequence_nodes = graph.get_nodes_by_type("consequence")
+    for edge in graph.get_edges(edge_type="derived_from"):
+        sf_id = edge["from"]
+        cons_id = edge["to"]
+        cons_data = consequence_nodes.get(cons_id, {})
+        pid = cons_data.get("path_id", "")
+        if pid:
+            flag_to_path[sf_id] = pid
+
     # Build overlay data: flag → affected entities
     # Overlays are embedded on entity nodes as {when: [state_flag_ids], details: {k: v}}
     flag_entities: dict[str, set[str]] = {}
@@ -483,7 +494,7 @@ def compute_prose_feasibility(
         else:
             # All relevant flags are light → deterministically residue
             for flag in relevant_flags:
-                path_id = flag.split(":")[-1] if ":" in flag else ""
+                path_id = flag_to_path.get(flag, "")
                 residue_specs.append(
                     ResidueSpec(
                         target_passage_id=spec.passage_id,
