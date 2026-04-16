@@ -284,7 +284,7 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
         # is *beyond* SEED (e.g., fill/dress), SEED must have completed. In that case,
         # re-running GROW should rewind all grow mutations to start fresh.
         last_stage = graph.get_last_stage()
-        if last_stage not in ("seed", "grow", "fill", "dress", "ship"):
+        if last_stage not in ("seed", "grow", "polish", "fill", "dress", "ship"):
             raise GrowStageError(
                 f"GROW requires completed SEED stage. Current last_stage: '{last_stage}'. "
                 f"Run SEED before GROW."
