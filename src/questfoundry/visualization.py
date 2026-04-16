@@ -254,8 +254,12 @@ def render_plantuml(dag: BeatDag, *, no_labels: bool = False) -> str:
     for pg in dag.passages:
         passage_beat_ids.update(pg.beat_ids)
 
-    # Collect which beats are inside an intersection group (and not in a passage).
-    # Build intersection_group → beats mapping.
+    # Collect which beats are inside an intersection group but not already in a
+    # passage container.  Beats in a passage are grouped there; they are excluded
+    # from intersection containers to avoid rendering a beat in two places.
+    # If all members of an intersection are in passages, the intersection container
+    # is simply not emitted — the co-occurrence is still visible from the beat's
+    # intersection_group field in the data model.
     ig_to_beats: dict[str, list[BeatVizNode]] = {}
     for beat in dag.beats:
         if beat.intersection_group and beat.id not in passage_beat_ids:
@@ -266,9 +270,9 @@ def render_plantuml(dag: BeatDag, *, no_labels: bool = False) -> str:
 
     # Passage containers.
     for pg in sorted(dag.passages, key=lambda p: p.id):
-        raw_pid = _sanitize_puml(strip_scope_prefix(pg.id))
+        plabel = _sanitize_puml(pg.label)
         ptype = _sanitize_puml(pg.grouping_type)
-        lines.append(f'rectangle "{raw_pid} [{ptype}]" {{')
+        lines.append(f'rectangle "{plabel} [{ptype}]" {{')
         for bid in pg.beat_ids:
             pg_beat = beat_map.get(bid)
             if pg_beat is not None:

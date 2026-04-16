@@ -261,7 +261,7 @@ class TestRenderPlantUml:
         graph = _make_y_shape_graph()
         dag = build_beat_dag(graph)
         puml = render_plantuml(dag)
-        assert "p1" in puml
+        assert "Opening" in puml
         assert "collapse" in puml
 
     def test_dilemma_stereotypes_in_output(self) -> None:
