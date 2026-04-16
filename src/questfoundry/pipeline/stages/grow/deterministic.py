@@ -92,26 +92,35 @@ async def phase_intra_path_predecessors(
     **before** cross-path interleaving runs, so every beat has its in-path
     successor as a structural predecessor child.
 
-    Only beats that are **exclusive to one path** participate in the chain.
-    Shared beats (belonging to multiple paths) already have or will receive
-    ordering from cross-path interleaving; adding alphabetical edges for them
-    risks creating cycles with those existing edges.
+    **All** beats on each path participate in the chain, including Y-shape
+    shared pre-commit beats (dual ``belongs_to``).  Shared beats appear in
+    both sibling paths' beat lists; when the second path is processed, the
+    shared-beat edges already exist and are idempotently skipped.  This
+    produces the correct Y-shape DAG::
+
+        shared_01 → shared_02 → commit_P1 → post_P1_01 → ...
+                               → commit_P2 → post_P2_01 → ...
+
+    Cross-dilemma cycle risk does not apply because guard rail 1 (Story
+    Graph Ontology Part 8) guarantees that dual ``belongs_to`` is always
+    intra-dilemma — shared beats cannot conflict with cross-dilemma
+    interleaving edges created by ``interleave_cross_path_beats``.
 
     Preconditions:
     - Beat DAG validated (Phase 1 passed).
     - Path nodes exist with beats linked via ``belongs_to`` edges.
 
     Postconditions:
-    - For each path, single-path-exclusive beats are sorted alphabetically
-      (canonical SEED naming: ``_beat_01``, ``_beat_02``, …) and chained:
-      ``predecessor(beat_n+1, beat_n)`` for every consecutive pair.
+    - For each path, beats are sorted alphabetically (canonical SEED naming:
+      ``shared_setup_…_01``, ``shared_setup_…_02``, ``…_beat_01``, …) and
+      chained: ``predecessor(beat_n+1, beat_n)`` for every consecutive pair.
     - Edges are only added, never removed; existing edges are not duplicated.
     - No edge is added whose reverse already exists (prevents cycles).
 
     Invariants:
     - Deterministic: same graph always produces same edges.
     - Idempotent: running twice produces the same edge set.
-    - Skips paths with fewer than 2 exclusive beats (no chain to form).
+    - Skips paths with fewer than 2 beats (no chain to form).
     """
     log.info("intra_path_predecessors_start")
     path_nodes = graph.get_nodes_by_type("path")
@@ -122,13 +131,9 @@ async def phase_intra_path_predecessors(
             detail="No path nodes found; nothing to do",
         )
 
-    # Build path → beats mapping and beat → paths mapping from belongs_to edges.
-    # We only chain beats that are exclusive to a single path.  Shared beats
-    # (belonging to multiple paths) already have cross-path predecessor edges
-    # created by SEED or earlier phases; adding alphabetical intra-path edges
-    # for them risks creating cycles with those existing edges.
+    # Build path → beats mapping, beat → paths, and path → dilemma index.
     path_beats: dict[str, list[str]] = {path_id: [] for path_id in path_nodes}
-    beat_path_count: dict[str, int] = {}
+    beat_paths: dict[str, set[str]] = {}
     belongs_to_edges = graph.get_edges(edge_type="belongs_to")
     beat_nodes = graph.get_nodes_by_type("beat")
     for edge in belongs_to_edges:
@@ -136,13 +141,65 @@ async def phase_intra_path_predecessors(
         path_id = edge["to"]
         if path_id in path_nodes and beat_id in beat_nodes:
             path_beats[path_id].append(beat_id)
-            beat_path_count[beat_id] = beat_path_count.get(beat_id, 0) + 1
+            beat_paths.setdefault(beat_id, set()).add(path_id)
 
-    # Restrict each path's beat list to single-path-exclusive beats.
-    exclusive_path_beats: dict[str, list[str]] = {}
-    for path_id in path_nodes:
-        exclusive = [b for b in path_beats.get(path_id, []) if beat_path_count.get(b, 0) == 1]
-        exclusive_path_beats[path_id] = sorted(exclusive)
+    # Resolve path → dilemma_id so we can distinguish Y-shape intra-dilemma
+    # shared beats from cross-dilemma shared beats (e.g., opening/finale
+    # that belong to paths from multiple dilemmas).
+    path_dilemma: dict[str, str] = {}
+    for path_id, pdata in path_nodes.items():
+        did = pdata.get("dilemma_id", "")
+        if did:
+            path_dilemma[path_id] = normalize_scoped_id(did, "dilemma")
+
+    def _is_intra_dilemma_shared(beat_id: str) -> bool:
+        """True if beat belongs to >1 path but all paths share the same dilemma.
+
+        Y-shape shared pre-commit beats satisfy this — they belong to both
+        paths of one dilemma.  Cross-dilemma shared beats (e.g., a fixture's
+        opening/finale beat that belongs to paths from 2+ dilemmas) do NOT.
+
+        Raises ValueError if a path is missing its dilemma mapping — this
+        indicates a broken graph (SEED always sets dilemma_id on paths).
+        """
+        paths = beat_paths.get(beat_id, set())
+        if len(paths) <= 1:
+            return False
+        dilemmas: set[str] = set()
+        for p in paths:
+            if p not in path_dilemma:
+                raise ValueError(
+                    f"Path {p!r} has no dilemma_id — cannot determine "
+                    f"whether beat {beat_id!r} is intra-dilemma shared."
+                )
+            dilemmas.add(path_dilemma[p])
+        return len(dilemmas) == 1
+
+    # Determine which beats to include per path.
+    # - Exclusive beats (single path): always included.
+    # - Y-shape intra-dilemma shared beats: included — they form the shared
+    #   pre-commit chain that must connect to each path's commit beat.
+    # - Cross-dilemma shared beats: excluded — their ordering comes from
+    #   cross-path interleaving; alphabetical chaining here would conflict
+    #   with pre-existing predecessor edges.
+    def _chainable(beat_id: str) -> bool:
+        paths = beat_paths.get(beat_id, set())
+        if len(paths) <= 1:
+            return True  # exclusive
+        return _is_intra_dilemma_shared(beat_id)  # Y-shape: yes; cross-dilemma: no
+
+    # Sort chainable beats: Y-shape shared beats first (they're the setup
+    # that precedes the per-path fork), then exclusive beats, alphabetical
+    # within each group.
+    def _beat_sort_key(beat_id: str) -> tuple[int, str]:
+        # 0 = intra-dilemma shared (pre-commit setup), 1 = exclusive
+        return (0 if _is_intra_dilemma_shared(beat_id) else 1, beat_id)
+
+    for path_id in path_beats:
+        path_beats[path_id] = sorted(
+            [b for b in path_beats[path_id] if _chainable(b)],
+            key=_beat_sort_key,
+        )
 
     # Build existing predecessor edge set for idempotency check.
     # We track both directions to avoid creating edges that conflict with
@@ -155,7 +212,7 @@ async def phase_intra_path_predecessors(
     paths_processed = 0
 
     for path_id in sorted(path_nodes):
-        beats = exclusive_path_beats.get(path_id, [])
+        beats = path_beats.get(path_id, [])
         if len(beats) < 2:
             continue
 
