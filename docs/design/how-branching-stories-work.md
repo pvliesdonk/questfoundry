@@ -204,7 +204,7 @@ This is not a rigid formula. A twist dilemma might introduce late in the story, 
 
 Here is the central structural reality of branching fiction:
 
-**Any beat that comes after a committed dilemma exists in multiple versions.** If the mentor dilemma has committed (the player chose to trust or distrust), then every beat that follows exists in two worlds — one where the mentor is trusted, one where they are not. If the artifact dilemma has *also* committed, every beat now exists in four worlds. Three committed dilemmas: eight worlds.
+**After a dilemma commits, each path has its own beats.** If the mentor dilemma has committed (the player chose to trust or distrust), each path's post-commit beats are separate, independently authored story moments — not versions of one beat. The player on one path never sees the other path's beats. If the artifact dilemma has *also* committed, each combination of choices has its own set of post-commit beats. Three committed dilemmas: eight possible worlds, each with distinct beats.
 
 This is where combinatorial explosion actually lives — not in the number of dilemmas, but in the relationship between beats and commits. A beat placed before any commit exists once. A beat placed after all commits exists in every possible world.
 
