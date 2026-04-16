@@ -386,7 +386,6 @@ class TestComputeChoiceEdges:
         graph.create_node(
             "state_flag::pa_committed", {"type": "state_flag", "raw_id": "pa_committed"}
         )
-        graph.add_edge("grants", "beat::start", "state_flag::pa_committed")
         graph.add_edge("grants", "beat::commit_a", "state_flag::pa_committed")
 
         specs = [

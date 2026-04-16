@@ -120,6 +120,13 @@ def compute_active_flags_at_beat(graph: Graph, beat_id: str) -> set[frozenset[st
                     dilemma_id=dilemma_id,
                 )
                 continue
+            if len(flag_ids) > 1:
+                log.warning(
+                    "commit_beat_multiple_grants",
+                    beat_id=candidate_id,
+                    dilemma_id=dilemma_id,
+                    flag_ids=flag_ids,
+                )
             for flag_id in flag_ids:
                 dilemma_flags.setdefault(dilemma_id, []).append(flag_id)
 

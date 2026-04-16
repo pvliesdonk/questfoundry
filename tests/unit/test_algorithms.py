@@ -35,13 +35,16 @@ def _add_predecessor(graph: Graph, child: str, parent: str) -> None:
     graph.add_edge("predecessor", child, parent)
 
 
-def _add_grants(graph: Graph, beat_id: str, state_flag_id: str) -> None:
+def _add_grants(graph: Graph, beat_id: str, state_flag_id: str, dilemma_id: str = "") -> None:
     """Create a state_flag node and grants edge from a commit beat."""
     if not graph.get_node(state_flag_id):
-        graph.create_node(
-            state_flag_id,
-            {"type": "state_flag", "raw_id": state_flag_id.split("::")[-1]},
-        )
+        data: dict[str, str] = {
+            "type": "state_flag",
+            "raw_id": state_flag_id.split("::")[-1],
+        }
+        if dilemma_id:
+            data["dilemma_id"] = dilemma_id
+        graph.create_node(state_flag_id, data)
     graph.add_edge("grants", beat_id, state_flag_id)
 
 

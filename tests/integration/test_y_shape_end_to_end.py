@@ -356,6 +356,7 @@ def test_polish_produces_two_choice_specs_for_y_shape(y_shape_graph: Graph) -> N
             f"ChoiceSpec {cs.from_passage} → {cs.to_passage} missing grants; "
             "Y-shape commit beats should produce state flags"
         )
-        assert any("state_flag::" in g for g in cs.grants), (
-            f"grants {cs.grants!r} should be state_flag node IDs"
+        expected_flags = {"state_flag::protector_committed", "state_flag::manipulator_committed"}
+        assert any(g in expected_flags for g in cs.grants), (
+            f"grants {cs.grants!r} should reference one of {expected_flags}"
         )
