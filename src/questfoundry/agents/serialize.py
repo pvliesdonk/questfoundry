@@ -2514,7 +2514,14 @@ async def serialize_seed_as_function(
                         callbacks=callbacks,
                         on_phase_progress=on_phase_progress,
                     )
-                    collected["initial_beats"] = beats
+                    # Preserve shared pre-commit beats (Y-shape dual belongs_to)
+                    # at the front — _serialize_beats_per_path only produces
+                    # per-path post-commit beats.  The initial serialization
+                    # at line ~2336 does the same prepend; the retry must match.
+                    shared = [
+                        b for b in collected.get("initial_beats", []) if b.get("also_belongs_to")
+                    ]
+                    collected["initial_beats"] = shared + beats
                     total_tokens += beats_tokens
                     retried_any = True
                 except SerializationError as e:
