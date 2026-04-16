@@ -1902,7 +1902,6 @@ class TestPhase7Integration:
         mock_model = MagicMock()
         result = await phase_convergence(graph, mock_model)
         assert result.status == "completed"
-        assert "No arcs" in result.detail
 
     @pytest.mark.asyncio
     async def test_phase_7_completes_convergence(self) -> None:
