@@ -435,52 +435,92 @@ async def phase_divergence(graph: Graph, model: BaseChatModel) -> GrowPhaseResul
 
 @grow_phase(name="convergence", depends_on=["divergence"], is_deterministic=True, priority=11)
 async def phase_convergence(graph: Graph, model: BaseChatModel) -> GrowPhaseResult:  # noqa: ARG001
-    """Phase 7: Find convergence points for diverged arcs (validation only).
+    """Phase 7: Identify and persist convergence points for soft dilemmas.
+
+    For each soft dilemma with 2+ explored paths, walks the interleaved beat
+    DAG to find the first beat reachable from all terminal exclusive beats.
+    Persists ``converges_at`` (beat ID) and ``convergence_payoff`` (exclusive
+    beat count) on each soft dilemma node.
+
+    Also runs the existing arc-level ``find_convergence_points()`` for
+    diagnostic logging.
 
     Preconditions:
-    - Divergence points computed (Phase 6 complete).
+    - Interleaving complete (predecessor edges exist).
     - Dilemma nodes have dilemma_role from SEED analysis.
 
     Postconditions:
-    - Convergence points computed and validated.
-    - No graph writes — convergence metadata is computed on-the-fly
-      by downstream consumers per the Story Graph Ontology.
+    - Soft dilemma nodes have ``converges_at`` and ``convergence_payoff`` set.
+    - Hard dilemma nodes are unchanged.
 
     Invariants:
-    - Deterministic: convergence derived from dilemma policies and beat sequences.
+    - Deterministic: convergence derived from DAG topology and dilemma roles.
+    - Idempotent: calling twice produces the same node data.
     """
     from questfoundry.graph.grow_algorithms import (
         compute_divergence_points,
         enumerate_arcs,
         find_convergence_points,
+        find_dag_convergence_beat,
     )
 
+    # --- DAG-based convergence: persist on dilemma nodes ---
+    dilemma_nodes = graph.get_nodes_by_type("dilemma")
+    persisted = 0
+
+    # Pre-build dilemma → paths map to avoid repeated full-graph scans.
+    path_nodes = graph.get_nodes_by_type("path")
+    dilemma_paths_map: dict[str, set[str]] = {}
+    for path_id, pdata in path_nodes.items():
+        raw_did = pdata.get("dilemma_id", "")
+        if raw_did:
+            scoped = normalize_scoped_id(raw_did, "dilemma")
+            dilemma_paths_map.setdefault(scoped, set()).add(path_id)
+
+    for dilemma_id, ddata in dilemma_nodes.items():
+        role = ddata.get("dilemma_role")
+        if role is None:
+            log.warning("convergence_dilemma_role_missing", dilemma_id=dilemma_id)
+            continue
+        if role == "hard":
+            continue
+
+        result = find_dag_convergence_beat(
+            graph,
+            dilemma_id,
+            dilemma_paths=dilemma_paths_map.get(dilemma_id),
+        )
+        if result is not None:
+            converges_at, payoff = result
+            graph.update_node(
+                dilemma_id,
+                converges_at=converges_at,
+                convergence_payoff=payoff,
+            )
+            persisted += 1
+            log.debug(
+                "convergence_persisted",
+                dilemma_id=dilemma_id,
+                converges_at=converges_at,
+                convergence_payoff=payoff,
+            )
+
+    # --- Arc-level convergence: diagnostic logging (existing behavior) ---
     arcs = enumerate_arcs(graph)
-    if not arcs:
-        return GrowPhaseResult(
-            phase="convergence",
-            status="completed",
-            detail="No arcs to process",
-        )
+    arc_convergence_count = 0
+    if arcs:
+        spine_arc_id = next((a.arc_id for a in arcs if a.arc_type == "spine"), None)
+        divergence_map = compute_divergence_points(arcs, spine_arc_id)
+        convergence_map = find_convergence_points(graph, arcs, divergence_map, spine_arc_id)
+        arc_convergence_count = sum(1 for info in convergence_map.values() if info.converges_at)
 
-    spine_arc_id = next((a.arc_id for a in arcs if a.arc_type == "spine"), None)
-
-    # Compute divergence first (needed for convergence)
-    divergence_map = compute_divergence_points(arcs, spine_arc_id)
-    convergence_map = find_convergence_points(graph, arcs, divergence_map, spine_arc_id)
-
-    if not convergence_map:
-        return GrowPhaseResult(
-            phase="convergence",
-            status="completed",
-            detail="No convergence points found",
-        )
-
-    convergence_count = sum(1 for info in convergence_map.values() if info.converges_at)
     return GrowPhaseResult(
         phase="convergence",
         status="completed",
-        detail=f"Found {convergence_count} convergence points",
+        detail=(
+            f"Persisted convergence for {persisted} dilemma(s); "
+            f"arc-level: {arc_convergence_count} convergence points"
+        ),
     )
 
 

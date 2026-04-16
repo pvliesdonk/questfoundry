@@ -56,6 +56,10 @@ The `anchored_to` edges are proper graph edges (dilemma → entity), not embedde
 
 Each dilemma also carries a **role** and associated structural properties, discussed in Part 2.
 
+After GROW interleaves the beat DAG, soft dilemmas gain two convergence fields:
+- **converges_at** — the beat ID where diverged paths rejoin (the first beat reachable from all terminal exclusive beats of the dilemma, typically the first shared setup beat of the next dilemma in sequence). `null` for hard dilemmas.
+- **convergence_payoff** — the minimum number of single-path-exclusive beats (commit + post-commit) per path before convergence. `null` for hard dilemmas.
+
 **Working.** Dilemmas are consumed by the pipeline. By SHIP, they have been absorbed into the story structure — paths, beats, choices. The player never sees "dilemma" as a concept.
 
 ### Answer
@@ -496,7 +500,7 @@ SEED is the heaviest mutation stage. It triages, scaffolds, orders, and sketches
 | **Creates** | Ordering edges (beat → beat), intersection groups, state flags |
 | **Edges created** | Predecessor/successor edges in the beat DAG, intersection grouping edges, `derived_from` (state flag → consequence) |
 | **Reads** | All SEED output (paths, beats, consequences, dilemma relationships, temporal hints) |
-| **Modifies** | Beat nodes (enriched with intersection membership), entity nodes (activates overlays with state flags — overlays are an embedded list on the entity, not a separate node type; see Part 6) |
+| **Modifies** | Beat nodes (enriched with intersection membership), dilemma nodes (soft dilemmas gain `converges_at` and `convergence_payoff` from DAG topology), entity nodes (activates overlays with state flags — overlays are an embedded list on the entity, not a separate node type; see Part 6) |
 | **Consumes** | Entity flexibility annotations (used to find intersections, then discarded), temporal hints (used for interleaving, then discarded) |
 | **Validates** | Every computed arc traversal is complete and has no dead ends |
 

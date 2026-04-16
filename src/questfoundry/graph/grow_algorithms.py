@@ -1202,6 +1202,173 @@ def find_convergence_points(
     return result
 
 
+def find_dag_convergence_beat(
+    graph: Graph,
+    dilemma_id: str,
+    dilemma_paths: set[str] | None = None,
+) -> tuple[str, int] | None:
+    """Find the convergence beat for a soft dilemma from the interleaved beat DAG.
+
+    For a soft dilemma, the convergence beat is the earliest beat reachable from
+    ALL terminal exclusive beats of the dilemma that is NOT exclusive to this
+    dilemma.
+
+    Algorithm:
+    1. Return ``None`` if ``dilemma_role`` is absent or ``"hard"``, or if the
+       dilemma has fewer than 2 explored paths.
+    2. Find terminal exclusive beats: beats whose ``belongs_to`` paths are a
+       subset of this dilemma's paths, AND that have no successor that is also
+       exclusive to this dilemma.  A path may have multiple terminals (e.g.
+       when cross-dilemma beats from a ``wraps`` relationship split the
+       exclusive chain); all terminals participate in the BFS.
+    3. BFS forward from **every** terminal beat across all paths.
+    4. Collect the non-exclusive beats reachable from each terminal.
+    5. Intersect all reachable sets; pick the beat with the lowest maximum BFS
+       distance across all terminal runs (alphabetical tiebreak for ties).
+    6. ``convergence_payoff`` = minimum count of single-path-exclusive beats
+       (commit + post-commit) across paths.
+    7. Return ``(converges_at, convergence_payoff)`` or ``None``.
+
+    Args:
+        graph: The interleaved beat DAG.
+        dilemma_id: Scoped dilemma ID (e.g. ``"dilemma::d1"``).
+        dilemma_paths: Pre-computed set of path IDs for this dilemma.  When
+            ``None``, looked up from the graph.  Passing this avoids repeated
+            full-graph scans when calling in a loop over dilemmas.
+
+    Returns:
+        ``(converges_at_beat_id, convergence_payoff)`` for soft dilemmas that
+        converge, ``None`` otherwise.
+    """
+    dilemma_id = normalize_scoped_id(dilemma_id.split("::")[-1], "dilemma")
+
+    dilemma_node = graph.get_node(dilemma_id)
+    if dilemma_node is None:
+        return None
+
+    dilemma_role = dilemma_node.get("dilemma_role")
+    if dilemma_role is None:
+        log.warning("convergence_dilemma_role_missing", dilemma_id=dilemma_id)
+        return None
+    if dilemma_role == "hard":
+        return None
+
+    # Collect this dilemma's path IDs (use pre-computed set if provided)
+    if dilemma_paths is None:
+        path_nodes = graph.get_nodes_by_type("path")
+        dilemma_paths = set()
+        for path_id, path_data in path_nodes.items():
+            raw_did = path_data.get("dilemma_id", "")
+            scoped_did = normalize_scoped_id(raw_did.split("::")[-1], "dilemma") if raw_did else ""
+            if scoped_did == dilemma_id:
+                dilemma_paths.add(path_id)
+
+    if len(dilemma_paths) < 2:
+        return None
+
+    # Build belongs_to index: beat_id → set of path_ids
+    belongs_to_edges = graph.get_edges(edge_type="belongs_to")
+    beat_paths: dict[str, set[str]] = {}
+    for edge in belongs_to_edges:
+        beat_id = edge["from"]
+        path_id = edge["to"]
+        beat_paths.setdefault(beat_id, set()).add(path_id)
+
+    # Build successor index: beat_id → list[beat_id]
+    # predecessor edge: from=later_beat, to=earlier_beat
+    # successors of X = all beats where to_id == X
+    predecessor_edges = graph.get_edges(edge_type="predecessor")
+    successors_of: dict[str, list[str]] = {}
+    for edge in predecessor_edges:
+        later_beat = edge["from"]  # the beat that comes after
+        earlier_beat = edge["to"]  # the prerequisite
+        successors_of.setdefault(earlier_beat, []).append(later_beat)
+
+    # Helper: is a beat exclusive to this dilemma?
+    def _is_exclusive(beat_id: str) -> bool:
+        """Return True if beat's belongs_to paths are a non-empty subset of dilemma_paths."""
+        bpaths = beat_paths.get(beat_id, set())
+        return bool(bpaths) and bpaths.issubset(dilemma_paths)
+
+    # Find all exclusive beats
+    beat_nodes = graph.get_nodes_by_type("beat")
+    exclusive_beats: set[str] = {bid for bid in beat_nodes if _is_exclusive(bid)}
+
+    # Find terminal exclusive beats per path:
+    # a beat is terminal if none of its successors are also exclusive to this dilemma
+    terminal_by_path: dict[str, list[str]] = {pid: [] for pid in dilemma_paths}
+    for beat_id in exclusive_beats:
+        succ_exclusive = [s for s in successors_of.get(beat_id, []) if s in exclusive_beats]
+        if not succ_exclusive:
+            # This is a terminal exclusive beat; add it to each path it belongs to
+            for path_id in beat_paths.get(beat_id, set()):
+                if path_id in dilemma_paths:
+                    terminal_by_path[path_id].append(beat_id)
+
+    # Gather ALL terminal exclusive beats across all paths (not one per path).
+    # A path may have multiple terminals when cross-dilemma beats from wraps
+    # relationships split the exclusive chain.  The convergence beat must be
+    # reachable from every terminal.
+    all_terminals: list[str] = []
+    exclusive_count_per_path: dict[str, int] = {}
+    for path_id in dilemma_paths:
+        terminals = terminal_by_path[path_id]
+        if not terminals:
+            return None
+        all_terminals.extend(terminals)
+        # Count single-path-exclusive beats (commit + post-commit): beats that
+        # belong to exactly this one path.  Shared pre-commit beats (belonging
+        # to all dilemma paths) are NOT counted.
+        exclusive_count_per_path[path_id] = sum(
+            1 for bid in exclusive_beats if beat_paths.get(bid) == {path_id}
+        )
+
+    convergence_payoff = min(exclusive_count_per_path.values()) if exclusive_count_per_path else 0
+
+    # BFS forward from each terminal beat, collecting non-exclusive reachable beats
+    # with their BFS distance (level) from the terminal.
+    def _bfs_distances(start: str) -> dict[str, int]:
+        """Return mapping of non-exclusive reachable beat → BFS level from start."""
+        distances: dict[str, int] = {}
+        frontier: deque[tuple[str, int]] = deque([(start, 0)])
+        visited: set[str] = set()
+        while frontier:
+            current, level = frontier.popleft()
+            if current in visited:
+                continue
+            visited.add(current)
+            if current != start and not _is_exclusive(current):
+                distances[current] = level
+            # Continue BFS regardless (exclusive beats can be intermediate nodes)
+            for successor in successors_of.get(current, []):
+                if successor not in visited:
+                    frontier.append((successor, level + 1))
+        return distances
+
+    distance_maps = [_bfs_distances(t) for t in all_terminals]
+
+    if not distance_maps:
+        return None
+
+    # Intersect: only beats reachable from ALL terminals
+    common = set(distance_maps[0].keys())
+    for dm in distance_maps[1:]:
+        common = common & dm.keys()
+
+    if not common:
+        return None
+
+    # Pick earliest common beat: minimum max-distance across all terminal BFS runs
+    # (i.e., the beat that is reached earliest when considering all paths).
+    # Alphabetical tiebreak within equal max-distances.
+    def _sort_key(beat_id: str) -> tuple[int, str]:
+        max_dist = max(dm[beat_id] for dm in distance_maps)
+        return (max_dist, beat_id)
+
+    converges_at = min(common, key=_sort_key)
+    return converges_at, convergence_payoff
+
+
 # ---------------------------------------------------------------------------
 # Phase 3: Intersection Detection
 # ---------------------------------------------------------------------------
