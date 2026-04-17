@@ -216,11 +216,11 @@ class TestGrowPhaseDecorator:
 class TestGlobalRegistry:
     """Tests for the global registry populated by actual GROW phases."""
 
-    def test_global_registry_has_17_phases(self) -> None:
-        """All GROW phases are registered (17 after #1180 added intra_path_predecessors)."""
+    def test_global_registry_has_18_phases(self) -> None:
+        """All GROW phases are registered (18 after transition_gaps added)."""
         registry = get_registry()
-        assert len(registry) == 17, (
-            f"Expected 17 phases, got {len(registry)}: {registry.phase_names}"
+        assert len(registry) == 18, (
+            f"Expected 18 phases, got {len(registry)}: {registry.phase_names}"
         )
 
     def test_global_registry_validates(self) -> None:
@@ -230,12 +230,7 @@ class TestGlobalRegistry:
         assert errors == [], f"Registry validation errors: {errors}"
 
     def test_global_registry_execution_order_matches_expected(self) -> None:
-        """Execution order matches the post-#1180 phase structure (17 phases).
-
-        #1124: intersections moved before interleave_beats (clean DAG for compat check).
-        #1123: resolve_temporal_hints inserted between intersections and interleave_beats.
-        #1180: intra_path_predecessors inserted between intersections and resolve_temporal_hints.
-        """
+        """Execution order matches the current phase structure (18 phases)."""
         expected = [
             "validate_dag",
             "intersections",
@@ -247,6 +242,7 @@ class TestGlobalRegistry:
             "pacing_gaps",
             "atmospheric",
             "path_arcs",
+            "transition_gaps",
             "entity_arcs",
             "enumerate_arcs",
             "divergence",
