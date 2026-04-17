@@ -1218,25 +1218,31 @@ def _create_residue_beat_and_passage(graph: Graph, rspec: ResidueSpec) -> None:
     graph.add_edge("grouped_in", beat_id, residue_passage_id)
     graph.add_edge("precedes", residue_passage_id, rspec.target_passage_id)
 
-    # Insert into beat DAG: the residue beat sits between the target
-    # passage's first beat and that beat's predecessors.  Multiple residue
-    # beats for the same target are parallel alternatives (gated by
-    # different state flags), not sequential.
-    #
-    #   beat_before → residue_A → target_beat
-    #               → residue_B → target_beat
+    # Insert into beat DAG.  The residue beat connects to a beat in the
+    # target passage that is on the SAME path as the residue (rspec.path_id).
+    # This ensures the residue only appears in arcs that include its path.
     target_beats = [
         e["from"]
         for e in graph.get_edges(edge_type="grouped_in")
         if e["to"] == rspec.target_passage_id
     ]
-    if target_beats:
-        target_beat = sorted(target_beats)[0]
-        # Residue beat comes after whatever the target beat's predecessors are
+    if target_beats and rspec.path_id:
+        # Find a target beat on the residue's own path
+        target_beat = None
+        for tb in sorted(target_beats):
+            tb_paths = {e["to"] for e in graph.get_edges(edge_type="belongs_to") if e["from"] == tb}
+            if rspec.path_id in tb_paths:
+                target_beat = tb
+                break
+        if target_beat is None:
+            # Fallback: use the first beat in the target passage
+            target_beat = sorted(target_beats)[0]
+
+        # Copy predecessors from the target beat to the residue beat,
+        # then make the target beat depend on the residue beat.
         for pred_edge in graph.get_edges(edge_type="predecessor"):
             if pred_edge["from"] == target_beat:
                 graph.add_edge("predecessor", beat_id, pred_edge["to"])
-        # Target beat comes after residue beat
         graph.add_edge("predecessor", target_beat, beat_id)
 
 
