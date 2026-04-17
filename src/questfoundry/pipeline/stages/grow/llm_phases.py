@@ -1318,7 +1318,7 @@ class _LLMPhaseMixin:
             tokens_used=total_tokens,
         )
 
-    @grow_phase(name="transition_gaps", depends_on=["path_arcs"], priority=8)
+    @grow_phase(name="transition_gaps", depends_on=["path_arcs", "entity_arcs"], priority=8)
     async def _phase_transition_gaps(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
         """Phase 4g: Insert transition beats at hard cross-dilemma seams.
 
@@ -1422,7 +1422,7 @@ class _LLMPhaseMixin:
         # Insert bridge beats
         inserted = 0
         for bridge in result.bridges:
-            pair = transition_map.get(bridge.transition_id)
+            pair = transition_map.get(bridge.transition_id.strip())
             if pair is None:
                 log.warning(
                     "phase4g_unknown_transition_id",
@@ -1451,9 +1451,6 @@ class _LLMPhaseMixin:
                     "entities": bridge.entities,
                     "location": bridge.location or "",
                     "dilemma_impacts": [],
-                    "is_gap_beat": True,
-                    "bridges_from": earlier,
-                    "bridges_to": later,
                 },
             )
 
