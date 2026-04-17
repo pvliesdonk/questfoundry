@@ -1454,6 +1454,12 @@ class _LLMPhaseMixin:
                 },
             )
 
+            # Copy belongs_to edges from the earlier beat so the transition
+            # beat is visible in arc traversals and passes POLISH validation.
+            for bt_edge in graph.get_edges(edge_type="belongs_to"):
+                if bt_edge["from"] == earlier:
+                    graph.add_edge("belongs_to", beat_id, bt_edge["to"])
+
             # Replace the old predecessor edge with two new ones
             graph.remove_edge("predecessor", later, earlier)
             graph.add_edge("predecessor", beat_id, earlier)
