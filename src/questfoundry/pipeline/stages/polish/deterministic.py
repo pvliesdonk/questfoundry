@@ -1218,19 +1218,25 @@ def _create_residue_beat_and_passage(graph: Graph, rspec: ResidueSpec) -> None:
     graph.add_edge("grouped_in", beat_id, residue_passage_id)
     graph.add_edge("precedes", residue_passage_id, rspec.target_passage_id)
 
-    # Insert into beat DAG: residue beat comes just before the target
-    # passage's first beat.  Find that beat via grouped_in edges, then
-    # splice the residue beat between the target beat and its predecessors.
+    # Insert into beat DAG: the residue beat sits between the target
+    # passage's first beat and that beat's predecessors.  Multiple residue
+    # beats for the same target are parallel alternatives (gated by
+    # different state flags), not sequential.
+    #
+    #   beat_before → residue_A → target_beat
+    #               → residue_B → target_beat
     target_beats = [
         e["from"]
         for e in graph.get_edges(edge_type="grouped_in")
         if e["to"] == rspec.target_passage_id
     ]
     if target_beats:
-        # Pick the topologically earliest beat in the target passage
-        # (the one with fewest predecessors from within the passage).
         target_beat = sorted(target_beats)[0]
-        # The residue beat becomes a predecessor of the target beat.
+        # Residue beat comes after whatever the target beat's predecessors are
+        for pred_edge in graph.get_edges(edge_type="predecessor"):
+            if pred_edge["from"] == target_beat:
+                graph.add_edge("predecessor", beat_id, pred_edge["to"])
+        # Target beat comes after residue beat
         graph.add_edge("predecessor", target_beat, beat_id)
 
 
