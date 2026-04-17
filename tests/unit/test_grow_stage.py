@@ -183,10 +183,10 @@ class TestGrowStageExecute:
 
 class TestGrowStagePhaseOrder:
     def test_phase_order_returns_correct_count(self) -> None:
-        """17 phases; intra_path_predecessors added in #1180."""
+        """18 phases; transition_gaps added in Phase 4g."""
         stage = GrowStage()
         phases = stage._phase_order()
-        assert len(phases) == 17
+        assert len(phases) == 18
 
     def test_phase_order_names(self) -> None:
         stage = GrowStage()
@@ -203,6 +203,7 @@ class TestGrowStagePhaseOrder:
             "atmospheric",
             "path_arcs",
             "entity_arcs",
+            "transition_gaps",
             "enumerate_arcs",
             "divergence",
             "convergence",

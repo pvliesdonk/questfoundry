@@ -101,6 +101,7 @@ Beat subtypes (distinguished by a role marker):
 - **Regular beat** — a story moment from SEED's scaffold
 - **Micro-beat** — a brief transition added by POLISH for pacing
 - **Residue beat** — a mood-setter added by POLISH before a shared passage, carrying state-flag-specific prose hints
+- **Transition beat** — a brief atmospheric bridge added by GROW between cross-dilemma scenes that share no entities or location
 
 **Working.** Beats are not exported. They are the authoring abstraction. The player sees passages.
 
@@ -497,7 +498,7 @@ SEED is the heaviest mutation stage. It triages, scaffolds, orders, and sketches
 
 | | |
 |---|---|
-| **Creates** | Ordering edges (beat → beat), intersection groups, state flags |
+| **Creates** | Ordering edges (beat → beat), intersection groups, state flags, transition beats |
 | **Edges created** | Predecessor/successor edges in the beat DAG, intersection grouping edges, `derived_from` (state flag → consequence) |
 | **Reads** | All SEED output (paths, beats, consequences, dilemma relationships, temporal hints) |
 | **Modifies** | Beat nodes (enriched with intersection membership), dilemma nodes (soft dilemmas gain `converges_at` and `convergence_payoff` from DAG topology), entity nodes (activates overlays with state flags — overlays are an embedded list on the entity, not a separate node type; see Part 6) |

@@ -139,7 +139,7 @@ If the non-canonical answer is not promoted to a path in SEED, that dilemma has 
 > defined in `_phase_order()`.
 > Actual order: `validate_dag → intersections → intra_path_predecessors → resolve_temporal_hints →
 > interleave_beats → scene_types → narrative_gaps → pacing_gaps → atmospheric →
-> path_arcs → entity_arcs → …`
+> path_arcs → transition_gaps → entity_arcs → …`
 > See also: **No-Conditional-Prerequisites Invariant** under Phase 3.
 
 ### Phase 1: Beat Graph Import
@@ -348,7 +348,16 @@ After `resolve_temporal_hints` completes, the set of surviving temporal hints mu
      - Reject: pacing is intentional
      - Modify: adjust proposal
 
-**Output:** Beat graph with gaps filled and all beats tagged with `scene_type`
+**4g. Cross-Dilemma Transition Gap Detection**
+1. For each cross-dilemma predecessor edge, check entity and location overlap between the two beats.
+2. If both overlaps are zero: this is a hard transition — the narrative jumps between unrelated scenes.
+3. LLM drafts a 1-2 sentence bridge summary referencing entities/locations from both sides.
+4. Insert a transition beat (`role: transition_beat`, `scene_type: micro_beat`) between the two beats. The original cross-dilemma edge is replaced by two edges: earlier → transition → later.
+5. Transition beats carry no `dilemma_impacts` — they are atmospheric connective tissue, not plot advancement.
+
+Transition beats are structural. POLISH can collapse them into adjacent passages or keep them standalone. FILL writes their prose — choosing between a smooth bridge, a hard cut, or an atmospheric moment based on the voice document. The `fill_hard_transition_detected` warning in FILL serves as a safety net for any transitions that GROW does not cover.
+
+**Output:** Beat graph with gaps filled, all beats tagged with `scene_type`, and transition beats at cross-dilemma seams
 
 **Iteration:** One pass for each sub-phase. If validation later finds issues, human can return here.
 
@@ -356,6 +365,7 @@ After `resolve_temporal_hints` completes, the set of surviving temporal hints mu
 - Each path forms connected route from entry to exit
 - No orphan beats
 - All beats have `scene_type` assigned
+- No cross-dilemma predecessor edge with zero entity/location overlap lacks a transition beat
 
 ---
 

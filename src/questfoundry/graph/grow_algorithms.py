@@ -1369,6 +1369,86 @@ def find_dag_convergence_beat(
     return converges_at, convergence_payoff
 
 
+def detect_cross_dilemma_hard_transitions(graph: Graph) -> list[tuple[str, str]]:
+    """Find cross-dilemma predecessor edges where beats share no entities AND no location.
+
+    A "hard transition" is a predecessor edge between beats from different dilemmas
+    that lack any narrative continuity signal (shared entity or shared location).
+    These are candidates for bridging beats or intersection groups.
+
+    Algorithm:
+    1. Build beat → dilemma mapping via belongs_to → path → dilemma_id.
+    2. For each predecessor edge (from=later_beat, to=earlier_beat):
+       - Skip if beats share any dilemma (intra-dilemma edge).
+       - Skip if beats share any entity (entity overlap).
+       - Skip if beats share the same location.
+       - Otherwise → hard transition: append (earlier_beat, later_beat).
+    3. Return sorted list.
+
+    Args:
+        graph: Graph containing beat, path, and dilemma nodes.
+
+    Returns:
+        Sorted list of (earlier_beat_id, later_beat_id) tuples for hard transitions.
+    """
+    # Step 1: Build beat → dilemma set mapping via belongs_to → path → dilemma_id
+    path_nodes = graph.get_nodes_by_type("path")
+    dilemma_nodes = graph.get_nodes_by_type("dilemma")
+
+    path_to_dilemma: dict[str, str] = {}
+    for path_id, path_data in path_nodes.items():
+        did = path_data.get("dilemma_id")
+        if did:
+            prefixed = normalize_scoped_id(did, "dilemma")
+            if prefixed in dilemma_nodes:
+                path_to_dilemma[path_id] = prefixed
+
+    beat_dilemmas: dict[str, set[str]] = {}
+    for edge in graph.get_edges(edge_type="belongs_to"):
+        beat_id = edge["from"]
+        path_id = edge["to"]
+        if path_id in path_to_dilemma:
+            beat_dilemmas.setdefault(beat_id, set()).add(path_to_dilemma[path_id])
+
+    # Step 2: Check each predecessor edge for hard transitions
+    beat_nodes = graph.get_nodes_by_type("beat")
+    hard_transitions: list[tuple[str, str]] = []
+
+    for edge in graph.get_edges(edge_type="predecessor"):
+        later_beat = edge["from"]
+        earlier_beat = edge["to"]
+
+        # Skip if either beat is not a known beat node
+        if later_beat not in beat_nodes or earlier_beat not in beat_nodes:
+            continue
+
+        later_dilemmas = beat_dilemmas.get(later_beat, set())
+        earlier_dilemmas = beat_dilemmas.get(earlier_beat, set())
+
+        # Skip intra-dilemma edges (beats share at least one dilemma)
+        if later_dilemmas & earlier_dilemmas:
+            continue
+
+        # Skip if beats share any entity (using entities list in beat data)
+        later_data = beat_nodes[later_beat]
+        earlier_data = beat_nodes[earlier_beat]
+
+        later_entities = {strip_scope_prefix(e) for e in later_data.get("entities", [])}
+        earlier_entities = {strip_scope_prefix(e) for e in earlier_data.get("entities", [])}
+        if later_entities & earlier_entities:
+            continue
+
+        # Skip if beats share the same location (normalize to handle scope prefix)
+        later_loc = strip_scope_prefix(later_data.get("location") or "")
+        earlier_loc = strip_scope_prefix(earlier_data.get("location") or "")
+        if later_loc and earlier_loc and later_loc == earlier_loc:
+            continue
+
+        hard_transitions.append((earlier_beat, later_beat))
+
+    return sorted(hard_transitions)
+
+
 # ---------------------------------------------------------------------------
 # Phase 3: Intersection Detection
 # ---------------------------------------------------------------------------

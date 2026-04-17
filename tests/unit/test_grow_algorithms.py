@@ -7943,3 +7943,190 @@ class TestFindDagConvergenceBeat:
 
         result = find_dag_convergence_beat(graph, "dilemma::d1")
         assert result is None
+
+
+# ---------------------------------------------------------------------------
+# detect_cross_dilemma_hard_transitions
+# ---------------------------------------------------------------------------
+
+
+class TestDetectCrossDilemmaHardTransitions:
+    """Tests for detect_cross_dilemma_hard_transitions."""
+
+    def test_detects_transition_with_no_shared_entities_or_location(self) -> None:
+        """Cross-dilemma predecessor edge with different entities and locations → 1 transition."""
+        from questfoundry.graph.grow_algorithms import detect_cross_dilemma_hard_transitions
+
+        graph = Graph.empty()
+
+        # Dilemma 1
+        graph.create_node("dilemma::d1", {"type": "dilemma", "raw_id": "d1"})
+        graph.create_node(
+            "path::d1_a",
+            {"type": "path", "raw_id": "d1_a", "dilemma_id": "dilemma::d1"},
+        )
+        graph.create_node(
+            "beat::beat_d1",
+            {
+                "type": "beat",
+                "raw_id": "beat_d1",
+                "entities": ["character::alice"],
+                "location": "library",
+                "dilemma_impacts": [],
+            },
+        )
+        graph.add_edge("belongs_to", "beat::beat_d1", "path::d1_a")
+
+        # Dilemma 2
+        graph.create_node("dilemma::d2", {"type": "dilemma", "raw_id": "d2"})
+        graph.create_node(
+            "path::d2_a",
+            {"type": "path", "raw_id": "d2_a", "dilemma_id": "dilemma::d2"},
+        )
+        graph.create_node(
+            "beat::beat_d2",
+            {
+                "type": "beat",
+                "raw_id": "beat_d2",
+                "entities": ["character::bob"],
+                "location": "rooftop",
+                "dilemma_impacts": [],
+            },
+        )
+        graph.add_edge("belongs_to", "beat::beat_d2", "path::d2_a")
+
+        # Cross-dilemma predecessor edge: beat_d2 requires beat_d1
+        graph.add_edge("predecessor", "beat::beat_d2", "beat::beat_d1")
+
+        result = detect_cross_dilemma_hard_transitions(graph)
+        assert result == [("beat::beat_d1", "beat::beat_d2")]
+
+    def test_no_transition_when_entities_overlap(self) -> None:
+        """Cross-dilemma edge where both beats share character::alice → 0 transitions."""
+        from questfoundry.graph.grow_algorithms import detect_cross_dilemma_hard_transitions
+
+        graph = Graph.empty()
+
+        graph.create_node("dilemma::d1", {"type": "dilemma", "raw_id": "d1"})
+        graph.create_node(
+            "path::d1_a",
+            {"type": "path", "raw_id": "d1_a", "dilemma_id": "dilemma::d1"},
+        )
+        graph.create_node(
+            "beat::beat_d1",
+            {
+                "type": "beat",
+                "raw_id": "beat_d1",
+                "entities": ["character::alice"],
+                "location": "library",
+                "dilemma_impacts": [],
+            },
+        )
+        graph.add_edge("belongs_to", "beat::beat_d1", "path::d1_a")
+
+        graph.create_node("dilemma::d2", {"type": "dilemma", "raw_id": "d2"})
+        graph.create_node(
+            "path::d2_a",
+            {"type": "path", "raw_id": "d2_a", "dilemma_id": "dilemma::d2"},
+        )
+        graph.create_node(
+            "beat::beat_d2",
+            {
+                "type": "beat",
+                "raw_id": "beat_d2",
+                "entities": ["character::alice"],  # same entity
+                "location": "rooftop",
+                "dilemma_impacts": [],
+            },
+        )
+        graph.add_edge("belongs_to", "beat::beat_d2", "path::d2_a")
+
+        graph.add_edge("predecessor", "beat::beat_d2", "beat::beat_d1")
+
+        result = detect_cross_dilemma_hard_transitions(graph)
+        assert result == []
+
+    def test_ignores_intra_dilemma_edges(self) -> None:
+        """Predecessor edge within the same dilemma → 0 transitions (not cross-dilemma)."""
+        from questfoundry.graph.grow_algorithms import detect_cross_dilemma_hard_transitions
+
+        graph = Graph.empty()
+
+        graph.create_node("dilemma::d1", {"type": "dilemma", "raw_id": "d1"})
+        graph.create_node(
+            "path::d1_a",
+            {"type": "path", "raw_id": "d1_a", "dilemma_id": "dilemma::d1"},
+        )
+        graph.create_node(
+            "beat::beat_early",
+            {
+                "type": "beat",
+                "raw_id": "beat_early",
+                "entities": ["character::alice"],
+                "location": "library",
+                "dilemma_impacts": [],
+            },
+        )
+        graph.create_node(
+            "beat::beat_late",
+            {
+                "type": "beat",
+                "raw_id": "beat_late",
+                "entities": ["character::bob"],
+                "location": "rooftop",
+                "dilemma_impacts": [],
+            },
+        )
+        graph.add_edge("belongs_to", "beat::beat_early", "path::d1_a")
+        graph.add_edge("belongs_to", "beat::beat_late", "path::d1_a")
+
+        # Intra-dilemma predecessor edge
+        graph.add_edge("predecessor", "beat::beat_late", "beat::beat_early")
+
+        result = detect_cross_dilemma_hard_transitions(graph)
+        assert result == []
+
+    def test_no_transition_when_location_overlaps(self) -> None:
+        """Cross-dilemma edge but both beats share the same location → 0 transitions."""
+        from questfoundry.graph.grow_algorithms import detect_cross_dilemma_hard_transitions
+
+        graph = Graph.empty()
+
+        graph.create_node("dilemma::d1", {"type": "dilemma", "raw_id": "d1"})
+        graph.create_node(
+            "path::d1_a",
+            {"type": "path", "raw_id": "d1_a", "dilemma_id": "dilemma::d1"},
+        )
+        graph.create_node(
+            "beat::beat_d1",
+            {
+                "type": "beat",
+                "raw_id": "beat_d1",
+                "entities": ["character::alice"],
+                "location": "library",
+                "dilemma_impacts": [],
+            },
+        )
+        graph.add_edge("belongs_to", "beat::beat_d1", "path::d1_a")
+
+        graph.create_node("dilemma::d2", {"type": "dilemma", "raw_id": "d2"})
+        graph.create_node(
+            "path::d2_a",
+            {"type": "path", "raw_id": "d2_a", "dilemma_id": "dilemma::d2"},
+        )
+        graph.create_node(
+            "beat::beat_d2",
+            {
+                "type": "beat",
+                "raw_id": "beat_d2",
+                "entities": ["character::bob"],
+                "location": "library",  # same location
+                "dilemma_impacts": [],
+            },
+        )
+        graph.add_edge("belongs_to", "beat::beat_d2", "path::d2_a")
+
+        graph.add_edge("predecessor", "beat::beat_d2", "beat::beat_d1")
+
+        result = detect_cross_dilemma_hard_transitions(graph)
+        assert result == []
