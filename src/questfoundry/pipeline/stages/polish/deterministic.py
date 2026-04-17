@@ -1235,8 +1235,10 @@ def _create_residue_beat_and_passage(graph: Graph, rspec: ResidueSpec) -> None:
                 target_beat = tb
                 break
         if target_beat is None:
-            # Fallback: use the first beat in the target passage
-            target_beat = sorted(target_beats)[0]
+            # No beat on the residue's path in the target passage.
+            # Skip DAG insertion; the precedes edge still connects
+            # at the passage layer.
+            return
 
         # Copy predecessors from the target beat to the residue beat,
         # then make the target beat depend on the residue beat.
