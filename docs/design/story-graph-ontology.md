@@ -588,7 +588,11 @@ A beat's `belongs_to` edge means "this beat serves this path's storyline — it 
 
 Intersection beats participate in scenes with beats from other paths, but they still belong to their original path. The historical cross-assignment of `belongs_to` edges across dilemmas conflated "shares a scene with beats from path B" with "is part of path B's storyline." This produced the hard-convergence violation: beats from mutually exclusive dilemmas appeared to belong to both, creating structurally impossible scenes.
 
-**Same-dilemma pre-commit multi-`belongs_to` is permitted.** A pre-commit beat — one that occurs before the dilemma's commit point — belongs to both paths of its own dilemma. This is structurally correct: every player experiences pre-commit beats regardless of which path they will later choose. Pre-commit beats have two `belongs_to` edges (one to each path in the dilemma); post-commit beats have exactly one. This is not the same as cross-dilemma multi-assignment, which remains forbidden.
+**Same-dilemma pre-commit multi-`belongs_to` is permitted.** A pre-commit beat — one that occurs before the dilemma's commit point — belongs to both paths of its own dilemma. This is structurally correct: every player experiences pre-commit beats regardless of which path they will later choose. Pre-commit beats have two `belongs_to` edges (one to each path in the dilemma); post-commit beats have exactly one.
+
+**Cross-dilemma multi-`belongs_to` is permitted for transition beats only.** Transition beats (`role: transition_beat`) bridge two dilemmas — they are atmospheric connective tissue between unrelated scenes. They belong to paths from both the earlier and later dilemma so they appear in every arc that traverses the cross-dilemma seam. This is not the same as the historical cross-assignment for intersection semantics, which conflated scene sharing with path membership.
+
+For all other beat types, cross-dilemma multi-`belongs_to` remains forbidden.
 
 #### Determining a beat's `belongs_to`
 

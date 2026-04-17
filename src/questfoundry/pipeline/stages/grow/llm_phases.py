@@ -1454,11 +1454,10 @@ class _LLMPhaseMixin:
                 },
             )
 
-            # Copy belongs_to edges from BOTH the earlier and later beats.
-            # The transition bridges two dilemmas; it must be in every arc
-            # that traverses the seam.  Without the later beat's paths, the
-            # transition is a dead-end in arcs that include the earlier
-            # dilemma's path but a different path of the later dilemma.
+            # Transition beats bridge two dilemmas and belong to paths from
+            # both sides.  Guard rail 1 is amended (Story Graph Ontology
+            # Part 8) to allow cross-dilemma dual belongs_to specifically
+            # for transition beats (role=transition_beat).
             seen_paths: set[str] = set()
             for bt_edge in graph.get_edges(edge_type="belongs_to"):
                 if bt_edge["from"] in (earlier, later):

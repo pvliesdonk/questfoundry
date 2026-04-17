@@ -687,8 +687,12 @@ def check_dilemma_role_compliance(graph: Graph) -> list[ValidationCheck]:
 def check_no_cross_dilemma_belongs_to(graph: Graph) -> ValidationCheck:
     """Guard rail 1: dual belongs_to must reference paths of the same dilemma.
 
-    Cross-dilemma dual belongs_to is a hard-convergence violation (Story Graph
+    Cross-dilemma dual belongs_to is forbidden for regular beats (Story Graph
     Ontology §8 "Path Membership ≠ Scene Participation").
+
+    **Exception:** Transition beats (``role: transition_beat``) bridge two
+    dilemmas and legitimately belong to paths from both sides.  They are
+    exempt from this guard rail.
     """
     path_nodes = graph.get_nodes_by_type("path")
     beat_nodes = graph.get_nodes_by_type("beat")
@@ -709,6 +713,9 @@ def check_no_cross_dilemma_belongs_to(graph: Graph) -> ValidationCheck:
     violations: list[str] = []
     for beat_id, paths in beat_paths.items():
         if len(paths) < 2:
+            continue
+        # Transition beats are exempt — they bridge two dilemmas by design.
+        if beat_nodes[beat_id].get("role") == "transition_beat":
             continue
         dilemmas = {path_to_dilemma.get(p) for p in paths}
         dilemmas.discard(None)  # paths without dilemma_id are caught by earlier checks
