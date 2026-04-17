@@ -117,10 +117,15 @@ log.error("provider_error", provider="ollama", message=str(e))
 ```
 
 **Log Levels:**
-- `INFO`: High-level flow events visible at default verbosity (stage start/complete, conversation phases)
-- `DEBUG`: Detailed events for troubleshooting (tool calls, validation details, LLM responses)
-- `WARNING`: Recoverable issues (missing optional config, fallbacks activated)
-- `ERROR`: Failures that stop execution (provider errors, validation exhausted)
+
+| Level | Use for | Pipeline examples |
+|-------|---------|-------------------|
+| `DEBUG` | Internal machinery, filtering details, cache hits | Beat excluded from chain, intersection candidate rejected, flag combo computed |
+| `INFO` | Significant operations completing normally, phase transitions | Stage start/complete, phase results, "inserted N beats", convergence found |
+| `WARNING` | Degraded state that may need attention — the system continues but something unexpected happened | Missing optional field, fallback activated, budget not met, entity ID not found in graph |
+| `ERROR` | Failures that stop execution or produce incorrect results | Validation failures, graph integrity violations, unrecoverable LLM errors |
+
+**The litmus test:** If the system detected a problem AND handled it correctly (rejected bad input, used a fallback, skipped an invalid proposal), that's `INFO` or `DEBUG` — not `WARNING`. `WARNING` means "this worked but someone should look at it." `ERROR` means "this didn't work."
 
 **Event Naming:**
 - Use `snake_case` event names as the first argument
