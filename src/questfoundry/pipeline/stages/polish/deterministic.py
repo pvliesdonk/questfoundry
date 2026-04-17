@@ -1218,6 +1218,21 @@ def _create_residue_beat_and_passage(graph: Graph, rspec: ResidueSpec) -> None:
     graph.add_edge("grouped_in", beat_id, residue_passage_id)
     graph.add_edge("precedes", residue_passage_id, rspec.target_passage_id)
 
+    # Insert into beat DAG: residue beat comes just before the target
+    # passage's first beat.  Find that beat via grouped_in edges, then
+    # splice the residue beat between the target beat and its predecessors.
+    target_beats = [
+        e["from"]
+        for e in graph.get_edges(edge_type="grouped_in")
+        if e["to"] == rspec.target_passage_id
+    ]
+    if target_beats:
+        # Pick the topologically earliest beat in the target passage
+        # (the one with fewest predecessors from within the passage).
+        target_beat = sorted(target_beats)[0]
+        # The residue beat becomes a predecessor of the target beat.
+        graph.add_edge("predecessor", target_beat, beat_id)
+
 
 def _create_choice_edge(graph: Graph, cspec: ChoiceSpec) -> None:
     """Create a choice edge between two passages."""
