@@ -14,7 +14,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from questfoundry.graph.graph import Graph
-from questfoundry.models.grow import ConflictGroupResolution, TemporalResolutionOutput
+from questfoundry.models.grow import (
+    ConflictGroupResolution,
+    TemporalResolutionOutput,
+    TransitionBridge,
+    TransitionGapsOutput,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -518,3 +523,201 @@ class TestVerifyHintsAcyclic:
         result = verify_hints_acyclic(graph, set())
 
         assert result == []
+
+
+# ---------------------------------------------------------------------------
+# Helpers for _phase_transition_gaps tests
+# ---------------------------------------------------------------------------
+
+
+def _make_cross_dilemma_hard_transition_graph() -> Graph:
+    """Build a minimal graph with one cross-dilemma hard transition.
+
+    Two dilemmas, each with one path and one beat. The beats have no shared
+    entities or location. A predecessor edge connects them cross-dilemma,
+    producing exactly one hard transition when detect_cross_dilemma_hard_transitions
+    is called.
+
+    Beat layout:
+      - beat::aq_beat: dilemma artifact_quest, location "library", entities ["book"]
+      - beat::mt_beat: dilemma mentor_trust, location "forest", entities ["sword"]
+    Predecessor edge: mt_beat → aq_beat (later → earlier, i.e. mt_beat comes after aq_beat).
+    Expected transition: (beat::aq_beat, beat::mt_beat).
+    """
+    graph = Graph.empty()
+
+    for dil, path_prefix in (
+        ("artifact_quest", "aq"),
+        ("mentor_trust", "mt"),
+    ):
+        graph.create_node(
+            f"dilemma::{dil}",
+            {"type": "dilemma", "raw_id": dil},
+        )
+        graph.create_node(
+            f"path::{path_prefix}_path",
+            {
+                "type": "path",
+                "raw_id": f"{path_prefix}_path",
+                "dilemma_id": f"dilemma::{dil}",
+                "is_canonical": True,
+            },
+        )
+
+    graph.create_node(
+        "beat::aq_beat",
+        {
+            "type": "beat",
+            "raw_id": "aq_beat",
+            "summary": "Protagonist finds the artifact in the library.",
+            "entities": ["entity::book"],
+            "location": "library",
+            "dilemma_impacts": [{"dilemma_id": "dilemma::artifact_quest", "effect": "advances"}],
+        },
+    )
+    graph.create_node(
+        "beat::mt_beat",
+        {
+            "type": "beat",
+            "raw_id": "mt_beat",
+            "summary": "Mentor challenges the hero in the forest.",
+            "entities": ["entity::sword"],
+            "location": "forest",
+            "dilemma_impacts": [{"dilemma_id": "dilemma::mentor_trust", "effect": "advances"}],
+        },
+    )
+
+    graph.add_edge("belongs_to", "beat::aq_beat", "path::aq_path")
+    graph.add_edge("belongs_to", "beat::mt_beat", "path::mt_path")
+
+    # Cross-dilemma predecessor: mt_beat comes after aq_beat
+    graph.add_edge("predecessor", "beat::mt_beat", "beat::aq_beat")
+
+    return graph
+
+
+# ---------------------------------------------------------------------------
+# Tests for _phase_transition_gaps
+# ---------------------------------------------------------------------------
+
+
+class TestPhaseTransitionGaps:
+    """Tests for _phase_transition_gaps insertion logic."""
+
+    @pytest.mark.asyncio
+    async def test_transition_gaps_inserts_bridge_beat(self) -> None:
+        """Happy path: bridge beat is inserted and predecessor edges are rewired.
+
+        Mock _grow_llm_call returns a TransitionGapsOutput with one bridge whose
+        transition_id matches the expected 'earlier|later' format. The phase must:
+        - Create a new beat::transition_aq_beat_mt_beat node with role='transition_beat'
+        - Remove the original predecessor edge (mt_beat → aq_beat)
+        - Add two new predecessor edges:
+            transition → aq_beat (transition comes after aq_beat)
+            mt_beat → transition (mt_beat comes after transition)
+        - Return status='completed' with 'Inserted 1' in detail
+        """
+        graph = _make_cross_dilemma_hard_transition_graph()
+        stage = _make_grow_stage_instance()
+        mock_model = MagicMock()
+
+        # Expected transition_id mirrors the format built in _phase_transition_gaps:
+        # "{earlier}|{later}" = "beat::aq_beat|beat::mt_beat"
+        bridge_output = TransitionGapsOutput(
+            bridges=[
+                TransitionBridge(
+                    transition_id="beat::aq_beat|beat::mt_beat",
+                    summary="The hero moves from the library to the forest, feeling the weight of destiny.",
+                    entities=[],
+                    location="crossroads",
+                )
+            ]
+        )
+
+        with patch.object(
+            stage,
+            "_grow_llm_call",
+            new=AsyncMock(return_value=(bridge_output, 1, 80)),
+        ):
+            result = await stage._phase_transition_gaps(graph, mock_model)
+
+        # Phase result
+        assert result.phase == "transition_gaps"
+        assert result.status == "completed"
+        assert "Inserted 1" in result.detail
+
+        # New transition beat node created
+        beat_nodes = graph.get_nodes_by_type("beat")
+        assert "beat::transition_aq_beat_mt_beat" in beat_nodes, (
+            f"Expected beat::transition_aq_beat_mt_beat; got {list(beat_nodes.keys())}"
+        )
+        transition_node = beat_nodes["beat::transition_aq_beat_mt_beat"]
+        assert transition_node.get("role") == "transition_beat"
+
+        # Old predecessor edge is gone
+        old_edges = graph.get_edges(
+            from_id="beat::mt_beat", to_id="beat::aq_beat", edge_type="predecessor"
+        )
+        assert old_edges == [], "Original predecessor edge should have been removed"
+
+        # Two new predecessor edges exist
+        transition_to_earlier = graph.get_edges(
+            from_id="beat::transition_aq_beat_mt_beat",
+            to_id="beat::aq_beat",
+            edge_type="predecessor",
+        )
+        assert len(transition_to_earlier) == 1, "Expected predecessor(transition_beat → aq_beat)"
+
+        later_to_transition = graph.get_edges(
+            from_id="beat::mt_beat",
+            to_id="beat::transition_aq_beat_mt_beat",
+            edge_type="predecessor",
+        )
+        assert len(later_to_transition) == 1, "Expected predecessor(mt_beat → transition_beat)"
+
+    @pytest.mark.asyncio
+    async def test_transition_gaps_warns_on_zero_matches(self) -> None:
+        """When LLM returns a bridge with a wrong transition_id, nothing is inserted.
+
+        Mock _grow_llm_call returns a bridge whose transition_id does not match any
+        key in transition_map. The phase must:
+        - Not create any new beat nodes
+        - Return status='completed' with 'Inserted 0' in detail
+        (The implementation also logs 'phase4g_no_bridges_matched', but we verify
+        the observable graph state rather than structlog internals.)
+        """
+        graph = _make_cross_dilemma_hard_transition_graph()
+        stage = _make_grow_stage_instance()
+        mock_model = MagicMock()
+
+        # transition_id that deliberately doesn't match
+        bad_bridge_output = TransitionGapsOutput(
+            bridges=[
+                TransitionBridge(
+                    transition_id="beat::nonexistent|beat::also_missing",
+                    summary="A bridge to nowhere.",
+                    entities=[],
+                    location="",
+                )
+            ]
+        )
+
+        with patch.object(
+            stage,
+            "_grow_llm_call",
+            new=AsyncMock(return_value=(bad_bridge_output, 1, 40)),
+        ):
+            result = await stage._phase_transition_gaps(graph, mock_model)
+
+        # Phase result
+        assert result.phase == "transition_gaps"
+        assert result.status == "completed"
+        assert "Inserted 0" in result.detail
+
+        # No new beat nodes were created (graph still has only the original two beats)
+        beat_nodes = graph.get_nodes_by_type("beat")
+        assert "beat::transition_aq_beat_mt_beat" not in beat_nodes, (
+            "No transition beat should have been created for a mismatched transition_id"
+        )
+        # Only the original two beat nodes should exist
+        assert set(beat_nodes.keys()) == {"beat::aq_beat", "beat::mt_beat"}
