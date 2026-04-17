@@ -1454,11 +1454,18 @@ class _LLMPhaseMixin:
                 },
             )
 
-            # Copy belongs_to edges from the earlier beat so the transition
-            # beat is visible in arc traversals and passes POLISH validation.
+            # Copy belongs_to edges from BOTH the earlier and later beats.
+            # The transition bridges two dilemmas; it must be in every arc
+            # that traverses the seam.  Without the later beat's paths, the
+            # transition is a dead-end in arcs that include the earlier
+            # dilemma's path but a different path of the later dilemma.
+            seen_paths: set[str] = set()
             for bt_edge in graph.get_edges(edge_type="belongs_to"):
-                if bt_edge["from"] == earlier:
-                    graph.add_edge("belongs_to", beat_id, bt_edge["to"])
+                if bt_edge["from"] in (earlier, later):
+                    path_id = bt_edge["to"]
+                    if path_id not in seen_paths:
+                        graph.add_edge("belongs_to", beat_id, path_id)
+                        seen_paths.add(path_id)
 
             # Replace the old predecessor edge with two new ones
             graph.remove_edge("predecessor", later, earlier)
