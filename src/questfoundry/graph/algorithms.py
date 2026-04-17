@@ -134,18 +134,11 @@ def compute_active_flags_at_beat(graph: Graph, beat_id: str) -> set[frozenset[st
         return {frozenset()}
 
     # Step 4: Deduplicate flags per dilemma and compute Cartesian product
-    # For each dilemma, the player can only be on one path, so each dilemma
-    # contributes exactly one flag (or none if not yet committed).
-    # We include "no flag for this dilemma" as an option only if the
-    # beat is NOT downstream of a commit for that dilemma. But since
-    # we only collected flags from ancestors that ARE commits, having
-    # a flag means the dilemma IS committed. We just need unique flags.
     per_dilemma_options: list[list[str]] = []
     for _dilemma_id, flags in sorted(dilemma_flags.items()):
         unique_flags = sorted(set(flags))
         per_dilemma_options.append(unique_flags)
 
-    # Cartesian product: one flag per committed dilemma
     result: set[frozenset[str]] = set()
     for combo in product(*per_dilemma_options):
         result.add(frozenset(combo))
@@ -160,81 +153,32 @@ def arc_key_for_paths(
     """Build a canonical arc key from path node IDs.
 
     Arc keys are sorted path ``raw_id`` values joined by ``"+"``.
-    This is the shared formula used by :func:`compute_arc_traversals`,
-    :func:`~questfoundry.graph.fill_context.get_spine_arc_key`, and
-    ``_resolve_arc_key``.
-
-    Args:
-        path_nodes: Mapping of path node ID → path data (must contain ``raw_id``).
-        path_ids: List of path node IDs to include in the key.
-
-    Returns:
-        Arc key string (e.g. ``"alpha+beta"``).
     """
     raw_ids = sorted(str(path_nodes.get(pid, {}).get("raw_id", pid)) for pid in path_ids)
     return "+".join(raw_ids)
-
-
-def _compute_compatible_beats(
-    beat_nodes: dict[str, Any],
-    beat_path_set: dict[str, set[str]],
-    path_to_dilemma: dict[str, str],
-    arc_path_set: set[str],
-) -> set[str]:
-    """Return the set of beat IDs compatible with an arc's path selection.
-
-    A beat is compatible if:
-    - It has zero ``belongs_to`` (transition/gap beat) → always compatible.
-    - For each dilemma it touches via ``belongs_to``, the arc includes at
-      least one of the beat's paths for that dilemma.
-    """
-    result: set[str] = set()
-    for bid in beat_nodes:
-        bp = beat_path_set.get(bid)
-        if not bp:
-            result.add(bid)  # zero-membership → universal
-            continue
-        beat_dilemmas: dict[str, set[str]] = {}
-        for p in bp:
-            did = path_to_dilemma.get(p)
-            if did:
-                beat_dilemmas.setdefault(did, set()).add(p)
-        if all(d_paths & arc_path_set for d_paths in beat_dilemmas.values()):
-            result.add(bid)
-    return result
 
 
 def compute_arc_traversals(graph: Graph) -> dict[str, list[str]]:
     """Compute arc traversals by walking the beat DAG.
 
     Each arc is a specific combination of path choices (one per dilemma).
-    The traversal walks the DAG from the root beat, following ``predecessor``
-    edges forward.  At Y-shape forks (where a shared beat has successors on
-    different paths of the same dilemma), the walk follows the successor
-    matching the arc's selected path.  Beats without ``belongs_to`` edges
-    (transition beats, gap beats) are walked through naturally — they sit
-    on the predecessor chain between path-member beats.
+    The traversal walks the DAG from the root beat following successor
+    edges.  At each beat:
+    - **One successor** → follow it.
+    - **Multiple successors** → fork.  Follow successors whose path
+      membership overlaps the arc's selected paths, or that have no
+      ``belongs_to`` (zero-membership transition/gap beats).
+      Successors on other paths are pruned.
 
     See Story Graph Ontology Part 3 "Total Order Per Arc".
-
-    Algorithm:
-        1. Build dilemma → paths mapping from path node ``dilemma_id``.
-        2. Build beat → path set and path → dilemma mappings.
-        3. Build successor adjacency from ``predecessor`` edges.
-        4. For each path combination (Cartesian product), walk the DAG:
-           - Start from root beats (beats with no predecessors).
-           - At each beat, filter successors: keep those whose path
-             membership is compatible with the arc's selected paths
-             (or that have no ``belongs_to`` — zero-membership beats).
-           - Topologically sort the reachable beat set.
 
     Args:
         graph: Graph containing dilemma, path, and beat nodes with
             ``belongs_to`` and ``predecessor`` edges.
 
     Returns:
-        Dict mapping arc key (``"path_a+path_b"``) to topologically sorted
-        list of beat IDs.  Returns empty dict if no dilemmas or paths exist.
+        Dict mapping arc key to topologically sorted list of beat IDs.
+        Returns empty dict if no dilemmas or paths exist.
     """
     path_nodes = graph.get_nodes_by_type("path")
     dilemma_nodes = graph.get_nodes_by_type("dilemma")
@@ -242,7 +186,7 @@ def compute_arc_traversals(graph: Graph) -> dict[str, list[str]]:
     if not dilemma_nodes or not path_nodes:
         return {}
 
-    # Step 1: Build dilemma → paths mapping
+    # Build dilemma → paths mapping
     dilemma_paths: dict[str, list[str]] = defaultdict(list)
     for path_id, path_data in path_nodes.items():
         dilemma_id = path_data.get("dilemma_id")
@@ -260,7 +204,7 @@ def compute_arc_traversals(graph: Graph) -> dict[str, list[str]]:
     sorted_dilemmas = sorted(dilemma_paths.keys())
     path_lists = [dilemma_paths[did] for did in sorted_dilemmas]
 
-    # Step 2: Build beat → path set and path → dilemma
+    # Build beat → path set
     beat_nodes = graph.get_nodes_by_type("beat")
     beat_path_set: dict[str, set[str]] = {}
     for edge in graph.get_edges(edge_type="belongs_to"):
@@ -269,14 +213,7 @@ def compute_arc_traversals(graph: Graph) -> dict[str, list[str]]:
         if bid in beat_nodes and pid in path_nodes:
             beat_path_set.setdefault(bid, set()).add(pid)
 
-    path_to_dilemma: dict[str, str] = {}
-    for pid, pdata in path_nodes.items():
-        did = pdata.get("dilemma_id")
-        if did:
-            path_to_dilemma[pid] = normalize_scoped_id(did, "dilemma")
-
-    # Step 3: Build successor adjacency from predecessor edges
-    # predecessor(from=child, to=parent) → successors[parent] = [child, ...]
+    # Build successor adjacency from predecessor edges
     successors_all: dict[str, list[str]] = {bid: [] for bid in beat_nodes}
     predecessors_all: dict[str, list[str]] = {bid: [] for bid in beat_nodes}
     for edge in graph.get_edges(edge_type="predecessor"):
@@ -286,7 +223,9 @@ def compute_arc_traversals(graph: Graph) -> dict[str, list[str]]:
             successors_all[parent].append(child)
             predecessors_all[child].append(parent)
 
-    # Step 4: For each arc, walk the DAG collecting reachable beats
+    roots = [bid for bid in beat_nodes if not predecessors_all[bid]]
+
+    # For each arc, walk the DAG from root
     result: dict[str, list[str]] = {}
     for combo in product(*path_lists):
         path_combo = list(combo)
@@ -294,23 +233,10 @@ def compute_arc_traversals(graph: Graph) -> dict[str, list[str]]:
         path_raw_ids = sorted(path_nodes[pid].get("raw_id", pid) for pid in path_combo)
         arc_key = "+".join(path_raw_ids)
 
-        # A beat is compatible with this arc if:
-        # - It has no belongs_to (zero-membership: transition/gap beat) → always compatible
-        # - For each dilemma the beat touches via belongs_to, the arc
-        #   includes at least one of the beat's paths for that dilemma.
-        compatible_beats = _compute_compatible_beats(
-            beat_nodes,
-            beat_path_set,
-            path_to_dilemma,
-            arc_path_set,
-        )
-
-        # Walk the DAG from root beats, following compatible successors.
-        # Zero-membership beats (transition/gap) are only included if at
-        # least one of their successors is also in the reachable set —
-        # they are connective tissue, not destinations.
+        # BFS walk: at each beat, follow successors that match this arc.
+        # One successor → follow. Multiple → follow those on arc's paths
+        # or with zero belongs_to. Prune the rest.
         reachable: set[str] = set()
-        roots = [bid for bid in beat_nodes if not predecessors_all[bid]]
         queue = list(roots)
         visited: set[str] = set()
 
@@ -319,29 +245,28 @@ def compute_arc_traversals(graph: Graph) -> dict[str, list[str]]:
             if bid in visited:
                 continue
             visited.add(bid)
-
-            if bid not in compatible_beats:
-                continue
-
-            # For zero-membership beats, check if any successor is compatible.
-            # If not, this beat is a dead-end bridge to a path not in this
-            # arc — skip it.
-            if not beat_path_set.get(bid):
-                has_compatible_succ = any(s in compatible_beats for s in successors_all[bid])
-                if not has_compatible_succ:
-                    continue
-
             reachable.add(bid)
-            for succ in successors_all[bid]:
-                if succ not in visited:
-                    queue.append(succ)
 
-        # Safety net: compatible beats not reached by the walk (e.g., in
-        # predecessor cycles or disconnected subgraphs) are still included
-        # so _topological_sort_subset's cycle fallback can handle them.
-        for bid in compatible_beats:
-            if bid not in reachable and beat_path_set.get(bid):
-                reachable.add(bid)
+            for succ in successors_all[bid]:
+                if succ in visited:
+                    continue
+                succ_paths = beat_path_set.get(succ)
+                if not succ_paths:
+                    # Zero-membership (transition/gap) → always follow
+                    queue.append(succ)
+                elif succ_paths & arc_path_set:
+                    # Successor's paths overlap with arc → follow
+                    queue.append(succ)
+                # else: successor is on a different path → prune
+
+        # Safety net: path-member beats in predecessor cycles or disconnected
+        # subgraphs won't be reached by the root walk.  Include them so the
+        # topological sort's cycle fallback can handle them.
+        for bid in beat_nodes:
+            if bid not in reachable:
+                bp = beat_path_set.get(bid)
+                if bp and (bp & arc_path_set):
+                    reachable.add(bid)
 
         sequence = _topological_sort_subset(reachable, successors_all)
         result[arc_key] = sequence
@@ -381,17 +306,14 @@ def compute_passage_traversals(graph: Graph) -> dict[str, list[str]]:
     # Fallback: passage_from edges (legacy, passage→beat)
     if not beat_to_passages:
         for edge in graph.get_edges(edge_type="passage_from"):
-            # passage_from: from=passage, to=beat
             beat_to_passages[edge["to"]].append(edge["from"])
 
     result: dict[str, list[str]] = {}
     for arc_key, beat_sequence in arc_traversals.items():
-        passages: list[str] = []
         seen: set[str] = set()
+        passages: list[str] = []
         for beat_id in beat_sequence:
-            # Sort passage IDs for determinism when multiple passages
-            # share the same beat.
-            for passage_id in sorted(beat_to_passages.get(beat_id, [])):
+            for passage_id in beat_to_passages.get(beat_id, []):
                 if passage_id not in seen:
                     seen.add(passage_id)
                     passages.append(passage_id)
@@ -400,52 +322,48 @@ def compute_passage_traversals(graph: Graph) -> dict[str, list[str]]:
     return result
 
 
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
+
+
 def _topological_sort_subset(
     beat_set: set[str],
     successors_all: dict[str, list[str]],
 ) -> list[str]:
-    """Topologically sort a subset of beats using Kahn's algorithm.
+    """Topologically sort a subset of beats using successor edges.
 
-    Uses alphabetical tie-breaking for determinism. Falls back to
-    sorted order if a cycle is detected.
-
-    Args:
-        beat_set: Set of beat IDs to sort.
-        successors_all: Successor adjacency for all beats in the full graph.
-
-    Returns:
-        Topologically sorted list of beat IDs.
+    Uses Kahn's algorithm restricted to beats in ``beat_set``.
+    Falls back to sorted order if cycles are detected.
     """
     if not beat_set:
         return []
 
-    # Build in-degree restricted to the subset
+    # Build in-degree map restricted to subset
     in_degree: dict[str, int] = dict.fromkeys(beat_set, 0)
-    for bid in beat_set:
-        for succ in successors_all.get(bid, []):
-            if succ in beat_set:
-                in_degree[succ] += 1
+    for parent in beat_set:
+        for child in successors_all.get(parent, []):
+            if child in beat_set:
+                in_degree[child] = in_degree.get(child, 0) + 1
 
-    import heapq
-
-    queue = [bid for bid, deg in in_degree.items() if deg == 0]
-    heapq.heapify(queue)
+    queue_sorted = sorted(bid for bid, deg in in_degree.items() if deg == 0)
     result: list[str] = []
 
-    while queue:
-        node = heapq.heappop(queue)
-        result.append(node)
-        for succ in successors_all.get(node, []):
-            if succ in beat_set:
-                in_degree[succ] -= 1
-                if in_degree[succ] == 0:
-                    heapq.heappush(queue, succ)
+    while queue_sorted:
+        bid = queue_sorted.pop(0)
+        result.append(bid)
+        for child in successors_all.get(bid, []):
+            if child in in_degree:
+                in_degree[child] -= 1
+                if in_degree[child] == 0:
+                    # Insert in sorted position for determinism
+                    import bisect
 
-    if len(result) != len(beat_set):
-        log.warning(
-            "cycle_detected_in_beat_subset",
-            remaining=sorted(beat_set - set(result)),
-        )
-        return sorted(beat_set)
+                    bisect.insort(queue_sorted, child)
+
+    # Cycle fallback: if not all beats were emitted, append remaining sorted
+    if len(result) < len(beat_set):
+        remaining = sorted(beat_set - set(result))
+        result.extend(remaining)
 
     return result
