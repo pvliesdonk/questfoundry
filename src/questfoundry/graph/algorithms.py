@@ -305,7 +305,10 @@ def compute_arc_traversals(graph: Graph) -> dict[str, list[str]]:
             arc_path_set,
         )
 
-        # Walk the DAG from root beats, following compatible successors
+        # Walk the DAG from root beats, following compatible successors.
+        # Zero-membership beats (transition/gap) are only included if at
+        # least one of their successors is also in the reachable set —
+        # they are connective tissue, not destinations.
         reachable: set[str] = set()
         roots = [bid for bid in beat_nodes if not predecessors_all[bid]]
         queue = list(roots)
@@ -319,6 +322,14 @@ def compute_arc_traversals(graph: Graph) -> dict[str, list[str]]:
 
             if bid not in compatible_beats:
                 continue
+
+            # For zero-membership beats, check if any successor is compatible.
+            # If not, this beat is a dead-end bridge to a path not in this
+            # arc — skip it.
+            if not beat_path_set.get(bid):
+                has_compatible_succ = any(s in compatible_beats for s in successors_all[bid])
+                if not has_compatible_succ:
+                    continue
 
             reachable.add(bid)
             for succ in successors_all[bid]:
