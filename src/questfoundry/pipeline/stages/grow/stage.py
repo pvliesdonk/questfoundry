@@ -136,6 +136,7 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
         "atmospheric": "_phase_4d_atmospheric",
         "path_arcs": "_phase_4e_path_arcs",
         "entity_arcs": "_phase_4f_entity_arcs",
+        "transition_gaps": "_phase_transition_gaps",
         "overlays": "_phase_8c_overlays",
     }
 

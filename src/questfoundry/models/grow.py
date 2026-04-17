@@ -332,6 +332,21 @@ class Phase8cOutput(BaseModel):
     overlays: list[OverlayProposal] = Field(default_factory=list)
 
 
+class TransitionBridge(BaseModel):
+    """A single transition bridge between two beats."""
+
+    transition_id: str = Field(min_length=1)
+    summary: str = Field(min_length=1)
+    entities: list[str] = Field(default_factory=list)
+    location: str = ""
+
+
+class TransitionGapsOutput(BaseModel):
+    """Output of the transition gap detection LLM call."""
+
+    bridges: list[TransitionBridge] = Field(default_factory=list)
+
+
 # ---------------------------------------------------------------------------
 # Stage result
 # ---------------------------------------------------------------------------

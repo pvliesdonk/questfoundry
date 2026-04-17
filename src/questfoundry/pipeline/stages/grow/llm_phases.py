@@ -1318,6 +1318,157 @@ class _LLMPhaseMixin:
             tokens_used=total_tokens,
         )
 
+    @grow_phase(name="transition_gaps", depends_on=["atmospheric"], priority=7)
+    async def _phase_transition_gaps(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
+        """Phase 4g: Insert transition beats at hard cross-dilemma seams.
+
+        Detects predecessor edges that cross dilemma boundaries with no shared
+        entities or location (hard transitions), then asks the LLM to draft
+        1-2 sentence bridge beats for each seam.
+
+        Preconditions:
+        - Atmospheric details assigned (Phase 4d complete).
+        - Beats have summaries, entities, and locations.
+        - Predecessor edges from interleave_beats are in place.
+
+        Postconditions:
+        - Hard-transition seams receive a new ``transition_beat`` beat node.
+        - The original predecessor edge is removed and replaced with two edges:
+          predecessor(transition, earlier) and predecessor(later, transition).
+
+        Invariants:
+        - Only cross-dilemma hard transitions (no shared entity/location) processed.
+        - Bridge beats have role="transition_beat", scene_type="micro_beat".
+        - No dilemma_impacts on bridge beats (atmospheric only).
+        """
+        from questfoundry.graph.context import strip_scope_prefix
+        from questfoundry.graph.grow_algorithms import detect_cross_dilemma_hard_transitions
+        from questfoundry.models.grow import TransitionGapsOutput
+
+        transitions = detect_cross_dilemma_hard_transitions(graph)
+        if not transitions:
+            return GrowPhaseResult(
+                phase="transition_gaps",
+                status="completed",
+                detail="No hard transitions detected",
+            )
+
+        # Build context lines for each transition
+        beat_nodes = graph.get_nodes_by_type("beat")
+        transition_lines: list[str] = []
+        transition_map: dict[str, tuple[str, str]] = {}
+
+        for earlier, later in transitions:
+            tid = f"{earlier}\u2192{later}"
+            earlier_data = beat_nodes.get(earlier, {})
+            later_data = beat_nodes.get(later, {})
+
+            earlier_summary = truncate_summary(earlier_data.get("summary", ""), 80)
+            later_summary = truncate_summary(later_data.get("summary", ""), 80)
+            earlier_entities = earlier_data.get("entities") or []
+            later_entities = later_data.get("entities") or []
+            earlier_location = earlier_data.get("location", "")
+            later_location = later_data.get("location", "")
+
+            earlier_ents_str = (
+                ", ".join(str(e) for e in earlier_entities) if earlier_entities else "none"
+            )
+            later_ents_str = ", ".join(str(e) for e in later_entities) if later_entities else "none"
+
+            transition_lines.append(
+                f"transition_id: {tid}\n"
+                f"  FROM: {earlier} — {earlier_summary}\n"
+                f"    entities: {earlier_ents_str}\n"
+                f"    location: {earlier_location or 'unknown'}\n"
+                f"  TO:   {later} — {later_summary}\n"
+                f"    entities: {later_ents_str}\n"
+                f"    location: {later_location or 'unknown'}"
+            )
+            transition_map[tid] = (earlier, later)
+
+        # Get genre/tone from vision node
+        vision_node = graph.get_node("vision")
+        genre = ""
+        tone = ""
+        if vision_node:
+            genre = vision_node.get("genre", "")
+            tone_val = vision_node.get("tone")
+            if isinstance(tone_val, list):
+                tone = ", ".join(str(t) for t in tone_val)
+            elif isinstance(tone_val, str):
+                tone = tone_val
+
+        context = {
+            "transition_count": str(len(transitions)),
+            "transitions_context": "\n\n".join(transition_lines),
+            "genre": genre or "(not specified)",
+            "tone": tone or "(not specified)",
+        }
+
+        try:
+            result, llm_calls, tokens = await self._grow_llm_call(  # type: ignore[attr-defined]
+                model=model,
+                template_name="grow_phase4g_transition_gaps",
+                context=context,
+                output_schema=TransitionGapsOutput,
+            )
+        except GrowStageError as e:
+            return GrowPhaseResult(
+                phase="transition_gaps",
+                status="failed",
+                detail=str(e),
+            )
+
+        # Insert bridge beats
+        inserted = 0
+        for bridge in result.bridges:
+            pair = transition_map.get(bridge.transition_id)
+            if pair is None:
+                log.warning(
+                    "phase4g_unknown_transition_id",
+                    transition_id=bridge.transition_id,
+                )
+                continue
+
+            earlier, later = pair
+            earlier_raw = strip_scope_prefix(earlier)
+            later_raw = strip_scope_prefix(later)
+            beat_id = f"beat::transition_{earlier_raw}_{later_raw}"
+
+            # Skip if already exists (e.g. from a retry)
+            if graph.has_node(beat_id):
+                log.warning("phase4g_transition_beat_exists", beat_id=beat_id)
+                continue
+
+            graph.create_node(
+                beat_id,
+                {
+                    "type": "beat",
+                    "raw_id": f"transition_{earlier_raw}_{later_raw}",
+                    "summary": bridge.summary,
+                    "role": "transition_beat",
+                    "scene_type": "micro_beat",
+                    "dilemma_impacts": [],
+                    "is_gap_beat": True,
+                    "bridges_from": earlier,
+                    "bridges_to": later,
+                },
+            )
+
+            # Replace the old predecessor edge with two new ones
+            graph.remove_edge("predecessor", later, earlier)
+            graph.add_edge("predecessor", beat_id, earlier)
+            graph.add_edge("predecessor", later, beat_id)
+            inserted += 1
+
+        return GrowPhaseResult(
+            phase="transition_gaps",
+            status="completed",
+            detail=f"Inserted {inserted} transition bridge beats from {len(transitions)} hard transitions",
+            llm_calls=llm_calls,
+            tokens_used=tokens,
+        )
+
     # -------------------------------------------------------------------------
     # Late LLM phases (state_flags → validation)
     # -------------------------------------------------------------------------
