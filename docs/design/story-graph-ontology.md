@@ -576,13 +576,9 @@ These are places where the intuitive graph interpretation diverges from the narr
 
 ### Graph Convergence ≠ Narrative Convergence
 
-In a graph, convergence means "two nodes share a successor." In the story, convergence means "two storylines come back together narratively." A shared successor in the beat DAG might be:
+When soft dilemma paths rejoin a shared beat, the beat DAG has converged structurally — but the narrative has not fully converged. State flags derived from the dilemma's consequences remain active: entity overlays still differentiate character behaviour, post-convergence gated choices may still differ per path, and residue beats inserted by POLISH set different emotional contexts before the shared passage. The DAG says "same beat"; the player's experience says "same story moment, different world."
 
-- A genuine narrative convergence (soft dilemma paths rejoining after payoff)
-- An intersection (beats co-occurring from different dilemmas — not paths merging)
-- A shared beat before any commit (shared because no divergence has happened yet)
-
-Only the first is narrative convergence. An LLM seeing "two edges point to the same node" will default to "these paths converge." The graph structure alone cannot distinguish the three cases — the dilemma role, commit positions, and intersection declarations provide the context needed to interpret what a shared successor means.
+An implementation that treats DAG convergence as complete narrative equivalence — and stops accounting for state flags at that point — will produce a story that forgets the player's choices exactly at the moment they should be felt.
 
 ### Path Membership ≠ Scene Participation
 
