@@ -1219,15 +1219,20 @@ def _create_residue_beat_and_passage(graph: Graph, rspec: ResidueSpec) -> None:
     graph.add_edge("precedes", residue_passage_id, rspec.target_passage_id)
 
     # Insert into beat DAG.  Splice the residue beat before the target
-    # passage's first beat.  The DAG walk reaches it naturally; FILL
-    # decides whether to render it based on the state flag gate.
+    # passage's first beat.  Skip transition beats (zero-membership,
+    # may be pruned from arcs) — connect to the first regular beat.
     target_beats = [
         e["from"]
         for e in graph.get_edges(edge_type="grouped_in")
         if e["to"] == rspec.target_passage_id
     ]
     if target_beats:
-        target_beat = sorted(target_beats)[0]
+        beat_data = graph.get_nodes_by_type("beat")
+        # Prefer non-transition beats; fall back to any
+        regular_targets = [
+            tb for tb in target_beats if beat_data.get(tb, {}).get("role") != "transition_beat"
+        ]
+        target_beat = sorted(regular_targets or target_beats)[0]
         # Residue inherits the target beat's predecessors
         for pred_edge in graph.get_edges(edge_type="predecessor"):
             if pred_edge["from"] == target_beat:
