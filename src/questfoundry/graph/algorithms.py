@@ -259,24 +259,16 @@ def compute_arc_traversals(graph: Graph) -> dict[str, list[str]]:
                     queue.append(succ)
                 # else: successor is on a different path → prune
 
-        # Prune zero-membership beats whose successors are all outside
-        # reachable (bridges to paths not in this arc).
+        # Prune zero-membership beats (transition/gap) whose successors
+        # are all outside reachable — bridges to paths not in this arc.
         to_remove = {
             bid
             for bid in reachable
-            if not beat_path_set.get(bid)  # zero-membership
-            and successors_all[bid]  # has successors
+            if not beat_path_set.get(bid)  # zero-membership only
+            and successors_all[bid]
             and not any(s in reachable for s in successors_all[bid])
         }
         reachable -= to_remove
-
-        # Safety net: path-member beats in predecessor cycles or disconnected
-        # subgraphs won't be reached by the root walk.
-        for bid in beat_nodes:
-            if bid not in reachable:
-                bp = beat_path_set.get(bid)
-                if bp and (bp & arc_path_set):
-                    reachable.add(bid)
 
         sequence = _topological_sort_subset(reachable, successors_all)
         result[arc_key] = sequence

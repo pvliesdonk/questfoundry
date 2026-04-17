@@ -751,8 +751,13 @@ class TestComputeArcTraversalsDilemmaIdNormalization:
 class TestComputeArcTraversalsCycleFallback:
     """Tests for cycle detection fallback in _topological_sort_subset."""
 
-    def test_cyclic_predecessors_falls_back_to_sorted(self) -> None:
-        """When beats form a cycle, falls back to sorted order."""
+    def test_cyclic_predecessors_excluded_from_walk(self) -> None:
+        """Beats in a cycle have no root entry point and are not reached by the walk.
+
+        GROW validates the DAG is acyclic, so cycles should not occur in
+        production.  If they do, the walk simply doesn't reach them — they
+        are excluded from the arc traversal.
+        """
         graph = Graph.empty()
         _make_dilemma(graph, "dilemma::d1")
         _make_path(graph, "path::p1", "d1")
@@ -761,13 +766,13 @@ class TestComputeArcTraversalsCycleFallback:
         _add_belongs_to(graph, "beat::a", "path::p1")
         _add_belongs_to(graph, "beat::b", "path::p1")
 
-        # Create a cycle: a → b → a
+        # Create a cycle: a → b → a (no root → unreachable)
         graph.add_edge("predecessor", "beat::a", "beat::b")
         graph.add_edge("predecessor", "beat::b", "beat::a")
 
         result = compute_arc_traversals(graph)
-        # Cycle fallback returns sorted order
-        assert result == {"p1": ["beat::a", "beat::b"]}
+        # Cyclic beats are unreachable — empty traversal
+        assert result == {"p1": []}
 
 
 # ---------------------------------------------------------------------------
