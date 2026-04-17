@@ -1318,7 +1318,7 @@ class _LLMPhaseMixin:
             tokens_used=total_tokens,
         )
 
-    @grow_phase(name="transition_gaps", depends_on=["atmospheric"], priority=7)
+    @grow_phase(name="transition_gaps", depends_on=["path_arcs"], priority=8)
     async def _phase_transition_gaps(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
         """Phase 4g: Insert transition beats at hard cross-dilemma seams.
 
@@ -1359,7 +1359,7 @@ class _LLMPhaseMixin:
         transition_map: dict[str, tuple[str, str]] = {}
 
         for earlier, later in transitions:
-            tid = f"{earlier}\u2192{later}"
+            tid = f"{earlier}|{later}"
             earlier_data = beat_nodes.get(earlier, {})
             later_data = beat_nodes.get(later, {})
 
@@ -1390,7 +1390,7 @@ class _LLMPhaseMixin:
         vision_node = graph.get_node("vision")
         genre = ""
         tone = ""
-        if vision_node:
+        if vision_node is not None:
             genre = vision_node.get("genre", "")
             tone_val = vision_node.get("tone")
             if isinstance(tone_val, list):
@@ -1448,6 +1448,8 @@ class _LLMPhaseMixin:
                     "summary": bridge.summary,
                     "role": "transition_beat",
                     "scene_type": "micro_beat",
+                    "entities": bridge.entities,
+                    "location": bridge.location or "",
                     "dilemma_impacts": [],
                     "is_gap_beat": True,
                     "bridges_from": earlier,
@@ -1460,6 +1462,14 @@ class _LLMPhaseMixin:
             graph.add_edge("predecessor", beat_id, earlier)
             graph.add_edge("predecessor", later, beat_id)
             inserted += 1
+
+        if inserted == 0 and transitions:
+            log.warning(
+                "phase4g_no_bridges_matched",
+                transitions_detected=len(transitions),
+                bridges_returned=len(result.bridges),
+                hint="LLM may have returned transition_ids that don't match the expected format",
+            )
 
         return GrowPhaseResult(
             phase="transition_gaps",

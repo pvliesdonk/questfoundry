@@ -1438,9 +1438,9 @@ def detect_cross_dilemma_hard_transitions(graph: Graph) -> list[tuple[str, str]]
         if later_entities & earlier_entities:
             continue
 
-        # Skip if beats share the same location
-        later_loc = later_data.get("location")
-        earlier_loc = earlier_data.get("location")
+        # Skip if beats share the same location (normalize to handle scope prefix)
+        later_loc = strip_scope_prefix(later_data.get("location") or "")
+        earlier_loc = strip_scope_prefix(earlier_data.get("location") or "")
         if later_loc and earlier_loc and later_loc == earlier_loc:
             continue
 

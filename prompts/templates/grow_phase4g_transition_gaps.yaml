@@ -28,16 +28,16 @@ system: |
   ## Output
   Return a JSON object with a "bridges" array:
   ```json
-  {{{{
+  {
     "bridges": [
-      {{{{
-        "transition_id": "beat::a→beat::b",
+      {
+        "transition_id": "beat::a|beat::b",
         "summary": "As Alice leaves the docks, the distant market bell signals Milo's arrival.",
         "entities": ["character::alice", "character::milo"],
         "location": "location::docks"
-      }}}}
+      }
     ]
-  }}}}
+  }
   ```
 
 user: |
