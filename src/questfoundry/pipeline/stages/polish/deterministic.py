@@ -1218,30 +1218,17 @@ def _create_residue_beat_and_passage(graph: Graph, rspec: ResidueSpec) -> None:
     graph.add_edge("grouped_in", beat_id, residue_passage_id)
     graph.add_edge("precedes", residue_passage_id, rspec.target_passage_id)
 
-    # Insert into beat DAG.  The residue beat connects to a beat in the
-    # target passage that is on the SAME path as the residue (rspec.path_id).
-    # This ensures the residue only appears in arcs that include its path.
+    # Insert into beat DAG.  Splice the residue beat before the target
+    # passage's first beat.  The DAG walk reaches it naturally; FILL
+    # decides whether to render it based on the state flag gate.
     target_beats = [
         e["from"]
         for e in graph.get_edges(edge_type="grouped_in")
         if e["to"] == rspec.target_passage_id
     ]
-    if target_beats and rspec.path_id:
-        # Find a target beat on the residue's own path
-        target_beat = None
-        for tb in sorted(target_beats):
-            tb_paths = {e["to"] for e in graph.get_edges(edge_type="belongs_to") if e["from"] == tb}
-            if rspec.path_id in tb_paths:
-                target_beat = tb
-                break
-        if target_beat is None:
-            # No beat on the residue's path in the target passage.
-            # Skip DAG insertion; the precedes edge still connects
-            # at the passage layer.
-            return
-
-        # Copy predecessors from the target beat to the residue beat,
-        # then make the target beat depend on the residue beat.
+    if target_beats:
+        target_beat = sorted(target_beats)[0]
+        # Residue inherits the target beat's predecessors
         for pred_edge in graph.get_edges(edge_type="predecessor"):
             if pred_edge["from"] == target_beat:
                 graph.add_edge("predecessor", beat_id, pred_edge["to"])
