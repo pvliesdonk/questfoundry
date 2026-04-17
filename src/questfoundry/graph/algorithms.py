@@ -175,22 +175,58 @@ def arc_key_for_paths(
     return "+".join(raw_ids)
 
 
+def _compute_compatible_beats(
+    beat_nodes: dict[str, Any],
+    beat_path_set: dict[str, set[str]],
+    path_to_dilemma: dict[str, str],
+    arc_path_set: set[str],
+) -> set[str]:
+    """Return the set of beat IDs compatible with an arc's path selection.
+
+    A beat is compatible if:
+    - It has zero ``belongs_to`` (transition/gap beat) → always compatible.
+    - For each dilemma it touches via ``belongs_to``, the arc includes at
+      least one of the beat's paths for that dilemma.
+    """
+    result: set[str] = set()
+    for bid in beat_nodes:
+        bp = beat_path_set.get(bid)
+        if not bp:
+            result.add(bid)  # zero-membership → universal
+            continue
+        beat_dilemmas: dict[str, set[str]] = {}
+        for p in bp:
+            did = path_to_dilemma.get(p)
+            if did:
+                beat_dilemmas.setdefault(did, set()).add(p)
+        if all(d_paths & arc_path_set for d_paths in beat_dilemmas.values()):
+            result.add(bid)
+    return result
+
+
 def compute_arc_traversals(graph: Graph) -> dict[str, list[str]]:
-    """Compute arc traversals from graph structure without stored Arc nodes.
+    """Compute arc traversals by walking the beat DAG.
 
-    Replicates the logic of ``enumerate_arcs()`` in ``grow_algorithms.py``
-    but as a pure read-only computation. For each Cartesian product
-    combination of paths across dilemmas, collects all beats belonging
-    to those paths and topologically sorts them.
+    Each arc is a specific combination of path choices (one per dilemma).
+    The traversal walks the DAG from the root beat, following ``predecessor``
+    edges forward.  At Y-shape forks (where a shared beat has successors on
+    different paths of the same dilemma), the walk follows the successor
+    matching the arc's selected path.  Beats without ``belongs_to`` edges
+    (transition beats, gap beats) are walked through naturally — they sit
+    on the predecessor chain between path-member beats.
 
-    The arc key is the sorted path raw_ids joined by ``"+"``, matching
-    the ``arc_id`` convention used by stored Arc nodes.
+    See Story Graph Ontology Part 3 "Total Order Per Arc".
 
     Algorithm:
         1. Build dilemma → paths mapping from path node ``dilemma_id``.
-        2. Build path → beat set mapping from ``belongs_to`` edges.
-        3. Compute Cartesian product of paths (one per dilemma).
-        4. For each combination, union the beat sets and topologically sort.
+        2. Build beat → path set and path → dilemma mappings.
+        3. Build successor adjacency from ``predecessor`` edges.
+        4. For each path combination (Cartesian product), walk the DAG:
+           - Start from root beats (beats with no predecessors).
+           - At each beat, filter successors: keep those whose path
+             membership is compatible with the arc's selected paths
+             (or that have no ``belongs_to`` — zero-membership beats).
+           - Topologically sort the reachable beat set.
 
     Args:
         graph: Graph containing dilemma, path, and beat nodes with
@@ -198,7 +234,7 @@ def compute_arc_traversals(graph: Graph) -> dict[str, list[str]]:
 
     Returns:
         Dict mapping arc key (``"path_a+path_b"``) to topologically sorted
-        list of beat IDs. Returns empty dict if no dilemmas or paths exist.
+        list of beat IDs.  Returns empty dict if no dilemmas or paths exist.
     """
     path_nodes = graph.get_nodes_by_type("path")
     dilemma_nodes = graph.get_nodes_by_type("dilemma")
@@ -218,47 +254,85 @@ def compute_arc_traversals(graph: Graph) -> dict[str, list[str]]:
     if not dilemma_paths:
         return {}
 
-    # Sort paths within each dilemma for determinism
     for paths in dilemma_paths.values():
         paths.sort()
 
     sorted_dilemmas = sorted(dilemma_paths.keys())
     path_lists = [dilemma_paths[did] for did in sorted_dilemmas]
 
-    # Step 2: Build path → beat set mapping via belongs_to edges
-    path_beat_sets: dict[str, set[str]] = defaultdict(set)
-    belongs_to_edges = graph.get_edges(edge_type="belongs_to")
+    # Step 2: Build beat → path set and path → dilemma
     beat_nodes = graph.get_nodes_by_type("beat")
-    for edge in belongs_to_edges:
-        beat_id = edge["from"]
-        path_id = edge["to"]
-        if beat_id in beat_nodes and path_id in path_nodes:
-            path_beat_sets[path_id].add(beat_id)
+    beat_path_set: dict[str, set[str]] = {}
+    for edge in graph.get_edges(edge_type="belongs_to"):
+        bid = edge["from"]
+        pid = edge["to"]
+        if bid in beat_nodes and pid in path_nodes:
+            beat_path_set.setdefault(bid, set()).add(pid)
 
-    # Step 3: Build predecessor adjacency for topological sort
-    # successors_all: parent → [children] (prerequisite → dependents)
-    predecessor_edges = graph.get_edges(edge_type="predecessor")
+    path_to_dilemma: dict[str, str] = {}
+    for pid, pdata in path_nodes.items():
+        did = pdata.get("dilemma_id")
+        if did:
+            path_to_dilemma[pid] = normalize_scoped_id(did, "dilemma")
+
+    # Step 3: Build successor adjacency from predecessor edges
+    # predecessor(from=child, to=parent) → successors[parent] = [child, ...]
     successors_all: dict[str, list[str]] = {bid: [] for bid in beat_nodes}
-    for edge in predecessor_edges:
-        from_id = edge["from"]  # dependent (child)
-        to_id = edge["to"]  # prerequisite (parent)
-        if from_id in beat_nodes and to_id in beat_nodes:
-            successors_all[to_id].append(from_id)
+    predecessors_all: dict[str, list[str]] = {bid: [] for bid in beat_nodes}
+    for edge in graph.get_edges(edge_type="predecessor"):
+        child = edge["from"]
+        parent = edge["to"]
+        if child in beat_nodes and parent in beat_nodes:
+            successors_all[parent].append(child)
+            predecessors_all[child].append(parent)
 
-    # Step 4: Cartesian product of paths, build traversals
+    # Step 4: For each arc, walk the DAG collecting reachable beats
     result: dict[str, list[str]] = {}
     for combo in product(*path_lists):
         path_combo = list(combo)
+        arc_path_set = set(path_combo)
         path_raw_ids = sorted(path_nodes[pid].get("raw_id", pid) for pid in path_combo)
         arc_key = "+".join(path_raw_ids)
 
-        # Collect beats from all selected paths
-        beat_set: set[str] = set()
-        for pid in path_combo:
-            beat_set.update(path_beat_sets.get(pid, set()))
+        # A beat is compatible with this arc if:
+        # - It has no belongs_to (zero-membership: transition/gap beat) → always compatible
+        # - For each dilemma the beat touches via belongs_to, the arc
+        #   includes at least one of the beat's paths for that dilemma.
+        compatible_beats = _compute_compatible_beats(
+            beat_nodes,
+            beat_path_set,
+            path_to_dilemma,
+            arc_path_set,
+        )
 
-        # Topological sort within the beat subset
-        sequence = _topological_sort_subset(beat_set, successors_all)
+        # Walk the DAG from root beats, following compatible successors
+        reachable: set[str] = set()
+        roots = [bid for bid in beat_nodes if not predecessors_all[bid]]
+        queue = list(roots)
+        visited: set[str] = set()
+
+        while queue:
+            bid = queue.pop(0)
+            if bid in visited:
+                continue
+            visited.add(bid)
+
+            if bid not in compatible_beats:
+                continue
+
+            reachable.add(bid)
+            for succ in successors_all[bid]:
+                if succ not in visited:
+                    queue.append(succ)
+
+        # Safety net: compatible beats not reached by the walk (e.g., in
+        # predecessor cycles or disconnected subgraphs) are still included
+        # so _topological_sort_subset's cycle fallback can handle them.
+        for bid in compatible_beats:
+            if bid not in reachable and beat_path_set.get(bid):
+                reachable.add(bid)
+
+        sequence = _topological_sort_subset(reachable, successors_all)
         result[arc_key] = sequence
 
     return result

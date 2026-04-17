@@ -81,6 +81,12 @@ def validate_grow_output(graph: Graph) -> list[str]:
     for beat_id in beat_nodes:
         paths = beats_with_path.get(beat_id, [])
         if len(paths) == 0:
+            # Zero-belongs_to beats (transition beats, gap beats) are DAG
+            # infrastructure — they don't belong to any dilemma's Y-shape.
+            # See Story Graph Ontology Part 8 "Zero-belongs_to beats".
+            beat_data = beat_nodes[beat_id]
+            if beat_data.get("role") in ("transition_beat", "gap_beat"):
+                continue
             errors.append(f"Beat {beat_id} has no belongs_to edge (no path assignment)")
 
     # 4. State flag nodes exist for explored dilemmas

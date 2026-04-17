@@ -295,7 +295,9 @@ Beats are not cloned per reachable state — each beat is one node with one set 
 
 ### Total Order Per Arc
 
-The DAG defines a partial order. Each arc (a specific combination of path choices) defines a **total order** — the exact sequence of beats a player on that arc experiences. This total order is computed from the DAG by selecting, for each dilemma, one path's beats and ordering them according to the DAG's edges.
+The DAG defines a partial order. Each arc (a specific combination of path choices) defines a **total order** — the exact sequence of beats a player on that arc experiences. This total order is computed by **walking the DAG** from the root beat, following `predecessor` edges forward. At each Y-shape fork (where a shared beat has successors on different paths of the same dilemma), the traversal follows the successor matching the arc's selected path for that dilemma. Beats that are not on any fork branch — transition beats, gap beats, and other DAG infrastructure — are traversed naturally as the walk passes through them.
+
+This is a DAG walk, not a collection-by-membership operation. The `belongs_to` edges define which path a beat furthers narratively (the Y-shape from SEED), but the arc traversal follows the `predecessor` DAG structure that GROW built. Beats without `belongs_to` edges (transition beats, setup beats) are included whenever the walk reaches them — they sit on the predecessor chain between path-member beats and are traversed like any other node.
 
 Arcs are not stored as graph nodes. They are **computed traversals** of the DAG. Any stage that needs an arc's beat sequence computes it on demand from the DAG structure. Diagnostic tools may snapshot pre-computed arc sequences for inspection, but pipeline stages must never read arcs from stored nodes — they traverse the DAG.
 
@@ -588,11 +590,9 @@ A beat's `belongs_to` edge means "this beat serves this path's storyline — it 
 
 Intersection beats participate in scenes with beats from other paths, but they still belong to their original path. The historical cross-assignment of `belongs_to` edges across dilemmas conflated "shares a scene with beats from path B" with "is part of path B's storyline." This produced the hard-convergence violation: beats from mutually exclusive dilemmas appeared to belong to both, creating structurally impossible scenes.
 
-**Same-dilemma pre-commit multi-`belongs_to` is permitted.** A pre-commit beat — one that occurs before the dilemma's commit point — belongs to both paths of its own dilemma. This is structurally correct: every player experiences pre-commit beats regardless of which path they will later choose. Pre-commit beats have two `belongs_to` edges (one to each path in the dilemma); post-commit beats have exactly one.
+**Same-dilemma pre-commit multi-`belongs_to` is permitted.** A pre-commit beat — one that occurs before the dilemma's commit point — belongs to both paths of its own dilemma. This is structurally correct: every player experiences pre-commit beats regardless of which path they will later choose. Pre-commit beats have two `belongs_to` edges (one to each path in the dilemma); post-commit beats have exactly one. Cross-dilemma multi-`belongs_to` remains forbidden.
 
-**Cross-dilemma multi-`belongs_to` is permitted for transition beats only.** Transition beats (`role: transition_beat`) bridge two dilemmas — they are atmospheric connective tissue between unrelated scenes. They belong to paths from both the earlier and later dilemma so they appear in every arc that traverses the cross-dilemma seam. This is not the same as the historical cross-assignment for intersection semantics, which conflated scene sharing with path membership.
-
-For all other beat types, cross-dilemma multi-`belongs_to` remains forbidden.
+**Zero-`belongs_to` beats.** Beats that are not part of any dilemma's Y-shape — transition beats (GROW), gap beats (GROW), and other DAG infrastructure — have no `belongs_to` edges. They are traversed by every arc that reaches them via the predecessor chain. They do not "belong to" any path; they sit on the DAG between path-member beats and are walked through naturally. See "Total Order Per Arc" in Part 3.
 
 #### Determining a beat's `belongs_to`
 

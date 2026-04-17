@@ -1454,17 +1454,11 @@ class _LLMPhaseMixin:
                 },
             )
 
-            # Transition beats bridge two dilemmas and belong to paths from
-            # both sides.  Guard rail 1 is amended (Story Graph Ontology
-            # Part 8) to allow cross-dilemma dual belongs_to specifically
-            # for transition beats (role=transition_beat).
-            seen_paths: set[str] = set()
-            for bt_edge in graph.get_edges(edge_type="belongs_to"):
-                if bt_edge["from"] in (earlier, later):
-                    path_id = bt_edge["to"]
-                    if path_id not in seen_paths:
-                        graph.add_edge("belongs_to", beat_id, path_id)
-                        seen_paths.add(path_id)
+            # Transition beats have zero belongs_to — they are DAG
+            # infrastructure, not part of any dilemma's Y-shape.  Arc
+            # traversals reach them by walking the predecessor chain.
+            # See Story Graph Ontology Part 3 "Total Order Per Arc"
+            # and Part 8 "Zero-belongs_to beats".
 
             # Replace the old predecessor edge with two new ones
             graph.remove_edge("predecessor", later, earlier)
