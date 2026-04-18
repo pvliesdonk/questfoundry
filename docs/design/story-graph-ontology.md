@@ -422,6 +422,8 @@ The complete passage layer — passages connected by choice edges — is a direc
 
 This passage graph is what SHIP exports. Digital formats traverse it with an engine. Gamebook formats number the passages and print "turn to page X" choices with codeword checks.
 
+**The player traverses the passage graph, not the beat DAG.** The beat DAG is an authoring abstraction — it is the working structure that GROW and POLISH operate on. The passage graph is the runtime structure the player moves through. Arc computation (walking the beat DAG to determine total order) is POLISH's working tool for building the passage graph, not something that happens at runtime.
+
 ---
 
 ## Part 6: Entity Overlays and State
