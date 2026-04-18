@@ -80,7 +80,12 @@ One answer to a dilemma, explored as a complete storyline. Created by SEED when 
 
 A path is a container for beats — the sequence of story moments that proves this answer. That sequence includes: the shared pre-commit chain (beats with dual `belongs_to` edges, one to each path of the dilemma — experienced by every player before the fork), the commit beat (exclusive to this path, where the choice locks in), and the post-commit beats (exclusive to this path, proving the answer). The pre-commit chain appears in both paths of the dilemma simultaneously — it is not duplicated, it is shared. But the path itself is a working concept: after GROW interleaves beats into a DAG, the path's identity is encoded in beat membership and state flags, not in a separate path node that the player traverses.
 
-An answer that has no path exploring it is a **shadow** — the road not taken. Shadows are derivable (an answer node with no `explores` edge pointing at it) and do not need a dedicated node type. Context builders must find them to provide FILL with the narrative weight of unexplored alternatives.
+An answer that is not actively lived by the player is a **shadow** — the road not taken. Two kinds, mirroring the narrative definition in "How Branching Stories Work":
+
+- **Locked-dilemma shadow** — the dilemma exists in the fiction but SEED declined to branch it; one answer is canonized (or implicit) and the other is a permanent shadow for every playthrough. Identifiable from graph topology as an answer node with no `explores` edge pointing at it.
+- **Player-choice shadow** — the non-chosen answer of a branched dilemma on a specific arc. Every arc shadows exactly one answer per branched dilemma. Not stored as a graph node — derived at FILL time from the arc being written (the set of `explores` edges *not* selected by that arc).
+
+Neither kind requires a dedicated node type. Context builders surface both so FILL has the narrative weight of unexplored alternatives.
 
 **Working.** Consumed by GROW.
 
@@ -625,7 +630,13 @@ A beat's `belongs_to` edges are a **narrative** statement: "this beat furthers t
 
 Cross-dilemma co-occurrence (a scene that serves two dilemmas at once) is **not** represented as a beat belonging to two dilemmas. It is represented as two distinct beats (one per dilemma) linked by an `intersection_group`. This preserves guard rail 1 below (no cross-dilemma dual `belongs_to`).
 
-**Grouping invariant:** a beat with zero `belongs_to` is a singleton passage during POLISH. It cannot collapse with any path-specific chain because the collapse rule requires exact path-set equality, and the empty set equals only itself, not any single-path set.
+**Grouping rules for zero-`belongs_to` beats.** The uniform "singleton passage" rule does not hold across all structural sub-types — passage-layer grouping is driven by sub-type:
+
+- **Setup, transition, micro-beat** — singleton passages (or chained with other structural beats of the same kind). These do not collapse with path-specific chains: the collapse rule requires exact path-set equality, and the empty set matches only itself.
+- **Residue beat** — forms flag-gated variant passages, either alone (residue passage with two variants before a shared passage) or combined with a following shared beat (two parallel passages, each gating residue + shared content by flag). See Part 5 "Residue Beats and Residue Passages."
+- **False branch beat** — may group with other false-branch beats on the same cosmetic-fork arm into one passage (a multi-beat sidetrack).
+
+The common thread across all sub-types: zero-`belongs_to` beats never collapse into a *path-specific chain* (their path-set is empty), but residue and false-branch beats have their own sub-type-specific grouping logic driven by flag gating and cosmetic-fork arms.
 
 Guard rails:
 
