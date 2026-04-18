@@ -98,18 +98,30 @@ A narrative beat directly advances a dilemma. It carries **dilemma impacts** (wh
 
 #### Structural Beats
 
-A structural beat serves the DAG without advancing any dilemma. It carries zero `dilemma_impacts` and zero `belongs_to` edges. Every arc that reaches a structural beat via the predecessor chain traverses it — it belongs to no path but is walked through naturally. Four sub-types:
+A structural beat serves the DAG without advancing any dilemma. It carries zero `dilemma_impacts` and zero `belongs_to` edges. Every arc that reaches a structural beat via the predecessor chain traverses it — it belongs to no path but is walked through naturally. Five sub-types:
 
 - **Setup beat** (SEED) — world-building before any dilemma is introduced. Establishes context without serving a dilemma.
 - **Transition beat** (GROW) — atmospheric bridge between cross-dilemma scenes that share no entities or location.
 - **Micro-beat** (POLISH) — brief moment added for pacing within a linear section.
 - **Residue beat** (POLISH) — mood-setter placed before a shared passage. Carries state-flag-specific prose hints; only shown to players holding the relevant flag. Has no `dilemma_impacts` but is flag-dependent.
+- **False branch beat** (POLISH) — one of one-or-more beats on a cosmetic fork-rejoin structure (diamond or sidetrack) that gives the player the experience of choice without dilemma consequence. Carries no dilemma relationship. The surrounding choice edges may optionally grant cosmetic state flags (flags unrelated to any dilemma, used later by residue beats or prose variation for flavor).
 
 #### Beat Lifecycle
 
 SEED creates the initial narrative beats (the Y-shaped scaffold per dilemma) and any setup beats needed. GROW combines all per-dilemma scaffolds into a single beat DAG, adding transition beats for structural continuity. Once GROW has combined all dilemmas, **beats are never removed** and the **dilemma topology is frozen** — the forks and convergences driven by dilemmas cannot change. POLISH operates within that frozen topology, adding micro-beats and residue beats. At the end of POLISH, one or more beats are grouped into a passage. Throughout this lifecycle, a beat's identity — what happens — remains stable. The metadata around it evolves.
 
 **Working.** Beats are not exported. They are the authoring abstraction. The player sees passages.
+
+### Branch
+
+A fork in the beat DAG (and correspondingly in the passage graph) where a beat has multiple successors, giving the player more than one way forward. Two kinds:
+
+- **Dilemma branch** — the structural fork at a dilemma's commit. The last shared pre-commit beat has one successor per explored path of the dilemma (the commit beats). Produces path-exclusive post-commit beats, grants dilemma state flags, and carries real narrative consequence. See Part 3 "What the DAG Represents" for divergence topology.
+- **False branch** — a cosmetic fork-rejoin added by POLISH for the experience of agency without dilemma consequence. Two sub-patterns: **diamond** (two choices both lead to the same target passage) and **sidetrack** (one choice is a one-or-more-beat detour that rejoins). May optionally grant cosmetic state flags (unrelated to dilemmas) that later gate a residue beat or prose variation. See Part 5 "False Branches" for the passage-layer shape and "Beat" (above) for the false branch beat sub-type.
+
+Branches are not a separate node type — the fork is encoded in predecessor/successor edges between beats and in choice edges between passages. The category (dilemma vs. false) is determined by what the surrounding beats carry: a branch whose diverging successors are commit beats of a dilemma is a dilemma branch; a branch whose diverging successors are structural beats (zero `belongs_to`) is a false branch.
+
+**Working.** Derived from DAG / passage-graph topology. Not a standalone node, but the branching it produces is what the player experiences.
 
 ### Consequence
 
@@ -121,17 +133,16 @@ Consequences are the bridge between narrative stakes (the "why it matters" descr
 
 ### State Flag
 
-An internal boolean marker representing a world state that resulted from a committed choice. Derived from consequences during GROW. "The mentor is hostile" is a state flag.
+An internal boolean marker representing a world state. "The mentor is hostile" is a state flag.
 
 State flags represent world state, not player actions. "The mentor is hostile" is a correct formulation. "Player chose to distrust the mentor" is not — it describes the action, not the resulting state. This distinction matters: multiple different choices could eventually produce the same world state, and the prose layer cares about what is true in the world, not which button was pressed.
 
-State flags serve two purposes:
-- **Routing** — gating choice edges and variant passages so the player sees the right content after soft dilemma convergence
-- **Entity overlays** — activating conditional entity state so FILL writes the correct version of an entity
+State flags come from two sources:
 
-State flags exist for both hard and soft dilemmas. For soft dilemmas, they drive routing after convergence. For hard dilemmas, the graph structure handles routing (paths never rejoin), but state flags still activate entity overlays — the mentor entity is one node, and the overlay needs a flag to know which version to present.
+- **Dilemma flags** — derived from a path's consequences during GROW. The primary source. "The mentor is hostile" is a dilemma flag derived from the distrust path's consequence. Dilemma flags serve two purposes: **routing** (gating choice edges and variant passages so the player sees the right content after soft dilemma convergence) and **entity overlays** (activating conditional entity state so FILL writes the correct version of an entity).
+- **Cosmetic flags** — granted by a false branch's choice edge during POLISH. Unrelated to any dilemma. Never route structural branches, but may gate a later residue beat or trigger prose variation ("signed in green"). Narrative seasoning, not structure.
 
-One state flag per soft dilemma suffices for routing: present means path A was taken, absent means path B. Hard dilemmas need flags only for overlay activation.
+Dilemma flags exist for both hard and soft dilemmas. For soft dilemmas, they drive routing after convergence. For hard dilemmas, the graph structure handles routing (paths never rejoin), but state flags still activate entity overlays — the mentor entity is one node, and the overlay needs a flag to know which version to present. One state flag per soft dilemma suffices for routing: present means path A was taken, absent means path B. Hard dilemmas need flags only for overlay activation.
 
 **Internal.** State flags are implementation machinery. The player does not interact with them in digital formats.
 
@@ -232,6 +243,8 @@ Each node in the DAG is a beat. Each directed edge means "this beat comes before
 A beat with two successors (one per path of a dilemma) represents a **divergence**: the story splits at the commit. A beat with two predecessors (from different paths) represents a **convergence**: the storylines rejoin structurally. These structural moments are not separate node types — they are visible in the DAG's topology. Structural convergence in the DAG does not mean the narrative experience converges — state flags, entity overlays, and residue beats continue to differentiate arcs after the DAG rejoins. → See Part 8 "Graph Convergence ≠ Narrative Convergence."
 
 Divergence happens *between* the last shared pre-commit beat (which has one successor per path) and the per-path commit beats that follow it — each commit beat is the first beat exclusive to its path.
+
+Not every fork in the DAG is a dilemma divergence. POLISH may add **false branches** — cosmetic fork-rejoin structures that produce the experience of choice without dilemma consequence. False branches are visually similar to dilemma divergences (a beat with two successors) but the diverging successors are structural beats (zero `belongs_to`) rather than commit beats. See Part 1 "Branch" for the full taxonomy.
 
 The first beat with predecessors from both post-commit chains is the **convergence point** — a graph-shape shorthand, not a narrative category. A soft dilemma's paths terminate at their last exclusive beat; the convergence beat is outside them and does not carry `belongs_to` to either path on the converged dilemma's account. See Part 8 "Determining a beat's `belongs_to`" for the governing rule.
 
@@ -414,7 +427,7 @@ Not every choice needs to be a real dilemma. POLISH creates **false branches** f
 - **Diamond** — two choices from passage A lead to passages B and C, which both lead to passage D. The player picks, but the story arrives at the same place.
 - **Sidetrack** — one choice goes directly to the next passage, the other takes a one-or-two-beat detour before rejoining. The player who detoured gets extra content but the story continues from the same point.
 
-False branches involve no state flags — they are purely topological patterns in the passage graph.
+False branches involve no dilemma relationship. They may optionally carry cosmetic state flags — granted by the branch's choice edges and consumed later by residue beats or prose variation. They are additions at both layers: structural beats (one or more per branch arm, zero `belongs_to`) plus the passage-graph topology that connects them. See Part 1 "False branch beat" for the beat sub-type, and "State Flag" for the cosmetic flag source.
 
 ### The Passage Graph
 
