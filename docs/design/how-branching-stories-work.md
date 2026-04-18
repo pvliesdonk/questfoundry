@@ -14,7 +14,12 @@ The pre-commit chain is shared — it appears in both paths of the dilemma. A pl
 
 *Not to be confused with **arc** — an arc is a complete playthrough combining one path from each dilemma. "The protector path" refers to one dilemma's answer; "the protector+artifact-saves arc" is the full story a player experiences.*
 
-**Shadow** — The answer not explored. Every path has a shadow — the road not taken. Shadows are not dead content; they give weight to the choice. The player chose to trust the mentor, but the *possibility* of betrayal is what makes that trust meaningful. Even unexplored dilemmas (where the player never made an active choice) can cast shadows — the narrative can touch on "what could have been."
+**Shadow** — The answer not taken. Every dilemma has two contrasting options; the shadow is the side that doesn't become the player's reality. Two sources:
+
+- **Player-choice shadow** — the dilemma is a branch point in the story; the player takes one path, the other is the shadow for that playthrough. "The player chose to trust the mentor; betrayal is the shadow."
+- **Locked-dilemma shadow** — SEED declined to branch the dilemma (each active dilemma doubles the branching work, so not all BRAINSTORM dilemmas survive as branches). The dilemma exists in the fiction but the player never chooses; the unexplored answer is a permanent shadow, present only as narrative possibility.
+
+Shadows are not dead content. They give weight to what IS by making visible what isn't. FILL uses shadows to accentuate the actual dilemma — a reference to the path not taken deepens the reader's sense of what the chosen path costs or secures.
 
 **Beat** — A concrete story moment. Most beats serve a dilemma (they advance, reveal, commit, or complicate); others are structural — setup, transitions, pacing, mood — with no dilemma relationship. Beats are the building blocks between abstract dilemmas and finished prose, and the fundamental unit manipulated throughout the pipeline. From SEED onward, the work is essentially: creating, ordering, and refining beats.
 
@@ -29,7 +34,7 @@ Each beat describes its relationship to the dilemma it serves — it does one of
 
 These describe what a beat does to the dilemma, not its full narrative purpose. When SEED scaffolds a path, it assembles beats into a complete arc — typically introducing the dilemma, developing it through advances and complications, surfacing a reveal, reaching a commit, and playing out the consequences. But this is a common shape, not a formula. A path might need multiple reveals, a try-fail cycle before the commit, emotional reaction beats that process what just happened, or setup beats that establish context without directly touching the dilemma. The scaffold should serve the story, not a template.
 
-Setup beats that serve no dilemma carry zero `belongs_to` edges in the graph. The ontology (`story-graph-ontology.md` Part 8, "Determining a beat's `belongs_to`") defines the three beat categories: shared pre-commit (dual), commit and exclusive post-commit (single), and setup / transition / epilogue (zero).
+Setup beats that serve no dilemma carry zero `belongs_to` edges in the graph. The ontology defines the full beat taxonomy in `story-graph-ontology.md` Part 1 (narrative beats vs. structural beats with their sub-types), and the `belongs_to` edge rule in Part 8 ("Determining a beat's `belongs_to`"): shared pre-commit (dual), commit and exclusive post-commit (single), setup / transition / epilogue (zero).
 
 **Passage** — What the player actually reads. A passage is the player-facing version of one or more beats, turned into prose. The player sees passages; the author thinks in beats.
 
@@ -49,17 +54,17 @@ In the graph, residue is implemented as **state flags** — boolean markers deri
 
 **Intersection** — Where independent storylines share a scene. If one path involves stealing a diamond and another involves meeting a spy, and both happen at the same party, that party is an intersection. Intersections make the world feel connected — choices across different dilemmas collide in the same moment.
 
-An intersection is a co-occurrence declaration, not a structural merge. The two beats remain separate — each still belongs only to its own dilemma's path, each still advances only its own dilemma. The intersection records that they share a scene; POLISH will group them into one passage. A beat that co-occurs with a beat from another path does **not** gain a `belongs_to` edge to that other path — it gains membership in an intersection group.
+An intersection is a co-occurrence declaration, not a structural merge. The two beats remain separate — each still belongs only to its own dilemma's path, each still advances only its own dilemma. The intersection is a planning signal GROW uses when assembling the beat DAG: it places the beats such that adjacent placement is structurally possible. POLISH later assesses the finalized DAG and may group them into one passage — but it is not bound by the intersection declaration. A beat that co-occurs with a beat from another path does **not** gain a `belongs_to` edge to that other path — it gains membership in an intersection group that GROW consumes during assembly.
 
 **Convergence** — Where diverged storylines rejoin. After a dilemma commits and paths split, they may eventually come back together. Whether and when they converge depends on the residue — paths with heavy residue may never converge (the worlds are too different), while paths with light residue can rejoin naturally. Convergence never erases a choice — the residue persists even after paths rejoin. Structural convergence (the beat DAG paths rejoin a shared beat) does not mean the narrative is identical again: state flags remain active, entity overlays still differentiate character behaviour, and residue beats continue to set different emotional contexts for the shared passage.
 
 **Variant Passage** — A separate version of a passage written for a specific combination of active residues. When heavy residue makes it impossible for one passage to serve all arcs honestly, each arc (or group of arcs) gets its own variant. Same story moment, genuinely different prose. Variants are not conditional text within a passage — they are complete, separate passages. *Why variants and not a single passage with conditionals:* heavy residue means the narrative truth is genuinely different — "the mentor is dead" and "the mentor is alive" cannot be served by one honest text. Any attempt to write a single passage that covers both would either lie to one arc or become so hedged it satisfies neither.
 
-**Residue Beat** — A short passage inserted before a shared passage to establish emotional context. When light residue affects how a shared scene should feel, a residue beat sets the mood without requiring the shared passage itself to vary. "You enter the vault with confidence, the mentor's endorsement giving you courage" (one path) vs. "You enter the vault alone, vigilant" (another path) — then both arrive at the same shared passage. *Why a residue beat and not a variant passage:* light residue means the scene itself is the same — what differs is only the emotional register. A well-crafted shared passage can be honest for both arcs once the right mood has been established.
+**Residue Beat** — A short beat inserted before a shared beat to establish emotional context. When light residue affects how a shared scene should feel, a residue beat sets the mood without requiring the shared beat itself to vary. "You enter the vault with confidence, the mentor's endorsement giving you courage" (one path) vs. "You enter the vault alone, vigilant" (another path) — then both arrive at the same shared beat. *Why a residue beat and not a variant passage:* light residue means the scene itself is the same — what differs is only the emotional register. A well-crafted shared beat can be honest for both arcs once the right mood has been established.
 
 **Gated** — A passage or choice that only exists for players who hold a specific state flag. The player experiences gating as consequence: "because I trusted the mentor, this scene happens for me; someone who didn't trust the mentor gets a different scene." Gating is how the story enforces that choices have structural consequences, not just prose differences.
 
-Most branching in the story follows DAG structure — you are literally on a different branch. Gating is different: it operates on state flags, meaning it can create divergence even after the DAG has structurally converged. A soft dilemma's paths may rejoin at a shared beat, but a gated choice immediately after that beat can send players with different flags in different directions again. Residue beats are a mild form of gating — a passage only shown to players with a specific flag, placed before a shared passage to set emotional context.
+Most branching in the story follows DAG structure — you are literally on a different branch. Gating is different: it operates on state flags, meaning it can create divergence even after the DAG has structurally converged. A soft dilemma's paths may rejoin at a shared beat, but a gated choice immediately after that beat can send players with different flags in different directions again. Residue beats are a mild form of gating — a flag-dependent beat placed before a shared beat to set emotional context. How POLISH maps this into passages is a later decision: typically one residue passage with two variants (gated by their respective flags) followed by a shared passage, but POLISH may instead pull the following shared beat in with the residue beat and produce two parallel passages.
 
 ---
 
@@ -79,7 +84,7 @@ The pipeline builds a branching story in stages:
 | **BRAINSTORM** | Build the cast and dilemmas |
 | **SEED** | Scaffold paths with beats, order dilemmas |
 | **GROW** | Weave independent paths into a branching structure |
-| **POLISH** | Shape the structure into a prose-ready story *(new — split from GROW)* |
+| **POLISH** | Shape the structure into a prose-ready story |
 | **FILL** | Write the prose |
 | **DRESS** | Create illustrations and reference material |
 | **SHIP** | Export to playable formats |
@@ -152,7 +157,7 @@ While scaffolding beats, SEED annotates them with **flexibility** — hints abou
 
 A beat that says "the protagonist meets the spy at the docks" might be annotated: the docks could also be the market. The spy could also be the informant. These are not changes — they are invitations. They tell GROW: "if you need to group this beat with another storyline, here's where there's room."
 
-This is how independent paths create the conditions for intersection later. If path A has "meet the spy at the docks" and path B has "find the artifact at the market," and SEED annotated that the spy meeting could happen at the market too — GROW can group them into one scene: meeting the spy at the market, where the artifact also happens to be. The beats remain separate — each still advances its own dilemma — but they co-occur, and POLISH will turn them into a single passage.
+This is how independent paths create the conditions for intersection later. If path A has "meet the spy at the docks" and path B has "find the artifact at the market," and SEED annotated that the spy meeting could happen at the market too — GROW can place them at the same scene in the DAG: meeting the spy at the market, where the artifact also happens to be. The beats remain separate — each still advances its own dilemma — but they co-occur in the DAG. POLISH, working from the finalized DAG, decides whether to group them into a single passage.
 
 ### Ordering Dilemmas
 
@@ -246,12 +251,12 @@ SEED's entity flexibility annotations are the raw material here. GROW looks for 
 
 As GROW walks through the interleaved beats, it identifies two critical structural moments:
 
-**Divergence** is where a commit forces the story to branch. Before the mentor dilemma commits, all players experience the same beats. At the commit, the story splits — one version for players who trusted the mentor, another for those who didn't. The divergence point is the last shared beat before the split.
+**Divergence** is where a commit forces the story to branch. Before the mentor dilemma commits, all players experience the same beats. At the commit, the story splits — one version for players who trusted the mentor, another for those who didn't. The divergence point is the edge between the last shared pre-commit beat and the per-path commit beats — the last shared beat has one successor per path, each of which is a commit beat exclusive to its path.
 
 **Convergence** is where branched storylines rejoin. This is governed by the intent SEED expressed:
 
 - For hard dilemmas: paths never structurally rejoin. The worlds are too different. The story carries separate beats all the way to separate endings.
-- For soft dilemmas: paths rejoin after enough payoff — a few **gated** beats exclusive to each path that let the player experience the consequences of their choice, then the storylines come back together. The residue persists (the mood is different, the details shift), but the structural path is shared again.
+- For soft dilemmas: paths rejoin after enough payoff. The real payoff happens **before** convergence, in the path-exclusive post-commit beats — these are separated by DAG structure (each on its own branch), not by flag gating. After convergence, the storylines are similar enough to share most beats. Residue beats and variant passages (gated by state flags) carry the echo forward — an occasional differentiation in an otherwise shared stretch. If the storylines are too different to rejoin this way, that is a hard dilemma by definition, not a soft one with heavy residue.
 - For flavor-level choices: paths barely diverge. The choice affects tone and details but not which beats the player experiences.
 
 Convergence is never about erasing a choice. Even when paths rejoin, the residue — the narrative memory of what the player chose — must persist. A converged passage might be shared structurally, but the player's experience of it should still reflect their journey.
@@ -275,8 +280,6 @@ If validation fails, the problem is structural — it goes back to GROW or SEED 
 GROW produced a valid branching structure — one where every combination of choices leads to a complete story. But a valid structure is not yet a story a player wants to read. POLISH takes the frozen structure and shapes it into something ready for prose.
 
 POLISH never changes what happens or on which branches. It changes how the story is presented and ensures that every passage can actually be written well.
-
-*Note: POLISH was historically part of GROW. It is separated here because the concerns are distinct — GROW is about the branching structure, POLISH is about story craft. Mixing them made both harder to reason about.*
 
 ### Character Arcs
 

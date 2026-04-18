@@ -416,9 +416,14 @@ Variants are linked to a **base passage** so the relationship is explicit: "thes
 
 ### Residue Beats and Residue Passages
 
-When light residue affects how a shared scene should feel, POLISH inserts a **residue beat** before the shared passage. The residue beat is a brief mood-setter — "You enter the vault with confidence" (trust path) vs. "You enter the vault on guard" (distrust path) — that sets the emotional context without requiring the shared passage to vary.
+When light residue affects how a shared scene should feel, POLISH inserts a **residue beat** before the shared beat. The residue beat is a brief mood-setter at the beat layer — "You enter the vault with confidence" (trust path) vs. "You enter the vault on guard" (distrust path) — that sets the emotional context without requiring the shared beat itself to vary.
 
-In graph terms, a residue beat becomes a short passage placed before the shared passage, with one variant per path, each gated by the appropriate state flag. The shared passage that follows is ungated — both paths arrive there, and the residue beat has already established the emotional context.
+The passage-layer mapping is a separate POLISH decision, typically one of:
+
+- **Residue passage with two variants** — the residue beat becomes its own short passage with one variant per path (each gated by the appropriate state flag), followed by a shared passage containing the shared beat. Both paths arrive at the shared passage after their respective residue-passage variant.
+- **Parallel passages** — POLISH pulls the following shared beat into the residue beat, producing two parallel passages (each containing residue+shared content for one path, gated by the appropriate state flag). The shared beat still exists once in the DAG, but the passage layer renders it twice.
+
+Either mapping preserves the beat-layer intent (flag-dependent mood before a shared beat). The choice between them depends on POLISH's assessment of prose feasibility and passage rhythm.
 
 ### False Branches
 
