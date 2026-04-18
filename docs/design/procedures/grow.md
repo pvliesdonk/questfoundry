@@ -121,7 +121,7 @@ R-2.6. Intersection Groups carry resolved scene context (shared location, shared
 | Symptom | Root cause | Broken rule |
 |---------|-----------|-------------|
 | Beat has `belongs_to` edges to paths from two different Dilemmas after GROW | Intersection modeled via cross-dilemma `belongs_to` instead of Intersection Group | R-2.5 |
-| Intersection Group contains two pre-commit beats of `dilemma::mentor_trust` | Same-dilemma pre-commit beats grouped as simultaneous | R-2.4 |
+| Intersection Group contains two pre-commit beats of `dilemma::mentor_trust` | Pre-commit beats of the same dilemma are already sequentially ordered in the dilemma's pre-commit chain; grouping them into an intersection implies simultaneity, which contradicts the chain ordering | R-2.4 |
 | Intersection Group contains `beat_a` (post-commit of `dilemma::mentor_trust::protector`) and `beat_b` (post-commit of `dilemma::mentor_trust::manipulator`) — same dilemma, mutually exclusive paths | Mutually exclusive paths grouped as simultaneous | R-2.3 |
 | Candidate LLM call receives `[beat_001, beat_002, beat_003]` as Python list repr | Context formatting broken — LLM cannot reason about bare IDs | R-2.2 |
 
@@ -131,7 +131,7 @@ R-2.6. Intersection Groups carry resolved scene context (shared location, shared
 
 **Rules:**
 
-R-2.7. For every `predecessor` edge A → B where A is in an Intersection Group, `paths(B) ⊇ paths(A_post_intersection)`. If the invariant fails, reject the intersection candidate — the beats remain separate.
+R-2.7. For every `predecessor` edge A → B where A is in an Intersection Group, `paths(B) ⊇ paths(A_post_intersection)`. Here `paths(A_post_intersection)` denotes the set of paths that reach A once the intersection is applied — i.e., A's original `belongs_to` set plus any paths that reach A via its Intersection Group co-members. If the invariant fails, reject the intersection candidate — the beats remain separate.
 
 R-2.8. Intersection rejection due to the invariant is logged at INFO with the candidate beat IDs and the violating predecessor edge.
 
@@ -222,7 +222,7 @@ R-3.7. After Phase 3 completes, applying all surviving temporal hints to the bas
 
 | Symptom | Root cause | Broken rule |
 |---------|-----------|-------------|
-| `interleave_cycle_skipped` warning in logs after GROW completes | Cyclic hint slipped through Phase 3 and was dropped silently in Phase 4 — pipeline failure per the Silent Degradation policy | R-3.7 |
+| `interleave_cycle_skipped` log entry appears after GROW | Cyclic hint slipped through Phase 3 and was dropped in Phase 4 — this is a pipeline ERROR, not a warning. Any occurrence of this log signature indicates a hard failure and must halt the pipeline per the Silent Degradation policy | R-3.7 |
 
 ### Output Contract
 
@@ -695,7 +695,7 @@ Consequences of `mentor_trust__protector` and `mentor_trust__manipulator` each p
 
 ### Phase 8
 
-4 arcs (2^1 from `mentor_trust` × 1 from `archive_nature`-canonical-only + no × from hard-with-canonical-only = 2 arcs). Wait: 2 paths × 1 path = 2 arcs. Each validated: complete, reaches terminal, one commit each.
+2 arcs (`mentor_trust` has 2 explored paths × `archive_nature` has only the canonical path = 2 arcs). Each validated: complete, reaches terminal, exactly one commit beat per explored Dilemma.
 
 ### Phase 9
 

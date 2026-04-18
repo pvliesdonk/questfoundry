@@ -250,7 +250,7 @@ R-4c.6. False branch choices (cosmetic) have empty `requires` unless they grant 
 
 | Symptom | Root cause | Broken rule |
 |---------|-----------|-------------|
-| Phase 4c produces zero choice edges | No Y-fork in beat DAG — SEED did not produce Y-shape, or GROW failed. Halt with ERROR; do not silently pass empty plan | R-4c.2 |
+| Phase 4c produces zero choice edges | No Y-fork in beat DAG — SEED did not produce Y-shape, or GROW failed. POLISH MUST halt with ERROR identifying the broken upstream stage; silently passing an empty plan forward violates the Silent Degradation policy (see Implementation Constraints) | R-4c.2 |
 | Post-convergence soft-dilemma choice has empty `requires` | Flag gate missing — player on wrong path can take unavailable choice | R-4c.3 |
 | Hard-dilemma choice has `requires` set | Unnecessary gate (passage graph is already separate) | R-4c.4 |
 
@@ -639,22 +639,9 @@ The single human gate is between Phase 3 (beat DAG freeze) and Phase 4 (plan com
 
 **Constrained (~32k context):** Phase 5 batches per-task calls (choice labels per passage, residue content per spec) to keep individual prompts small. Phase 3 may batch character arc synthesis by path rather than one-entity-per-call.
 
-## Critical Utility: `compute_active_flags_at_beat()`
+## Flag Computation Note
 
-A shared utility that replaces Arc-dependent flag computation.
-
-**Purpose:** For a given beat, return the set of possible state flag combinations active at that beat's DAG position.
-
-**Algorithm:**
-1. Find all commit beats in the DAG.
-2. For the target beat B, determine which commit beats are ancestors via reverse BFS on `predecessor` edges.
-3. Map ancestor commits → their dilemmas → the state flag each activates.
-4. Compute valid flag combinations respecting mutual exclusivity (cannot be on both paths of the same dilemma).
-5. Return the set of frozensets.
-
-**Performance:** O(beats × dilemmas) per query — fast for any realistic story (3–5 dilemmas, ~50 beats).
-
-**Replaces:** Arc-dependent flag lookup. Arcs are computed traversals, not stored nodes (→ ontology §Part 3); this utility removes the need to materialize Arc objects.
+Phase 4b's prose feasibility audit needs to know which state flags are *structurally relevant* at each passage — i.e., which commit beats are ancestors of the passage's beats in the DAG. This is a graph-level query computable on demand from the finalized DAG; it does not require materialized Arc objects (arcs are computed traversals, not stored nodes — → ontology §Part 3: Total Order Per Arc). Implementation details (algorithm choice, performance characteristics, utility function signature) belong in code-level documentation, not this procedure doc.
 
 ## Worked Example
 

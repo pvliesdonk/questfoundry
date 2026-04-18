@@ -198,7 +198,7 @@ R-3.15. Setup and epilogue beats are optional — a story may have zero of each.
 | Epilogue beat has `dilemma_impacts.effect: commits` | Epilogue is post-all-commits; cannot commit a dilemma | R-3.14 |
 | Commit beat has `also_belongs_to` set | Commit beats are exclusive to one path; `also_belongs_to` must be null | R-3.7 |
 | Post-commit beat has `dilemma_impacts.effect: commits` | Post-commit beats must not contain a commits impact (that would make them a commit beat) | R-3.8 |
-| Dilemma has zero pre-commit beats | Y-fork missing; POLISH Phase 4c will produce zero choices | R-3.10 |
+| Dilemma has zero pre-commit beats | Y-fork missing — per the Y-shape requirement stated in the Overview, the last shared pre-commit beat is the divergence point that seeds the Y-fork. Without it, POLISH Phase 4c's `compute_choice_edges()` finds no divergence and produces zero choices | R-3.10 |
 | Path has zero commit beats | Path cannot "commit" — no point of irreversible choice | R-3.11 |
 | Path has two commit beats | A path commits once, not twice | R-3.11 |
 | Path has only one post-commit beat | Minimum is 2; single post-commit gives no space to prove the answer | R-3.12 |
@@ -465,7 +465,7 @@ R-8.5. If the LLM call fails, no relationships are declared — the graph is lef
 | Symptom | Root cause | Broken rule |
 |---------|-----------|-------------|
 | n×(n-1)/2 ordering edges declared for n Dilemmas | Exhaustive O(n²) declaration instead of sparse | R-8.2 |
-| `concurrent` edge from `dilemma::zero` to `dilemma::alpha` (non-lex order) | Normalization rule not applied | R-8.3 |
+| `concurrent` edge with `dilemma_a: dilemma::mentor_trust` and `dilemma_b: dilemma::archive_nature` | Non-lex order — `archive_nature` precedes `mentor_trust` alphabetically, so it should be `dilemma_a`. Normalization rule not applied | R-8.3 |
 | `shared_entity` edge exists in graph | Declared as an edge instead of derived | R-8.4 |
 | `concurrent` edge duplicated (A→B and B→A) | Symmetric edge stored twice | R-8.3 |
 
@@ -599,7 +599,8 @@ R-8.5: LLM failure in Phase 8 logged at WARNING.
 | 3 (Path Construction) | 2 (Answer Selection) | Path proves unworkable |
 | 4 (Convergence Sketching) | 2 (Answer Selection) | Paths can't converge naturally; demote non-canonical |
 | 5 (Viability) | 2 (Answer Selection) | Scope too large; manual pruning |
-| Any | 1 (Entity Triage) | Missing critical entity discovered |
+| Phases 1–5 (pre-freeze) | 1 (Entity Triage) | Missing critical entity discovered |
+| Phases 7–8 (post-freeze) | re-enter 6 (Path Freeze) | Missing entity surfaces post-freeze — re-authorization required before any Phase-1 loop |
 | Any | BRAINSTORM | Dilemmas poorly formed; entities missing; vision mismatch |
 
 **Maximum iterations:**
