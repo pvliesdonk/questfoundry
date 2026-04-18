@@ -117,7 +117,7 @@ R-2.6. LLM receives full Passage prose + ArtDirection + EntityVisuals for every 
 
 ### Input Contract
 
-1. Phase 2 Output Contract satisfied (Phase 3 may run in parallel with Phase 2).
+1. Phase 1 Output Contract satisfied (Phase 3 may run in parallel with Phase 2; it only depends on Phase 1's Entity/EntityVisual outputs and the FILL-era state flags).
 
 ### Operations
 
@@ -137,7 +137,7 @@ R-3.4. Codex entries are diegetic — written in the story's voice, not as techn
 
 R-3.5. Each entry is self-contained — readable without prior tiers.
 
-R-3.6. Lower-ranked tiers must not contain spoilers for higher tiers. LLM validation checks for spoilers; violations trigger retry (max 2 per entity).
+R-3.6. A lower-ranked (earlier-visible) entry must not prematurely disclose content whose reveal is gated behind a higher-ranked tier. The direction of the spoiler is what matters: rank 1 may be deliberately vague and rank 2+ may fully reveal, but rank 1 must not leak information that rank 2+ is supposed to reveal. LLM validation checks for this; violations trigger retry (max 2 per entity).
 
 R-3.7. CodexEntry gating uses **state flag** IDs, not codewords. SHIP projects a subset of state flags as player-facing codewords; DRESS gates internally via state flags. → ontology §Part 8: Codewords ≠ State Flags.
 
@@ -149,7 +149,7 @@ R-3.8. LLM call per entity receives: full Entity description (base + overlays), 
 |---------|-----------|-------------|
 | Entity has no CodexEntry | Phase 3 skipped | R-3.1 |
 | Rank-1 entry has `visible_when: [state_flag::mentor_hostile]` | Rank 1 must be unconditional | R-3.2 |
-| Rank-2 entry reveals "Aldric is the traitor" while rank 1 says "A mysterious scholar" | Rank 1 spoiled by rank 2 — but rank 1 should also be self-contained; if rank 1 is deliberately vague and rank 2 reveals, that's fine. Violation is only when low tier CONTAINS a spoiler from a later tier it shouldn't know yet | R-3.6 |
+| Rank-1 entry: "A mysterious scholar who secretly knows your true identity." Rank 2 (gated behind `met_aldric`): "Aldric is the traitor who betrayed your mentor." | Rank 1 prematurely disclosed the deception angle — that reveal was supposed to be gated behind rank 2. Direction of spoiler is low tier → high tier content | R-3.6 |
 | `visible_when` references `codeword::met_aldric` | Should be a state flag ID; codewords are SHIP's projection | R-3.7 |
 | Entry: "Aldric is a character who serves as the protagonist's mentor" | Non-diegetic voice | R-3.4 |
 
@@ -273,7 +273,7 @@ R-5.7. No orphan assets: every asset file has a corresponding Illustration node,
 ## Cross-References
 
 - DRESS narrative concept → how-branching-stories-work.md §Part 6: Illustration and Export
-- ArtDirection, EntityVisual, IllustrationBrief, Illustration, CodexEntry schemas → story-graph-ontology.md §Part 1; §Part 9 Node Types
+- ArtDirection, EntityVisual, IllustrationBrief, Illustration, CodexEntry schemas → story-graph-ontology.md §Part 9: Node Types
 - `describes_visual`, `targets`, `from_brief`, `HasEntry`, `Depicts` edges → story-graph-ontology.md §Part 9: Edge Types
 - State flags vs codewords distinction → story-graph-ontology.md §Part 8: Codewords ≠ State Flags
 - Diegetic voice constraint (codex in-world voice) → how-branching-stories-work.md §Illustration and Reference (DRESS)

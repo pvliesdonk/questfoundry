@@ -274,18 +274,18 @@ R-5.3. The cap is configurable but defaults to 2.
 - **Context Enrichment:** Every prose-generation LLM call must receive the Voice Document, full entity details (name, appearance, personality, active overlays from state flags), character arc metadata for every entity in the passage, sliding window of preceding prose, lookahead at convergence points, shadows for active dilemmas. Bare Passage summaries are insufficient. → CLAUDE.md §Context Enrichment Principle (CRITICAL)
 - **Prompt Context Formatting:** Entity details, state flag lists, sliding windows, character arc metadata must be formatted as human-readable text with explanatory headers. Never interpolate Python objects. → CLAUDE.md §Prompt Context Formatting (CRITICAL)
 - **Valid ID Injection:** LLM calls do not generate IDs (prose is unconstrained); however, entity micro-detail updates must reference existing Entity IDs. Provide the valid Entity ID list when asking for updates. → CLAUDE.md §Valid ID Injection Principle
-- **Silent Degradation:** Persistent quality failures after 2 cycles must escalate upstream — do not ship silently-low-quality prose. The `fill_hard_transition_detected` warning serves as a safety net for transitions GROW did not cover; it must surface, not be suppressed. → CLAUDE.md §Silent Degradation
+- **Silent Degradation:** Persistent quality failures after 2 cycles must escalate upstream — do not ship silently-low-quality prose. The `fill_hard_transition_detected` warning — a runtime log signature emitted when FILL encounters a cross-dilemma seam that GROW's Phase 5 did not cover with a transition beat (→ grow.md §Phase 5: Transition Beat Insertion) — must surface in logs and flag for human review, not be suppressed. → CLAUDE.md §Silent Degradation
 - **Small Model Prompt Bias:** If voice drifts or scene structure breaks on small models, fix the prompt (stronger voice reinforcement, explicit scene-type guidance, concrete exemplars) before blaming the model. → CLAUDE.md §Small Model Prompt Bias (CRITICAL)
 
 ## Cross-References
 
 - FILL narrative concept → how-branching-stories-work.md §Part 5: Writing the Narrative
-- Voice Document schema → story-graph-ontology.md §Part 1: Voice Document
+- Voice Document schema → story-graph-ontology.md §Part 1: Vision (Voice Document paragraph); §Part 9: Node Types
 - Vision `pov_style` advisory role → story-graph-ontology.md §Part 1: Vision
 - Entity base-state vs overlays → story-graph-ontology.md §Part 6: What FILL Adds vs. What Overlays Track
 - Character arc metadata → story-graph-ontology.md §Part 1: Character Arc Metadata
 - Scene Blueprint (per-passage writing plan) → story-graph-ontology.md §Part 1: Scene Blueprint
-- Canonical arc writing-first-then-branches → story-graph-ontology.md §Part 1: Answer (operational privilege)
+- Canonical arc writing-first-then-branches (operational privilege) → story-graph-ontology.md §Part 1: Answer
 - Previous stage → polish.md §Stage Output Contract
 - Next stage → dress.md §Stage Input Contract
 

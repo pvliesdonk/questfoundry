@@ -32,6 +32,7 @@ SHIP does NOT modify passage prose, choice edges, entities, state flags, or any 
 ### Input Contract
 
 1. Stage Input Contract satisfied.
+2. Gamebook is one of the requested export formats. If the export request targets only digital formats (Twee, HTML, JSON), Phase 1 is skipped entirely — digital engines track state flags silently and require no Codeword projection.
 
 ### Operations
 
