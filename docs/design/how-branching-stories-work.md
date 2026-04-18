@@ -23,7 +23,7 @@ Shadows are not dead content. They give weight to what IS by making visible what
 
 **Beat** — A concrete story moment. Most beats serve a dilemma (they advance, reveal, commit, or complicate); others are structural — setup, transitions, pacing, mood — with no dilemma relationship. Beats are the building blocks between abstract dilemmas and finished prose, and the fundamental unit manipulated throughout the pipeline. From SEED onward, the work is essentially: creating, ordering, and refining beats.
 
-**Beat lifecycle:** SEED *seeds* each dilemma with beats — creating the Y-shaped scaffold (pre-commit chain, commit beat, post-commit beats) for each explored path, plus any setup beats needed before any dilemma is introduced. GROW combines all per-dilemma scaffolds into a single coherent beat DAG, adding transition beats between cross-dilemma scenes that share no entities or location. Once GROW has combined all dilemmas, the **dilemma topology** is frozen — no beat is ever removed, and the forks and convergences driven by dilemmas cannot change. POLISH operates within that frozen topology: it may reorder consecutive independent beats within linear (non-branching) sections, add micro-beats for pacing and residue beats for mood-setting, or add false branches (cosmetic choices unrelated to any dilemma). All of these are additions only. At the end of POLISH, one or more beats are grouped into a **passage** — the player-facing unit that FILL writes prose for.
+**Beat lifecycle:** SEED *seeds* each dilemma with beats — creating the Y-shaped scaffold (pre-commit chain, commit beat, post-commit beats) for each explored path, plus any setup beats needed before any dilemma is introduced. GROW combines all per-dilemma scaffolds into a single coherent beat DAG, adding transition beats between cross-dilemma scenes that share no entities or location. Once GROW has combined all dilemmas, the **dilemma topology** is frozen — no beat is ever removed, and the forks and convergences driven by dilemmas cannot change. POLISH operates within that frozen topology: it may reorder consecutive independent beats within linear (non-branching) sections and add three kinds of structural beats — micro-beats for pacing, residue beats for mood-setting, and false-branch beats (cosmetic choices unrelated to any dilemma). All of these are additions only. At the end of POLISH, one or more beats are grouped into a **passage** — the player-facing unit that FILL writes prose for.
 
 Each beat describes its relationship to the dilemma it serves — it does one of four things:
 
@@ -141,7 +141,7 @@ BRAINSTORM gave us a cast and a set of dilemmas. SEED decides which of those ing
 
 Not everything from BRAINSTORM survives. SEED selects the characters, locations, and dilemmas that work together as a unified story. A brilliant character who doesn't connect to any dilemma gets cut. A dilemma whose central entities feel disconnected from the rest of the cast gets cut. The goal is a **cohesive ensemble**, not a collection of interesting parts.
 
-For each dilemma that survives, SEED decides which answers to explore as full paths. Often both answers are explored — but sometimes scope or narrative focus means only one side gets a full storyline, with the other remaining as a shadow.
+For each dilemma that survives, SEED decides which answers to explore as full paths. Often both answers are explored — but sometimes scope or narrative focus means only one side gets a full storyline, with the other remaining as a locked-dilemma shadow (see the Shadow entry in Common Language).
 
 ### Scaffolding Paths with Beats
 
@@ -183,7 +183,7 @@ Finally, SEED sketches where diverged paths might rejoin — expressing the auth
 
 Convergence intent depends on two independent decisions:
 
-- **Can these paths structurally rejoin?** Hard dilemmas typically never rejoin — the worlds are too different. Soft dilemmas rejoin after enough payoff. Flavor-level choices barely diverge at all.
+- **Can these paths structurally rejoin?** Hard dilemmas by definition do not rejoin — the worlds are too different; if they could rejoin, the dilemma would be soft. Soft dilemmas rejoin after enough payoff. Flavor-level choices barely diverge at all.
 - **How much should the prose vary when they do?** Heavy residue means genuinely different passages even at convergence. Light residue means a mood-setting beat before a shared passage. Cosmetic residue means tiny differences handled in prose.
 
 These are separate decisions. A soft dilemma can still have heavy residue at specific story moments. A hard dilemma might have low impact on the ending if it resolves before the climax. The convergence sketch captures both dimensions so that GROW knows what to implement and POLISH knows what prose decisions to make.
@@ -247,6 +247,8 @@ Intersections are what make a branching story feel like a *world* rather than pa
 
 SEED's entity flexibility annotations are the raw material here. GROW looks for beats that share entities, overlap in location, or could plausibly occur simultaneously — and proposes grouping them into shared scenes. The author approves, rejects, or modifies each proposed intersection.
 
+Intersection groups are a planning signal GROW uses within its own DAG assembly: it places the beats such that adjacent placement is structurally possible, so passage-level grouping later becomes feasible. They are not handed forward to POLISH as a constraint — POLISH assesses the finalized DAG on its own and decides whether to group co-occurring beats into a passage.
+
 ### Divergence and Convergence
 
 As GROW walks through the interleaved beats, it identifies two critical structural moments:
@@ -307,7 +309,7 @@ POLISH applies a decision tree to each passage:
 
 - **Two or three compatible states?** The passage can be written as poly-state prose — text that is diegetically honest for all active states simultaneously. "The mentor's expression was unreadable" works whether the mentor is trustworthy or not.
 
-- **Light residue that affects the mood?** Create a **residue beat** — a short passage placed before the shared passage that establishes the emotional context for each path. One path gets "You enter the vault with confidence" and another gets "You enter the vault on guard." The shared passage that follows can be neutral because the residue beat already set the tone.
+- **Light residue that affects the mood?** Create a **residue beat** — a short beat inserted before the shared beat that establishes the emotional context for each path. One path gets "You enter the vault with confidence" and another gets "You enter the vault on guard." The shared beat that follows can be written neutrally because the residue beat already set the tone.
 
 - **Heavy residue that changes the scene fundamentally?** Create a **variant passage** — a genuinely separate version of the passage for each incompatible state. Same story moment, completely different prose. The mentor is alive in one variant and dead in the other — no amount of careful wording can serve both.
 
