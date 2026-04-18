@@ -24,6 +24,8 @@ POLISH does NOT change the branching topology set by SEED and GROW (Y-shape fork
 12. No Passage, Choice, variant passage, residue beat, or character arc metadata exists.
 13. No cycles in `predecessor` edges.
 14. No orphan beats (all reachable from root by at least one arc).
+15. Setup beats from SEED persist (structural, zero `belongs_to`, zero `dilemma_impacts`) — GROW does not add to or remove from them.
+16. Epilogue beats from SEED persist (structural, zero `belongs_to`, zero `dilemma_impacts`) — GROW does not add to or remove from them.
 
 ---
 
@@ -181,7 +183,7 @@ R-4a.1. Every beat ends up in exactly one Passage (one `grouped_in` edge per bea
 R-4a.2. Collapse groups sequential beats with identical path membership (same `belongs_to` set) and no intervening choice. Beats with different `belongs_to` sets do not collapse under this rule.
 
 R-4a.3. Structural beats (zero `belongs_to`) follow sub-type-specific rules (→ ontology §Part 8 grouping rules):
-- Setup / transition / micro-beat: singleton passage (or chained with same-kind structural neighbors).
+- Setup / epilogue / transition / micro-beat: may be singleton passages, or may collapse with adjacent structural beats (of any structural sub-type) into a multi-paragraph passage. These sub-types do not collapse with path-specific chains — the collapse rule requires exact path-set equality, and the empty set matches only itself.
 - Residue beat: forms flag-gated variant passages (→ Phase 5/6).
 - False-branch beat: may group with other false-branch beats on the same cosmetic arm (→ Phase 5/6).
 

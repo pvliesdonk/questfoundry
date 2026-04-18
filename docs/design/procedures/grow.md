@@ -23,7 +23,9 @@ GROW does NOT create Passage nodes, Choice edges, variant passages, residue beat
 11. Zero or more `wraps`/`concurrent`/`serial` edges between Dilemmas; `concurrent` normalized.
 12. No orphan references (every edge endpoint exists).
 13. Human approval of Path Freeze is recorded.
-14. No Passage, Choice, State Flag, Intersection Group, or Transition Beat nodes exist.
+14. Zero or more setup beats (structural, zero `belongs_to`, zero `dilemma_impacts`) for story-opening world-building.
+15. Zero or more epilogue beats (structural, zero `belongs_to`, zero `dilemma_impacts`) for story-closing wrap-up.
+16. No Passage, Choice, State Flag, Intersection Group, or Transition Beat nodes exist.
 
 ---
 
@@ -515,6 +517,8 @@ R-9.4. Pruning never deletes a beat that has `belongs_to` to an explored Path �
 12. No Passage, Choice, variant passage, residue beat, or character arc metadata exists.
 13. No cycles in `predecessor` edges.
 14. No orphan beats (all reachable from root by at least one arc).
+15. Setup beats from SEED persist (structural, zero `belongs_to`, zero `dilemma_impacts`) — GROW does not add to or remove from them.
+16. Epilogue beats from SEED persist (structural, zero `belongs_to`, zero `dilemma_impacts`) — GROW does not add to or remove from them.
 
 ## Implementation Constraints
 

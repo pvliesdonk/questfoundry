@@ -2,7 +2,7 @@
 
 ## Overview
 
-SEED is the heaviest mutation stage. It triages entities and answers, constructs the Y-shaped beat scaffold per dilemma (shared pre-commit chain → commit fork → exclusive post-commit chains), generates consequences, classifies each dilemma's role and residue, and declares pairwise dilemma ordering relationships. After SEED's Path Freeze, no new paths, entities, or consequences may be created downstream — GROW works within this structure.
+SEED is the heaviest mutation stage. It triages entities and answers, constructs the Y-shaped beat scaffold per dilemma (shared pre-commit chain → commit fork → exclusive post-commit chains), generates consequences, creates any setup beats (story-opening world-building before any dilemma) and epilogue beats (story-closing wrap-up after all dilemmas commit/converge), classifies each dilemma's role and residue, and declares pairwise dilemma ordering relationships. After SEED's Path Freeze, no new paths, entities, or consequences may be created downstream — GROW works within this structure.
 
 SEED does NOT interleave beats into a single DAG (that is GROW's job), create Passage nodes (POLISH), write prose (FILL), or create Intersection Groups or State Flags (GROW).
 
@@ -185,11 +185,17 @@ R-3.12. Every explored Path has 2–4 post-commit beats.
 
 R-3.13. Every beat has non-empty `summary` and `entities` (list of entity IDs it references).
 
+R-3.14. Setup beats (SEED-created, story-opening) and epilogue beats (SEED-created, story-closing) are structural beats with zero `belongs_to` edges and zero `dilemma_impacts`. Setup beats establish world context before any dilemma is introduced; epilogue beats wrap up the story after all dilemmas have committed and converged. Neither type is tied to any path. → ontology §Part 1: Structural Beats.
+
+R-3.15. Setup and epilogue beats are optional — a story may have zero of each. When present, each has non-empty `summary` and `entities` (same requirement as any beat).
+
 **Violations:**
 
 | Symptom | Root cause | Broken rule |
 |---------|-----------|-------------|
 | Beat has `belongs_to` edges to `path::mentor_trust__protector` and `path::artifact_nature__salvation` | Cross-dilemma dual `belongs_to` — conflates path membership with scene co-occurrence | R-3.9 |
+| Setup beat has `belongs_to` to a path | Structural beat wrongly assigned path membership | R-3.14 |
+| Epilogue beat has `dilemma_impacts.effect: commits` | Epilogue is post-all-commits; cannot commit a dilemma | R-3.14 |
 | Commit beat has `also_belongs_to` set | Commit beats are exclusive to one path; `also_belongs_to` must be null | R-3.7 |
 | Post-commit beat has `dilemma_impacts.effect: commits` | Post-commit beats must not contain a commits impact (that would make them a commit beat) | R-3.8 |
 | Dilemma has zero pre-commit beats | Y-fork missing; POLISH Phase 4c will produce zero choices | R-3.10 |
@@ -209,6 +215,8 @@ R-3.13. Every beat has non-empty `summary` and `entities` (list of entity IDs it
 5. Every explored Path has exactly one commit beat (one `belongs_to`, `effect: commits` in `dilemma_impacts`).
 6. Every explored Path has 2–4 post-commit beats (each with one `belongs_to`, no commits impact).
 7. No beat has cross-dilemma dual `belongs_to`.
+8. Zero or more setup beats exist (structural, zero `belongs_to`, zero `dilemma_impacts`), for story-opening world-building.
+9. Zero or more epilogue beats exist (structural, zero `belongs_to`, zero `dilemma_impacts`), for story-closing wrap-up after all dilemmas commit and converge.
 
 ---
 
@@ -485,7 +493,9 @@ R-8.5. If the LLM call fails, no relationships are declared — the graph is lef
 11. Zero or more `wraps`/`concurrent`/`serial` edges between Dilemmas; `concurrent` normalized.
 12. No orphan references (every edge endpoint exists).
 13. Human approval of Path Freeze is recorded.
-14. No Passage, Choice, State Flag, Intersection Group, or Transition Beat nodes exist.
+14. Zero or more setup beats (structural, zero `belongs_to`, zero `dilemma_impacts`) for story-opening world-building.
+15. Zero or more epilogue beats (structural, zero `belongs_to`, zero `dilemma_impacts`) for story-closing wrap-up.
+16. No Passage, Choice, State Flag, Intersection Group, or Transition Beat nodes exist.
 
 ## Implementation Constraints
 
@@ -532,6 +542,8 @@ R-3.10: Every Dilemma with two explored Answers has ≥1 pre-commit beat.
 R-3.11: Every explored Path has exactly one commit beat.
 R-3.12: Every explored Path has 2–4 post-commit beats.
 R-3.13: Every beat has non-empty `summary` and `entities`.
+R-3.14: Setup and epilogue beats are structural (zero `belongs_to`, zero `dilemma_impacts`).
+R-3.15: Setup and epilogue beats are optional; when present, have non-empty `summary` and `entities`.
 R-3b.1: `flexibility` edges preserve the beat's dramatic function.
 R-3b.2: `flexibility` edges carry a `role` property.
 R-3b.3: Flexibility applies to any entity category.
