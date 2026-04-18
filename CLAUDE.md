@@ -27,7 +27,33 @@ Context compaction loses nuance. Re-reading these rules prevents repeating mista
 | **Should/Prefer** | Strong defaults - deviate only with reason | "Should use targeted tests" |
 | **May/Can** | Options - use judgment | "May split into multiple PRs" |
 
-Design docs in `docs/design/` are guidelines. This CLAUDE.md file is rules.
+This CLAUDE.md file is rules for *how to work*. Separately, the authoritative design docs are rules for *what to build* — see the next section.
+
+### Design Doc Authority (Specs Supersede Code)
+
+The following design documents are **authoritative specifications**, not guidelines. They define what the pipeline must do; code and tests must conform to them.
+
+- `docs/design/how-branching-stories-work.md` — narrative model
+- `docs/design/story-graph-ontology.md` — graph / data model
+- `docs/design/procedures/*.md` — per-stage algorithm specifications
+
+**What "authoritative" means in practice:**
+
+1. **Specs supersede code and tests.** If code or tests conflict with these docs, **the code or tests are wrong.** Do not "interpret" the doc to match the code. Do not treat code as the source of truth.
+2. **Docs-first fix order.** If something doesn't work correctly, the fix sequence is:
+   1. Read the authoritative spec. Is the behavior you need defined?
+   2. If the spec is silent, incomplete, or wrong for your case — **update the spec first**, get alignment on the new intent.
+   3. Then update the code and tests to match the updated spec.
+   Never flip this: never adjust a spec retroactively to document what broken code happens to do.
+3. **Surface drift explicitly.** If you find code that contradicts a spec, do not silently paper over it. Either the spec needs updating (then update it) or the code needs fixing (then fix it). It cannot be both "working as intended" and "contradicting the spec."
+4. **ADRs and implementation notes do not override the authoritative specs.** ADRs record decisions and rationale; they can't silently contradict the three doc sets above. If an ADR and an authoritative spec conflict, the spec wins and the ADR must be updated.
+
+**Other docs — not authoritative:**
+
+- CLAUDE.md (this file) — rules for how to work, not about what to build
+- `docs/design/01-prompt-compiler.md`, `docs/design/07-getting-started.md`, etc. — implementation-level guidance; may be adjusted to match code as implementation evolves
+- `docs/design/00-spec.md` — **deprecated**; do not cite as authoritative
+- Other files in `docs/design/` — clarifying guidelines unless explicitly marked authoritative
 
 ---
 
@@ -90,13 +116,16 @@ DRESS stage (art direction, illustrations, codex) is specified in Slice 5. See `
 
 When a bug is not resolved by static tools (ruff/mypy/tests):
 
+0) **Read the authoritative spec first** (see Instruction Hierarchy §Design Doc Authority). The spec — not the code — defines correct behavior. The failing test or buggy output is evidence that code diverged from the spec; your first job is to identify the divergence.
 1) Reproduce the failure with a minimal command.
 2) Do not edit code until reproduction is confirmed.
 3) Use `pdb` for interactive inspection if needed.
 4) Prefer temporary logging before stepping.
-5) Form a concrete hypothesis before modifying code.
+5) Form a concrete hypothesis before modifying code. The hypothesis should name which spec rule the current behavior violates (e.g., "code produces Y but SEED §R-3.6 requires Z").
 6) Remove all debug hooks before final commit.
 7) Re-run pre-commit and tests after fixes.
+
+If the spec is silent or ambiguous for your case, **update the spec first** (get alignment on intended behavior), then fix the code. Never invert this order.
 
 Use debugging as a precision tool, not a trial-and-error loop.
 
@@ -320,6 +349,8 @@ qf inspect -p <project> --json # Machine-readable JSON output
 - Epics larger than 10 issues (split into sequential milestones)
 - Claiming "SEED/GROW/POLISH ran successfully" based on exit code without verifying output against design docs
 - **Silent degradation of story structure constraints** — if the pipeline cannot satisfy a structural requirement (cross-dilemma ordering, intersection formation, DAG consistency), it MUST fail loudly. Silently skipping constraints and producing a weaker story is not acceptable. `interleave_cycle_skipped` warnings, all-intersections-rejected, and similar "we tried but gave up" outcomes are pipeline failures, not warnings.
+- **Retroactively updating an authoritative spec to match broken code.** The spec comes first (see Instruction Hierarchy §Design Doc Authority). If code diverges from the spec, the code is wrong — fix the code. If the spec turns out to be incomplete or incorrect, update the spec *first* to reflect the intended behavior, *then* fix the code to match. Never flip this order.
+- **Treating code or tests as the source of truth** for pipeline behavior. The authoritative specs (`docs/design/how-branching-stories-work.md`, `docs/design/story-graph-ontology.md`, `docs/design/procedures/*.md`) are the source of truth. Reading existing code to "figure out" how a stage is supposed to work is a trap — read the spec first.
 
 ## Testing Strategy
 
