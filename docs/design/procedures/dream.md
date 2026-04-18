@@ -1,279 +1,205 @@
-# DREAM Procedure
+# DREAM — Establish the creative vision
 
-> For the narrative description of the DREAM stage, see ["How Branching Stories Work", Part 1](../how-branching-stories-work.md). This document provides the detailed algorithm specification.
+## Overview
 
-## Summary
+DREAM captures the creative contract that governs every downstream decision: genre, subgenre, tone, themes, audience, scope, content notes, and an optional point-of-view hint. It produces a single Vision node with no edges. DREAM does not create entities, dilemmas, beats, or any graph structure — that begins in BRAINSTORM.
 
-**Purpose:** Establish the creative vision that guides all subsequent stages. Capture genre, tone, themes, constraints, and scope.
+## Stage Input Contract
 
-**Input artifacts:**
-- Human's initial spark (informal idea)
-
-**Output artifacts:**
-- `01-dream.yaml` (approved vision)
-
-**Mode:** Human-led with LLM assistance. The human has the vision; the LLM helps articulate, explore, and document it.
+1. The graph is empty (no nodes, no edges).
+2. The human has an initial creative spark (informal idea, may be vague).
 
 ---
 
-## Prerequisites
+## Phase 1: Vision Capture
 
-### Required Input Files
+**Purpose:** Explore the creative concept through dialogue, define its boundaries, and serialize it into a validated Vision node.
 
-None. DREAM is the first stage.
+### Input Contract
 
-### Required Human Decisions
+1. Graph is empty.
+2. Human-provided creative spark is available as conversational input.
 
-- Initial story spark or concept (can be vague: "noir mystery in space")
+### Operations
 
-### Knowledge Context
+#### Spark Exploration
 
-Inject for LLM:
-- Genre conventions (from IF-Craft Corpus)
-- Interactive fiction craft knowledge (pacing, branching patterns)
-- Web search capability for research
+**What:** The LLM helps the human articulate the creative vision through open-ended dialogue. Genre, subgenre, tone, themes, audience, and the emotional register of the story are surfaced. The output is a prose understanding — no graph mutation yet.
 
----
+**Rules:**
 
-## Core Concepts
+R-1.1. The discussion produces a single coherent vision, not a menu of options. When the human is uncertain, the LLM may suggest alternatives — but a decision is required before proceeding to the next operation.
 
-### Human Leads, LLM Assists
+R-1.2. Genre and subgenre are distinct fields. "Mystery" is a genre; "cozy mystery" is a subgenre. Do not conflate them into one field.
 
-Unlike BRAINSTORM (where LLM generates expansively), DREAM is about **capturing human intent**. The LLM's role is:
-- Ask clarifying questions
-- Suggest possibilities the human might not have considered
-- Provide genre knowledge when relevant
-- Help articulate vague ideas into concrete terms
+R-1.3. Themes are abstract ideas the story explores ("the price of loyalty"), not plot points ("the mentor dies in chapter three"). Plot belongs in BRAINSTORM and later.
 
-The human decides. The LLM facilitates.
+**Violations:**
 
-### Vision vs Structure
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| Vision has `genre: "cozy mystery"` and no `subgenre` | Genre and subgenre conflated into one field | R-1.2 |
+| Vision has `themes: ["the mentor betrays the protagonist"]` | Plot point written as theme — themes must be abstract | R-1.3 |
+| Discussion ends without a committed genre ("maybe fantasy, maybe sci-fi") | Exploration never converged on a decision | R-1.1 |
 
-DREAM captures **what kind of story** (vision), not **what happens in the story** (structure). The distinction:
+#### Constraint Definition
 
-| DREAM (Vision) | BRAINSTORM (Structure) |
-|----------------|------------------------|
-| "Dark fantasy mystery" | Characters, locations, factions |
-| "Themes of trust and sacrifice" | "Can the mentor be trusted?" dilemma |
-| "Morally ambiguous tone" | Specific moral dilemmas |
-| "Short length" | ~15 entities, ~6 dilemmas |
+**What:** The human defines the boundaries of the story — content to include or avoid, structural limits (single POV, linear timeline), and scope (how big this story will be). Constraints enable creativity by defining the sandbox; they are firm commitments, not preferences.
 
-DREAM stays abstract. BRAINSTORM makes it concrete.
+**Rules:**
 
-### Constraints as Boundaries
+R-1.4. Scope is a named preset (e.g., `micro`, `short`, `medium`, `long`, or their equivalent implementation values), not a raw beat or passage count. The preset implies approximate sizes for cast, dilemma count, beat count, and passage count.
 
-Constraints define what the story **won't** do:
-- Content boundaries ("no explicit violence")
-- Structural limits ("single protagonist POV")
-- Setting limits ("contemporary, no fantasy elements")
-- Scope limits ("standalone, no sequel hooks")
+R-1.5. Content notes define creative direction — what to embrace and what to avoid. They are substantive constraints on BRAINSTORM's output, not after-the-fact filters. "Avoid graphic violence" belongs here; "redact expletives from prose" does not.
 
-Good constraints enable creativity by defining the sandbox.
+R-1.6. Constraints are firm decisions. Reopening them requires looping back to an earlier operation with explicit human approval.
 
----
+**Violations:**
 
-## Algorithm Phases
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| Vision has `scope: 15` (raw number) | Scope must be a named preset, not a count | R-1.4 |
+| Content note: "remove any swearing from generated prose" | Content notes shape creative direction; prose scrubbing is a FILL concern | R-1.5 |
+| BRAINSTORM surfaces a dilemma that contradicts a declared content note, and the pipeline proceeds | Constraint silently softened instead of surfacing conflict to human | R-1.6 |
 
-### Phase 1: Spark Exploration
+#### Vision Synthesis
 
-**Purpose:** Expand the initial spark into a fuller vision.
+**What:** The discussed vision is serialized into a Vision node in the graph. This is the only graph write DREAM performs. The node carries all required fields; its `pov_style` is advisory only.
 
-**LLM Involvement:** Discuss
+**Rules:**
 
-The human provides an initial idea. LLM explores it through questions:
+R-1.7. Exactly one Vision node is created. If synthesis is retried, the previous node is replaced, not duplicated.
 
-**Discussion prompts:**
+R-1.8. All required fields — `genre`, `tone`, `themes`, `audience`, `scope` — are non-empty. `subgenre`, `content_notes`, and `pov_style` are optional but recommended.
 
-*Genre and tone:*
-- "What genre feels right? Any subgenres or mashups?"
-- "What's the emotional register? Dark, light, bittersweet?"
-- "What existing works have the feel you're going for?"
+R-1.9. `pov_style`, when present, is one of: `first_person`, `second_person`, `third_person_limited`, `third_person_omniscient`. It is advisory — FILL makes the final decision.
 
-*Themes:*
-- "What ideas do you want this story to explore?"
-- "What questions should the reader be asking?"
-- "What makes this story meaningful to you?"
+R-1.10. No graph edges are created. The Vision node has no incoming or outgoing edges; it is retrieved by node-type lookup.
 
-*Setting and scope:*
-- "What world does this take place in?"
-- "How long do you envision this being? A short experience or an epic?"
-- "What's the player's role in this world?"
+R-1.11. Synthesis captures only what was discussed. The LLM does not invent themes, constraints, or fields that did not surface in the conversation.
 
-**LLM role:** Curious, supportive. Ask follow-up questions. Offer options when the human seems uncertain. Use corpus knowledge to suggest genre conventions.
+**Violations:**
 
-**Human role:** Share the vision. React to suggestions. Make decisions.
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| Two Vision nodes exist after DREAM | Retry created a second node without removing the first | R-1.7 |
+| Vision has empty `themes: []` | Required field left empty — synthesis did not capture a necessary decision | R-1.8 |
+| Vision has `pov_style: "omniscient"` | Value outside the permitted set | R-1.9 |
+| Synthesis adds a theme ("redemption") that was never discussed | LLM invented content to fill a perceived gap | R-1.11 |
+| Downstream stage treats `pov_style` as a hard constraint instead of a starting point | `pov_style` on Vision is advisory, not binding | R-1.9 |
 
-**Output:** Discussion notes (conversation history)
+#### Approval
 
-**Human Gate:** Light touch. Continue until vision feels sufficiently explored.
+**What:** The human reviews the serialized Vision and either approves it (DREAM completes) or rejects it (loop back to the operation with the misalignment). Approval is an explicit step, not a default.
 
----
+**Rules:**
 
-### Phase 2: Constraint Definition
+R-1.12. DREAM is not complete until the human explicitly approves the Vision node. Silent acceptance (no response) is not approval.
 
-**Purpose:** Define the boundaries of the story.
+R-1.13. Rejection loops back to the operation that contains the misalignment — spark exploration for vision gaps, constraint definition for boundary issues, synthesis for field errors. It does not silently self-correct.
 
-**LLM Involvement:** Assist
+**Violations:**
 
-Once the vision is clear, define constraints:
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| Pipeline proceeds to BRAINSTORM without recorded human approval | Approval step skipped or implicit | R-1.12 |
+| Synthesis retried after rejection without re-exploring the rejected concern | Loop-back operation not identified; fix applied to the wrong layer | R-1.13 |
 
-**Discussion prompts:**
+### Output Contract
 
-*Length and scope:*
-- "How long should this be? A quick read (micro) or a substantial experience (long)?"
-- "How much branching complexity feels right?"
-
-*Content boundaries:*
-- "Any content to avoid? (violence level, themes, etc.)"
-- "Any content that must be included?"
-
-*Structural constraints:*
-- "Single POV or multiple?"
-- "Linear timeline or non-linear?"
-- "Any format constraints? (text-only, illustrated, etc.)"
-
-**Length calibration:**
-
-| Length | Word Count | Passages | Playtime |
-|--------|------------|----------|----------|
-| micro | 2-5k | 10-20 | 5-15 min |
-| short | 5-15k | 20-50 | 15-45 min |
-| medium | 15-40k | 50-100 | 1-2 hours |
-| long | 40k+ | 100+ | 2+ hours |
-
-**LLM role:** Help quantify vague preferences. Suggest constraints the human might not have considered.
-
-**Human role:** Make boundary decisions. These are firm commitments.
-
-**Output:** Constraint list
-
-**Human Gate:** Yes. Constraints must be explicitly approved.
+1. Exactly one Vision node exists.
+2. `genre`, `tone`, `themes`, `audience`, `scope` are all non-empty.
+3. `pov_style`, if present, is one of four permitted values.
+4. No edges exist in the graph.
+5. Human approval is recorded.
 
 ---
 
-### Phase 3: Vision Synthesis
+## Stage Output Contract
 
-**Purpose:** Consolidate discussion into structured artifact.
+1. Exactly one Vision node exists in the graph.
+2. The Vision node has non-empty values for: `genre`, `tone`, `themes`, `audience`, `scope`.
+3. The Vision node has no incoming or outgoing edges.
+4. `pov_style` is present and is one of `first_person`, `second_person`, `third_person_limited`, `third_person_omniscient`, or absent/null if deferred to FILL.
+5. No other node types exist in the graph.
+6. Human approval is recorded.
 
-**LLM Involvement:** Summarize
+## Implementation Constraints
 
-LLM synthesizes the discussion into the dream schema:
+- **Prompt Context Formatting:** Any prompt that references Vision fields must format them as human-readable text. Never interpolate raw Python dicts, lists, or enum reprs. → CLAUDE.md §Prompt Context Formatting (CRITICAL)
+- **Small Model Prompt Bias:** DREAM's discussion runs on small models during local dev. Write exploration prompts with explicit structure, concrete examples, and clear delimiters. Do not blame the model for vague vision output; fix the prompt first. → CLAUDE.md §Small Model Prompt Bias (CRITICAL)
 
-```yaml
-dream:
-  genre: string           # e.g., "dark fantasy mystery"
-  tone: string            # e.g., "atmospheric, morally ambiguous"
-  themes: string[]        # e.g., ["forbidden knowledge", "trust", "sacrifice"]
-  constraints: string[]   # e.g., ["single protagonist POV", "no explicit magic system"]
-  length: micro | short | medium | long
-```
+## Cross-References
 
-**For each field:**
-- `genre`: Primary genre with any subgenres or mashups
-- `tone`: Emotional register, atmosphere descriptors
-- `themes`: Abstract ideas the story explores (not plot points)
-- `constraints`: Firm boundaries (content, structure, scope)
-- `length`: Scope commitment
+- Genre, subgenre, tone, themes, scope narrative meaning → how-branching-stories-work.md §The Vision (DREAM)
+- Vision node schema and field semantics → story-graph-ontology.md Part 1: Vision
+- Next stage consumes Vision → brainstorm.md §Stage Input Contract
 
-**LLM role:** Extract and organize. Do not invent—only capture what was discussed.
+## Rule Index
 
-**Human role:** Review for accuracy.
-
-**Output:** Draft `01-dream.yaml`
-
-**Human Gate:** Yes. This is the approval gate.
-
----
-
-### Phase 4: Approval
-
-**Purpose:** Final sign-off on the vision.
-
-**LLM Involvement:** None
-
-Human reviews the complete artifact:
-- Does this capture my vision?
-- Are the constraints correct?
-- Is the length appropriate?
-
-If approved, DREAM is complete. If not, return to relevant phase.
-
-**Human Gate:** Yes. Must explicitly approve.
-
-**Output:** Approved `01-dream.yaml`
+R-1.1: Discussion produces a single coherent vision, not a menu of options.
+R-1.2: Genre and subgenre are distinct fields.
+R-1.3: Themes are abstract ideas, not plot points.
+R-1.4: Scope is a named preset, not a raw count.
+R-1.5: Content notes shape creative direction; they are not after-the-fact filters.
+R-1.6: Constraints are firm — reopening them requires explicit approval.
+R-1.7: Exactly one Vision node exists; retries replace rather than duplicate.
+R-1.8: Required fields (genre, tone, themes, audience, scope) are non-empty.
+R-1.9: `pov_style` is one of four permitted values; advisory only.
+R-1.10: Vision node has no graph edges.
+R-1.11: Synthesis captures only what was discussed; no LLM invention.
+R-1.12: DREAM is not complete until human explicitly approves.
+R-1.13: Rejection loops back to the operation that contains the misalignment.
 
 ---
 
-## Human Gates Summary
+## Human Gates
 
-| Phase | Gate | Decision |
-|-------|------|----------|
-| 1 | Spark Exploration | Light: "vision explored enough?" |
-| 2 | Constraint Definition | Yes: approve constraints |
-| 3 | Vision Synthesis | Yes: review draft |
-| 4 | Approval | Yes: final sign-off |
-
----
+| Operation | Gate | Decision |
+|-----------|------|----------|
+| Spark Exploration | Light — "vision explored enough?" | Continue or probe further |
+| Constraint Definition | Required | Approve boundaries |
+| Vision Synthesis | Required | Review draft Vision node |
+| Approval | Required | Final sign-off |
 
 ## Iteration Control
 
-### Forward Progress
+**Forward flow:** Spark Exploration → Constraint Definition → Vision Synthesis → Approval.
 
-Normal flow: Phase 1 → 2 → 3 → 4
+**Backward loops:**
 
-### Backward Loops
+| From | To | Trigger |
+|------|-----|---------|
+| Constraint Definition | Spark Exploration | Constraints reveal vision gaps |
+| Vision Synthesis | Spark Exploration | Synthesis shows underdeveloped areas |
+| Vision Synthesis | Constraint Definition | Missing or unclear constraints |
+| Approval | Any prior operation | Human requests changes (see R-1.13) |
 
-| From Phase | To Phase | Trigger |
-|------------|----------|---------|
-| 2 (Constraints) | 1 (Exploration) | Constraints reveal vision gaps |
-| 3 (Synthesis) | 1 (Exploration) | Synthesis shows underdeveloped areas |
-| 3 (Synthesis) | 2 (Constraints) | Missing or unclear constraints |
-| 4 (Approval) | Any | Human requests changes |
+**Maximum iterations:**
 
-### Maximum Iterations
+- Spark Exploration: no fixed limit; human decides when "enough."
+- Constraint Definition: at most 2 revision passes.
+- Vision Synthesis: at most 2 synthesis attempts per approval cycle.
+- Approval: single pass — approve or loop back.
 
-- Phase 1: No fixed limit (human decides when "enough")
-- Phase 2: Max 2 revision passes
-- Phase 3: Max 2 synthesis attempts
-- Phase 4: 1 pass (approval or loop back)
+## Failure Modes
 
----
+| Operation | Failure | Detection | Recovery |
+|-----------|---------|-----------|----------|
+| Spark Exploration | Vision too vague | Human cannot answer basic genre/tone questions | More exploration, try different angles |
+| Spark Exploration | Vision too specific | Human already has full plot | Fast-track to Synthesis; note detail for BRAINSTORM |
+| Constraint Definition | Constraints too restrictive | No interesting stories fit within bounds | Relax; discuss tradeoffs |
+| Constraint Definition | Constraints too loose | No clear boundaries | Push for specificity |
+| Vision Synthesis | LLM invents content | Vision contains undiscussed fields (R-1.11) | Strip inventions; re-synthesize |
+| Vision Synthesis | LLM loses nuance | Vision oversimplifies the discussion | Human edits directly or re-discusses |
+
+**Escalation.** DREAM has no prior stage. If DREAM cannot complete, the initial spark may be unsuitable for interactive fiction — the human should reconsider the concept.
 
 ## Context Management
 
-### Standard (128k+ context)
+**Standard (≥128k context):** Include full discussion history for synthesis. No windowing.
 
-Include full discussion history for synthesis. No windowing needed.
-
-### Constrained (32k context)
-
-If discussion is very long:
-1. Human curates key points from discussion
-2. Pass curated summary to Phase 3
-3. Trust human curation to preserve important decisions
-
----
-
-## Failure Modes and Recovery
-
-### Phase-Specific Failures
-
-| Phase | Failure | Detection | Recovery |
-|-------|---------|-----------|----------|
-| 1. Exploration | Vision too vague | Human can't answer basic genre/tone questions | More exploration, try different angles |
-| 1. Exploration | Vision too specific | Human already has full plot in mind | Fast-track to Phase 3, note detail for BRAINSTORM |
-| 2. Constraints | Constraints too restrictive | No interesting stories possible within bounds | Relax constraints, discuss tradeoffs |
-| 2. Constraints | Constraints too loose | No clear boundaries | Push for specificity |
-| 3. Synthesis | LLM invents content | Artifact contains undiscussed elements | Strip inventions, re-synthesize |
-| 3. Synthesis | LLM loses nuance | Artifact oversimplifies vision | Human edits directly or re-discusses |
-
-### Escalation
-
-DREAM has no prior stage to escalate to. If DREAM cannot complete:
-- The initial spark may be unsuitable for interactive fiction
-- Human should reconsider the concept or approach
-
----
+**Constrained (~32k context):** Human curates key points from discussion; pass curated summary to Synthesis. Trust the human curation to preserve important decisions.
 
 ## Worked Example
 
@@ -281,79 +207,53 @@ DREAM has no prior stage to escalate to. If DREAM cannot complete:
 
 **Human:** "I want to write a story about an archivist who discovers forbidden knowledge. Dark fantasy, mysterious."
 
-### Phase 1: Exploration
+### Spark Exploration
 
-**LLM:** "An archivist with forbidden knowledge—that's rich territory. What draws you to this concept? Is it the dilemma between preservation and destruction? The corruption of knowledge? The isolation of knowing something others don't?"
+**LLM:** "An archivist with forbidden knowledge — that's rich territory. What draws you to this concept? Is it the dilemma between preservation and destruction? The corruption of knowledge? The isolation of knowing something others don't?"
 
-**Human:** "The corruption angle. And trust—who can you trust when you know something dangerous?"
+**Human:** "The corruption angle. And trust — who can you trust when you know something dangerous?"
 
-**LLM:** "Trust is powerful. So we have themes of forbidden knowledge and trust. What's the tone? You said dark fantasy—are we talking grimdark, or more atmospheric and melancholic?"
+**LLM:** "Trust is powerful. So we have themes of forbidden knowledge and trust. What's the tone? You said dark fantasy — are we talking grimdark, or more atmospheric and melancholic?"
 
 **Human:** "Atmospheric. Morally ambiguous rather than grimdark. Think of it like a mystery where you're not sure who to believe."
 
-**LLM:** "Atmospheric, morally ambiguous, mystery elements within dark fantasy. What about the scope? Epic quest or intimate character study?"
+**LLM:** "Atmospheric, morally ambiguous, mystery elements within dark fantasy. What's the scope? Epic quest or intimate character study?"
 
 **Human:** "Intimate. Focused. Maybe just the archivist and a few key relationships."
 
-### Phase 2: Constraints
+### Constraint Definition
 
-**LLM:** "For constraints: single protagonist POV makes sense for intimate focus. Any content boundaries?"
+**LLM:** "For constraints: single-protagonist POV makes sense for intimate focus. Any content boundaries?"
 
-**Human:** "No explicit magic system—keep it mysterious. And no graphic violence."
+**Human:** "No explicit magic system — keep it mysterious. And no graphic violence."
 
-**LLM:** "Length? Given the intimate scope, short or medium?"
+**LLM:** "Scope? Given the intimate focus, short or medium?"
 
 **Human:** "Short. I want it tight and focused."
 
-### Phase 3: Synthesis
+### Vision Synthesis
 
 ```yaml
-dream:
-  genre: "dark fantasy mystery"
+vision:
+  genre: "dark fantasy"
+  subgenre: "mystery"
   tone: "atmospheric, morally ambiguous"
   themes:
     - "forbidden knowledge"
     - "trust"
     - "corruption"
-  constraints:
+  audience: "adult readers of literary speculative fiction"
+  scope: short
+  content_notes:
     - "single protagonist POV"
     - "no explicit magic system"
     - "no graphic violence"
     - "intimate scope (few key relationships)"
-  length: short
+  pov_style: third_person_limited
 ```
 
-### Phase 4: Approval
+### Approval
 
 **Human:** "Yes, this captures it."
 
-DREAM complete.
-
----
-
-## Output Checklist
-
-Before DREAM is complete, verify:
-
-- [ ] Genre clearly identified
-- [ ] Tone captured (emotional register, atmosphere)
-- [ ] At least 2-3 themes defined
-- [ ] Constraints explicitly listed
-- [ ] Length committed
-- [ ] Human has approved final artifact
-- [ ] `01-dream.yaml` written
-
----
-
-## Summary
-
-DREAM transforms a human's initial spark into an approved creative vision:
-
-| Input | Output |
-|-------|--------|
-| Vague idea | Defined genre and tone |
-| Intuitions | Explicit themes |
-| Preferences | Firm constraints |
-| Sense of scope | Committed length |
-
-DREAM captures **what kind of story**. BRAINSTORM will derive **what happens in it**.
+DREAM complete. Vision node written to graph.
