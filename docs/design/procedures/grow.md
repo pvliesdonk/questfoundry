@@ -12,16 +12,16 @@ GROW does NOT create Passage nodes, Choice edges, variant passages, residue beat
 
 1. Every Entity has `disposition` ∈ {`retained`, `cut`}.
 2. Every explored Answer has exactly one Path with an `explores` edge.
-3. Every Path has ≥1 Consequence with ≥1 ripple via `has_consequence`.
-4. Every Dilemma with two explored Answers has ≥1 pre-commit beat (two `belongs_to` edges to paths of that dilemma).
-5. Every explored Path has exactly one commit beat (one `belongs_to`, `dilemma_impacts.effect: commits`) and 2–4 post-commit beats (one `belongs_to` each, no commits impact).
+3. Every Path has ≥1 Consequence with ≥1 ripple via `has_consequence` edges.
+4. Every Dilemma with two explored Answers has a shared pre-commit beat chain (≥1 beats, each with two `belongs_to` edges to the two paths of that Dilemma).
+5. Every explored Path has exactly one commit beat (one `belongs_to` edge, `dilemma_impacts.effect: commits`) and 2–4 post-commit beats (each with one `belongs_to`, no commits impact).
 6. No beat has cross-dilemma dual `belongs_to`.
 7. Every beat has non-empty `summary` and `entities`.
-8. Beats may carry zero or more `flexibility` edges with `role` properties.
-9. Arc count ≤ 16.
+8. Beats may carry zero or more `flexibility` edges, each with a `role` property.
+9. Arc count ≤ 16 (≤ 4 fully explored Dilemmas).
 10. Every Dilemma has `dilemma_role`, `residue_weight`, `ending_salience` set.
-11. Zero or more `wraps`/`concurrent`/`serial` edges between Dilemmas (normalized).
-12. No orphan references.
+11. Zero or more `wraps`/`concurrent`/`serial` edges between Dilemmas; `concurrent` normalized.
+12. No orphan references (every edge endpoint exists).
 13. Human approval of Path Freeze is recorded.
 14. No Passage, Choice, State Flag, Intersection Group, or Transition Beat nodes exist.
 

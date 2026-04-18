@@ -10,19 +10,20 @@ POLISH does NOT change the branching topology set by SEED and GROW (Y-shape fork
 
 *Must match GROW §Stage Output Contract exactly.*
 
-1. The beat DAG is acyclic: every beat has ≥1 predecessor or is root; ≥1 successor or is terminal.
+1. The beat DAG is acyclic: every beat node has either ≥1 predecessor or is the root; ≥1 successor or is a terminal.
 2. Every computed arc from root to terminal is complete — no dead ends.
 3. Every arc includes exactly one commit beat per explored Dilemma.
-4. Zero or more Intersection Group nodes exist; none contain two beats from the same Dilemma.
-5. Beats retain SEED `belongs_to` edges unchanged — co-occurrence via `intersection` edges, not cross-dilemma `belongs_to`.
-6. Transition Beats exist at cross-dilemma seams with zero entity/location overlap (zero `belongs_to`, zero `dilemma_impacts`).
-7. Every Consequence has ≥1 State Flag with `derived_from` edge.
+4. Zero or more Intersection Group nodes exist. No group contains two beats from the same Dilemma.
+5. Beats retain their SEED `belongs_to` edges unchanged — co-occurrence is declared via `intersection` edges, never via cross-dilemma `belongs_to`.
+6. Transition Beats exist at every cross-dilemma seam with zero entity/location overlap, with zero `belongs_to` and zero `dilemma_impacts`.
+7. Every Consequence has ≥1 associated State Flag node with a `derived_from` edge.
 8. State flag names express world state, not player actions.
-9. Entity overlays embedded on Entity nodes, activated by state flags.
-10. Every soft Dilemma has `converges_at` and `convergence_payoff`; every hard Dilemma has both null.
-11. No Passage, Choice, variant passage, residue beat, or character arc metadata exists.
-12. No cycles in `predecessor` edges.
-13. No orphan beats.
+9. Entity nodes have overlay lists activated by state flags; overlays are embedded, not separate nodes.
+10. Every soft Dilemma has `converges_at` and `convergence_payoff` populated from DAG topology.
+11. Every hard Dilemma has `converges_at: null` and `convergence_payoff: null`.
+12. No Passage, Choice, variant passage, residue beat, or character arc metadata exists.
+13. No cycles in `predecessor` edges.
+14. No orphan beats (all reachable from root by at least one arc).
 
 ---
 
