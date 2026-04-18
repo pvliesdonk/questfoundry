@@ -1,669 +1,402 @@
-# QuestFoundry v5 — DRESS Algorithm Specification
+# DRESS — Visual identity, illustrations, and codex
 
-**Status:** Specification Complete
-**Parent:** docs/design/00-spec.md
-**Purpose:** Detailed specification of the DRESS stage mechanics
+## Overview
 
-> For the narrative description of the DRESS stage, see ["How Branching Stories Work", Part 6](../how-branching-stories-work.md). This document provides the detailed algorithm specification.
->
-> **Terminology note:** The [Story Graph Ontology](../story-graph-ontology.md) distinguishes *state flags* (internal routing markers) from *codewords* (player-facing gamebook markers). This document uses "codewords" throughout, which maps to "state flags" in the Story Graph Ontology's vocabulary. Codex visibility gating uses state flags internally; SHIP projects a subset as player-facing codewords. The code has not yet been updated.
+DRESS adds visual identity and reference material to a completed story. It generates an ArtDirection node, per-entity visual profiles, illustration briefs with priority scoring, generated image assets, and tiered diegetic codex entries. DRESS is **optional** — the story is playable without it — and it does NOT modify prose, beats, passages, choices, entities, or any narrative structure. It reads and decorates.
 
----
+## Stage Input Contract
 
-## Summary
+*Must match FILL §Stage Output Contract exactly.*
 
-**Purpose:** Generate the presentation layer — art direction, illustrations, and codex — for a completed story. DRESS operates on finished prose and entities, adding visual and encyclopedic content without modifying narrative structure.
-
-**Input artifacts:**
-- Completed story graph (all passages with prose, entities with details)
-- Vision metadata (genre, tone, themes)
-- Codewords (for codex visibility gating)
-
-**Output artifacts:**
-- ArtDirection node (global visual identity)
-- EntityVisual nodes (per-entity appearance profiles)
-- IllustrationBrief nodes (structured image prompts with priorities)
-- Illustration nodes (generated image assets)
-- CodexEntry nodes (diegetic encyclopedia entries, spoiler-graduated)
-- Depicts edges (illustration → passage)
-- HasEntry edges (codex_entry → entity)
-- Asset files (`projects/<name>/assets/`)
-
-**Mode:** LLM-heavy generation (art direction, briefs, codex) + image provider generation (illustrations). Two human gates. Optional stage — story is playable without DRESS.
+1. Voice Document singleton exists with all required fields populated.
+2. Every Passage has non-empty `prose`.
+3. Entity base-state enriched with zero or more universal micro-details (additive only).
+4. No Passage, Choice, beat, Entity, Dilemma, Path, Consequence, or State Flag nodes created or deleted by FILL.
+5. No overlay modifications.
+6. Character arc metadata unchanged (consumed as context, not mutated).
+7. At most 2 review+revision cycles were run.
 
 ---
 
-## Prerequisites
+## Phase 1: Art Direction
 
-### Required Input State
+**Purpose:** Establish the story's visual identity — ArtDirection singleton plus one EntityVisual per Entity appearing in passages. Governs all downstream illustration generation, analogous to how the Voice Document governs prose.
 
-| Data | Required State |
-|------|----------------|
-| Vision | Complete (approved) |
-| Passages | All have prose (FILL complete) |
-| Entities | Complete with details (FILL updates applied) |
-| Codewords | All defined (GROW complete) |
-| Appears edges | Present (entity-to-passage links from GROW) |
+### Input Contract
 
-### Required Human Decisions from Prior Stages
+1. Stage Input Contract satisfied.
+2. `appears` edges exist from Entities to Passages (GROW/POLISH output; derivable from beat references if missing).
 
-- FILL approved (all prose reviewed)
-- All prior human gates passed
+### Operations
 
-### Required Configuration
+#### Art Direction Discussion and Serialization
 
-| Config | Purpose |
-|--------|---------|
-| `providers.image` | Image generation provider (e.g., `openai/gpt-image-1`) |
-| `OPENAI_API_KEY` | Required if using OpenAI image provider |
+**What:** Uses the three-phase pattern (discuss / summarize / serialize). LLM and human explore visual style; LLM distills to a narrative art brief; structured output produces the ArtDirection node and per-entity EntityVisual nodes with `describes_visual` edges.
 
----
+**Rules:**
 
-## Core Concepts
+R-1.1. Exactly one ArtDirection singleton node is created. Retries replace the previous node.
 
-### Art Direction Document
+R-1.2. ArtDirection fields include `style`, `medium`, `palette`, `composition_notes`, `negative_defaults`, `aspect_ratio`.
 
-The art direction document captures the visual identity of the story. It governs all illustration generation, analogous to how FILL's voice document governs all prose generation.
+R-1.3. Every Entity with at least one `appears` edge to a Passage gets an EntityVisual node with a `describes_visual` edge.
 
-Created through the standard discuss/summarize/serialize pattern, where user and LLM collaborate on visual style before any images are generated.
+R-1.4. Every EntityVisual has a non-empty `reference_prompt_fragment` — the text that will be injected into image prompts when this entity appears.
 
-**What it contains:**
+R-1.5. Human approval at Gate 1 is required before proceeding to Phase 2.
 
-| Field | Purpose |
-|-------|---------|
-| `style` | Art style (watercolor, digital painting, ink sketch, pixel art) |
-| `medium` | What it looks like it was made with |
-| `palette` | Dominant colors and mood |
-| `composition_notes` | Framing preferences |
-| `negative_defaults` | Things to avoid across all images |
-| `aspect_ratio` | Default image dimensions |
+R-1.6. DRESS does not modify the Entity's base-state. EntityVisual is a separate node, not an annotation on the Entity.
 
-### Entity Visual Profiles
+**Violations:**
 
-Entities (characters, locations, objects) must look consistent across all illustrations. EntityVisual nodes store per-entity appearance descriptions and a `reference_prompt_fragment` that is injected into every image prompt featuring that entity.
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| Two ArtDirection nodes exist | Retry duplicated | R-1.1 |
+| Entity appearing in 3 passages has no EntityVisual | Phase 1 skipped this entity | R-1.3 |
+| EntityVisual has `reference_prompt_fragment: ""` | Required field empty | R-1.4 |
+| DRESS writes to `character::mentor.description` | Entity base-state mutated | R-1.6 |
+| Phase 2 starts without Gate 1 approval | Human gate skipped | R-1.5 |
 
-The Appears edges from GROW tell DRESS which entities appear in each passage. For each illustration brief, DRESS:
-1. Reads the passage's Appears edges to find entities
-2. Loads each entity's EntityVisual node
-3. Injects `reference_prompt_fragment` into the image prompt
+### Output Contract
 
-This ensures a character looks the same whether they appear in the opening scene or the climax.
-
-### Diegetic Constraint
-
-Both illustration captions and codex entries must be **diegetic** — written in the story's voice, as if they are part of the world.
-
-**Captions:**
-- Good: "The bridge where loyalties shatter"
-- Bad: "An illustration of two characters confronting each other on a bridge"
-
-**Codex:**
-- Good: "A traveling scholar who offers guidance to those in need."
-- Bad: "Aldric is a character who serves as the protagonist's mentor."
-
-This constraint is enforced through prompt instructions and validated during human review at Gate 2.
-
-### Illustration Priority Scoring
-
-Not all passages need illustrations. Image generation is expensive, so DRESS assigns a priority score to each passage using a hybrid approach: structural rules provide a stable base, LLM judgment adds narrative sensitivity.
-
-**Structural base score:**
-
-| Factor | Score |
-|--------|-------|
-| Spine passage | +3 |
-| Branch opening (first passage after a choice) | +2 |
-| Ending passage (no outgoing choices) | +2 |
-| Climax scene_type | +2 |
-| New location introduction | +1 |
-| Transition / micro_beat scene_type | -1 |
-
-**LLM adjustment (applied per passage):**
-
-| Factor | Score |
-|--------|-------|
-| Visually striking scene | +1 |
-| Emotionally pivotal moment | +1 |
-| Dialogue-heavy / static scene | -1 |
-
-**Priority mapping:**
-
-| Total Score | Priority | Label |
-|-------------|----------|-------|
-| ≥ 5 | 1 | Must-have |
-| 3–4 | 2 | Important |
-| 1–2 | 3 | Nice-to-have |
-| ≤ 0 | — | Skip (no brief generated) |
-
-### Cumulative Codex Model
-
-Each entity gets multiple codex entries, ranked and gated by codewords. This enables spoiler graduation — players learn more about entities as they progress through the story.
-
-**Key properties:**
-- **Cumulative:** SHIP shows all unlocked entries, not just the highest
-- **Ranked:** Entries display in rank order (1 = base knowledge)
-- **Self-contained:** Each entry is readable without prior tiers
-- **Diegetic:** Written in the story's voice
-
-**Tier 1** (rank=1) always has `visible_when: []` — it's visible from the start. Higher tiers are gated by codewords earned through gameplay.
-
-The LLM generates all tiers at once, with instruction to minimize redundancy across tiers while keeping each self-contained.
-
-### Image Provider Abstraction
-
-DRESS uses a provider-independent interface for image generation. LangChain Python has no `BaseImageModel` — only a DALL-E tool wrapper — so QuestFoundry defines its own thin protocol.
-
-```python
-class ImageProvider(Protocol):
-    async def generate(
-        self,
-        prompt: str,
-        *,
-        negative_prompt: str | None = None,
-        aspect_ratio: str = "1:1",
-        quality: str = "standard",
-    ) -> ImageResult: ...
-
-@dataclass
-class ImageResult:
-    image_data: bytes
-    content_type: str       # "image/png", "image/webp"
-    provider_metadata: dict  # provider-specific info (model, seed, etc.)
-```
-
-Single provider per project. The prompt assembly layer translates structured IllustrationBrief data into a provider-specific prompt string.
+1. Exactly one ArtDirection node exists.
+2. Every Entity with ≥1 `appears` edge has an EntityVisual node connected by `describes_visual`.
+3. Every EntityVisual has a non-empty `reference_prompt_fragment`.
+4. Human approval of Gate 1 recorded.
 
 ---
 
-## Algorithm Phases
+## Phase 2: Illustration Brief Generation
 
-### Phase 0: Art Direction
+**Purpose:** For each Passage, generate a structured IllustrationBrief with priority score, subject, composition, mood, category, caption, and negative prompt. Briefs are candidates; Phase 4 renders the selected subset.
 
-**Purpose:** Establish the story's visual identity through collaborative exploration.
+### Input Contract
 
-**Input:**
-- Vision metadata (genre, tone, themes)
-- Entity list (all entities with their base descriptions)
+1. Phase 1 Output Contract satisfied.
 
-**Operations:**
+### Operations
 
-Uses the standard **discuss/summarize/serialize** pattern:
+#### Per-Passage Brief Generation
 
-1. **Discuss:** High-temperature exploration of visual style. LLM proposes styles, user reacts. Tools available for style research (genre conventions, art references). Discussion covers:
-   - Overall art style and medium
-   - Color palette and mood
-   - Composition preferences
-   - Per-entity appearance (characters, key locations, significant objects)
-   - What to avoid (negative prompt defaults)
+**What:** For each Passage, read the prose, the `appears` entities, and the Passage's position in the graph (spine/branch/ending). Compute a structural priority base score (spine +3, branch opening +2, ending +2, climax +2, new location +1, transition/micro-beat −1). LLM generates the narrative brief and an adjustment score (visually striking +1, emotionally pivotal +1, dialogue-heavy −1). Compute final priority.
 
-2. **Summarize:** Distill discussion into a narrative art brief. Captures the agreed visual direction in prose form.
+**Rules:**
 
-3. **Serialize:** Convert to structured output:
-   - One ArtDirection node (global style)
-   - One EntityVisual node per entity (appearance profile + prompt fragment)
-   - `describes_visual` edges linking each EntityVisual to its entity
+R-2.1. Every Passage gets an IllustrationBrief node with a `targets` edge to the Passage. Briefs that score ≤ 0 are still created but marked `priority: skip` (not rendered by default).
 
-**Output:**
-- ArtDirection node
-- EntityVisual[] nodes
-- `describes_visual` edges
+R-2.2. Briefs are created for Passages, not for beats.
 
-**Human Gate:** YES — **Gate 1**
-- Review global art direction document
-- Review entity visual profiles (especially `reference_prompt_fragment`)
-- Ensure consistency between entity descriptions and art style
-- Can request regeneration or manual edits
+R-2.3. Each Brief has non-empty `subject`, `composition`, `mood`, `category`, `caption`, plus `negative` and optional `style_overrides`.
 
-**LLM Involvement:** Generate + Validate (standard three-phase)
+R-2.4. Caption must be diegetic — written in the story's voice. "The bridge where loyalties shatter" (good) vs "An illustration of two characters confronting each other on a bridge" (bad).
 
-**Completion Criteria:**
-- ArtDirection node created with all fields populated
-- EntityVisual node created for every entity
-- Each EntityVisual has a non-empty `reference_prompt_fragment`
-- Human approval at Gate 1
+R-2.5. Priority ∈ {1 (must-have, score ≥ 5), 2 (important, 3–4), 3 (nice-to-have, 1–2), skip (≤ 0)}.
+
+R-2.6. LLM receives full Passage prose + ArtDirection + EntityVisuals for every entity in `appears` — not just IDs or summaries.
+
+**Violations:**
+
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| Brief has `caption: "Illustration of Kay entering the archive"` | Non-diegetic | R-2.4 |
+| Brief has `targets` edge to a beat | Briefs target passages | R-2.2 |
+| Brief has empty `subject` | Required field missing | R-2.3 |
+| Brief LLM call receives bare passage IDs | Context enrichment missing | R-2.6 |
+
+### Output Contract
+
+1. Every Passage has exactly one IllustrationBrief node with a `targets` edge.
+2. Every Brief has all required fields and a priority score.
+3. Captions are diegetic.
 
 ---
 
-### Phase 1: Illustration Brief Generation
+## Phase 3: Codex Generation
 
-**Purpose:** Generate structured image prompts for all passages, with priority scoring.
+**Purpose:** For each Entity, generate tiered diegetic codex entries gated by state flags. Tier 1 is always visible; higher tiers are gated by the state flags that track entity-affecting choices — enabling spoiler graduation as the player progresses.
 
-**Input:**
-- All passages (with prose)
-- ArtDirection node
-- EntityVisual[] nodes
-- Appears edges (entity → passage)
+### Input Contract
 
-**Operations:**
+1. Phase 2 Output Contract satisfied (Phase 3 may run in parallel with Phase 2).
 
-For each passage:
+### Operations
 
-1. **Read context:** passage prose, scene_type (from beat), position in graph (spine/branch/ending)
-2. **Identify entities:** Follow Appears edges to find all entities in this passage
-3. **Load visuals:** Read EntityVisual for each appearing entity
-4. **Compute structural score:** Apply base scoring rules (see Core Concepts)
-5. **Generate brief:** LLM call with passage context, entity visuals, and art direction. LLM produces:
-   - `subject`: What the image depicts
-   - `composition`: Framing and camera notes
-   - `mood`: Emotional tone
-   - `category`: scene | portrait | vista | item_detail
-   - `caption`: Diegetic caption
-   - `negative`: Image-specific things to avoid
-   - `style_overrides`: Deviations from global art direction (usually empty)
-   - LLM priority adjustment (visually striking, emotionally pivotal, etc.)
-6. **Compute final priority:** Combine structural base + LLM adjustment
-7. **Create IllustrationBrief node** with `targets` edge to passage
+#### Per-Entity Codex Entry Generation
 
-**Batching:** Passages can be processed in parallel batches. Brief generation is cheap (text LLM calls).
+**What:** For each Entity, identify which state flags relate to it (from overlay `when` clauses and from Consequences of paths involving the entity). Plan tier structure: rank 1 visible always, higher ranks gated by state flags. One LLM call per entity produces all tiers at once, with diegetic-voice instructions and self-containment requirements.
 
-**Output:**
-- IllustrationBrief[] nodes (one per passage)
-- `targets` edges (brief → passage)
+**Rules:**
 
-**Human Gate:** NO (deferred to Gate 2)
+R-3.1. Every Entity has at least one CodexEntry with `HasEntry` edge to the Entity.
 
-**LLM Involvement:** Generate (one call per passage)
+R-3.2. Tier 1 (rank = 1) has `visible_when: []` — always visible from the start.
 
-**Completion Criteria:**
-- IllustrationBrief created for every passage
-- All briefs have valid priority scores
-- All briefs have non-empty subject, composition, and caption
+R-3.3. Higher-tier entries (rank ≥ 2) are gated by `visible_when` referencing valid state flag IDs.
 
----
+R-3.4. Codex entries are diegetic — written in the story's voice, not as technical documentation. "A traveling scholar who offers guidance" (good) vs "Aldric is a character who serves as the protagonist's mentor" (bad).
 
-### Phase 2: Codex Generation
+R-3.5. Each entry is self-contained — readable without prior tiers.
 
-**Purpose:** Generate diegetic, spoiler-graduated encyclopedia entries for all entities.
+R-3.6. Lower-ranked tiers must not contain spoilers for higher tiers. LLM validation checks for spoilers; violations trigger retry (max 2 per entity).
 
-**Input:**
-- All entities (with base descriptions and overlays)
-- All codewords (with `tracks` links to consequences)
-- Vision metadata (genre, tone for voice)
+R-3.7. CodexEntry gating uses **state flag** IDs, not codewords. SHIP projects a subset of state flags as player-facing codewords; DRESS gates internally via state flags. → ontology §Part 8: Codewords ≠ State Flags.
 
-**Operations:**
+R-3.8. LLM call per entity receives: full Entity description (base + overlays), related state flags with their narrative meanings, tier plan, diegetic-voice instructions, Vision metadata.
 
-For each entity:
+**Violations:**
 
-1. **Analyze codeword gates:** Identify which codewords relate to this entity:
-   - Codewords that appear in the entity's overlay `when` clauses
-   - Codewords tracked by consequences involving this entity's paths
-2. **Determine tier structure:** Plan which knowledge is revealed at each gate:
-   - Rank 1: Always visible — basic introduction (who/what is this?)
-   - Rank 2+: Gated by codewords — progressively deeper knowledge
-   - Number of tiers depends on entity complexity and available codewords
-3. **Generate entries:** Single LLM call per entity produces all tiers. The prompt includes:
-   - Entity base description and overlays (full knowledge)
-   - Available codewords with their narrative meanings
-   - Tier plan (which codewords gate which rank)
-   - Diegetic constraint instructions
-   - Vision metadata for voice consistency
-4. **Validate:** Each entry is self-contained, diegetic, and doesn't spoil content from higher tiers
-5. **Create CodexEntry nodes** with `HasEntry` edges to entity
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| Entity has no CodexEntry | Phase 3 skipped | R-3.1 |
+| Rank-1 entry has `visible_when: [state_flag::mentor_hostile]` | Rank 1 must be unconditional | R-3.2 |
+| Rank-2 entry reveals "Aldric is the traitor" while rank 1 says "A mysterious scholar" | Rank 1 spoiled by rank 2 — but rank 1 should also be self-contained; if rank 1 is deliberately vague and rank 2 reveals, that's fine. Violation is only when low tier CONTAINS a spoiler from a later tier it shouldn't know yet | R-3.6 |
+| `visible_when` references `codeword::met_aldric` | Should be a state flag ID; codewords are SHIP's projection | R-3.7 |
+| Entry: "Aldric is a character who serves as the protagonist's mentor" | Non-diegetic voice | R-3.4 |
 
-**Parallelism:** Codex generation runs in parallel with Phase 1 (illustration briefs). Both read from the same graph state and create different node types.
+### Output Contract
 
-**Output:**
-- CodexEntry[] nodes (multiple per entity)
-- `HasEntry` edges (codex_entry → entity)
-
-**Human Gate:** NO (deferred to Gate 2)
-
-**LLM Involvement:** Generate (one call per entity)
-
-**Completion Criteria:**
-- Every entity has at least one codex entry (rank 1, always visible)
-- All entries are diegetic (in-world voice)
-- Tier codeword gates are valid (codewords exist in graph)
-- No spoilers in lower-ranked tiers
+1. Every Entity has ≥1 CodexEntry via `HasEntry` edge.
+2. Rank 1 of every Entity's entries is always visible.
+3. Higher tiers gate by valid state flag IDs.
+4. All entries are diegetic and self-contained.
+5. No lower-tier spoilers.
 
 ---
 
-### Phase 3: Human Review (Gate 2)
+## Phase 4: Human Review (Gate 2)
 
-**Purpose:** Review all generated content and set the image generation budget.
+**Purpose:** Review briefs and codex, set the image generation budget (which briefs to render).
 
-**Input:**
-- IllustrationBrief[] (sorted by priority)
-- CodexEntry[] (grouped by entity, sorted by rank)
+### Input Contract
 
-**Operations:**
+1. Phases 2 and 3 Output Contracts satisfied.
 
-Present to user for review:
+### Operations
 
-1. **Illustration briefs:**
-   - Displayed sorted by priority (must-have first)
-   - Show: subject, composition, mood, category, caption, priority score
-   - User can: approve, edit, skip, reprioritize
-   - User sets **image generation budget**: number of images or priority cutoff
-     (e.g., "render all priority 1+2", "render top 10", "skip all")
+#### Review and Budget Setting
 
-2. **Codex entries:**
-   - Displayed grouped by entity, sorted by rank within each group
-   - Show: entity name, rank, visible_when, content
-   - User can: approve, edit, add/remove tiers, adjust codeword gates
+**What:** Present illustration briefs sorted by priority and codex entries grouped by entity. Human approves / edits / skips briefs, sets a rendering budget (e.g., "render all priority 1 and 2," "render top 10," "skip all images"). Codex entries may be edited, added, or removed.
 
-**Output:**
-- Set of selected brief IDs (approved for rendering)
-- Approved codex entries (may be edited)
+**Rules:**
 
-**Human Gate:** YES — **Gate 2**
+R-4.1. Human explicitly sets the rendering budget. Silent defaults are forbidden — DRESS does not decide which briefs to render without human input.
 
-**LLM Involvement:** None
+R-4.2. Edits to briefs are captured in the brief node. Skipped briefs have `priority: skip` or a corresponding marker.
 
-**Completion Criteria:**
-- User has explicitly approved or skipped image generation
-- Codex entries reviewed (at minimum, spot-checked)
+R-4.3. Codex edits are persisted to the CodexEntry nodes.
 
----
+R-4.4. Human approval recorded.
 
-### Phase 4: Image Generation
+**Violations:**
 
-**Purpose:** Render selected illustration briefs into image assets.
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| DRESS proceeds to Phase 5 with no recorded budget | Silent default applied | R-4.1 |
+| Codex edits not reflected in graph | Edits lost | R-4.3 |
 
-**Input:**
-- Selected IllustrationBrief[] (from Gate 2)
-- ArtDirection node
-- EntityVisual[] nodes (for prompt assembly)
+### Output Contract
 
-**Operations:**
-
-1. **Prompt assembly:** For each selected brief:
-   - Assemble entity descriptions: join `reference_prompt_fragment` for each entity in `entities[]`
-   - Combine with action: append brief's `subject`, `composition`, and `mood`
-   - Apply global style: append ArtDirection's `style`, `medium`, and `palette`
-   - Apply overrides: append any `style_overrides` from the brief
-   - Set negative prompt: combine brief's `negative` with ArtDirection's `negative_defaults`
-   - Format for provider (e.g., DALL-E expects a single text prompt; A1111 expects separate positive/negative)
-
-2. **Sample generation:**
-   - Generate ONE image from the highest-priority brief
-   - Present to user for style confirmation
-   - If rejected: user can adjust art direction or brief, then retry
-   - If approved: proceed to batch
-
-3. **Batch generation:**
-   - Generate remaining selected briefs
-   - Track progress (X of Y complete)
-   - On failure: log error, skip brief, continue batch
-   - No retry by default (image generation is expensive; user can re-run)
-
-4. **Asset storage:**
-   - Compute SHA-256 of image data
-   - Store as `projects/<name>/assets/<sha256_prefix>.<ext>`
-   - Hash-based naming enables deduplication
-
-5. **Graph updates:**
-   - Create Illustration node (id, asset path, caption from brief, category from brief)
-   - Create Depicts edge (illustration → passage, via brief's targets edge)
-   - Create from_brief edge (illustration → illustration_brief)
-
-**Output:**
-- Illustration[] nodes
-- Asset files on disk
-- Depicts edges (illustration → passage)
-- from_brief edges (illustration → illustration_brief)
-
-**Human Gate:** Implicit (sample confirmation before batch)
-
-**LLM Involvement:** None (image provider only)
-
-**Completion Criteria:**
-- All selected briefs either rendered or logged as failed
-- Assets stored with correct hash-based naming
-- Illustration nodes and Depicts edges created for all successful renders
-- No orphan assets (every file has a corresponding Illustration node)
+1. Set of approved IllustrationBrief IDs for rendering (possibly empty — user may skip images entirely).
+2. CodexEntry edits persisted.
+3. Human approval recorded.
 
 ---
 
-## Human Gates Summary
+## Phase 5: Image Generation
 
-| Gate | After Phase | Reviews | Blocking? | Can Loop Back? |
-|------|-------------|---------|-----------|----------------|
-| **Gate 1** | Phase 0 (Art Direction) | Global style + entity visuals | Yes | To Phase 0 discuss |
-| **Gate 2** | Phase 1+2 (Briefs + Codex) | Priority list + budget + codex | Yes | To Phase 1 or 2 |
-| **Sample** | Phase 4 first image | Style confirmation | Yes | To Phase 0 or brief edit |
+**Purpose:** Render selected briefs into image assets via the configured image provider. Produces Illustration nodes and asset files.
 
-**Skipping DRESS entirely:** User can skip DRESS without affecting story playability. SHIP handles the absence of illustrations and codex gracefully.
+### Input Contract
+
+1. Phase 4 Output Contract satisfied with a non-empty rendering budget. If budget is empty, Phase 5 is skipped.
+
+### Operations
+
+#### Prompt Assembly and Image Generation
+
+**What:** For each selected brief, assemble a prompt from ArtDirection + EntityVisual fragments (for appearing entities) + brief's subject/composition/mood + negative prompt. Generate one sample image first for style confirmation; on approval, render the rest.
+
+**Rules:**
+
+R-5.1. Prompt assembly injects `reference_prompt_fragment` for every Entity in the brief's appearing set so characters/locations look consistent across images.
+
+R-5.2. Sample image is generated for the highest-priority brief first. Human confirms style fit before batch rendering.
+
+R-5.3. On sample rejection, the user may adjust ArtDirection or the brief and re-run — batch does not proceed without confirmation.
+
+R-5.4. On per-brief generation failure, log ERROR with the brief ID and provider error, skip the brief, continue the batch. No automatic retry (image generation is expensive).
+
+R-5.5. Generated images are stored with SHA-256 hash-prefix filenames in `projects/<name>/assets/` enabling deduplication.
+
+R-5.6. Each successfully rendered image produces an Illustration node + `Depicts` edge to the target passage + `from_brief` edge to the source IllustrationBrief.
+
+R-5.7. No orphan assets: every asset file has a corresponding Illustration node, and every Illustration node has an existing asset file.
+
+**Violations:**
+
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| Character appearance inconsistent across images | `reference_prompt_fragment` not injected | R-5.1 |
+| Batch renders without sample confirmation | Gate skipped | R-5.2 |
+| Asset file exists without Illustration node | Orphan — either log-and-clean or node creation failed | R-5.7 |
+| Illustration node with no corresponding asset file | Broken reference | R-5.7 |
+
+### Output Contract
+
+1. For every successfully rendered brief: an Illustration node + `Depicts` edge + `from_brief` edge + asset file on disk.
+2. For every failed brief: ERROR logged; brief marked as not-rendered; no Illustration node.
+3. No orphan asset files.
 
 ---
+
+## Stage Output Contract
+
+1. Exactly one ArtDirection node exists.
+2. Every Entity with ≥1 `appears` edge has an EntityVisual with non-empty `reference_prompt_fragment`.
+3. Every Passage has an IllustrationBrief with a `targets` edge.
+4. Every Brief has all required fields and a priority score; captions are diegetic.
+5. Every Entity has ≥1 CodexEntry with `HasEntry` edge.
+6. CodexEntry rank 1 is always visible; higher ranks gated by state flag IDs.
+7. All codex entries are diegetic and self-contained; no lower-tier spoilers.
+8. Selected Briefs have corresponding Illustration nodes with assets on disk; `Depicts` and `from_brief` edges wired.
+9. No prose, passage, choice, beat, entity-core, or state-flag mutations.
+10. DRESS may be skipped entirely — no required outputs if human opts out.
+
+## Implementation Constraints
+
+- **Context Enrichment:** Brief generation (Phase 2) must receive full Passage prose + ArtDirection + EntityVisuals for appearing entities. Codex generation (Phase 3) must receive full entity descriptions + related state flag meanings + Vision. Bare IDs produce generic output. → CLAUDE.md §Context Enrichment Principle (CRITICAL)
+- **Prompt Context Formatting:** All context blocks (entity visuals, state flag lists, brief lists during review) use human-readable formatting. No Python repr. → CLAUDE.md §Prompt Context Formatting (CRITICAL)
+- **Valid ID Injection:** Codex entries' `visible_when` fields must use valid state flag IDs. Provide the full list when calling the LLM for codex generation. → CLAUDE.md §Valid ID Injection Principle
+- **Silent Degradation:** Phase 5 per-brief failures log ERROR and skip the brief — the batch does not halt silently. The absence of an Illustration node for a selected brief must be logged. Phase 3 retry exhaustion produces a minimal rank-1-only codex with a WARNING, not silent gaps. → CLAUDE.md §Silent Degradation
+- **Small Model Prompt Bias:** If briefs consistently non-diegetic or codex entries consistently bland, fix the prompt first. → CLAUDE.md §Small Model Prompt Bias (CRITICAL)
+
+## Cross-References
+
+- DRESS narrative concept → how-branching-stories-work.md §Part 6: Illustration and Export
+- ArtDirection, EntityVisual, IllustrationBrief, Illustration, CodexEntry schemas → story-graph-ontology.md §Part 1; §Part 9 Node Types
+- `describes_visual`, `targets`, `from_brief`, `HasEntry`, `Depicts` edges → story-graph-ontology.md §Part 9: Edge Types
+- State flags vs codewords distinction → story-graph-ontology.md §Part 8: Codewords ≠ State Flags
+- Diegetic voice constraint → how-branching-stories-work.md §The Codex
+- Previous stage → fill.md §Stage Output Contract
+- Next stage → ship.md §Stage Input Contract
+
+## Rule Index
+
+R-1.1: Exactly one ArtDirection singleton; retries replace.
+R-1.2: ArtDirection has style, medium, palette, composition_notes, negative_defaults, aspect_ratio.
+R-1.3: Every entity with `appears` edge has an EntityVisual.
+R-1.4: Every EntityVisual has non-empty `reference_prompt_fragment`.
+R-1.5: Gate 1 approval required before Phase 2.
+R-1.6: DRESS does not mutate Entity base-state.
+R-2.1: Every Passage has an IllustrationBrief via `targets` edge.
+R-2.2: Briefs target Passages, not beats.
+R-2.3: Briefs have all required fields.
+R-2.4: Captions are diegetic.
+R-2.5: Priority ∈ {1, 2, 3, skip}.
+R-2.6: Brief LLM calls receive full Passage prose + ArtDirection + EntityVisuals.
+R-3.1: Every Entity has ≥1 CodexEntry via `HasEntry`.
+R-3.2: Rank 1 is always visible (`visible_when: []`).
+R-3.3: Higher tiers gated by valid state flag IDs.
+R-3.4: Entries are diegetic.
+R-3.5: Entries are self-contained.
+R-3.6: Lower tiers do not contain higher-tier spoilers; retries up to 2 per entity.
+R-3.7: Gating uses state flag IDs, not codewords.
+R-3.8: Codex LLM calls receive full entity + state flag meanings + Vision.
+R-4.1: Human explicitly sets rendering budget; no silent defaults.
+R-4.2: Brief edits persisted.
+R-4.3: Codex edits persisted.
+R-4.4: Gate 2 approval recorded.
+R-5.1: Prompt assembly injects `reference_prompt_fragment` per appearing entity.
+R-5.2: Sample image first for style confirmation.
+R-5.3: Sample rejection blocks batch.
+R-5.4: Per-brief failure logs ERROR, skips, continues batch.
+R-5.5: Asset files hash-prefixed in projects/<name>/assets/.
+R-5.6: Successful renders produce Illustration + Depicts + from_brief.
+R-5.7: No orphan assets; every asset has a node, every node has an asset.
+
+---
+
+## Human Gates
+
+| Phase | Gate | Decision |
+|-------|------|----------|
+| 1 | Art Direction (Gate 1) | Required — approve ArtDirection + EntityVisuals |
+| 4 | Review (Gate 2) | Required — set rendering budget, approve codex |
+| 5 | Sample image | Required — confirm style before batch; can loop back to Phase 1 or brief edit |
+
+**Skipping DRESS entirely:** The human may set the Phase 4 rendering budget to empty and opt out of codex edits. The story remains playable — SHIP handles the absence gracefully.
 
 ## Iteration Control
 
-### Art Direction (Phase 0)
-- Standard discuss/summarize/serialize with max 3 validation retries
-- If art direction is rejected at Gate 1, re-enter discuss phase (full re-run)
+**Forward flow:** 1 → 2 + 3 (parallel) → 4 → 5 (if budget non-empty).
 
-### Brief Generation (Phase 1)
-- No retry loop — briefs are generated once per passage
-- If a brief fails validation, log warning and create a minimal brief (subject only)
+**Backward loops:**
 
-### Codex Generation (Phase 2)
-- Max 2 retries per entity if validation fails (e.g., spoiler detected in low tier)
-- If retries exhausted, create minimal codex (rank 1 only, basic description)
+| From | To | Trigger |
+|------|-----|---------|
+| Gate 1 | Phase 1 discuss | Art direction rejected |
+| Gate 2 | Phase 2 or 3 | Briefs or codex need regeneration |
+| Phase 5 sample | Phase 1 or brief edit | Style mismatch on first image |
 
-### Image Generation (Phase 4)
-- No automatic retry (expensive operation)
-- On API failure: log error, mark brief as "not rendered", continue batch
-- User can re-run Phase 4 with remaining unrendered briefs
+**Maximum iterations:**
 
----
-
-## Context Management
-
-### Phase 0: Art Direction
-
-| Context | Tokens (est.) |
-|---------|---------------|
-| Vision metadata | ~200 |
-| Entity list with descriptions | ~500–2,000 (depends on entity count) |
-| Style discussion history | ~2,000–5,000 |
-| Output buffer | ~500 |
-
-### Phase 1: Illustration Brief Generation (per passage)
-
-| Context | Tokens (est.) |
-|---------|---------------|
-| Art direction document | ~300 |
-| Passage prose | ~300–500 |
-| Entity visuals (for appearing entities) | ~200–500 |
-| Scene type and graph position | ~100 |
-| Output buffer | ~300 |
-
-Fits comfortably in modern context windows. For stories with many entities per passage, entity visuals may be summarized.
-
-### Phase 2: Codex Generation (per entity)
-
-| Context | Tokens (est.) |
-|---------|---------------|
-| Entity full description (base + overlays) | ~200–500 |
-| Related codewords with meanings | ~200–400 |
-| Vision metadata (for voice) | ~200 |
-| Output buffer (all tiers) | ~500–1,000 |
-
----
-
-## Worked Example
-
-### Setup
-
-A minimal story with 3 passages and 2 entities:
-
-- **Passages:** opening → bridge_confrontation → ending
-- **Entities:** protagonist (character), mentor_aldric (character)
-- **Codewords:** met_aldric, discovered_betrayal
-
-### Phase 0: Art Direction
-
-Discuss produces:
-```yaml
-art_direction:
-  id: art_direction::main
-  style: "ink wash with watercolor accents"
-  medium: "traditional Japanese sumi-e"
-  palette: ["deep indigo", "rust orange", "ash grey"]
-  composition_notes: "Wide shots for landscapes, close-up for emotional moments"
-  negative_defaults: "photorealistic, text, modern clothing, bright colors"
-  aspect_ratio: "16:9"
-```
-
-Entity visuals:
-```yaml
-entity_visual:
-  id: ev::protagonist
-  description: "Young woman in her 20s, short dark hair, determined expression"
-  distinguishing_features: ["jade pendant", "ink-stained fingers"]
-  color_associations: ["deep indigo", "jade green"]
-  reference_prompt_fragment: "young woman, short dark hair, jade pendant, ink-stained fingers, determined expression"
-
-entity_visual:
-  id: ev::mentor_aldric
-  description: "Tall gaunt man in his 60s, silver-streaked beard, scar over left eye"
-  distinguishing_features: ["scar across left eyebrow", "worn leather satchel"]
-  color_associations: ["deep burgundy", "aged gold"]
-  reference_prompt_fragment: "tall gaunt elderly man, silver beard, scar over left eye, burgundy robes, leather satchel"
-```
-
-### Phase 1: Illustration Briefs
-
-For `bridge_confrontation` (spine passage, climax scene_type):
-- Structural score: spine(+3) + climax(+2) = 5
-- LLM adjustment: emotionally pivotal(+1) = +1
-- Total: 6 → **Priority 1 (must-have)**
-
-```yaml
-illustration_brief:
-  id: ib::bridge_confrontation
-  priority: 1
-  category: scene
-  subject: "Protagonist and Aldric face each other on the crumbling stone bridge at twilight"
-  entities: [entity::protagonist, entity::mentor_aldric]
-  composition: "wide shot, two figures silhouetted against sunset, bridge spanning a gorge"
-  mood: "tense, bittersweet"
-  style_overrides: {}
-  negative: "modern architecture, happy expressions"
-  caption: "The bridge where loyalties shatter"
-```
-
-### Phase 2: Codex
-
-For `mentor_aldric`:
-```yaml
-codex_entry:
-  id: codex::aldric_basic
-  rank: 1
-  visible_when: []
-  content: "A traveling scholar who offers guidance to those in need."
-
-codex_entry:
-  id: codex::aldric_background
-  rank: 2
-  visible_when: [met_aldric]
-  content: "Claims to be a former court advisor, exiled for speaking truth to power."
-
-codex_entry:
-  id: codex::aldric_truth
-  rank: 3
-  visible_when: [discovered_betrayal]
-  content: "His exile was self-imposed — he left the court after orchestrating the king's downfall."
-```
-
-### Phase 3: Gate 2
-
-User reviews briefs (sorted by priority) and sets budget: "render all priority 1" (1 image).
-User reviews codex entries and approves.
-
-### Phase 4: Image Generation
-
-1. Assemble prompt for `ib::bridge_confrontation`:
-   ```
-   young woman, short dark hair, jade pendant, ink-stained fingers, determined expression
-   and tall gaunt elderly man, silver beard, scar over left eye, burgundy robes, leather satchel
-   face each other on the crumbling stone bridge at twilight,
-   wide shot, two figures silhouetted against sunset, bridge spanning a gorge,
-   tense, bittersweet,
-   ink wash with watercolor accents, traditional Japanese sumi-e style,
-   deep indigo, rust orange, ash grey palette
-   ```
-   Negative: `modern architecture, happy expressions, photorealistic, text, modern clothing, bright colors`
-
-2. Generate sample → user confirms style
-3. (Only one image in budget, so batch = done)
-4. Store: `assets/a3f8c2...png`
-5. Create Illustration node + Depicts edge to `bridge_confrontation`
-
----
+- Phase 1: up to 3 validation retries (standard three-phase pattern).
+- Phase 2: no retry loop; failed briefs get minimal-subject fallback.
+- Phase 3: max 2 retries per entity if validation fails; fallback to rank-1-only codex.
+- Phase 5: no automatic retry on API failure; user may re-run Phase 5 for unrendered briefs.
 
 ## Failure Modes
 
-### Image Provider Failure
+| Phase | Failure | Detection | Recovery |
+|-------|---------|-----------|----------|
+| 1 | Style rejected at Gate 1 | Human review | Re-enter discuss; full Phase 1 re-run |
+| 2 | Brief validation fails | Validator check | Minimal brief (subject only) with WARNING |
+| 3 | Spoiler detected in low tier | Validator / LLM | Up to 2 retries; fallback to rank-1-only with WARNING |
+| 5 | Image provider API failure | Provider response | Log ERROR, skip brief, continue batch |
+| 5 | Sample image rejected | Human review | Adjust ArtDirection or brief; re-run |
 
-| Failure | Recovery |
-|---------|----------|
-| API timeout | Log, skip brief, continue batch |
-| Rate limiting | Back off, retry once, then skip |
-| Content policy rejection | Log prompt, mark brief as "blocked", continue |
-| Authentication failure | Abort batch, report error |
+## Context Management
 
-**No automatic retry for cost reasons.** User can re-run Phase 4 targeting only unrendered briefs.
+**Standard (≥128k context):** Full Vision + entity list + per-phase context comfortable in context window. Entity count is typically ~10–20; fits in a single prompt.
 
-### Art Direction Too Vague
+**Constrained (~32k context):** Phase 1 entity visuals may be generated in batches (5–10 entities per call). Phase 2 per-passage briefs run one call at a time (already bounded). Phase 3 per-entity codex runs one call at a time.
 
-If serialization produces an ArtDirection with empty or generic fields (e.g., `style: "good"`), the validation loop retries with feedback specifying which fields need concrete values. Max 3 retries.
+## Worked Example
 
-### Entity Visual Inconsistency
+### Starting Point (FILL output)
 
-Gate 1 is the primary defense. If entity visuals are inconsistent (e.g., protagonist described differently from their entity base description), the user catches this during review and either edits directly or requests re-generation.
+- 12 Passages with prose
+- 8 Entities (4 characters, 3 locations, 1 object)
+- Voice Document, state flags, overlays all in place
 
-### Codex Spoiler Leak
+### Phase 1
 
-If a low-ranked codex entry reveals information gated by codewords in a higher-ranked entry, validation flags it. Recovery: regenerate the entity's codex entries with explicit spoiler ordering instructions. Max 2 retries.
+Human + LLM discuss visual style. Final:
 
-### Budget Exceeded
+```yaml
+art_direction:
+  style: "ink-wash with muted color tint"
+  medium: "digital painting mimicking traditional ink"
+  palette: "deep blues and greys, warm amber accents"
+  composition_notes: "dramatic lighting, low-angle compositions for tension"
+  negative_defaults: "no photorealism, no cartoon styling, no modern clothing"
+  aspect_ratio: "3:2"
+```
 
-If the user-selected budget would exceed a configured cost limit (if set), warn before proceeding. The user can reduce the selection or override.
+8 EntityVisual nodes created with reference_prompt_fragments. Gate 1 approved.
 
----
+### Phase 2 + 3 (parallel)
 
-## Design Principle: Visual Identity Serves the Narrative
+12 IllustrationBriefs generated, 4 priority-1, 5 priority-2, 3 priority-3. Sample caption: "Where the archive keeps its oldest silence."
 
-Art direction is a **constraint document**, not creative freedom. Like the voice document in FILL, the art direction document exists to ensure consistency, not to showcase art.
+8 Entities get tiered codex entries (mostly 2–3 tiers each).
 
-Every visual element must serve the story:
-- **Illustrations** show what the player is experiencing, not abstract beauty
-- **Captions** are part of the world, not commentary on it
-- **Codex entries** are the world speaking to the player, not the author explaining the world
-- **Entity visuals** exist for consistency, not for their own sake
+### Phase 4 (Gate 2)
 
-DRESS is optional. A story without illustrations is still a complete story. DRESS adds atmosphere, not structure.
+Human reviews. Budget: "render all priority-1 and priority-2" (9 images). Codex approved with minor edits to 2 entries.
 
----
+### Phase 5
 
-## Output Checklist
+Sample image for highest-priority brief generated — approved. Remaining 8 rendered in batch. All 9 Illustration nodes + assets created.
 
-Before DRESS is complete:
-
-- [ ] ArtDirection node exists with all fields populated
-- [ ] EntityVisual exists for every entity with non-empty `reference_prompt_fragment`
-- [ ] IllustrationBrief exists for every passage with valid priority
-- [ ] Illustration exists for every selected (rendered) brief
-- [ ] Every Illustration has a Depicts edge to its passage
-- [ ] Every Illustration has a from_brief edge to its IllustrationBrief
-- [ ] Every Illustration has a diegetic caption
-- [ ] Every entity has at least one CodexEntry (rank 1, visible_when: [])
-- [ ] Every CodexEntry has a HasEntry edge to its entity
-- [ ] All codex content is diegetic
-- [ ] No spoiler leaks in low-ranked codex entries
-- [ ] All assets stored in `projects/<name>/assets/` with hash-based naming
-- [ ] Human gates passed (Gate 1 + Gate 2 + sample confirmation)
-
----
-
-## Summary
-
-| Phase | Purpose | Creates | Cost | Gate? |
-|-------|---------|---------|------|-------|
-| 0: Art Direction | Visual identity | ArtDirection, EntityVisual[] | Cheap (LLM) | Gate 1 |
-| 1: Illustration Briefs | Image prompts | IllustrationBrief[] | Cheap (LLM) | — |
-| 2: Codex | Encyclopedia | CodexEntry[] | Cheap (LLM) | — |
-| 3: Human Review | Budget + approval | (edits only) | Free | Gate 2 |
-| 4: Image Generation | Render assets | Illustration[] | Expensive (image API) | Sample |
+DRESS complete.
