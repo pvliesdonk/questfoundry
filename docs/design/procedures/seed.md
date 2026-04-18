@@ -1,843 +1,736 @@
-# SEED Procedure
+# SEED — Triage BRAINSTORM into committed structure, scaffold the Y-shape
 
-> For the narrative description of the SEED stage, see ["How Branching Stories Work", Part 2](../how-branching-stories-work.md). This document provides the detailed algorithm specification.
->
-> **Y-shape structure SEED is responsible for creating (#1206).** A dilemma is a minimal branching story shaped like the letter Y. SEED must produce, per dilemma:
-> - A **shared pre-commit chain** — beats that introduce and develop the dilemma. These beats belong to *every* path of the dilemma (two `belongs_to` edges for a binary dilemma) — every player experiences them regardless of which answer they will later choose.
-> - A **commit beat per path** — the first beat exclusive to that path. Each commit beat carries a `dilemma_impacts` entry with `effect: commits`. Commit beats have exactly one `belongs_to` edge.
-> - **2–4 post-commit beats per path** — beats that prove that path's answer. Post-commit beats have exactly one `belongs_to` edge.
->
-> In the beat DAG, the last shared pre-commit beat has one successor per path (the divergence point); each successor is that path's commit beat. Without this Y-shape, POLISH Phase 4c's `compute_choice_edges()` finds no divergence and produces zero choices. The three guard rails from the [Story Graph Ontology, Part 8, "Path Membership ≠ Scene Participation"](../story-graph-ontology.md) apply: same-dilemma constraint, pre-commit only, intersection exclusion.
->
-> **Terminology transitions (2026-02-24):** The [Story Graph Ontology](../story-graph-ontology.md) replaces several terms used in this document. The code has not yet been updated.
-> - `convergence_policy` (hard/soft/flavor) → `dilemma_role` (hard/soft). Convergence behavior is derived from the role, not declared directly. `flavor` is removed — flavor-level choices are handled by POLISH as false branches.
-> - `InteractionConstraint` (shared_entity/causal_chain/resource_conflict) → dilemma ordering relationships. The three declared relationships are `wraps`, `concurrent`, and `serial`. `shared_entity` is derived from `anchored_to` edges (not explicitly declared). `causal_chain` is subsumed by `serial`. `resource_conflict` is removed.
-> - `central_entity_ids` (list field on dilemmas) → `anchored_to` edges in the graph.
-> - `location_alternatives` (field on beats) → entity flexibility edges (generalized to any entity category, not just locations).
+## Overview
 
-## Summary
+SEED is the heaviest mutation stage. It triages entities and answers, constructs the Y-shaped beat scaffold per dilemma (shared pre-commit chain → commit fork → exclusive post-commit chains), generates consequences, creates any setup beats (story-opening world-building before any dilemma) and epilogue beats (story-closing wrap-up after all dilemmas commit/converge), classifies each dilemma's role and residue, and declares pairwise dilemma ordering relationships. After SEED's Path Freeze, no new paths, entities, or consequences may be created downstream — GROW works within this structure.
 
-**Purpose:** Triage BRAINSTORM output into committed story structure. This is the path creation gate—after SEED, no new paths or entities can be created.
+SEED does NOT interleave beats into a single DAG (that is GROW's job), create Passage nodes (POLISH), write prose (FILL), or create Intersection Groups or State Flags (GROW).
 
-**Input artifacts:**
-- `02-brainstorm.yaml` (entities, dilemmas with answers)
-- `01-dream.yaml` (vision context)
+## Stage Input Contract
 
-**Output artifacts:**
-- `03-seed.yaml` (curated entities, paths with consequences, initial beats, convergence sketch)
+*Must match BRAINSTORM §Stage Output Contract exactly.*
 
-**Mode:** LLM-heavy generation with human critique gates. LLM proposes complete artifacts; human reviews, critiques, and approves.
+1. Exactly one Vision node with non-empty `genre`, `tone`, `themes`, `audience`, `scope`.
+2. One or more Entity nodes, each with non-empty `name`, `category`, `concept`; `category` ∈ {`character`, `location`, `object`, `faction`}.
+3. At least two distinct `location`-category entities exist.
+4. Entity IDs are namespaced by category (e.g., `character::mentor`).
+5. One or more Dilemma nodes, each with non-empty `question` (ending `?`) and `why_it_matters`.
+6. Each Dilemma has exactly two `has_answer` edges to distinct Answer nodes.
+7. Each Answer has a non-empty `description`.
+8. Exactly one Answer per Dilemma has `is_canonical: true`.
+9. Each Dilemma has at least one `anchored_to` edge to an Entity.
+10. Dilemma IDs use the `dilemma::` prefix.
+11. No Path, Beat, Consequence, State Flag, Passage, or Intersection Group nodes exist.
 
 ---
 
-## Prerequisites
+## Phase 1: Entity Triage
 
-### Required Input Files
+**Purpose:** Filter the BRAINSTORM cast into the final retained set. After Phase 1, every Entity is either retained (in the story) or cut (removed — downstream stages cannot reference it).
 
-| File | Required State |
-|------|----------------|
-| `01-dream.yaml` | Complete (approved vision) |
-| `02-brainstorm.yaml` | Complete (approved entities and dilemmas) |
+### Input Contract
 
-### Required Human Decisions from Prior Stages
+1. Stage Input Contract satisfied.
+2. All BRAINSTORM Entity nodes have no `disposition` field yet.
 
-- DREAM vision approved
-- BRAINSTORM entities and dilemmas approved
+### Operations
 
-### Knowledge Context
+#### Entity Disposition Assignment
 
-Inject for LLM:
-- Full DREAM vision
-- Full BRAINSTORM output
-- Story length target (from DREAM constraints)
+**What:** Each Entity is marked `retained` or `cut`. Cut entities cannot be referenced by Paths, Beats, Consequences, or Dilemmas downstream. An entity anchored_to by a surviving Dilemma cannot be cut without re-anchoring or cutting that Dilemma first.
+
+**Rules:**
+
+R-1.1. Every Entity node has `disposition` set to `retained` or `cut` before Phase 1 ends.
+
+R-1.2. An Entity with an incoming `anchored_to` edge from a surviving (non-cut) Dilemma cannot be cut. Either re-anchor the Dilemma to another retained Entity, or cut the Dilemma itself.
+
+R-1.3. No new Entities may be introduced in Phase 1. Entities not present in BRAINSTORM cannot be added — loop back to BRAINSTORM if a missing entity is discovered.
+
+R-1.4. The two-location minimum from BRAINSTORM (R-2.4) must still hold after triage: at least two retained `location`-category Entities must exist.
+
+**Violations:**
+
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| Entity has no `disposition` field after Phase 1 | Triage omitted this entity | R-1.1 |
+| Dilemma has `anchored_to` edge to an entity with `disposition: cut` | Entity was cut without re-anchoring or cutting the dilemma | R-1.2 |
+| Phase 1 output contains an entity that was not in BRAINSTORM | New entity introduced during triage | R-1.3 |
+| Downstream beat references an entity with `disposition: cut` | Cut entity still live in references | R-1.1 |
+| Only one `location`-category entity has `disposition: retained` | Two-location minimum lost during triage | R-1.4 |
+
+### Output Contract
+
+1. Every Entity node has `disposition` ∈ {`retained`, `cut`}.
+2. No surviving Dilemma has `anchored_to` to a cut Entity.
+3. At least two distinct retained `location`-category Entities exist.
 
 ---
 
-## Core Concepts
+## Phase 2: Answer Selection
 
-### Path Freeze
+**Purpose:** For each Dilemma, decide which Answers become explored (full paths will be generated in Phase 3) and which remain shadows (narrative weight only).
 
-SEED is the last stage where structural elements can be created. After SEED approval:
-- No new paths
-- No new entities
-- No new dilemmas
+### Input Contract
 
-GROW can mutate beats, create intersections, derive passages—but works within the structure SEED defines.
+1. Phase 1 Output Contract satisfied.
 
-### Consequence as Narrative Bridge
+### Operations
 
-A **Consequence** describes the narrative meaning of choosing a path. It bridges the gap between:
-- **Answer** (what this path represents): "Mentor is genuine protector"
-- **Codeword** (how we track it): `mentor_protector_committed`
+#### Exploration Decision
 
-Consequences declare *what changes* in the story world. GROW later implements these with codewords and entity overlays.
+**What:** The canonical Answer is always explored. For each non-canonical Answer, the human decides `explored` (will become a full Path) or `shadow` (locked-dilemma shadow — no Path, narrative possibility only). The `explored` field is immutable after Phase 2; pruning in Phase 5 drops Paths but never modifies `explored`.
 
-```yaml
-consequence:
-  id: mentor_ally
-  path_id: path::mentor_trust__protector
-  description: "Mentor becomes protective ally"
-  ripples:
-    - "Shields Kay in confrontation"
-    - "Reveals family connection"
+**Rules:**
+
+R-2.1. The canonical Answer of every Dilemma is explored. No exceptions.
+
+R-2.2. Each non-canonical Answer is assigned `explored: true` or `explored: false` (shadow). No third state.
+
+R-2.3. The `explored` field is immutable after Phase 2. Later phases (notably Phase 5 over-generate-and-select pruning) may drop Path nodes, but must not modify `explored`.
+
+R-2.4. Every Dilemma has exploration decisions for all its Answers before Phase 2 ends.
+
+**Violations:**
+
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| Canonical Answer has no Path node after Phase 3 | Canonical was incorrectly left as shadow | R-2.1 |
+| Non-canonical Answer has `explored` unset | Decision not recorded | R-2.2 / R-2.4 |
+| Phase 5 pruning modifies `explored: true` → `explored: false` on a Dilemma | Pruning must drop Path nodes, not mutate `explored` — invariant broken | R-2.3 |
+
+### Output Contract
+
+1. Every Dilemma has an exploration decision for every Answer (canonical always explored; non-canonical marked explored or shadow).
+2. `explored` field is final and will not be modified for the rest of the pipeline.
+
+---
+
+## Phase 3: Path Construction
+
+**Purpose:** Generate the complete Y-shaped beat scaffold for each Dilemma — shared pre-commit chain, commit beat per path, 2–4 post-commit beats per path — plus Path nodes with their Consequences. This is the structural heart of SEED. **Without the Y-shape, POLISH Phase 4c finds no divergence and produces zero choices.**
+
+### Input Contract
+
+1. Phase 2 Output Contract satisfied.
+
+### Operations
+
+#### Path Node Creation
+
+**What:** For each explored Answer, create a Path node with an `explores` edge to that Answer. Path IDs are hierarchical: `path::<dilemma_id>__<answer_id>`.
+
+**Rules:**
+
+R-3.1. Every explored Answer has exactly one Path node, connected by an `explores` edge.
+
+R-3.2. Path IDs follow the pattern `path::<dilemma_suffix>__<answer_suffix>` (e.g., `path::mentor_trust__protector` for `dilemma::mentor_trust` + answer `mentor_protector`).
+
+**Violations:**
+
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| Explored Answer has no Path | Path creation skipped | R-3.1 |
+| Two Paths both have `explores` edge to the same Answer | Duplicate path creation | R-3.1 |
+| Path ID is `mentor_protector` (no prefix) | ID convention not followed | R-3.2 |
+
+#### Consequence Generation
+
+**What:** Each Path must declare the narrative outcomes it implies — the world-state changes that GROW will implement as state flags and entity overlays. Consequences describe world state, not player actions.
+
+**Rules:**
+
+R-3.3. Every Path has at least one Consequence node, connected by a `has_consequence` edge.
+
+R-3.4. Every Consequence has a non-empty `description` and at least one ripple (concrete downstream story effect).
+
+R-3.5. Consequences describe world state ("the mentor becomes hostile") — NOT player actions ("the player chose to distrust the mentor"). → ontology §Part 8: State Flags ≠ Player Choices.
+
+**Violations:**
+
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| Path has no `has_consequence` edges | Consequence generation skipped | R-3.3 |
+| Consequence has `ripples: []` | Missing downstream effects | R-3.4 |
+| Consequence description: "the player chose to distrust the mentor" | Consequences describe world state, not player actions | R-3.5 |
+
+#### Y-Shape Beat Scaffold
+
+**What:** For each Dilemma with two explored Answers, SEED generates a Y-shaped beat structure: a shared pre-commit chain that belongs to both paths of the dilemma, a commit beat per path (the first beat exclusive to that path), and 2–4 exclusive post-commit beats per path. In the DAG, the last shared pre-commit beat has one successor per path — each is that path's commit beat. This is the structural precondition for choice-edge derivation downstream.
+
+Shape:
+
+```
+pre_commit_01 → pre_commit_02 → commit_path_a → post_a_01 → post_a_02
+                             ↘ commit_path_b → post_b_01 → post_b_02
 ```
 
-### Branch and Bottleneck
+where `pre_commit_*` beats have two `belongs_to` edges (both paths of this dilemma), and `commit_*` and `post_*` beats have exactly one.
 
-Sustainable branching requires convergence. Key insight: a story that branches and never converges is just two separate stories.
+**Rules:**
 
-**Branch and bottleneck pattern:**
-- Paths diverge at choice points
-- Paths reconverge at key story beats (intersections)
-- Residue (codewords, overlays) carries forward after convergence
+R-3.6. Pre-commit beats have exactly two `belongs_to` edges, both referencing Paths of the same Dilemma. In YAML form, this is represented by `path_id` (primary) and `also_belongs_to` (other path); in the graph, it is two distinct `belongs_to` edges.
 
-SEED sketches where convergence should happen. GROW implements it.
+R-3.7. Commit beats have exactly one `belongs_to` edge AND `dilemma_impacts` contains an entry with `effect: commits` naming which path locks in. In YAML, `also_belongs_to` is absent or null on commit beats.
 
-### Viability Analysis
+R-3.8. Post-commit beats have exactly one `belongs_to` edge AND `dilemma_impacts` contains no entry with `effect: commits`.
 
-Combinatorial complexity depends on:
-- Number of dilemmas with both answers explored: 2^n potential arcs
-- Convergence factor: how much content is shared vs unique
-- Path interactions: do paths have natural intersection points?
+R-3.9. No beat has `belongs_to` edges referencing Paths from different Dilemmas. Cross-dilemma dual `belongs_to` is forbidden — it conflates path membership with scene co-occurrence. Co-occurrence belongs in GROW's intersection groups. → ontology §Part 8: Path Membership ≠ Scene Participation.
 
-SEED surfaces this complexity early so humans can scope appropriately.
+R-3.10. Every Dilemma with two explored Answers has at least one pre-commit beat. The number is a narrative decision — some dilemmas need one shared setup beat, others need several. Zero pre-commit beats means no Y-shape fork, which breaks downstream choice derivation.
 
-### Over-Generate-and-Select Pattern
+R-3.11. Every explored Path has exactly one commit beat.
 
-LLMs are poor at counting and self-constraint. Instead of teaching the LLM to stay within arc limits, QuestFoundry uses an **over-generate-and-select** pattern:
+R-3.12. Every explored Path has 2–4 post-commit beats.
 
-1. **LLM generates freely** - The LLM explores all answers it finds compelling without worrying about arc limits
-2. **Runtime scores dilemmas** - Each dilemma is scored by quality criteria:
-   - Beat richness: How many beats explore the non-canonical path
-   - Consequence depth: How many narrative effects cascade from the path
-   - Entity coverage: How many unique entities appear in beats
-   - Location variety: How many distinct locations the path uses
-   - Path tier: Major paths score higher than minor
-   - Content distinctiveness: How different the paths are (Jaccard distance)
-3. **Runtime selects top N** - The highest-scoring dilemmas are kept fully explored (up to 4 dilemmas = 16 arcs)
-4. **Runtime prunes excess** - Demoted dilemmas have their paths, consequences, and beats removed
+R-3.13. Every beat has non-empty `summary` and `entities` (list of entity IDs it references).
 
-**Key invariant: The `explored` field is immutable after SEED.** Pruning only drops paths; it never modifies the dilemma's `explored` field. This separation between "LLM intent" (stored as `explored`) and "runtime state" (derived from path existence) ensures:
-- The pruning operation is idempotent
-- Arc count is derived from actual paths, not potentially stale metadata
-- Debugging is simpler—you can see what the LLM originally intended vs what survived pruning
+R-3.14. Setup beats (SEED-created, story-opening) and epilogue beats (SEED-created, story-closing) are structural beats with zero `belongs_to` edges and zero `dilemma_impacts`. Setup beats establish world context before any dilemma is introduced; epilogue beats wrap up the story after all dilemmas have committed and converged. Neither type is tied to any path. → ontology §Part 1: Structural Beats.
 
-This pattern:
-- Simplifies prompts (no arc math, verification checklists, or hard limits)
-- Lets the LLM focus on narrative quality instead of constraint compliance
-- Produces consistent, predictable arc counts
-- Avoids validation ping-pong where the LLM over/under-corrects
+R-3.15. Setup and epilogue beats are optional — a story may have zero of each. When present, each has non-empty `summary` and `entities` (same requirement as any beat).
 
----
+**Violations:**
 
-## Algorithm Phases
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| Beat has `belongs_to` edges to `path::mentor_trust__protector` and `path::artifact_nature__salvation` | Cross-dilemma dual `belongs_to` — conflates path membership with scene co-occurrence | R-3.9 |
+| Setup beat has `belongs_to` to a path | Structural beat wrongly assigned path membership | R-3.14 |
+| Epilogue beat has `dilemma_impacts.effect: commits` | Epilogue is post-all-commits; cannot commit a dilemma | R-3.14 |
+| Commit beat has `also_belongs_to` set | Commit beats are exclusive to one path; `also_belongs_to` must be null | R-3.7 |
+| Post-commit beat has `dilemma_impacts.effect: commits` | Post-commit beats must not contain a commits impact (that would make them a commit beat) | R-3.8 |
+| Dilemma has zero pre-commit beats | Y-fork missing — per the Y-shape requirement stated in the Overview, the last shared pre-commit beat is the divergence point that seeds the Y-fork. Without it, POLISH Phase 4c's `compute_choice_edges()` finds no divergence and produces zero choices | R-3.10 |
+| Path has zero commit beats | Path cannot "commit" — no point of irreversible choice | R-3.11 |
+| Path has two commit beats | A path commits once, not twice | R-3.11 |
+| Path has only one post-commit beat | Minimum is 2; single post-commit gives no space to prove the answer | R-3.12 |
+| Path has six post-commit beats | Maximum is 4; longer sequences belong in GROW/POLISH as added beats | R-3.12 |
+| Beat has `summary: ""` | Required field empty | R-3.13 |
+| Pre-commit beat references Paths from two different Dilemmas | R-3.6 says both belongs_to edges must be to paths of the SAME dilemma | R-3.6 / R-3.9 |
 
-### Phase 1: Entity Triage
+### Output Contract
 
-**Operation:** Filter BRAINSTORM entities into final cast.
-
-**LLM Involvement:** Generate
-
-LLM produces ranked entity list with rationale:
-- **Core:** Essential to story dilemmas
-- **Supporting:** Enriches but not essential
-- **Cut candidates:** Can be removed without story impact
-
-**Human Gate:** Yes
-
-Human reviews ranking, makes final in/out decisions. May add entities missed in BRAINSTORM.
-
-**Artifacts Modified:**
-- Working draft of curated entity list
-
-**Completion Criteria:**
-- Every BRAINSTORM entity has disposition (in/out)
-- Human has approved entity list
-- No unresolved questions about entity necessity
+1. Every explored Answer has exactly one Path node with an `explores` edge.
+2. Every Path has ≥1 `has_consequence` edge to a Consequence with ≥1 ripple.
+3. Consequences describe world state, not player actions.
+4. Every Dilemma with two explored Answers has ≥1 pre-commit beat (two `belongs_to` edges to paths of that dilemma).
+5. Every explored Path has exactly one commit beat (one `belongs_to`, `effect: commits` in `dilemma_impacts`).
+6. Every explored Path has 2–4 post-commit beats (each with one `belongs_to`, no commits impact).
+7. No beat has cross-dilemma dual `belongs_to`.
+8. Zero or more setup beats exist (structural, zero `belongs_to`, zero `dilemma_impacts`), for story-opening world-building.
+9. Zero or more epilogue beats exist (structural, zero `belongs_to`, zero `dilemma_impacts`), for story-closing wrap-up after all dilemmas commit and converge.
 
 ---
 
-### Phase 2: Answer Selection
+## Phase 3b: Entity Flexibility Analysis
 
-**Operation:** For each dilemma, decide which answers to explore.
+**Purpose:** For each beat, annotate which entity references could be substituted without breaking the beat's dramatic function. This creates the raw material GROW uses to propose intersections (Phase 4 of GROW).
 
-**LLM Involvement:** Generate
+### Input Contract
 
-LLM proposes exploration map per dilemma:
+1. Phase 3 Output Contract satisfied.
 
-```yaml
-dilemma_exploration:
-  - dilemma_id: dilemma::mentor_trust
-    explored:
-      - answer_id: mentor_protector    # canonical, always explored
-        rationale: "Spine path - mentor as ally"
-      - answer_id: mentor_manipulator  # non-canonical
-        rationale: "Dark branch - doubles content but adds replayability"
-        recommendation: explore | shadow
-    scope_impact: "Exploring both adds ~15 beats, creates 2 major arcs"
-```
+### Operations
 
-For each non-canonical answer, LLM provides:
-- Recommendation (explore or leave as shadow)
-- Rationale
-- Scope impact estimate
+#### Entity Flexibility Annotation
 
-**Human Gate:** Yes
+**What:** SEED proposes `flexibility` edges from beats to alternative entities. Each flexibility edge carries a `role` property (e.g., `role: "mentor"` when the spy could play the mentor role in this beat). Flexibility is about preserving the beat's dramatic function — an alternative only qualifies if it can serve the same narrative purpose. Flexibility applies to any entity category, not just locations.
 
-Human decides which answers become paths. May override LLM recommendations.
+**Rules:**
 
-**Artifacts Modified:**
-- Exploration decisions per dilemma
+R-3b.1. A `flexibility` edge is added only if the alternative entity preserves the beat's dramatic function. "Meet spy at crowded Market" and "Meet spy at dangerous Docks" are NOT interchangeable if the danger vs safety changes the scene's meaning.
 
-**Completion Criteria:**
-- Every dilemma has exploration decision
-- Human understands scope implications
-- Human has approved exploration map
+R-3b.2. Each `flexibility` edge carries a `role` property stating what role the alternative plays in the beat (e.g., `role: "mentor"`, `role: "meeting_location"`).
 
----
+R-3b.3. Flexibility applies to any entity category, not just locations. A character, object, or faction can be annotated as substitutable.
 
-### Phase 3: Path Construction
+R-3b.4. Phase 3b is advisory — GROW may use flexibility signals when proposing intersections but is not bound by them.
 
-**Operation:** Generate complete path definitions with consequences.
+**Violations:**
 
-**LLM Involvement:** Generate
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| `flexibility` edge without a `role` property | Role metadata missing | R-3b.2 |
+| `flexibility` edge from beat "confront the antagonist at the Vault" to entity "Library" | Library is not a "confrontation location" — dramatic function not preserved | R-3b.1 |
+| Phase 3b restricted to locations only (no flexibility for characters) | Incorrectly scoped — flexibility is for any category | R-3b.3 |
 
-For each explored answer, LLM generates:
+### Output Contract
 
-```yaml
-path:
-  id: path::mentor_trust__protector          # hierarchical ID
-  name: "The Mentor's Protection"
-  dilemma_id: dilemma::mentor_trust          # derivable from path_id
-  answer_id: mentor_protector
-  shadows: [mentor_manipulator]
-  tier: major
-  description: "Kay discovers the mentor has been protecting them all along..."
-  consequences:
-    - mentor_ally
-
-consequences:
-  - id: mentor_ally
-    path_id: path::mentor_trust__protector
-    description: "Mentor becomes protective ally"
-    ripples:
-      - "Mentor shields Kay during confrontation with antagonist"
-      - "Mentor reveals connection to Kay's family"
-      - "Mentor's knowledge becomes available resource"
-```
-
-LLM generates the full Y-shape beat scaffold for each dilemma (see the transition admonition at the top of this document for the complete structure):
-
-- **Shared pre-commit beats** — one chain per dilemma, introducing and developing the dramatic question. Each pre-commit beat has a `path_id` (its primary path) and an `also_belongs_to` field naming the other explored path of the dilemma, producing one `belongs_to` edge per path. The chain terminates at the last shared pre-commit beat, whose successors in the DAG are the per-path commit beats.
-- **Commit beat per path** — the first beat exclusive to that path, carrying `dilemma_impacts.effect: commits`. It has only `path_id`; `also_belongs_to` is absent or null.
-- **Post-commit beats per path** — 2–4 beats that prove the path's answer. Each has only `path_id`.
-
-```yaml
-initial_beats:
-  # Shared pre-commit beat — dual belongs_to within the dilemma
-  - id: mentor_warning
-    summary: "Mentor delivers cryptic warning about the investigation"
-    path_id: path::mentor_trust__protector
-    also_belongs_to: path::mentor_trust__manipulator
-    dilemma_impacts:
-      - dilemma_id: dilemma::mentor_trust
-        effect: advances
-        note: "Warning could be protective or manipulative"
-    entities: [mentor, kay]
-    location: archive_entrance          # primary location
-    location_alternatives: []           # filled in Phase 3b
-
-  # Commit beat — first beat exclusive to the protector path (singular belongs_to)
-  - id: mentor_confession_protector
-    summary: "Mentor reveals the protective motive behind the warnings"
-    path_id: path::mentor_trust__protector
-    dilemma_impacts:
-      - dilemma_id: dilemma::mentor_trust
-        effect: commits
-        note: "Mentor's confession locks in the protective reading"
-    entities: [mentor, kay]
-    location: archive_reading_room
-```
-
-Pre-commit beats have one `belongs_to` edge per path of the dilemma; commit and post-commit beats have exactly one. The number of pre-commit beats is a narrative decision, not a fixed quota — a dilemma may need one shared setup beat or several, depending on how much development the question needs before the fork.
-
-**Human Gate:** Yes
-
-Human reviews complete path artifacts:
-- Path descriptions accurate?
-- Consequences capture narrative meaning?
-- Ripples are plausible story effects?
-- Initial beats cover path arc?
-- Tier assignments correct?
-
-Human may request regeneration, edits, or additions.
-
-**Artifacts Modified:**
-- Path definitions
-- Consequence definitions
-- Initial beat list
-
-**Completion Criteria:**
-- All paths have complete definitions
-- All paths have consequences with ripples
-- All paths have initial beats
-- Human has approved path artifacts
+1. Beats may have zero or more `flexibility` edges to alternative entities of any category.
+2. Every `flexibility` edge has a non-empty `role` property.
 
 ---
 
-### Phase 3b: Location Flexibility Analysis
+## Phase 4: Convergence Sketching
 
-**Operation:** For each beat, consider alternative locations to enable intersection formation.
+**Purpose:** For each soft Dilemma, express the author's intent for where its paths might reconverge. This is a hint for GROW, not a binding structure.
 
-**LLM Involvement:** Generate
+### Input Contract
 
-For each initial beat, LLM considers:
-- "Could this beat work at other locations?"
-- "Which other beats share entities or dramatic function?"
-- "What location flexibility would enable merging?"
+1. Phase 3b Output Contract satisfied.
 
-```yaml
-# Before analysis:
-beat:
-  id: spy_meeting
-  summary: "Kay meets the spy to exchange information"
-  location: market
-  location_alternatives: []
+### Operations
 
-# After analysis:
-beat:
-  id: spy_meeting
-  summary: "Kay meets the spy to exchange information"
-  location: market
-  location_alternatives: [docks, tavern]
-  flexibility_rationale: "Public encounter - works at any crowded location"
-```
+#### Convergence Intent Declaration
 
-**Key principle:** Only mark locations as alternatives if the dramatic function is preserved. "Meet spy at Market" (crowded, public) vs "Meet spy at Docks" (shadowy, dangerous) may have different narrative texture—only mark as flexible if truly fungible.
+**What:** For each Dilemma where the author expects paths to rejoin after commit (soft behavior), sketch approximately where and how. This is captured as text (for the LLM → human discussion) and then distilled into `dilemma_role` and `residue_weight` in Phase 7.
 
-**Intersection enablement:** LLM notes which flexibility enables intersections:
-- "If spy_meeting moves to Docks, can merge with crate_discovery from Path B"
-- "Both beats become one scene: Kay meets spy while searching for crate"
+**Rules:**
 
-**Human Gate:** Yes
+R-4.1. Convergence intent is a hint, not a binding constraint. GROW decides actual DAG topology; POLISH decides passage layer.
 
-Human reviews flexibility annotations:
-- Is the flexibility genuine (dramatic function preserved)?
-- Do the enabled intersections make narrative sense?
-- Any beats that should stay location-fixed?
+R-4.2. Hard Dilemmas do not require convergence intent — paths of a hard dilemma never structurally rejoin. → ontology §Part 2: Dilemma Role.
 
-**Artifacts Modified:**
-- Initial beats (location_alternatives populated)
+R-4.3. If storylines are too different to rejoin, the Dilemma is hard by definition, not a soft one with heavy residue. → how-branching §Convergence Sketching.
 
-**Completion Criteria:**
-- All beats assessed for location flexibility
-- Human has approved flexibility annotations
+R-4.4. Convergence intent may loop back to Phase 2 if a sketched convergence proves narratively impossible (drop the non-canonical path, making the Dilemma effectively hard with only one explored answer).
+
+**Violations:**
+
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| Convergence sketch treats hard Dilemma paths as rejoining | Conflates hard/soft role with structural rejoin — hard paths never rejoin | R-4.2 |
+| Convergence sketch claims "paths diverge completely, no rejoin possible" yet Dilemma is marked soft | Misclassified Dilemma — if no rejoin is possible, it's hard | R-4.3 |
+
+### Output Contract
+
+1. Every Dilemma with two explored Answers has a convergence intent (soft: sketched rejoin; hard: noted as permanent divergence).
 
 ---
 
-### Phase 4: Convergence Sketching
+## Phase 5: Viability Analysis
 
-**Operation:** Identify where paths should reconverge.
+**Purpose:** Assess combinatorial complexity and apply the over-generate-and-select pruning to keep arc count manageable (≤ 16 = 2^4). Drop Paths whose dilemmas score lowest on quality criteria.
 
-**LLM Involvement:** Generate
+### Input Contract
 
-LLM analyzes paths and proposes convergence strategy:
+1. Phase 4 Output Contract satisfied.
 
-```yaml
-convergence_sketch:
-  convergence_points:
-    - "Major paths should converge by act 2 climax"
-    - "dilemma::mentor_trust resolution before final confrontation"
+### Operations
 
-  residue_notes:
-    - "After dilemma::mentor_trust convergence: mentor demeanor differs based on path"
-    - "Kay's dialogue options vary based on mentor relationship"
-```
+#### Arc-Count Guardrail and Pruning
 
-LLM flags potential issues:
-- Paths that never naturally intersect (even with location flexibility)
-- Paths with incompatible timelines
-- Excessive divergence (too little shared content)
+**What:** If more than 4 Dilemmas have both Answers explored, the runtime scores each Dilemma by quality (beat richness, consequence depth, entity coverage, location variety, path tier, content distinctiveness) and demotes the lowest-scoring dilemmas — dropping their non-canonical Paths and Consequences while preserving the `explored` field for auditability.
 
-**Human Gate:** Yes
+**Rules:**
 
-Human reviews convergence strategy:
-- Are convergence points narratively appropriate?
-- Is residue (variation after convergence) interesting?
-- Are flagged issues acceptable or need addressing?
+R-5.1. Arc count ≤ 16 (≤ 4 Dilemmas fully explored). Above this threshold, pruning runs automatically.
 
-May loop back to Phase 2 to reduce scope if convergence is problematic.
+R-5.2. Pruning drops Path, Consequence, and associated Beat nodes. It does NOT modify the Dilemma's `explored` field — that field records LLM intent, separate from runtime state.
 
-**Artifacts Modified:**
-- Convergence sketch
+R-5.3. Pruning is logged at INFO level per demoted dilemma, including the quality scores that drove the decision. No silent pruning.
 
-**Completion Criteria:**
-- All major path pairs have convergence strategy
-- Residue effects identified
-- Human has approved convergence approach
+R-5.4. After pruning, all contracts in Phase 3's Output Contract must still hold for the surviving Paths.
 
----
+**Violations:**
 
-### Phase 5: Viability Analysis
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| Arc count 32 after Phase 5 (5 dilemmas fully explored) | Pruning did not run or failed to demote | R-5.1 |
+| Pruning removes a Path but leaves orphan Consequences pointing at nothing | Incomplete cleanup | R-5.4 |
+| Pruning sets `explored: false` on a demoted Dilemma's non-canonical Answer | Pruning must drop nodes, not mutate `explored` | R-5.2 |
+| Demotion happens with no log entry | Silent pruning — debugging lost | R-5.3 |
 
-**Operation:** Assess combinatorial complexity and sustainability.
+### Output Contract
 
-**LLM Involvement:** Generate
-
-LLM produces complexity report:
-
-```yaml
-viability_analysis:
-  arc_count: 4                    # 2^n where n = dilemmas with both explored
-
-  content_estimate:
-    shared_beats: 45              # beats in all arcs
-    unique_beats: 30              # beats in subset of arcs
-    total_beats: 75
-
-  convergence_factor: 0.6         # shared / total
-
-  risk_flags:
-    - severity: warning
-      issue: "romance_path and gadget_path never interact"
-      suggestion: "Consider shared entity or cut one path"
-
-    - severity: info
-      issue: "High unique content ratio increases writing effort"
-      suggestion: "Consider more aggressive convergence"
-
-  recommendation: "Scope is sustainable for medium-length story"
-```
-
-**Note on Arc Limits:** The runtime enforces arc limits programmatically via the over-generate-and-select pattern (see Core Concepts). If the LLM generates more than 4 fully-explored dilemmas (16+ arcs), the runtime automatically selects the best dilemmas by quality score and demotes the rest. This removes the need for LLM self-constraint on arc counts.
-
-**Human Gate:** Yes
-
-Human reviews viability:
-- Is arc count manageable?
-- Is convergence factor acceptable?
-- Are risk flags addressed or accepted?
-
-May loop back to Phase 2 to reduce scope.
-
-**Artifacts Modified:**
-- Viability analysis (informational, not serialized)
-
-**Completion Criteria:**
-- Human understands scope implications
-- Human accepts or adjusts scope
-- No unaddressed critical risk flags
+1. Arc count ≤ 16.
+2. Every Dilemma's `explored` field is unchanged from Phase 2.
+3. No orphan Consequences or Beats (every edge endpoint exists).
+4. Pruning decisions logged at INFO.
 
 ---
 
-### Phase 6: Final Review & Path Freeze
+## Phase 6: Path Freeze
 
-**Operation:** Final approval and serialization.
+**Purpose:** Final validation and sign-off. After Path Freeze, no new Paths, Entities, Dilemmas, or Consequences may be created downstream. GROW begins working within this structure.
 
-**LLM Involvement:** Validate
+### Input Contract
 
-LLM performs final consistency checks:
-- All paths reference valid dilemmas and answers
-- All consequences reference valid paths
-- All initial beats reference valid paths and entities
-- No orphan references
+1. Phase 5 Output Contract satisfied.
 
-**Human Gate:** Yes (CRITICAL)
+### Operations
 
-Human performs final review of complete SEED output:
-- `03-seed.yaml` with all sections
+#### Structural Validation
 
-**This is the Path Freeze gate.** After approval:
-- No new paths can be created
-- No new entities can be created
-- GROW begins working within this structure
+**What:** Validate that every reference points to an existing node. No dangling edges, no orphan nodes.
 
-**Artifacts Modified:**
-- `03-seed.yaml` (final)
+**Rules:**
 
-**Completion Criteria:**
-- Validation passes
-- Human has approved complete SEED output
-- Path Freeze is in effect
+R-6.1. Every `belongs_to`, `anchored_to`, `has_consequence`, `explores`, `flexibility` edge has both endpoints existing in the graph.
 
----
+R-6.2. Every beat's `entities` list references only retained Entity IDs.
 
-### Phase 7: Dilemma Analysis (Convergence Classification)
+R-6.3. Every Path has all Y-shape components: Consequences, pre-commit chain (via its Dilemma), commit beat, 2–4 post-commit beats.
 
-**Operation:** Classify each dilemma's convergence behavior.
+**Violations:**
 
-**Position:** After all 6 core sections are serialized, post-prune. Requires full context (dilemmas, paths, consequences, entities).
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| `belongs_to` edge pointing at a non-existent Path ID | Pruning cleanup incomplete or ID typo | R-6.1 |
+| Beat references `character::kay_predecessor` which has `disposition: cut` | Cut entity still referenced | R-6.2 |
+| Path has commit beat but zero post-commit beats | Y-shape incomplete | R-6.3 |
 
-**LLM Involvement:** Serialize (single call per section)
+#### Human Approval
 
-LLM produces a `DilemmaAnalysisSection` — one `DilemmaAnalysis` per dilemma:
+**What:** The human reviews the complete SEED output and approves Path Freeze. This is the gate.
 
-```yaml
-dilemma_analyses:
-  - dilemma_id: "dilemma::mentor_trust"
-    convergence_policy: soft
-    payoff_budget: 3
-    reasoning: "Mentor relationship affects dialogue but not plot structure"
-```
+**Rules:**
 
-Uses the `structured` provider role. Soft failure: if the LLM call fails, SEED continues with defaults (`soft`/budget=2 per dilemma). GROW still works, just with less guidance.
+R-6.4. Human approval is required and explicitly recorded.
 
-**Human Gate:** No (automated, with defaults on failure)
+R-6.5. After Path Freeze, downstream stages (GROW, POLISH, FILL, DRESS, SHIP) must not create new Path, Entity, Dilemma, or Consequence nodes. Violation of this is a pipeline-integrity failure.
 
-**Artifacts Modified:**
-- Graph: `convergence_policy` and `payoff_budget` stored on dilemma nodes
+**Violations:**
+
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| Pipeline proceeds to GROW without recorded SEED approval | Approval step skipped | R-6.4 |
+| GROW creates a new Path node | Post-freeze structural mutation — forbidden | R-6.5 |
+
+### Output Contract
+
+1. No orphan references anywhere in the graph.
+2. Every Path has complete Y-shape components and Consequences.
+3. Human approval of Path Freeze is recorded.
 
 ---
 
-### Phase 8: Interaction Constraints
+## Phase 7: Dilemma Analysis
 
-**Operation:** Identify pairwise dilemma relationships.
+**Purpose:** Classify each Dilemma's structural behavior: `dilemma_role`, `residue_weight`, `ending_salience`. These fields drive GROW's convergence and POLISH's passage-variant decisions.
 
-**Position:** After Phase 7.
+### Input Contract
 
-**LLM Involvement:** Serialize (single call)
+1. Phase 6 Output Contract satisfied.
 
-LLM produces an `InteractionConstraintsSection` — sparse pairwise constraints for dilemma pairs that share `central_entity_ids` or have causal dependencies:
+### Operations
 
-```yaml
-interaction_constraints:
-  - dilemma_a: "dilemma::mentor_trust"
-    dilemma_b: "dilemma::power_source"
-    constraint_type: shared_entity
-    description: "Both dilemmas involve the mentor character"
-    reasoning: "Mentor's trust level affects power training willingness"
-```
+#### Dilemma Classification
 
-Only relevant pairs are included (not O(n^2)). Soft failure → empty list.
+**What:** A single LLM call produces, for every Dilemma: `dilemma_role` ∈ {hard, soft}, `residue_weight` ∈ {heavy, light, cosmetic}, `ending_salience` ∈ {high, low, none}. On LLM failure, defaults (soft / light / low) are applied — but the failure is logged at WARNING, never silent.
 
-**Human Gate:** No (automated, with empty default on failure)
+**Rules:**
 
-**Artifacts Modified:**
-- Graph: interaction constraint edges between dilemma nodes
+R-7.1. Every Dilemma has `dilemma_role` ∈ {`hard`, `soft`}.
+
+R-7.2. Every Dilemma has `residue_weight` ∈ {`heavy`, `light`, `cosmetic`}.
+
+R-7.3. Every Dilemma has `ending_salience` ∈ {`high`, `low`, `none`}.
+
+R-7.4. `residue_weight` and `dilemma_role` are independent axes — a soft dilemma can have heavy residue at specific moments; a hard dilemma can have cosmetic residue at an intersection. → ontology §Part 2: Residue Weight.
+
+R-7.5. If the LLM call fails, defaults are applied (role: soft, weight: light, salience: low) but the failure is logged at WARNING level with the Dilemma IDs affected. Silent default application is forbidden.
+
+**Violations:**
+
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| Dilemma has no `dilemma_role` field after Phase 7 | Phase 7 soft-failed and left the field unset | R-7.1 / R-7.5 |
+| Dilemma has `dilemma_role: flavor` | `flavor` is not a valid role (flavor-level choices are handled by POLISH false branches, not by dilemma role) | R-7.1 |
+| Phase 7 LLM failure produces no log entry | Silent default application | R-7.5 |
+
+### Output Contract
+
+1. Every Dilemma has `dilemma_role`, `residue_weight`, `ending_salience` fields set to valid values.
+2. Any LLM failure is logged at WARNING.
 
 ---
 
-## Human Gates Summary
+## Phase 8: Dilemma Ordering Relationships
+
+**Purpose:** Declare pairwise dilemma relationships (`wraps`, `concurrent`, `serial`) as hints for GROW's interleaving. Only relevant pairs are declared — not an O(n²) exhaustive list.
+
+### Input Contract
+
+1. Phase 7 Output Contract satisfied.
+
+### Operations
+
+#### Pairwise Relationship Declaration
+
+**What:** For each Dilemma pair with a meaningful structural relationship (wrapping, concurrency, or serial ordering), declare an edge. Pairs without interaction need no edge. The `shared_entity` signal is derived from `anchored_to` edges — it is not a declared relationship.
+
+**Rules:**
+
+R-8.1. Valid relationships: `wraps` (A wraps B when A introduces before B and B resolves before A), `concurrent` (both active at once, no nesting), `serial` (A fully resolves before B introduces).
+
+R-8.2. Relationships are declared only for relevant pairs — those sharing entities, with causal dependencies, or with explicit authorial ordering intent. Exhaustive O(n²) declaration is forbidden.
+
+R-8.3. `concurrent` is symmetric. The edge is stored once, with the lexicographically smaller Dilemma ID as `dilemma_a`. → ontology §Part 2: Pairwise Relationships.
+
+R-8.4. `shared_entity` is NOT a declared relationship — it is derived from `anchored_to` edges. Do not create `shared_entity` edges.
+
+R-8.5. If the LLM call fails, no relationships are declared — the graph is left with zero ordering edges. Failure logged at WARNING.
+
+**Violations:**
+
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| n×(n-1)/2 ordering edges declared for n Dilemmas | Exhaustive O(n²) declaration instead of sparse | R-8.2 |
+| `concurrent` edge with `dilemma_a: dilemma::mentor_trust` and `dilemma_b: dilemma::archive_nature` | Non-lex order — `archive_nature` precedes `mentor_trust` alphabetically, so it should be `dilemma_a`. Normalization rule not applied | R-8.3 |
+| `shared_entity` edge exists in graph | Declared as an edge instead of derived | R-8.4 |
+| `concurrent` edge duplicated (A→B and B→A) | Symmetric edge stored twice | R-8.3 |
+
+### Output Contract
+
+1. Zero or more `wraps`, `concurrent`, `serial` edges between Dilemma pairs.
+2. `concurrent` edges are stored once per pair with lex-smaller ID as `dilemma_a`.
+3. No `shared_entity` edges exist (it is a derived signal, not a declared edge).
+4. Any LLM failure is logged at WARNING.
+
+---
+
+## Stage Output Contract
+
+1. Every Entity has `disposition` ∈ {`retained`, `cut`}.
+2. Every explored Answer has exactly one Path with an `explores` edge.
+3. Every Path has ≥1 Consequence with ≥1 ripple via `has_consequence` edges.
+4. Every Dilemma with two explored Answers has a shared pre-commit beat chain (≥1 beats, each with two `belongs_to` edges to the two paths of that Dilemma).
+5. Every explored Path has exactly one commit beat (one `belongs_to` edge, `dilemma_impacts.effect: commits`) and 2–4 post-commit beats (each with one `belongs_to`, no commits impact).
+6. No beat has cross-dilemma dual `belongs_to`.
+7. Every beat has non-empty `summary` and `entities`.
+8. Beats may carry zero or more `flexibility` edges, each with a `role` property.
+9. Arc count ≤ 16 (≤ 4 fully explored Dilemmas).
+10. Every Dilemma has `dilemma_role`, `residue_weight`, `ending_salience` set.
+11. Zero or more `wraps`/`concurrent`/`serial` edges between Dilemmas; `concurrent` normalized.
+12. No orphan references (every edge endpoint exists).
+13. Human approval of Path Freeze is recorded.
+14. Zero or more setup beats (structural, zero `belongs_to`, zero `dilemma_impacts`) for story-opening world-building.
+15. Zero or more epilogue beats (structural, zero `belongs_to`, zero `dilemma_impacts`) for story-closing wrap-up.
+16. No Passage, Choice, State Flag, Intersection Group, or Transition Beat nodes exist.
+
+## Implementation Constraints
+
+- **Valid ID Injection:** Every LLM call in Phase 3 (path construction, beat scaffolding) must receive an explicit `### Valid IDs` section listing every retained entity ID, every dilemma ID, every answer ID, and (after they exist) every path ID. Never assume the model will correctly infer IDs from prose. → CLAUDE.md §Valid ID Injection Principle (CRITICAL)
+- **Context Enrichment:** LLM calls must receive all ontologically relevant graph data — dilemma `question`, `why_it_matters`, answer labels, entity names and concepts, `anchored_to` relationships, `(default)` markers where relevant. Bare ID listings (e.g., `dilemma::X: explored=[a, b]`) are insufficient. → CLAUDE.md §Context Enrichment Principle (CRITICAL)
+- **Prompt Context Formatting:** Path lists, entity lists, dilemma lists, and explored-answer sets must be formatted as human-readable text (joined strings with backtick-wrapped IDs, bullet points). Never interpolate Python lists, dicts, or enum reprs. Every context block must have a header explaining what the data is and why it's provided. → CLAUDE.md §Prompt Context Formatting (CRITICAL)
+- **Silent Degradation:** If Phase 7 or 8 LLM calls fail, defaults may be applied — but the failure MUST be logged at WARNING with affected Dilemma IDs. Silent default application is forbidden. → CLAUDE.md §Silent Degradation
+- **Small Model Prompt Bias:** SEED runs on small models locally. If a beat scaffold is malformed, fix the prompt first — concrete examples, explicit structure, clear delimiters. Do not blame the model. → CLAUDE.md §Small Model Prompt Bias (CRITICAL)
+
+## Cross-References
+
+- Y-shape narrative concept → how-branching-stories-work.md §Scaffolding Paths with Beats
+- `belongs_to` invariant and guard rails → story-graph-ontology.md §Part 8: Path Membership ≠ Scene Participation
+- Pre-commit / commit / post-commit beat categories → story-graph-ontology.md §Part 8: Determining a beat's `belongs_to`
+- Narrative and structural beat taxonomy → story-graph-ontology.md §Part 1: Beat
+- Consequence → state flag → overlay chain → story-graph-ontology.md §Part 1: Consequence, State Flag
+- Dilemma role (hard/soft) → story-graph-ontology.md §Part 2: Dilemma Role
+- Residue weight independence from role → story-graph-ontology.md §Part 2: Residue Weight
+- Dilemma ordering relationships → story-graph-ontology.md §Part 2: Pairwise Relationships
+- State Flags ≠ Player Choices → story-graph-ontology.md §Part 8: State Flags ≠ Player Choices
+- Previous stage → brainstorm.md §Stage Output Contract
+- Next stage → grow.md §Stage Input Contract
+
+## Rule Index
+
+R-1.1: Every Entity has `disposition` ∈ {retained, cut} after Phase 1.
+R-1.2: Entity anchored by a surviving Dilemma cannot be cut without re-anchoring.
+R-1.3: No new Entities introduced in SEED.
+R-1.4: Two-location minimum must hold after triage.
+R-2.1: Canonical Answer is always explored.
+R-2.2: Each non-canonical Answer assigned `explored: true` or shadow.
+R-2.3: `explored` field is immutable after Phase 2.
+R-2.4: Every Dilemma has exploration decisions for all Answers.
+R-3.1: Every explored Answer has exactly one Path via `explores` edge.
+R-3.2: Path IDs follow `path::<dilemma>__<answer>` pattern.
+R-3.3: Every Path has ≥1 Consequence.
+R-3.4: Every Consequence has ≥1 ripple with non-empty description.
+R-3.5: Consequences describe world state, not player actions.
+R-3.6: Pre-commit beats have exactly two `belongs_to` edges, both to paths of the same Dilemma.
+R-3.7: Commit beats have one `belongs_to` and `dilemma_impacts.effect: commits`.
+R-3.8: Post-commit beats have one `belongs_to` and no commits impact.
+R-3.9: No beat has cross-dilemma dual `belongs_to`.
+R-3.10: Every Dilemma with two explored Answers has ≥1 pre-commit beat.
+R-3.11: Every explored Path has exactly one commit beat.
+R-3.12: Every explored Path has 2–4 post-commit beats.
+R-3.13: Every beat has non-empty `summary` and `entities`.
+R-3.14: Setup and epilogue beats are structural (zero `belongs_to`, zero `dilemma_impacts`).
+R-3.15: Setup and epilogue beats are optional; when present, have non-empty `summary` and `entities`.
+R-3b.1: `flexibility` edges preserve the beat's dramatic function.
+R-3b.2: `flexibility` edges carry a `role` property.
+R-3b.3: Flexibility applies to any entity category.
+R-3b.4: Phase 3b is advisory; GROW not bound by it.
+R-4.1: Convergence intent is a hint, not binding.
+R-4.2: Hard Dilemmas have no convergence intent; paths never rejoin.
+R-4.3: If paths can't rejoin, the Dilemma is hard by definition.
+R-4.4: Convergence sketching may loop back to Phase 2.
+R-5.1: Arc count ≤ 16 (≤ 4 fully explored Dilemmas).
+R-5.2: Pruning drops Paths, not `explored` field.
+R-5.3: Pruning logged at INFO with quality scores.
+R-5.4: After pruning, no orphan nodes.
+R-6.1: All edges have existing endpoints.
+R-6.2: Every beat's `entities` list references retained Entities.
+R-6.3: Every Path has complete Y-shape components.
+R-6.4: Human approval of Path Freeze recorded.
+R-6.5: Post-freeze, downstream stages create no new Path/Entity/Dilemma/Consequence nodes.
+R-7.1: Every Dilemma has `dilemma_role` ∈ {hard, soft}.
+R-7.2: Every Dilemma has `residue_weight` ∈ {heavy, light, cosmetic}.
+R-7.3: Every Dilemma has `ending_salience` ∈ {high, low, none}.
+R-7.4: `residue_weight` and `dilemma_role` are independent axes.
+R-7.5: LLM failure in Phase 7 logged at WARNING; no silent defaults.
+R-8.1: Valid relationships: wraps, concurrent, serial.
+R-8.2: Relationships declared only for relevant pairs (not O(n²)).
+R-8.3: `concurrent` is symmetric; stored once with lex-smaller ID as `dilemma_a`.
+R-8.4: `shared_entity` is derived, not declared as an edge.
+R-8.5: LLM failure in Phase 8 logged at WARNING.
+
+---
+
+## Human Gates
 
 | Phase | Gate | Decision |
 |-------|------|----------|
-| 1 | Entity Triage | In/out for each entity |
-| 2 | Answer Selection | Explore/shadow for each non-canonical answer |
-| 3 | Path Construction | Approve path definitions, consequences, initial beats |
-| 3b | Location Flexibility | Approve location alternatives for beats |
-| 4 | Convergence Sketching | Approve convergence strategy |
-| 5 | Viability Analysis | Accept scope or loop back |
-| 6 | Path Freeze | Final approval, SEED complete |
-| 7 | Dilemma Analysis | Automated (soft failure → defaults) |
-| 8 | Interaction Constraints | Automated (soft failure → empty) |
-
----
+| 1 | Entity Triage | Required — approve retain/cut list |
+| 2 | Answer Selection | Required — approve explore/shadow per non-canonical Answer |
+| 3 | Path Construction | Required — approve paths, consequences, Y-shape scaffold |
+| 3b | Entity Flexibility | Required — approve flexibility annotations |
+| 4 | Convergence Sketching | Required — approve convergence intent |
+| 5 | Viability Analysis | Required — accept scope or loop back |
+| 6 | Path Freeze | Required (CRITICAL) — final sign-off, structure frozen |
+| 7 | Dilemma Analysis | Automated (WARNING log on LLM failure) |
+| 8 | Ordering Relationships | Automated (WARNING log on LLM failure) |
 
 ## Iteration Control
 
-### Forward Progress
+**Forward flow:** 1 → 2 → 3 → 3b → 4 → 5 → 6 → 7 → 8.
 
-Normal flow: Phase 1 → 2 → 3 → 3b → 4 → 5 → 6
+**Backward loops:**
 
-### Backward Loops
-
-| From Phase | To Phase | Trigger |
-|------------|----------|---------|
+| From | To | Trigger |
+|------|-----|---------|
 | 3 (Path Construction) | 2 (Answer Selection) | Path proves unworkable |
-| 4 (Convergence Sketching) | 2 (Answer Selection) | Paths don't converge naturally |
-| 5 (Viability Analysis) | 2 (Answer Selection) | Scope too large |
-| Any | 1 (Entity Triage) | Missing critical entity discovered |
+| 4 (Convergence Sketching) | 2 (Answer Selection) | Paths can't converge naturally; demote non-canonical |
+| 5 (Viability) | 2 (Answer Selection) | Scope too large; manual pruning |
+| Phases 1–5 (pre-freeze) | 1 (Entity Triage) | Missing critical entity discovered |
+| Phases 7–8 (post-freeze) | re-enter 6 (Path Freeze) | Missing entity surfaces post-freeze — re-authorization required before any Phase-1 loop |
+| Any | BRAINSTORM | Dilemmas poorly formed; entities missing; vision mismatch |
 
-### Escalation to BRAINSTORM
+**Maximum iterations:**
 
-Return to BRAINSTORM if:
-- Dilemmas prove poorly formed (answers don't create meaningful contrast)
-- Critical entities missing from BRAINSTORM output
-- Vision mismatch (BRAINSTORM doesn't serve DREAM)
-
-### Maximum Iterations
-
-- Phase 3 regeneration: Max 3 attempts per path
-- Overall SEED: No hard cap, but persistent issues indicate BRAINSTORM problems
-
----
-
-## Context Requirements
-
-### Per-Phase Context
-
-| Phase | Context Includes |
-|-------|------------------|
-| 1 | DREAM vision, all BRAINSTORM entities |
-| 2 | DREAM vision, all BRAINSTORM dilemmas, curated entities |
-| 3 | DREAM vision, exploration decisions, curated entities |
-| 4 | All paths with consequences, initial beats |
-| 5 | Complete path structure, convergence sketch |
-| 6 | Full SEED output for validation |
-
-### Token Budget Guidance
-
-SEED operates on summaries and structure, not prose. Estimated context per phase:
-
-| Component | Est. Tokens |
-|-----------|-------------|
-| DREAM vision | ~200-400 |
-| Entity list (15-20 entities) | ~800-1,200 |
-| Dilemma list (4-6 dilemmas) | ~400-600 |
-| Path definitions (8-12 paths) | ~1,000-1,500 |
-| Initial beats (40-60 beats) | ~4,000-6,000 |
-| **Typical total** | **~7,000-10,000** |
-
-Fits comfortably in modern context windows.
-
----
+- Phase 3 regeneration: at most 3 attempts per path.
+- Overall SEED: no hard cap, but persistent regeneration failures indicate BRAINSTORM problems — escalate.
 
 ## Failure Modes
 
-### Failure: Path Explosion
+| Phase | Failure | Detection | Recovery |
+|-------|---------|-----------|----------|
+| 1 | Entity cut leaves Dilemma anchored to nothing | R-1.2 violation | Re-anchor or cut Dilemma |
+| 3 | Dilemma has zero pre-commit beats | R-3.10 violation — POLISH Phase 4c fails downstream | Regenerate with explicit Y-shape prompt |
+| 3 | Cross-dilemma dual `belongs_to` produced | R-3.9 violation | Regenerate; conflation of path membership with scene co-occurrence |
+| 3 | Path has < 2 or > 4 post-commit beats | R-3.12 violation | Regenerate |
+| 5 | Arc count > 16 after pruning | Pruning ineffective or failed | Re-run pruning; manual intervention |
+| 6 | Orphan reference | R-6.1 violation | Trace back to phase that created the dangling edge |
+| 7 | LLM returns invalid role value | R-7.1 violation | Apply default + WARNING log; retry if persistent |
 
-**Symptom:** Too many paths, unmanageable arc count
+**Escalation to BRAINSTORM.** Return if:
+- Dilemmas prove poorly formed (answers don't create meaningful contrast)
+- Critical entities missing from BRAINSTORM
+- Vision mismatch emerges
 
-**Cause:** Exploring too many non-canonical answers
+## Context Management
 
-**Recovery:** In most cases, the runtime's over-generate-and-select pattern handles this automatically by:
-1. Scoring dilemmas by quality criteria
-2. Selecting the top N dilemmas for full exploration (up to 4 = 16 arcs)
-3. Demoting excess dilemmas (moving non-canonical to `unexplored`)
+**Standard (≥128k context):** Full DREAM + BRAINSTORM + in-progress SEED state per phase. Typical SEED token footprint ~7,000–10,000 tokens.
 
-If automatic pruning produces unsatisfactory results:
-1. Return to Phase 2
-2. Manually specify which answers to explore
-3. Focus on most narratively distinct branches
-
-### Failure: Disconnected Paths
-
-**Symptom:** Paths have no natural intersection points
-
-**Cause:** Dilemmas don't share entities or narrative space
-
-**Recovery:**
-1. Return to Phase 2, consider dropping one path
-2. Or return to BRAINSTORM, add connecting entity
-3. Or accept paths as parallel tracks (reduced interweaving in GROW)
-
-### Failure: Shallow Consequences
-
-**Symptom:** Consequences don't have meaningful ripples
-
-**Cause:** Answer doesn't actually change story significantly
-
-**Recovery:**
-1. Reconsider if answer is worth exploring
-2. Deepen consequence ripples
-3. Or demote path to shadow
-
-### Failure: Convergence Impossible
-
-**Symptom:** Paths diverge too far to reconverge naturally
-
-**Cause:** Answers are fundamentally incompatible story states
-
-**Recovery:**
-1. Accept as parallel endings (multiple story conclusions)
-2. Or find earlier convergence point before incompatibility
-3. Or restructure as separate stories (extreme case)
-
-### Failure: Entity Mismatch
-
-**Symptom:** Path needs entity not in curated list
-
-**Cause:** Entity triaged out but actually necessary
-
-**Recovery:**
-1. Return to Phase 1, add entity back
-2. If entity wasn't in BRAINSTORM, escalate to BRAINSTORM
-
----
+**Constrained (~32k context):** Summarize entity list (names + concepts only) for Phase 3's beat-scaffold prompt; keep full paths + consequences for Phase 4+. Phase 5 pruning may be skipped if context forbids and arc count is already ≤ 16.
 
 ## Worked Example
 
-### Starting Point
+### Starting Point (BRAINSTORM output)
 
-BRAINSTORM produced:
-- 18 entities (characters, locations, objects)
-- 4 dilemmas with answers
-- Various notes from discussion
+- 18 Entities (characters, locations, objects, factions)
+- 4 Dilemmas with answers and anchors
+- Vision, approved
 
 ### Phase 1: Entity Triage
 
-LLM proposes:
-```
-CORE (essential):
-- Kay (protagonist)
-- Mentor (central to trust dilemma)
-- Antagonist (opposes Kay)
-- The Archive (central location)
-
-SUPPORTING (enrich):
-- Rival researcher
-- Archive keeper
-- Kay's sibling
-
-CUT CANDIDATES:
-- Generic guard characters (can be prose detail)
-- Unnamed faction members (absorbed into faction entity)
-```
-
-Human approves, cutting 7 generic entities. 11 entities remain.
+LLM proposes retain/cut list with rationale. Human approves cutting 7 generic entities. 11 retained (2 of which are `location`-category — two-location minimum holds).
 
 ### Phase 2: Answer Selection
 
-LLM proposes for `dilemma::mentor_trust` dilemma:
 ```
-mentor_protector (canonical): Always explore - spine path
-mentor_manipulator (non-canonical):
-  Recommendation: EXPLORE
-  Rationale: Creates compelling dark mirror to spine
-  Scope impact: +12 beats, +1 major arc
-```
+dilemma::mentor_trust:
+  mentor_protector (canonical): EXPLORED
+  mentor_manipulator (non-canonical): EXPLORED — "compelling dark mirror"
 
-Human approves exploring both answers.
-
-For `dilemma::archive_nature` dilemma:
+dilemma::archive_nature:
+  archive_salvation (canonical): EXPLORED
+  archive_corruption (non-canonical): SHADOW — "less narrative impact, stays as possibility"
 ```
-archive_benign (canonical): Always explore
-archive_dangerous (non-canonical):
-  Recommendation: SHADOW
-  Rationale: Less narrative impact than mentor dilemma
-  Scope impact: Would add +15 beats, +2 arcs
-```
-
-Human accepts shadow recommendation.
 
 ### Phase 3: Path Construction
 
-LLM generates `path::mentor_trust__protector`:
-```yaml
-path:
-  id: path::mentor_trust__protector
-  name: "The Mentor's Protection"
-  dilemma_id: dilemma::mentor_trust
-  answer_id: mentor_protector
-  shadows: [mentor_manipulator]
-  tier: major
-  description: "Kay gradually realizes the mentor's cryptic behavior
-    has been protective all along. The mentor has been shielding Kay
-    from dangers Kay didn't know existed."
-  consequences: [mentor_ally]
+For `dilemma::mentor_trust`, LLM generates Y-shape scaffold:
 
-consequences:
-  - id: mentor_ally
-    path_id: path::mentor_trust__protector
-    description: "Mentor becomes trusted ally"
-    ripples:
-      - "Mentor shields Kay during antagonist confrontation"
-      - "Mentor reveals knowledge of Kay's family history"
-      - "Mentor's resources become available to Kay"
-      - "Mentor sacrifices something to protect Kay"
+```yaml
+# Shared pre-commit chain (two belongs_to edges per beat — same dilemma)
+- id: beat_mentor_warning
+  summary: "Mentor delivers cryptic warning about the investigation"
+  path_id: path::mentor_trust__protector
+  also_belongs_to: path::mentor_trust__manipulator
+  dilemma_impacts:
+    - dilemma_id: dilemma::mentor_trust
+      effect: advances
+      note: "Warning could be protective or manipulative"
+  entities: [character::mentor, character::kay]
+
+# Commit beat on protector path (singular belongs_to)
+- id: beat_mentor_confession_protector
+  summary: "Mentor reveals the protective motive behind the warnings"
+  path_id: path::mentor_trust__protector
+  dilemma_impacts:
+    - dilemma_id: dilemma::mentor_trust
+      effect: commits
+      note: "Mentor's confession locks in the protective reading"
+  entities: [character::mentor, character::kay]
+
+# Post-commit beats on protector path (3 of them)
+- id: beat_mentor_shield_01
+  summary: "Mentor shields Kay during antagonist confrontation"
+  path_id: path::mentor_trust__protector
+  dilemma_impacts: []
+  entities: [character::mentor, character::kay, character::antagonist]
 ```
 
-Human reviews: "Ripple 4 (sacrifice) feels like a beat, not a consequence. Remove."
+Plus symmetric commit + post-commit beats for `path::mentor_trust__manipulator`.
 
-LLM regenerates with 3 ripples. Human approves.
+### Phase 3b: Entity Flexibility
+
+LLM annotates `beat_mentor_warning` with `flexibility: [{entity: location::reading_room, role: "meeting_location"}]` — the warning could happen in the reading room instead of the entrance, without changing the dramatic function.
 
 ### Phase 4: Convergence Sketching
 
-LLM proposes:
-```yaml
-convergence_sketch:
-  intersection_candidates:
-    - "mentor_reveal + archive_discovery - mentor leads Kay to archive truth"
-    - "confrontation beats from both mentor paths - same scene, different mentor role"
+Soft Dilemma `mentor_trust`: paths rejoin before the archive climax, with residue carried by mentor demeanor overlays and Kay's internal-state variation.
 
-  convergence_points:
-    - "Mentor paths converge at archive climax"
-    - "Both paths lead to same confrontation, different dynamics"
+### Phase 5: Viability
 
-  residue_notes:
-    - "Post-convergence: mentor's dialogue varies (supportive vs defensive)"
-    - "Kay's internal state differs (trusting vs wary)"
-```
-
-Human approves.
-
-### Phase 5: Viability Analysis
-
-LLM produces:
-```yaml
-viability_analysis:
-  arc_count: 2                    # only dilemma::mentor_trust has both explored
-  content_estimate:
-    shared_beats: 35
-    unique_beats: 20
-    total_beats: 55
-  convergence_factor: 0.64
-  risk_flags: []
-  recommendation: "Sustainable scope for short-medium story"
-```
-
-Human approves scope.
+Arc count: 2 (only `mentor_trust` fully explored). Within limits; no pruning.
 
 ### Phase 6: Path Freeze
 
-LLM validates: No orphan references, all links valid.
+Validation passes. Human approves. SEED complete for Phases 1–6.
 
-Human performs final review of `03-seed.yaml`.
+### Phase 7: Dilemma Analysis
 
-**PATH FREEZE.** SEED complete. GROW begins.
+```yaml
+dilemma_analyses:
+  - dilemma_id: dilemma::mentor_trust
+    dilemma_role: soft
+    residue_weight: light
+    ending_salience: low
+    reasoning: "Mentor relationship affects dialogue and mood; paths can rejoin."
+  - dilemma_id: dilemma::archive_nature
+    dilemma_role: hard
+    residue_weight: heavy
+    ending_salience: high
+    reasoning: "The archive's nature shapes the ending fundamentally; no rejoin possible."
+```
 
----
+### Phase 8: Dilemma Ordering
 
-## Design Principle: LLM Proposes, Human Critiques
+```yaml
+# Only relevant pairs declared (not O(n²))
+- dilemma_a: dilemma::archive_nature   # lex-smaller
+  dilemma_b: dilemma::mentor_trust
+  relationship: concurrent
+  reasoning: "Both active through middle of story, interwoven via mentor's archive role."
+```
 
-SEED follows "LLM proposes complete artifacts, human reviews and critiques" rather than item-by-item approval.
-
-**Why this works:**
-- LLM can see full picture, propose coherent structures
-- Human reviews holistically, catches issues LLM misses
-- Faster than granular back-and-forth
-- Human stays in decision-maker role, not construction role
-
-**LLM should:**
-- Generate complete path definitions, not ask "what should the path be called?"
-- Propose convergence strategy, not ask "where should paths converge?"
-- Surface risks proactively, not wait for human to discover them
-
-**Human should:**
-- Review and critique, not construct from scratch
-- Override LLM when judgment differs
-- Request regeneration when output misses the mark
-
----
-
-## Output Checklist
-
-Before SEED is complete, verify:
-
-- [ ] All BRAINSTORM entities have disposition (in/out)
-- [ ] All dilemmas have exploration decisions
-- [ ] All explored answers have path definitions
-- [ ] All paths have consequences with ripples
-- [ ] Every explored dilemma has a shared pre-commit chain (one or more beats with `belongs_to` edges to every path of the dilemma)
-- [ ] Every path has a commit beat (singular `belongs_to`, `effect: commits` in `dilemma_impacts`) and 2–4 post-commit beats
-- [ ] Convergence sketch exists
-- [ ] Viability analysis reviewed
-- [ ] No orphan references
-- [ ] Human has approved Path Freeze
-- [ ] `03-seed.yaml` written
-
----
-
-## Summary
-
-SEED transforms BRAINSTORM possibilities into committed structure:
-
-| Input | Output |
-|-------|--------|
-| ~20 entities | ~10-15 curated entities |
-| 4-6 dilemmas with answers | Exploration map |
-| — | Paths with consequences |
-| — | Initial beats |
-| — | Convergence sketch |
-
-After SEED: Path Freeze. GROW works within this structure.
+SEED complete.
