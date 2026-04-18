@@ -276,7 +276,7 @@ R-5.7. No orphan assets: every asset file has a corresponding Illustration node,
 - ArtDirection, EntityVisual, IllustrationBrief, Illustration, CodexEntry schemas → story-graph-ontology.md §Part 1; §Part 9 Node Types
 - `describes_visual`, `targets`, `from_brief`, `HasEntry`, `Depicts` edges → story-graph-ontology.md §Part 9: Edge Types
 - State flags vs codewords distinction → story-graph-ontology.md §Part 8: Codewords ≠ State Flags
-- Diegetic voice constraint → how-branching-stories-work.md §The Codex
+- Diegetic voice constraint (codex in-world voice) → how-branching-stories-work.md §Illustration and Reference (DRESS)
 - Previous stage → fill.md §Stage Output Contract
 - Next stage → ship.md §Stage Input Contract
 
