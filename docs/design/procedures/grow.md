@@ -1,925 +1,700 @@
-# QuestFoundry v5 — GROW Algorithm Specification
-
-**Status:** Specification Complete
-**Parent:** questfoundry-v5-spec.md
-**Purpose:** Detailed specification of the GROW stage mechanics
-
-> For the narrative description of the GROW stage, see ["How Branching Stories Work", Part 3](../how-branching-stories-work.md). This document provides the detailed algorithm specification.
-
-> **Major scope change (2026-02-24):** "How Branching Stories Work" and the [Story Graph Ontology](../story-graph-ontology.md) split the original GROW scope into **GROW** (beat DAG creation) and **POLISH** (passage layer creation). Phases 8a–9 (passage creation, codeword creation, overlay creation, choice derivation) move to POLISH. See "How Branching Stories Work", Part 4 for the POLISH specification. The code has not yet been reorganized.
->
-> **Additional terminology transitions:**
-> - `convergence_policy` (hard/soft/flavor) → `dilemma_role` (hard/soft). `flavor` is removed — handled by POLISH as false branches.
-> - Intersection model: the Story Graph Ontology redefines intersections as co-occurrence groupings. Beats retain their existing `belongs_to` edges under the Y-shape invariant — pre-commit beats belong to every path of their dilemma (dual for a binary dilemma), commit and post-commit beats belong to exactly one path — and an intersection group node declares scene sharing across dilemmas. Three guard rails apply: (1) **same-dilemma constraint** — any beat with two `belongs_to` edges must reference paths of the same dilemma; cross-dilemma multi-`belongs_to` remains forbidden; (2) **pre-commit only** — only beats before the dilemma's commit may have multi-`belongs_to`; (3) **intersection exclusion** — intersection groups must not contain two pre-commit beats from the same dilemma (they already co-occur by definition). The current implementation still cross-assigns `belongs_to` edges to model intersections, which is incorrect on both axes. See the [Story Graph Ontology, Part 8](../story-graph-ontology.md).
-> - Arc model: the Story Graph Ontology treats arcs as computed DAG traversals, not stored graph nodes.
-> - `sequenced_after` → `predecessor`/`successor` edges.
-> - `location_alternatives` → entity flexibility edges (generalized to any entity category).
-
-> **Note:** This document describes the original design intent. Implementation
-> may differ — see source code and ADRs in `docs/architecture/decisions.md` for
-> current behavior. In particular, Phase 2 (path-agnostic assessment) was removed
-> in favor of residue beats (see ADR-015).
-
----
+# GROW — Weave independent paths into one beat DAG
 
 ## Overview
 
-GROW transforms a SEED (paths with initial beats) into a validated story graph (arcs, passages, choices).
+GROW takes SEED's independent per-dilemma Y-shaped scaffolds and weaves them into a single coherent beat DAG — the central structural artifact of the pipeline. It detects intersections between paths, resolves temporal-hint conflicts, interleaves beats across dilemmas, inserts transition beats at cross-dilemma seams, derives state flags from consequences, activates entity overlays, populates soft-dilemma convergence metadata, validates arc completeness, and prunes unreachable content.
 
-**Input:**
-- Paths (with dilemma linkage, shadows, tiers, consequences)
-- Consequences (narrative meaning of each path)
-- Initial beats (with path assignments, `requires` ordering, `dilemma_impacts`, location flexibility)
-- Convergence sketch (convergence points, residue notes)
-- Entities, relationships
+GROW does NOT create Passage nodes, Choice edges, variant passages, residue beats, or character arc metadata — those belong to POLISH. GROW does NOT modify the Y-shape itself or mutate SEED's `belongs_to` edges (cross-dilemma co-occurrence is declared via intersection groups, not by cross-assignment).
 
-**Output:**
-- Beats (expanded, with intersections)
-- Arcs (valid routes through beat graph)
-- Passages (1:1 from beats) *(moves to POLISH — see note above)*
-- Choice edges (at divergence points) *(moves to POLISH — see note above)*
-- Validated, pruned graph
+## Stage Input Contract
 
----
+*Must match SEED §Stage Output Contract exactly.*
 
-## Core Concepts
-
-### The Commits Beat
-
-A dilemma has a lifecycle:
-
-```
-Dilemma introduced → Evidence builds → Truth locks in → Consequences play out
-     (advances)        (reveals)         (commits)        (path-specific)
-```
-
-**Before commits:** Beats can be shared across arcs — they work regardless of which answer is true.
-
-**At commits:** The narrative locks in. One answer becomes true for this playthrough.
-
-**After commits:** Beats are path-specific. They only make sense for the committed answer.
-
-**Schema:**
-```yaml
-beat:
-  dilemma_impacts:
-    - dilemma_id: dilemma::mentor_trust
-      effect: commits
-      path_id: path::mentor_trust__protector  # which path this locks in
-```
-
-A commits beat must specify which path it locks in.
-
-### Shared Beats and Convergence
-
-Beats before any commits for a dilemma can be **shared** across arcs — they work
-regardless of which answer is true.
-
-Example:
-- "Kay meets the mentor" — protector or manipulator, works either way
-- "Mentor gives cryptic advice" — ambiguous until truth revealed
-
-Shared beats reduce duplication. When arcs reconverge at a shared beat, **residue
-beats** (Phase 8d) are inserted before the convergence point to carry forward
-each arc's emotional tone.
-
-### Divergence and Convergence
-
-**Divergence:** Arcs split at choice points leading to different commits beats.
-
-**Convergence:** Arcs can merge only after all divergent dilemmas have committed. Otherwise merged content would need to accommodate contradictory truths.
-
-```
-Arc A: path::mentor_trust__protector + path::artifact_nature__saves
-Arc B: path::mentor_trust__manipulator + path::artifact_nature__saves
-                    ↓
-      Can converge after mentor commits
-      (both share artifact_saves path)
-```
-
-### Combinatorial Scope
-
-With n explored dilemmas (one path per dilemma explored as answer), there are 2^n possible arc combinations.
-
-| Explored dilemmas | Arc combinations |
-|-------------------|------------------|
-| 2 | 4 |
-| 3 | 8 |
-| 4 | 16 |
-| 5 | 32 |
-
-**Control strategy:** Limit explored answers in SEED. Not every dilemma needs an alternate path.
-
-```yaml
-dilemma:
-  id: dilemma::mentor_trust
-  answers:
-    - id: protector
-      canonical: true      # always explored, used for spine
-    - id: manipulator
-      canonical: false     # explored only if promoted to path in SEED
-```
-
-If the non-canonical answer is not promoted to a path in SEED, that dilemma has no branching—only the canonical route exists.
+1. Every Entity has `disposition` ∈ {`retained`, `cut`}.
+2. Every explored Answer has exactly one Path with an `explores` edge.
+3. Every Path has ≥1 Consequence with ≥1 ripple via `has_consequence`.
+4. Every Dilemma with two explored Answers has ≥1 pre-commit beat (two `belongs_to` edges to paths of that dilemma).
+5. Every explored Path has exactly one commit beat (one `belongs_to`, `dilemma_impacts.effect: commits`) and 2–4 post-commit beats (one `belongs_to` each, no commits impact).
+6. No beat has cross-dilemma dual `belongs_to`.
+7. Every beat has non-empty `summary` and `entities`.
+8. Beats may carry zero or more `flexibility` edges with `role` properties.
+9. Arc count ≤ 16.
+10. Every Dilemma has `dilemma_role`, `residue_weight`, `ending_salience` set.
+11. Zero or more `wraps`/`concurrent`/`serial` edges between Dilemmas (normalized).
+12. No orphan references.
+13. Human approval of Path Freeze is recorded.
+14. No Passage, Choice, State Flag, Intersection Group, or Transition Beat nodes exist.
 
 ---
 
-## Algorithm Phases
+## Phase 1: Import and Validate
 
-> **Execution order note (#1123, #1124):** Phase 3 (intersection detection)
-> executes **before** Phase 1b (interleave) and before Phase 4a/4b/4c (gap
-> detection). Running intersections on a clean beat DAG (no predecessor edges
-> yet) ensures the No-Conditional-Prerequisites Invariant always passes (#1124).
-> A new **`resolve_temporal_hints`** phase runs between intersections and
-> interleave: it detects cycles in temporal hint proposals deterministically
-> and calls the LLM only for swap pairs (hints that cycle together but not
-> alone). This eliminates silent `interleave_cycle_skipped` drops in valid runs
-> (#1123) by resolving all conflicts before interleave creates any edges.
-> Phase numbering is preserved for historical continuity; execution order is
-> defined in `_phase_order()`.
-> Actual order: `validate_dag → intersections → intra_path_predecessors → resolve_temporal_hints →
-> interleave_beats → scene_types → narrative_gaps → pacing_gaps → atmospheric →
-> path_arcs → transition_gaps → entity_arcs → …`
-> See also: **No-Conditional-Prerequisites Invariant** under Phase 3.
+**Purpose:** Read SEED's output, verify every contract item, and build the starting beat DAG from the per-dilemma Y-shaped scaffolds. No new ordering edges across dilemmas yet — that comes in Phase 4.
 
-### Phase 1: Beat Graph Import
+### Input Contract
 
-**Input:** SEED artifacts
+1. Stage Input Contract satisfied.
 
-**Operations:**
-1. Import all beats with path assignments
-2. Import `requires` edges (ordering constraints)
-3. Import consequences for each path
-4. Import location and location_alternatives for each beat
-5. Import convergence sketch (convergence points, residue notes)
-6. Verify each beat has `dilemma_impacts` (at minimum, which dilemmas it touches)
-7. Verify each explored dilemma has at least one `commits` beat per path
-8. Flag validation errors
+### Operations
 
-**Output:** Initial beat graph with consequences and location flexibility attached
+#### SEED Artifact Validation
 
-**LLM involvement:** None (deterministic)
+**What:** Mechanically check every item in the Stage Input Contract. Any violation halts GROW with an error pointing at the offending node or edge — this is a SEED bug, not something GROW patches.
+
+**Rules:**
+
+R-1.1. Every contract item from SEED's Stage Output Contract is verified. Missing or malformed data is a SEED failure; GROW must halt, not paper over it.
+
+R-1.2. Validation failure produces an error identifying the node(s) and the violated contract rule.
+
+**Violations:**
+
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| Dilemma has zero pre-commit beats, and GROW proceeds | Validation did not check R-3.10 from SEED | R-1.1 |
+| Cross-dilemma dual `belongs_to` present, GROW silently reassigns belongs_to | Validation skipped; GROW trying to patch SEED bug | R-1.1 |
+| Validation error message names no specific node | Error unactionable | R-1.2 |
+
+#### Intra-Path Predecessor Edge Construction
+
+**What:** For each explored Path, create `predecessor` edges that wire its own Y-shape: pre-commit chain → commit beat → post-commit chain. No cross-path or cross-dilemma edges yet.
+
+**Rules:**
+
+R-1.3. Each Path's pre-commit chain is linearly ordered via `predecessor` edges (one beat to the next in the chain).
+
+R-1.4. The last shared pre-commit beat has one `predecessor` successor per explored path of its Dilemma (each successor is that path's commit beat).
+
+R-1.5. Each Path's post-commit chain is linearly ordered via `predecessor` edges starting from its commit beat.
+
+R-1.6. Intra-path `predecessor` edges form no cycles.
+
+**Violations:**
+
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| Last shared pre-commit beat has only one successor | Y-fork not wired; later phases will find no divergence | R-1.4 |
+| Pre-commit chain has a cycle | Self-referential ordering | R-1.6 |
+| Commit beat has no incoming predecessor from the pre-commit chain | Y-shape broken at the fork | R-1.4 |
+
+### Output Contract
+
+1. All SEED contract items verified.
+2. Each Path has a complete linear chain of `predecessor` edges: pre-commit → commit → post-commit.
+3. The last shared pre-commit beat has one `predecessor` successor per path of its Dilemma.
+4. No cycles in intra-path `predecessor` edges.
 
 ---
 
-### ~~Phase 2: Path-Agnostic Assessment~~ (Removed)
+## Phase 2: Intersection Detection
 
-> **Removed in Epic #858.** See ADR-015. The original Phase 2 used an LLM to
-> assess which beats were "prose-compatible" across paths and marked them with
-> `path_agnostic_for`. This was replaced by residue beats (Phase 8d) which
-> handle post-convergence variation without requiring upfront prose compatibility
-> assessment. Whether a beat is shared across multiple arcs is now inferred
-> structurally from the beat DAG (a beat's `belongs_to` edges plus its position
-> relative to commit beats determines which arcs traverse it), rather than
-> from LLM annotation.
+**Purpose:** Identify beats from different Dilemmas that co-occur in the same scene, and declare that co-occurrence as Intersection Group nodes. Intersection groups are consumed within GROW to inform beat placement in Phase 4 — they are NOT a handoff artifact to POLISH. POLISH makes its own passage grouping assessment from the finalized DAG.
 
----
+### Input Contract
 
-### Phase 3: Intersection Detection
+1. Phase 1 Output Contract satisfied.
 
-> **Intersection model change:** The [Story Graph Ontology, Part 4](../story-graph-ontology.md) redefines intersections as co-occurrence groupings. Beats retain their existing `belongs_to` edges under the Y-shape invariant (pre-commit beats: every path of their dilemma; commit and post-commit beats: exactly one path), and an intersection group node declares which beats share a scene across dilemmas. The three guard rails in the transition admonition at the top of this document apply: same-dilemma constraint, pre-commit only, intersection exclusion. The current implementation still cross-assigns `belongs_to` edges to model intersections — this must be replaced with intersection group nodes. See the Story Graph Ontology for the new model.
+### Operations
 
-**Purpose:** Find beats from different paths (different dilemmas) that should be one scene.
+#### Intersection Candidate Generation
 
-**Input:** Beat graph with validated DAG and location flexibility from SEED. No predecessor edges exist yet (interleave has not run).
+**What:** Generate candidate co-occurrences from deterministic signals (shared entities, location overlap via `flexibility`, temporal proximity), then have the LLM cluster candidates into proposed Intersection Groups. The human reviews each proposed group and approves, rejects, or modifies.
 
-**Operations:**
-1. Build candidate pool:
-   - All beats not yet placed in an arc
-   - Group by shared signals:
-     - **Location overlap** (highest priority): Beat A's location ∈ Beat B's location_alternatives, or vice versa
-     - **Shared entity**: Same character/location appears in both beats
-     - **Timing**: Beats could plausibly occur simultaneously
-2. LLM clusters candidates:
-   - Input: "Here are 20 beats with their entities, locations, and location_alternatives. Group into scenes."
-   - Prioritize beats with location overlap—SEED marked these as flexible for merging
-   - Output: `[[beat_a, beat_b], [beat_c], [beat_d, beat_e, beat_f]]`
-3. For each cluster with >1 beat:
-   - **Compatibility check (deterministic):**
-     - Beats must be from compatible paths (different dilemmas)
-     - No `requires` conflicts (A requires B, B requires A)
-     - No timing contradictions
-     - Location resolution possible (shared location exists in both location sets)
-     - **No conditional prerequisites** (see invariant below)
-   - If compatible: propose as intersection with resolved location
-4. Human reviews proposed intersections:
-   - Approve: execute intersection operation (mark or merge), set resolved location
-   - Reject: beats remain separate
-   - Modify: adjust clustering or location choice
+**Rules:**
 
-**Location resolution:** When merging beats, GROW picks a location that works for both:
-- If Beat A (location: market, alternatives: [docks]) merges with Beat B (location: docks, alternatives: [market])
-- Resolved location = docks (or market—human can choose)
+R-2.1. Candidate generation uses signals derivable from the graph: `anchored_to` overlap, `flexibility`-based entity substitutability, co-positioning hints from temporal annotations.
 
-**Intersection operations:**
+R-2.2. LLM clustering receives full beat context (summary, entities, flexibility annotations, dilemma question, `why_it_matters`) per candidate — not bare IDs.
 
-| Operation | When | Result |
-|-----------|------|--------|
-| Mark | Beats are distinct but same scene | Beat gains multiple path assignments, location resolved |
-| Merge | Beats are essentially the same | New beat replaces both, inherits from both, location resolved |
+R-2.3. Each Intersection Group contains beats from ≥2 different Dilemmas. Same-dilemma beats are never co-occurred via an Intersection Group.
 
-**Output:** Beat graph with intersections applied, locations resolved
+R-2.4. No two pre-commit beats of the SAME Dilemma may appear in the same Intersection Group. Pre-commit beats of the same dilemma are already sequentially ordered in the chain; grouping them as simultaneous contradicts that ordering. → ontology §Part 4: Intersection and Convergence Policy.
 
-**Iteration:** One pass of clustering. If human wants more intersections, re-run with different guidance.
+R-2.5. A beat's `belongs_to` edges are NEVER modified by intersection-group assignment. Co-occurrence is declared via `intersection` edges (Beat → Intersection Group), not via cross-dilemma `belongs_to`. → ontology §Part 8: Path Membership ≠ Scene Participation.
+
+R-2.6. Intersection Groups carry resolved scene context (shared location, shared entities, rationale).
+
+**Violations:**
+
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| Beat has `belongs_to` edges to paths from two different Dilemmas after GROW | Intersection modeled via cross-dilemma `belongs_to` instead of Intersection Group | R-2.5 |
+| Intersection Group contains two pre-commit beats of `dilemma::mentor_trust` | Same-dilemma pre-commit beats grouped as simultaneous | R-2.4 |
+| Intersection Group contains `beat_a` (post-commit of `dilemma::mentor_trust::protector`) and `beat_b` (post-commit of `dilemma::mentor_trust::manipulator`) — same dilemma, mutually exclusive paths | Mutually exclusive paths grouped as simultaneous | R-2.3 |
+| Candidate LLM call receives `[beat_001, beat_002, beat_003]` as Python list repr | Context formatting broken — LLM cannot reason about bare IDs | R-2.2 |
 
 #### No-Conditional-Prerequisites Invariant
 
-For any `requires` edge A → B where A is in a proposed intersection:
+**What:** For any intra-path `predecessor` edge A → B where A joins an Intersection Group, the set of paths that reach B must include all paths that reach A after intersection assignment. If this invariant is violated, the edge would be silently dropped during arc enumeration for arcs missing the prerequisite's path — producing inconsistent orderings and `passage_dag_cycles` failures downstream.
 
-> **`paths(B) ⊇ paths(A_post_intersection)`**
+**Rules:**
 
-A beat that would become shared across multiple paths (via intersection
-marking) cannot depend on a beat that exists only on a strict subset of
-those paths.  If this invariant is violated, the `requires` edge would be
-silently dropped during arc enumeration for arcs missing the prerequisite's
-path.  This produces inconsistent topological orderings across arcs and
-causes `passage_dag_cycles` failures in validation.
+R-2.7. For every `predecessor` edge A → B where A is in an Intersection Group, `paths(B) ⊇ paths(A_post_intersection)`. If the invariant fails, reject the intersection candidate — the beats remain separate.
 
-**Current strategy:** Reject the intersection.  The beats remain separate.
+R-2.8. Intersection rejection due to the invariant is logged at INFO with the candidate beat IDs and the violating predecessor edge.
 
-**Future alternatives** (not yet implemented):
-- **Lift prerequisites (#360):** Also add the prerequisite beat to all
-  intersection paths, making it globally shared.  Risk: may widen a beat
-  beyond its narrative intent.
-- **Split lead-ins (#361):** Create path-specific copies of the shared beat
-  so the path-specific version keeps the dependency while others are
-  independent.  Risk: increases beat count and complexity.
+**Violations:**
+
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| `passage_dag_cycles` validation failure in Phase 8 | A `predecessor` edge was dropped silently during arc enumeration because the invariant was not checked | R-2.7 |
+| All intersection candidates rejected with no log entries | Silent rejection without explanation | R-2.8 |
+
+### Output Contract
+
+1. Zero or more Intersection Group nodes exist, each with ≥2 beats from different Dilemmas.
+2. No Intersection Group contains two pre-commit beats of the same Dilemma.
+3. No beat has had its `belongs_to` edges modified by intersection assignment.
+4. Every Intersection Group carries resolved scene context.
 
 ---
 
-### Phase 3b: Resolve Temporal Hints
+## Phase 3: Temporal Hint Resolution
 
-**Purpose:** Detect cycles in temporal hint proposals and resolve them deterministically (mandatory drops) or via LLM consultation (swap pairs) before interleave applies any cross-path ordering edges.
+**Purpose:** SEED beats may carry `temporal_hint` annotations stating a desired position relative to another Dilemma's commit or introduction. These hints can conflict with each other and with dilemma ordering relationships. GROW detects cycles deterministically and resolves them — mandatory drops (hints that cycle against the base DAG alone) are stripped automatically; swap pairs (hints that cycle only together) are resolved by LLM consultation. The surviving hint set is acyclic.
 
-**Input:** Beat graph with intersections applied, no predecessor edges yet (Phase 3 complete). Beats may carry `temporal_hint` fields (optional dict with `position` and `relative_to` keys).
+### Input Contract
 
-**Algorithm:**
+1. Phase 2 Output Contract satisfied.
 
-**Step 1 — Build base DAG:**
-Simulate all non-hint ordering edges without any temporal hints. This includes:
-- Serial relationships (last beats of A precede first beats of B)
-- Wraps relationships (A's intro precedes B's intro; B's final beats precede A's commits)
-- Heuristic commit-ordering edges (deterministic ordering of concurrent dilemmas by ID)
+### Operations
 
-This is the stable substrate against which all temporal hints will be tested.
+#### Base DAG Simulation
 
-**Step 2 — Solo hint testing:**
-For each beat carrying a temporal hint, test the hint in isolation against the base DAG. If the hint would create a cycle alone (no interference from other hints), the hint is mandatory-drop — the dilemma ordering relationships take precedence over the temporal relationship.
+**What:** Build a simulated DAG using all non-hint ordering edges — serial/wraps relationships plus heuristic commit-ordering edges for concurrent dilemmas. This is the substrate against which temporal hints are tested.
 
-**Step 3 — Pairwise testing:**
-For surviving hints, test them in pairs. For each pair (A, B):
-- Test A's hint when B is absent: does A cycle?
-- Test B's hint when A is absent: does B cycle?
-- If both survive solo but both cycle together, they form a swap pair — a genuine narrative trade-off where exactly one must be dropped.
+**Rules:**
 
-**Step 4 — Minimum drop set (greedy heuristic):**
-Apply a greedy minimum feedback arc set heuristic to the conflict graph. For swap pairs identified in Step 3, determine a default drop candidate using:
-1. Hint strength: `before_commit` or `after_commit` > `before_introduce` or `after_introduce`
-2. Beat role: spine or anchor beats > branch-only beats (more narratively central)
-3. Alphabetical tiebreak on beat ID
+R-3.1. Base DAG uses deterministic ordering from Dilemma ordering relationships (`wraps`, `concurrent`, `serial`) only. Temporal hints are excluded from base.
 
-**Step 5 — LLM consultation (swap pairs only):**
-For each swap pair, present the LLM with a binary choice: "Drop exactly one of Beat A or Beat B's temporal hint. Which one should be sacrificed?" The LLM receives:
-- Both beat summaries and their temporal requests
-- The narrative consequence of each drop
-- Default recommendation from Step 4
+**Violations:**
 
-LLM returns `ConflictGroupResolution` per pair. Invalid responses (both, neither, neither valid beat ID) fall back to the mechanical default from Step 4.
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| Base DAG includes a temporal hint edge | Base simulation contamination | R-3.1 |
 
-**Step 6 — Apply drops:**
-Strip `temporal_hint` (set to `None`) from all beats marked for dropping: mandatory drops from Step 2, plus LLM-selected drops from Step 5.
+#### Solo Hint Testing (Mandatory Drops)
 
-**Output:** Beat graph with a consistent (acyclic) set of temporal hints. No subsequent edge creation will silently drop hints due to cycles.
+**What:** For each beat carrying a temporal hint, test the hint in isolation against the base DAG. A hint that creates a cycle alone is a mandatory drop — the Dilemma ordering relationships take precedence.
 
-**LLM involvement:** Yes, for swap pairs only. Mandatory drops are deterministic (no LLM call).
+**Rules:**
 
-**Human Gate:** No (consumed programmatically by interleave phase).
+R-3.2. A temporal hint that creates a cycle when applied alone to the base DAG is dropped. No LLM consultation is needed — dilemma ordering is authoritative.
 
-#### Why Mandatory vs. Swap Distinction?
+R-3.3. Each mandatory drop is logged at INFO with the beat ID and the reason (which dilemma ordering relationship conflicts).
 
-Hints that cycle against the base DAG alone represent a narrative impossibility: the dilemma ordering structure is fixed; temporal relationships requesting contradictory orderings cannot all be honored. No narrative choice is possible — one must be dropped.
+**Violations:**
 
-Hints that only cycle in combination with another hint represent a genuine creative trade-off. The LLM is better positioned than a deterministic tiebreaker to choose which temporal relationship matters more to the story's narrative arc. This aligns with the core philosophy: "LLM as collaborator under constraint."
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| Mandatory drop silently executed | Logging missing | R-3.3 |
+
+#### Pairwise Swap Resolution (LLM)
+
+**What:** For surviving hints, test pairs. If two hints survive alone but cycle together, they form a swap pair — a genuine narrative trade-off. The LLM picks which to drop, given both beat summaries and consequence descriptions.
+
+**Rules:**
+
+R-3.4. Swap pairs are resolved by LLM consultation. The LLM receives both beat summaries, both temporal-hint requests, and a default recommendation from a deterministic tiebreaker.
+
+R-3.5. The LLM must drop exactly one hint per swap pair. Invalid responses (both / neither / non-existent beat ID) fall back to the deterministic default.
+
+R-3.6. Each swap resolution is logged at INFO with pair IDs and chosen drop.
+
+**Violations:**
+
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| LLM drops both hints in a pair | R-3.5 violation — must drop exactly one | R-3.5 |
+| Pair resolved with no log entry | Logging missing | R-3.6 |
 
 #### Temporal Hint Acyclicity Invariant
 
-After `resolve_temporal_hints` completes, the set of surviving temporal hints must be acyclic — i.e., applying all surviving hint edges to the base DAG produces no cycles. This is verified by simulating edge application. If the postcondition fails, `TemporalHintResolutionInvariantError` is raised. This is a hard pipeline failure; silent degradation (skipping cyclic hints at interleave time) is not acceptable.
+**What:** After all drops are applied, the surviving temporal hints plus the base DAG must be acyclic. If not, raise `TemporalHintResolutionInvariantError` — hard failure, no silent degradation.
+
+**Rules:**
+
+R-3.7. After Phase 3 completes, applying all surviving temporal hints to the base DAG produces no cycles. If this postcondition fails, GROW halts with an error. Silent degradation (skipping cyclic hints at interleave time) is forbidden.
+
+**Violations:**
+
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| `interleave_cycle_skipped` warning in logs after GROW completes | Cyclic hint slipped through Phase 3 and was dropped silently in Phase 4 — pipeline failure per the Silent Degradation policy | R-3.7 |
+
+### Output Contract
+
+1. Surviving temporal-hint set applied to base DAG is acyclic.
+2. Each drop (mandatory or swap) is logged at INFO with rationale.
+3. No `interleave_cycle_skipped` outcomes possible in Phase 4.
 
 ---
 
-### Phase 4: Gap Detection and Scene-Type Tagging
+## Phase 4: Interleave
 
-**Purpose:** Find missing beats needed for narrative continuity AND assign scene types for pacing.
+**Purpose:** Apply cross-dilemma ordering edges to weave the per-dilemma Y-shapes into a single DAG. Use the Dilemma ordering relationships (`wraps`/`concurrent`/`serial`) plus the surviving temporal hints from Phase 3. No cycles possible — Phase 3 guaranteed acyclicity.
 
-**Input:** Beat graph with intersections applied and predecessor edges from interleave (see execution order note above)
+### Input Contract
 
-**Operations:**
+1. Phase 3 Output Contract satisfied.
 
-**4a. Scene-Type Tagging**
-1. For each beat, LLM assesses scene type based on:
-   - Beat summary content (action vs reaction)
-   - Position in path (early = setup, mid = conflict, late = resolution)
-   - Dilemma impacts (reveals/commits often warrant full scenes)
-2. Assign: `scene_type: scene | sequel | micro_beat`
-3. Human reviews tags, may override
+### Operations
 
-**4b. Narrative Gap Detection**
-1. For each path:
-   - Trace beat sequence (respecting `requires`)
-   - LLM assesses: "Is this sequence complete? Any narrative gaps?"
-   - Output: list of proposed gaps with descriptions
-2. For each proposed gap:
-   - LLM drafts beat summary (including scene_type)
-   - Human reviews:
-     - Approve: add beat to graph
-     - Reject: no gap
-     - Modify: edit summary
+#### Cross-Dilemma Ordering Edge Creation
 
-**4c. Pacing Gap Detection**
-1. For each arc sequence, analyze scene-type rhythm
-2. LLM flags pacing issues:
-   - Three or more scenes in a row with no sequel (relentless action)
-   - Three or more sequels in a row with no scene (stagnant)
-   - No sequel after a major commits beat (no breathing room)
-3. For each pacing gap:
-   - LLM proposes beat to fix pacing (typically a sequel after intense scenes)
-   - Human reviews:
-     - Approve: add beat
-     - Reject: pacing is intentional
-     - Modify: adjust proposal
+**What:** Add `predecessor` edges between beats of different Dilemmas according to `wraps`/`concurrent`/`serial` plus temporal hints. Each edge reflects "beat X must come before beat Y in any arc that traverses both."
 
-**4g. Cross-Dilemma Transition Gap Detection**
-1. For each cross-dilemma predecessor edge, check entity and location overlap between the two beats.
-2. If both overlaps are zero: this is a hard transition — the narrative jumps between unrelated scenes.
-3. LLM drafts a 1-2 sentence bridge summary referencing entities/locations from both sides.
-4. Insert a transition beat (`role: transition_beat`, `scene_type: micro_beat`) between the two beats. The original cross-dilemma edge is replaced by two edges: earlier → transition → later.
-5. Transition beats carry no `dilemma_impacts` — they are atmospheric connective tissue, not plot advancement.
+**Rules:**
 
-Transition beats are structural. POLISH can collapse them into adjacent passages or keep them standalone. FILL writes their prose — choosing between a smooth bridge, a hard cut, or an atmospheric moment based on the voice document. The `fill_hard_transition_detected` warning in FILL serves as a safety net for any transitions that GROW does not cover.
+R-4.1. `serial` Dilemmas: the last beat of Dilemma A precedes the first beat of Dilemma B.
 
-**Output:** Beat graph with gaps filled, all beats tagged with `scene_type`, and transition beats at cross-dilemma seams
+R-4.2. `wraps` Dilemmas (A wraps B): A's introduction beats precede B's introduction beats; B's final beats precede A's commit beats.
 
-**Iteration:** One pass for each sub-phase. If validation later finds issues, human can return here.
+R-4.3. `concurrent` Dilemmas: no mandatory ordering from the relationship itself; interleaving is governed by temporal hints and heuristics.
 
-**Completion criterion (measurable):**
-- Each path forms connected route from entry to exit
-- No orphan beats
-- All beats have `scene_type` assigned
-- No cross-dilemma predecessor edge with zero entity/location overlap lacks a transition beat
+R-4.4. Temporal hints that survived Phase 3 are applied as `predecessor` edges.
+
+R-4.5. No cycles are introduced. If a cycle would be introduced, the input from Phase 3 was faulty — this is a hard failure, not a silent skip.
+
+**Violations:**
+
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| Beat cycle exists after Phase 4 | Either Phase 3's acyclicity guarantee failed, or Phase 4 introduced a new edge that closed a cycle | R-4.5 |
+| `interleave_cycle_skipped` outcome | Silent degradation — pipeline failure, not warning | R-4.5 (and R-3.7) |
+
+### Output Contract
+
+1. The beat DAG is acyclic.
+2. Cross-dilemma `predecessor` edges reflect Dilemma ordering relationships and surviving temporal hints.
+3. No edges are silently dropped.
 
 ---
 
-### Phase 4f: Entity Arc Descriptors
+## Phase 5: Transition Beat Insertion
 
-> **Moves to POLISH:** The [Story Graph Ontology, Part 1](../story-graph-ontology.md) calls these "character arc metadata" and assigns their creation to the POLISH stage. The concept is preserved; the stage assignment changes.
+**Purpose:** Where a cross-dilemma `predecessor` edge connects two beats with no shared entities and no shared location, insert a Transition Beat between them — a short structural bridge that carries no dilemma relationship (zero `belongs_to`, zero `dilemma_impacts`). → ontology §Part 1: Transition beat.
 
-**Purpose:** Derive per-entity arc trajectories for each path.
+### Input Contract
 
-**Input:** Beat graph with intersections applied
+1. Phase 4 Output Contract satisfied.
 
-**Placement:** Runs after Phase 3 (intersections) because intersections change beat
-membership, which would invalidate pre-intersection pivot beats. Runs before Phase 5
-(arc enumeration) so arc data is available before passages are created.
+### Operations
 
-**Operations:**
-1. For each path:
-   - **Entity selection** (deterministic):
-     - Characters/factions: 2+ appearances on this path's beats, OR named in dilemma `involves`
-     - Objects/locations: 1+ appearance (single-appearance objects can carry weight)
-   - If no eligible entities, skip this path (no LLM call)
-2. LLM generates one `EntityArcDescriptor` per eligible entity:
-   - `entity_id`: which entity
-   - `arc_line`: concise "A → B → C" trajectory (10-200 chars)
-   - `pivot_beat`: the beat where the arc *turns* (the hinge, not the climax)
-3. **arc_type** is computed deterministically from entity category (not LLM-generated):
-   - character → `transformation`
-   - location → `atmosphere`
-   - object → `significance`
-   - faction → `relationship`
-4. Semantic validation:
-   - `entity_id` must exist in eligible entity set
-   - `pivot_beat` must exist in path-scoped beat set
-5. Results stored on path nodes: `entity_arcs: [{entity_id, arc_line, pivot_beat, arc_type}]`
+#### Cross-Dilemma Seam Detection and Bridging
 
-**Shared pivot policy:** If `pivot_beat` is shared across multiple arcs (either a
-pre-commit beat with multi-`belongs_to` within its dilemma, or an intersection-
-shared scene), a warning is logged but no error raised. Post-commit, path-
-specific pivot beats are preferred because the entity's trajectory usually
-turns *on* the commit, not before it.
+**What:** For each cross-dilemma `predecessor` edge, check whether the two beats share any entities or location. If both overlaps are zero, this is a hard transition — the narrative jumps between unrelated scenes. Insert a Transition Beat drafted by the LLM (1–2 sentences referencing entities/locations from both sides). The original edge is replaced by two edges: earlier → transition → later.
 
-**Output:** Path nodes annotated with `entity_arcs`
+**Rules:**
 
-**LLM involvement:** Yes (arc_line + pivot_beat generation per path)
+R-5.1. Transition Beats carry zero `dilemma_impacts` and zero `belongs_to` edges. They are structural beats, traversed by every arc that reaches them via the predecessor chain.
 
-**Human Gate:** No (consumed programmatically by FILL)
+R-5.2. Transition Beats are inserted only at cross-dilemma seams with zero entity/location overlap. Seams with partial overlap are left alone; POLISH may add micro-beats for rhythm later.
+
+R-5.3. Each Transition Beat references entities and/or locations from both sides of the seam in its summary (bridging concrete anchors).
+
+R-5.4. The LLM call that drafts the transition summary receives full context for both bridging beats (summaries, entities, locations).
+
+**Violations:**
+
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| Transition Beat has `belongs_to` edge | Wrongly assigned path membership to a structural beat | R-5.1 |
+| Transition Beat inserted at a seam with shared mentor entity | R-5.2 — not a hard transition | R-5.2 |
+| Transition Beat summary mentions only one side's entities | Bridge not bridging | R-5.3 |
+
+### Output Contract
+
+1. Every cross-dilemma `predecessor` edge with zero entity/location overlap has a Transition Beat inserted.
+2. Every Transition Beat has zero `belongs_to` and zero `dilemma_impacts`.
+3. Transition Beat summaries bridge entities/locations from both sides.
 
 ---
 
-### Phase 5: Arc Enumeration
+## Phase 6: State Flag Derivation and Entity Overlay Activation
 
-> **Arc model change:** The [Story Graph Ontology, Part 3](../story-graph-ontology.md) treats arcs as computed DAG traversals, not stored graph nodes. Arc enumeration becomes a validation/diagnostic utility rather than a graph-building step.
+**Purpose:** Derive State Flag nodes from Path Consequences, and activate Entity Overlays on the entities those consequences affect.
 
-**Purpose:** Enumerate all valid routes through the beat graph.
+### Input Contract
 
-**Input:** Complete beat graph
+1. Phase 5 Output Contract satisfied.
 
-**Operations:**
-1. Identify all path combinations:
-   - One path per dilemma (respecting exclusivity)
-   - Example: 3 dilemmas × 2 paths each = 8 combinations
-2. For each combination:
-   - Collect applicable beats:
-     - Beats assigned to these paths
-     - Shared beats for these dilemmas
-     - Intersections involving these paths
-   - Topological sort (respecting `requires`)
-   - This sequence is one arc
-3. Human selects spine arc:
-   - Default: all canonical paths
-   - Or: human overrides
+### Operations
 
-**Arc schema:**
-```yaml
-arc:
-  id: string
-  type: spine | branch
-  paths: path_id[]              # one per dilemma
-  sequence: beat_id[]           # topologically sorted
-  diverges_from: arc_id | null  # which arc this branches from
-  diverges_at: beat_id | null   # the choice point
-  converges_to: arc_id | null   # if branches rejoin
-  converges_at: beat_id | null
-```
+#### State Flag Derivation
 
-**Output:** Enumerated arcs
+**What:** For each Consequence attached to a Path, create a State Flag node with a `derived_from` edge back to the Consequence. The state flag represents the world-state change the Consequence describes — "the mentor is hostile," not "the player chose to distrust the mentor."
 
-**LLM involvement:** None (deterministic)
+**Rules:**
 
----
+R-6.1. Every State Flag node has a `derived_from` edge to exactly one Consequence. State flags created ad hoc (without a Consequence source) are forbidden — they are dilemma flags in the ontology's taxonomy and must be derivable.
 
-### Phase 6: Divergence Point Identification
+R-6.2. State flag names express world state, not player actions. → ontology §Part 8: State Flags ≠ Player Choices.
 
-**Purpose:** Find where arcs split.
+R-6.3. State flags are associated with the commit beat of their source path: the flag is "active" on any arc that traverses that commit beat.
 
-**Input:** Enumerated arcs
+R-6.4. Every Consequence produces at least one State Flag.
 
-**Operations:**
-1. For each pair of arcs sharing paths:
-   - Walk sequences in parallel
-   - Find last shared beat before sequences differ
-   - This is the divergence point
-2. Record divergence relationships:
-   - Arc B diverges from Arc A at beat X
-   - Arc B commits to path P at beat Y
+**Violations:**
 
-**Output:** Arcs with divergence metadata
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| State Flag node has no `derived_from` edge | Ad hoc creation — no source consequence | R-6.1 |
+| State flag named `player_chose_distrust` | Action-phrased instead of world-state-phrased | R-6.2 |
+| Consequence has no associated State Flag | Derivation skipped | R-6.4 |
 
-**LLM involvement:** None (deterministic)
+#### Entity Overlay Activation
 
----
+**What:** For each Consequence with entity-affecting ripples, add an overlay to the affected Entity node. The overlay has `when` (list of state flag IDs that must be active) and `details` (property changes). Overlays are an embedded list on the Entity, not separate nodes. → ontology §Part 6.
 
-### Phase 7: Convergence Identification (Policy-Aware)
+**Rules:**
 
-> **Terminology transition:** The [Story Graph Ontology, Part 2](../story-graph-ontology.md) replaces `convergence_policy` (hard/soft/flavor) with `dilemma_role` (hard/soft). Convergence behavior is derived from the role. `flavor` is removed — flavor-level choices are handled by POLISH as false branches. The code currently still uses `convergence_policy`.
+R-6.5. Overlays are stored as an embedded list on the Entity node. Each overlay is a dict with `when` (list of state flag IDs) and `details` (property changes).
 
-**Purpose:** Find where arcs can rejoin, respecting the branching contract.
+R-6.6. The Entity remains one node. Overlays do not create second entities or variant entities.
 
-**Input:** Arcs with divergence metadata, dilemma convergence policies from SEED
+R-6.7. Overlays may be composed — if multiple state flags affect the same entity, multiple overlays apply on arcs where their flags are all active.
 
-**Operations:**
-1. For each branch arc, determine the **effective policy**:
-   - Traverse arc's paths → path's `dilemma_id` → dilemma node's `convergence_policy` and `payoff_budget`
-   - Multi-dilemma combine rule: `hard` dominates; `payoff_budget = max(...)` across all dilemmas
-   - Default (no SEED metadata): `flavor`/budget=0 (backward compatible)
-2. Apply per-policy convergence logic:
-   - **`flavor`**: First shared beat after divergence (original behavior)
-   - **`soft`**: Backward scan — find last exclusive beat in branch sequence; `converges_at` = the beat immediately after, if shared. Reject if exclusive beat count < `payoff_budget`.
-   - **`hard`**: `converges_at` is never set. Arc stays separate.
-3. Store `convergence_policy` and `payoff_budget` on arc nodes for downstream use.
+R-6.8. Hard and soft Dilemmas both produce overlays. For hard Dilemmas, the state flag activates overlays even though the passage graph is structurally separate.
 
-**`converges_at` semantics:** "From this beat onward, all remaining content on this arc is shared with the spine." It is NOT set at intersections (shared beats that have later exclusive beats).
+**Violations:**
 
-**Output:** Arcs with convergence metadata (including policy fields)
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| Two Entity nodes: `character::mentor` and `character::mentor__hostile` | Overlay implemented as separate entity | R-6.6 |
+| Overlay has `when: []` | No activation condition — always-on | R-6.5 |
+| Hard Dilemma produces no overlay | Skipped because "hard paths don't rejoin" — but overlays still needed for FILL | R-6.8 |
 
-**LLM involvement:** None (deterministic). Policy comes from SEED dilemma analysis.
+### Output Contract
+
+1. Every Consequence has ≥1 associated State Flag with a `derived_from` edge.
+2. State flag names express world state, not player actions.
+3. Every entity-affecting Consequence produces an overlay on the affected Entity.
+4. Overlays are embedded on Entity nodes, not separate nodes.
+5. Hard and soft Dilemmas both produce overlays when their consequences affect entities.
 
 ---
 
-### Phase 8: Passage and State Derivation
+## Phase 7: Convergence Metadata Population
 
-> **Moves to POLISH:** ["How Branching Stories Work", Part 4](../how-branching-stories-work.md) assigns passage creation (8a), state flag/codeword creation (8b), overlay creation (8c), and choice derivation (Phase 9) to the POLISH stage. See also the [Story Graph Ontology, Part 5](../story-graph-ontology.md) (The Passage Layer) and [Part 6](../story-graph-ontology.md) (Entity Overlays and State). The code has not yet been reorganized.
+**Purpose:** For each soft Dilemma, compute the `converges_at` beat ID and `convergence_payoff` count from the finalized DAG topology. Hard Dilemmas leave both fields null.
 
-**Purpose:** Create player-facing passages from beats, and derive codewords and overlays from consequences.
+### Input Contract
 
-**Input:** Complete arc structure, consequences from SEED
+1. Phase 6 Output Contract satisfied.
 
-**Operations:**
+### Operations
 
-**8a. Passage Creation**
-1. For each beat:
-   - Create passage with same ID (or derived ID)
-   - Copy summary (becomes prose brief for FILL)
-   - Link entities via `appears` edges
-   - Link relationships via `involves` edges
-   - Set `from_beat` for traceability
+#### Soft Dilemma Convergence Computation
 
-**8b. Codeword Creation**
-1. For each consequence:
-   - Create codeword with `tracks` linking to consequence
-   - Naming: `{path_id}_committed` or derived from consequence description
-   - Type: `granted`
-2. For each path's `commits` beat:
-   - Add that path's consequence codeword to beat's `grants`
-3. Human reviews codeword assignments
+**What:** For each Dilemma with `dilemma_role: soft` and two explored paths, find the first beat reachable from all terminal exclusive beats of the Dilemma (typically the first shared setup beat of the next Dilemma in sequence). Record that beat's ID as `converges_at`. Count the minimum number of single-path-exclusive beats (commit + post-commit) per path before convergence — that is `convergence_payoff`.
 
-**8c. Entity Overlay Creation**
-1. For each consequence with entity-affecting ripples:
-   - LLM proposes overlay for affected entity
-   - `when`: the consequence's codeword
-   - `details`: derived from ripple description
-2. Human reviews proposed overlays:
-   - Approve: add to entity
-   - Modify: edit details
-   - Reject: ripple is prose-only, no state change
+**Rules:**
 
-Example:
-```yaml
-# From SEED consequence:
-consequence:
-  id: mentor_ally
-  description: "Mentor becomes protective ally"
-  ripples:
-    - "Mentor's demeanor shifts to warmth"
+R-7.1. `converges_at` is computed from DAG reachability — not declared. It is the first shared beat after both paths' post-commit chains.
 
-# GROW derives:
-codeword:
-  id: mentor_trust__protector_committed
-  type: granted
-  tracks: mentor_ally
+R-7.2. `convergence_payoff` is the minimum count of path-exclusive beats (including commit) per path before convergence.
 
-entity:
-  id: mentor
-  overlays:
-    - when: [mentor_trust__protector_committed]
-      details: { demeanor: "warm" }
-```
+R-7.3. Hard Dilemmas have `converges_at: null` and `convergence_payoff: null`. Paths never rejoin.
 
-**Output:** Passages, codewords, entity overlays
+R-7.4. If a soft Dilemma has no structural convergence beat (e.g., paths lead to different endings), this is a classification error — the Dilemma should be hard. Halt with error identifying the Dilemma.
 
-**LLM involvement:** Overlay proposal (8c)
+**Violations:**
 
-**Human Gate:** Yes (codeword and overlay review)
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| Hard Dilemma has `converges_at` set | Mis-applied to hard role | R-7.3 |
+| Soft Dilemma has `converges_at: null` but paths do rejoin in DAG | Computation skipped | R-7.1 |
+| Soft Dilemma's paths never rejoin and GROW proceeds | Should have halted with classification error | R-7.4 |
+
+### Output Contract
+
+1. Every soft Dilemma has `converges_at` (beat ID) and `convergence_payoff` (integer) populated from DAG topology.
+2. Every hard Dilemma has both fields null.
+3. No soft Dilemma survives without a convergence beat.
 
 ---
 
-### Phase 9: Choice Derivation
+## Phase 8: Arc Validation
 
-**Purpose:** Create choice edges between passages.
+**Purpose:** Enumerate all valid arc traversals of the DAG (one combination of path choices per arc) and verify completeness, reachability, and dilemma resolution. Arcs are COMPUTED, not stored — the enumeration is a validation utility.
 
-**Input:** Passages, arc structure
+### Input Contract
 
-**Operations:**
+1. Phase 7 Output Contract satisfied.
 
-**9a. Codeword requires pre-computation** (before passage successor deduplication):
-1. Compute passage → arc membership mapping
-2. For each passage exclusive to hard-policy branch arcs, collect codeword IDs from the branch's consequences
-3. This must happen BEFORE `find_passage_successors()` deduplicates passages across arcs
+### Operations
 
-**9b. Choice creation:**
-1. For each beat B appearing in arcs:
-   - Find successor beats in each arc
-   - Group by unique successors
-2. If single successor across all arcs:
-   - Single choice edge (may be implicit "continue")
-   - `requires` is always empty (single-outgoing-choice = never gated, prevents soft-locks)
-3. If multiple successors:
-   - Create choice per successor
-   - LLM generates diegetic label: "What does the player do/say to reach this?"
-   - Set `requires` from pre-computed codeword requirements (hard-policy branch targets only)
-   - Set `grants` from codewords the choice provides
-4. Spoke choices (hub-spoke patterns): `requires` is always empty (spokes are flavor-only)
+#### Arc Enumeration and Integrity Checks
 
-**Choice schema:**
-```yaml
-choice:
-  from_passage: passage_id
-  to_passage: passage_id
-  label: string                 # diegetic, never "Continue" or "Go left"
-  requires: codeword[]          # gate
-  grants: codeword[]            # state change
-```
+**What:** For each combination of one path per explored Dilemma, walk the DAG from root, following the successor matching the arc's selected path at each Y-fork. The traversal is the arc's beat sequence. Validate it.
 
-**Output:** Choice edges
+**Rules:**
 
-**LLM involvement:** Label generation only
+R-8.1. Arc traversal starts at the DAG root and walks `predecessor` successors. At each Y-fork, the traversal follows the successor matching the arc's selected path for that Dilemma.
 
----
+R-8.2. Arcs are computed on demand, not stored as graph nodes. If materialized for debugging, they must use the `materialized_` prefix.
 
-### Phase 10: Validation
+R-8.3. Every computed arc reaches a terminal beat (no dead ends).
 
-**Purpose:** Verify graph integrity.
+R-8.4. Every arc traverses exactly one commit beat per explored Dilemma.
 
-**Checks (deterministic):**
+R-8.5. Every beat in the graph is reachable from the root via at least one arc. Unreachable beats are pruning candidates (Phase 9) — not errors at this stage, but logged at INFO.
 
-| Check | Failure means |
-|-------|---------------|
-| Single start passage | Multiple starts = ambiguous entry |
-| All passages reachable from start | Orphan passages = wasted content or GROW bug |
-| All endings reachable | Blocked route = impossible gates |
-| Each dilemma resolved | Missing `commits` = dilemma never pays off |
-| Gate satisfiability | Required codewords unobtainable on some route |
-| No cycles in `requires` | Impossible ordering |
+R-8.6. No cycles in `predecessor` edges.
 
-**Commits timing check (deterministic):**
+**Violations:**
 
-For each dilemma, validate when the `commits` beat occurs:
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| Arc traversal reaches a beat with no outgoing edges before a terminal passage | Missing successor edge — interleave created a gap | R-8.3 |
+| Arc traverses two commit beats of the same Dilemma | Interleave placed both per-path commits in one arc's path | R-8.4 |
+| Arc node materialized without `materialized_` prefix | Violates arc-as-derived rule | R-8.2 |
 
-| Condition | Severity | Message |
-|-----------|----------|---------|
-| `commits` beat is <3 beats from arc start | Warn | "Dilemma {D} commits too early—limited shared content before branching" |
-| No `reveals` or `advances` beats before `commits` | Warn | "Dilemma {D} has no buildup before commits—may feel unearned" |
-| `commits` beat is in final 20% of arc | Warn | "Dilemma {D} commits too late—dilemma may drag" |
-| >5 beats after last `reveals` before `commits` | Warn | "Dilemma {D} has gap between last reveal and commits—pacing issue" |
+### Output Contract
 
-These are warnings, not failures. Human reviews and decides whether to:
-- Accept (pacing is intentional)
-- Adjust beat ordering
-- Add/remove beats to improve timing
-
-**Narrative check (LLM-assisted, optional):**
-- Does each arc feel complete?
-- Are commits moments dramatically appropriate?
-- Any tone inconsistencies?
-
-**Output:** Validation report
-
-**On failure:** Human reviews. Options:
-- Fix locally (edit passage/choice)
-- Return to earlier phase (gap detection, intersection detection)
-- Abort to SEED (fundamental structure issue)
+1. Every arc is complete (reaches terminal).
+2. Every arc contains exactly one commit per explored Dilemma.
+3. No cycles in `predecessor` edges.
+4. Unreachable beats are logged (for Phase 9 pruning).
 
 ---
 
-### Phase 11: Pruning
+## Phase 9: Pruning
 
-**Purpose:** Remove unreachable content.
+**Purpose:** Remove unreachable beats and orphan edges. Freeze the DAG.
 
-**Input:** Validated graph
+### Input Contract
 
-**Operations:**
-1. Mark all nodes reachable from start
-2. Delete unmarked nodes (passages, orphan entities)
-3. Freeze graph
+1. Phase 8 Output Contract satisfied.
 
-**Output:** Final graph ready for FILL
+### Operations
 
-**LLM involvement:** None (deterministic)
+#### Unreachable Beat Removal
+
+**What:** Delete beats and associated edges that no arc traverses. These are usually the result of intersection rejection or temporal-hint drops leaving orphan structure.
+
+**Rules:**
+
+R-9.1. A beat is prunable if no computed arc reaches it.
+
+R-9.2. Pruning deletes the beat node and all edges incident on it.
+
+R-9.3. Every pruning decision is logged at INFO with the beat ID and reason.
+
+R-9.4. Pruning never deletes a beat that has `belongs_to` to an explored Path — such a beat should always be reachable; if it isn't, that is a structural bug to halt on, not a pruning target.
+
+**Violations:**
+
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| Post-commit beat pruned as "unreachable" | Structural bug masked by pruning; should halt instead | R-9.4 |
+| Pruning removes a beat with no log entry | Silent deletion | R-9.3 |
+
+### Output Contract
+
+1. All beats are reachable by at least one arc.
+2. No orphan edges.
+3. Pruning decisions logged.
+
+---
+
+## Stage Output Contract
+
+1. The beat DAG is acyclic: every beat node has either ≥1 predecessor or is the root; ≥1 successor or is a terminal.
+2. Every computed arc from root to terminal is complete — no dead ends.
+3. Every arc includes exactly one commit beat per explored Dilemma.
+4. Zero or more Intersection Group nodes exist. No group contains two beats from the same Dilemma.
+5. Beats retain their SEED `belongs_to` edges unchanged — co-occurrence is declared via `intersection` edges, never via cross-dilemma `belongs_to`.
+6. Transition Beats exist at every cross-dilemma seam with zero entity/location overlap, with zero `belongs_to` and zero `dilemma_impacts`.
+7. Every Consequence has ≥1 associated State Flag node with a `derived_from` edge.
+8. State flag names express world state, not player actions.
+9. Entity nodes have overlay lists activated by state flags; overlays are embedded, not separate nodes.
+10. Every soft Dilemma has `converges_at` and `convergence_payoff` populated from DAG topology.
+11. Every hard Dilemma has `converges_at: null` and `convergence_payoff: null`.
+12. No Passage, Choice, variant passage, residue beat, or character arc metadata exists.
+13. No cycles in `predecessor` edges.
+14. No orphan beats (all reachable from root by at least one arc).
+
+## Implementation Constraints
+
+- **Silent Degradation:** `interleave_cycle_skipped` is a pipeline failure, not a warning. All cycles must be resolved in Phase 3 before Phase 4 applies edges. Similarly, all-intersections-rejected is a failure — log at ERROR and halt, do not produce degraded output. → CLAUDE.md §Silent Degradation (CRITICAL)
+- **Context Enrichment:** Intersection detection LLM call (Phase 2), swap-pair resolution (Phase 3), and transition drafting (Phase 5) must receive full beat context — summaries, entity references, location, `flexibility` annotations, dilemma question, `why_it_matters`. Bare ID listings are insufficient. → CLAUDE.md §Context Enrichment Principle (CRITICAL)
+- **Valid ID Injection:** Every LLM call that references dilemma IDs, path IDs, beat IDs, entity IDs must receive an explicit `### Valid IDs` section listing every valid value. → CLAUDE.md §Valid ID Injection Principle
+- **Prompt Context Formatting:** Beat lists, entity lists, intersection candidate clusters must be formatted as human-readable text (bulleted, headed, backtick-wrapped IDs). Never Python repr. → CLAUDE.md §Prompt Context Formatting (CRITICAL)
+- **Small Model Prompt Bias:** If intersection clustering or transition drafting underperforms, fix the prompt before blaming the model. → CLAUDE.md §Small Model Prompt Bias (CRITICAL)
+
+## Cross-References
+
+- Interleaving narrative concept → how-branching-stories-work.md §Interleaving
+- Intersection narrative concept → how-branching-stories-work.md §Intersections
+- Intersection lifecycle (GROW-internal, not handed to POLISH) → story-graph-ontology.md §Part 4: Intersections
+- Path Membership ≠ Scene Participation (no cross-dilemma dual `belongs_to`) → story-graph-ontology.md §Part 8
+- No-Conditional-Prerequisites Invariant → grow.md §Phase 2 (self-reference)
+- Arc as computed traversal → story-graph-ontology.md §Part 3: Total Order Per Arc
+- Transition Beat sub-type → story-graph-ontology.md §Part 1: Structural Beats (Transition beat)
+- State Flag derivation from Consequences → story-graph-ontology.md §Part 1: State Flag (dilemma flags)
+- State Flags ≠ Player Choices → story-graph-ontology.md §Part 8
+- Entity Overlays → story-graph-ontology.md §Part 6
+- Soft-dilemma convergence metadata → story-graph-ontology.md §Part 1: Dilemma (`converges_at`, `convergence_payoff`)
+- Silent Degradation policy → CLAUDE.md §Anti-Patterns to Avoid
+- Previous stage → seed.md §Stage Output Contract
+- Next stage → polish.md §Stage Input Contract
+
+## Rule Index
+
+R-1.1: Validate every SEED Stage Output Contract item; halt on violation.
+R-1.2: Validation errors identify specific nodes and rules.
+R-1.3: Pre-commit chain linearly ordered via `predecessor`.
+R-1.4: Last shared pre-commit beat has one successor per explored path of its Dilemma.
+R-1.5: Post-commit chain linearly ordered from commit beat.
+R-1.6: Intra-path `predecessor` edges form no cycles.
+R-2.1: Intersection candidates from `anchored_to`, `flexibility`, temporal signals.
+R-2.2: Clustering LLM receives full beat context, not bare IDs.
+R-2.3: Intersection Groups contain beats from ≥2 different Dilemmas.
+R-2.4: No two pre-commit beats of the same Dilemma in one Intersection Group.
+R-2.5: `belongs_to` edges never modified by intersection assignment.
+R-2.6: Intersection Groups carry resolved scene context.
+R-2.7: No-Conditional-Prerequisites Invariant: `paths(B) ⊇ paths(A_post_intersection)`.
+R-2.8: Intersection rejections logged at INFO.
+R-3.1: Base DAG excludes temporal hints.
+R-3.2: Hints cycling alone are mandatory drops.
+R-3.3: Mandatory drops logged with reason.
+R-3.4: Swap pairs resolved by LLM with context.
+R-3.5: LLM drops exactly one hint per swap pair.
+R-3.6: Swap resolutions logged.
+R-3.7: After Phase 3, surviving hints + base DAG are acyclic (hard invariant).
+R-4.1: Serial: last beat of A precedes first beat of B.
+R-4.2: Wraps: A's intros precede B's; B's finals precede A's commits.
+R-4.3: Concurrent: no mandatory ordering from relationship alone.
+R-4.4: Surviving temporal hints applied as edges.
+R-4.5: No cycles in Phase 4 output; no silent skip.
+R-5.1: Transition Beats have zero `belongs_to` and zero `dilemma_impacts`.
+R-5.2: Transition Beats only at zero-overlap cross-dilemma seams.
+R-5.3: Transition summary references both sides' entities/locations.
+R-5.4: Drafting LLM receives full context for both bridging beats.
+R-6.1: Every State Flag has `derived_from` to a Consequence.
+R-6.2: Flag names are world-state, not player-action.
+R-6.3: Flags associated with their source path's commit beat.
+R-6.4: Every Consequence produces ≥1 State Flag.
+R-6.5: Overlays embedded on Entity nodes (not separate nodes).
+R-6.6: Entity remains one node; no variant entities.
+R-6.7: Overlays compose when multiple flags affect the same entity.
+R-6.8: Hard and soft Dilemmas both produce overlays.
+R-7.1: `converges_at` computed from DAG reachability.
+R-7.2: `convergence_payoff` is min exclusive-beat count per path.
+R-7.3: Hard Dilemmas have both fields null.
+R-7.4: Soft Dilemma without structural convergence → halt (classification error).
+R-8.1: Arc traversal walks `predecessor` successors; follows path at forks.
+R-8.2: Arcs computed, not stored (materialized uses `materialized_` prefix).
+R-8.3: Every arc reaches a terminal beat.
+R-8.4: Every arc has exactly one commit per explored Dilemma.
+R-8.5: Unreachable beats logged at INFO for pruning.
+R-8.6: No cycles in `predecessor` edges.
+R-9.1: Prunable beats have no reaching arc.
+R-9.2: Pruning deletes the beat and incident edges.
+R-9.3: Every pruning decision logged.
+R-9.4: Path-member beats that are unreachable are structural bugs, not pruning targets.
 
 ---
 
-## Human Gates Summary
+## Human Gates
 
-| After Phase | Human Decision |
-|-------------|----------------|
-| ~~2. Path-agnostic~~ | ~~Removed — see ADR-015~~ |
-| 3. Intersections | Approve/reject/modify intersection proposals |
-| 4a. Scene-type | Approve/edit scene-type tags |
-| 4b. Narrative gaps | Approve/reject/edit new beats |
-| 4c. Pacing gaps | Approve/reject pacing beats |
-| 5. Arcs | Select spine arc |
-| 7. Convergence | Approve/reject convergence points |
-| 8b. Codewords | Review codeword assignments |
-| 8c. Overlays | Approve/modify/reject entity overlays |
-| 10. Validation | Fix issues or abort |
-
----
-
-## Failure Modes and Recovery
-
-### Phase-Specific Failures
-
-| Phase | Failure | Detection | Recovery |
-|-------|---------|-----------|----------|
-| 1. Import | Missing `commits` beat for a dilemma | Validation check | Return to SEED, add commits beat |
-| 1. Import | Cycle in `requires` edges | Topological sort fails | Return to SEED, fix ordering |
-| ~~2. Path-agnostic~~ | ~~Removed — see ADR-015~~ | | |
-| 3. Intersections | Incompatible beats proposed as intersection | Compatibility check | Automatic rejection, try other clusters |
-| 3. Intersections | No intersections found when expected | Human review | Accept (story is linear) or return to SEED |
-| 4. Gaps | Path has no route from entry to exit | Connectivity check | Add bridging beats or return to SEED |
-| 5. Arcs | Combinatorial explosion (>16 arcs) | Count check | Return to SEED, reduce explored dilemmas |
-| 7. Convergence | Arcs cannot converge (never commit) | Commits check | Add commits beats or accept separate endings |
-| 9. Choices | Near-synonym labels generated | Human review | Regenerate with stronger differentiation prompt |
-| 10. Validation | Orphan passages | Reachability check | Prune or add connecting choices |
-| 10. Validation | Unreachable endings | Route check | Add routes or remove endings |
-
-### Structural Failures (Abort to SEED)
-
-These failures indicate fundamental structure issues that GROW cannot fix:
-
-| Condition | Why Abort |
-|-----------|-----------|
-| Missing entity discovered during intersection detection | GROW cannot create entities |
-| New dilemma needed for narrative coherence | GROW cannot create dilemmas |
-| Path freeze violation attempted | Architectural constraint |
-| >3 GROW attempts without passing validation | Diminishing returns, structure needs rework |
-
-**Abort procedure:**
-1. Document current state and failure reason
-2. Export partial artifacts for reference
-3. Return to SEED with identified issues
-4. Human revises SEED artifacts
-5. Re-run GROW from Phase 1
-
-### Recoverable Failures (Local Fix)
-
-These failures can be fixed within GROW:
-
-| Failure | Fix |
-|---------|-----|
-| Single orphan passage | Add choice edge from nearest reachable passage |
-| Missing transition beat | Add beat in Phase 4 (gap detection) |
-| Poor choice label | Regenerate with Phase 9 |
-| Timing warning | Adjust beat ordering or accept |
-
----
+| Phase | Gate | Decision |
+|-------|------|----------|
+| 1 | Import and Validate | Automated (halt on violation) |
+| 2 | Intersection Detection | Required — approve/reject/modify intersection proposals |
+| 3 | Temporal Hint Resolution | Automated + LLM (swap pairs only) |
+| 4 | Interleave | Automated |
+| 5 | Transition Beat Insertion | Automated (LLM drafts; human may review post-hoc) |
+| 6 | State Flag and Overlay Activation | Required — review overlay details |
+| 7 | Convergence Metadata | Automated |
+| 8 | Arc Validation | Required — review validation report; fix or abort |
+| 9 | Pruning | Automated |
 
 ## Iteration Control
 
-**Principle:** Iterate until measurable condition met. If unmeasurable, fixed pass count (configurable).
+**Forward flow:** 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9.
 
-| Phase | Completion Criterion | Fallback |
-|-------|---------------------|----------|
-| ~~Path-agnostic~~ | ~~Removed~~ | |
-| Intersections | No more candidates above threshold | 1 pass |
-| Scene-type (4a) | All beats tagged | 1 pass |
-| Narrative gaps (4b) | Each path connected start→end | 1 pass + validation catch |
-| Pacing gaps (4c) | No flagged pacing issues (or human accepts) | 1 pass |
-| Validation | All checks pass | N/A (human decides) |
+**Backward loops:**
 
-**Global iteration:** If validation fails and human chooses to return to earlier phase, that's a new GROW attempt. Track attempt count; abort if exceeds limit (default: 3).
+| From | To | Trigger |
+|------|-----|---------|
+| 2 | 1 | Validation rejection (SEED bug) — abort to SEED |
+| 8 | 2 | Arc validation fails on intersection-caused inconsistency — re-run intersections with tighter candidacy |
+| 8 | 5 | Arc validation fails on transition placement — re-run with adjusted seams |
 
----
+**Abort to SEED:**
+
+- Missing entity discovered during intersection detection (GROW cannot create entities).
+- New Dilemma needed (GROW cannot create dilemmas).
+- Path Freeze violation attempted (architectural constraint from SEED).
+- >3 GROW attempts without passing validation (diminishing returns).
+
+## Failure Modes
+
+| Phase | Failure | Detection | Recovery |
+|-------|---------|-----------|----------|
+| 1 | Missing commit beat for explored path | Contract check | Halt — fix in SEED |
+| 1 | Cycle in SEED `predecessor` hints | Topological sort | Halt — fix in SEED |
+| 2 | Cross-dilemma `belongs_to` attempted | R-2.5 check | Halt — SEED or GROW bug |
+| 2 | All intersection candidates rejected | Silent degradation check | Halt ERROR (not warning) |
+| 3 | Hint cycles slip through (`interleave_cycle_skipped`) | Phase 4 detection | Halt — Phase 3 invariant violated |
+| 5 | Transition drafting LLM fails | LLM timeout/error | Retry once; if still failing, insert placeholder transition beat and log WARNING |
+| 7 | Soft dilemma has no convergence beat | R-7.4 check | Halt — classification error in SEED |
+| 8 | Arc has dead end | Reachability check | Re-run Phase 2 (intersection) or abort to SEED |
 
 ## Context Management
 
-### Standard (128k+ context)
+**Standard (≥128k context):** Full DREAM + BRAINSTORM + SEED output + intermediate DAG state per phase. Context consumption peaks in Phase 2 (intersection clustering across all candidate beats).
 
-Pass full beat graph to each phase. No windowing needed.
-
-### Constrained (32k context)
-
-Apply windowing in phases 3-4:
-
-1. **Frozen content:** Summarize completed arcs into ~500 token blocks
-2. **Active frontier:** Full detail for beats not yet connected
-3. **Focus window:** For intersection detection, only pass beats from paths currently being processed
-
-Estimated working set: ~120 beats maximum for quality on 8B models.
-
----
+**Constrained (~32k context):** Phase 2 batches candidates by cluster signal (location overlap first, then shared entity, then temporal) rather than single-call clustering. Phase 5 drafts transitions per-seam rather than all at once.
 
 ## Worked Example
 
-**Setup:**
-- 2 dilemmas: dilemma::mentor_trust, dilemma::artifact_nature
-- Each dilemma: 2 answers (1 canonical, 1 alternate)
-- 4 possible arcs
+### Starting Point (SEED output)
 
-**SEED provides:**
-```
-Dilemma: dilemma::mentor_trust
-  Path: path::mentor_trust__protector (canonical)
-    Beats: meet_mentor, mentor_advice, mentor_reveal_good
-  Path: path::mentor_trust__manipulator (alternate)
-    Beats: meet_mentor, mentor_advice, mentor_reveal_evil
-  (meet_mentor, mentor_advice shared across both paths)
+- 2 Dilemmas: `dilemma::mentor_trust` (soft, both paths explored), `dilemma::archive_nature` (hard, only canonical path explored)
+- Per-dilemma Y-shapes from SEED
+- 2 Consequences per explored path
+- `concurrent` edge between the two Dilemmas
 
-Dilemma: dilemma::artifact_nature
-  Path: path::artifact_nature__saves (canonical)
-    Beats: find_artifact, study_artifact, use_artifact_good
-  Path: path::artifact_nature__corrupts (alternate)
-    Beats: find_artifact, study_artifact, use_artifact_bad
-```
+### Phase 1
 
-**Phase 3 (intersections):**
-- LLM clusters: [[mentor_advice, study_artifact]] — same location, same entities
-- Compatibility: ✓ (different dilemmas)
-- Intersection created: advice_and_study (serves both paths)
+Validation passes. Intra-path `predecessor` edges wired for both Y-shapes.
 
-**Phase 5 (arcs):**
-```
-Arc 1 (spine): path::mentor_trust__protector + path::artifact_nature__saves
-  Sequence: meet_mentor → advice_and_study → mentor_reveal_good → use_artifact_good
+### Phase 2
 
-Arc 2: path::mentor_trust__protector + path::artifact_nature__corrupts
-  Sequence: meet_mentor → advice_and_study → mentor_reveal_good → use_artifact_bad
+Candidate: pre-commit beat of `mentor_trust` and pre-commit beat of `archive_nature` both involve `character::mentor` and could co-occur at `location::archive`. LLM clusters them into one Intersection Group. Human approves. `belongs_to` edges unchanged on both beats.
 
-Arc 3: path::mentor_trust__manipulator + path::artifact_nature__saves
-  Sequence: meet_mentor → advice_and_study → mentor_reveal_evil → use_artifact_good
+### Phase 3
 
-Arc 4: path::mentor_trust__manipulator + path::artifact_nature__corrupts
-  Sequence: meet_mentor → advice_and_study → mentor_reveal_evil → use_artifact_bad
-```
+No temporal hints in this run; acyclicity trivially holds.
 
-**Phase 6 (divergence):**
-- Arc 1 and Arc 2 diverge at advice_and_study (artifact dilemma)
-- Arc 1 and Arc 3 diverge at advice_and_study (mentor dilemma)
+### Phase 4
 
-**Phase 9 (choices):**
-- After advice_and_study: 4-way choice (or 2 sequential binary choices)
-- LLM generates labels:
-  - "Trust the mentor's guidance" → mentor_reveal_good
-  - "Investigate the mentor's motives" → mentor_reveal_evil
-  - "Use the artifact as instructed" → use_artifact_good
-  - "Study the artifact's warnings first" → use_artifact_bad
+Cross-dilemma `predecessor` edges added per `concurrent` interleaving heuristic.
 
----
+### Phase 5
 
-## Resolved Questions
+One cross-dilemma seam between `mentor_trust` post-commit and `archive_nature` pre-commit has no shared entity/location. LLM drafts: "Kay steps out of the reading room into the courtyard, thoughts of the mentor receding as the archive looms." Transition Beat inserted.
 
-1. ~~**Multi-way divergence:**~~ **Resolved.** Sequential binary choices that can be merged into a single multi-way layer if dramatically appropriate. Implementation should support both presentations.
+### Phase 6
 
-2. ~~**Intersection limits:**~~ **Resolved.** Cap at 2-3 beats per intersection. More creates unwieldy scenes and exponential complexity.
+Consequences of `mentor_trust__protector` and `mentor_trust__manipulator` each produce one State Flag (`mentor_protective_ally`, `mentor_hostile_adversary`). Overlays added to `character::mentor` node.
 
-3. ~~**Partial arc development:**~~ **Deferred to v5.1.** "Thin arcs" (arcs using more shared content, fewer unique beats) would reduce authoring burden for less-important branches. Mechanics require additional design work around:
-   - How to mark an arc as "thin"
-   - Automatic beat sharing heuristics
-   - Quality validation for thin vs full arcs
+### Phase 7
 
-   For v5, all arcs are fully developed. This may limit practical scope to 3-4 dilemmas.
+`dilemma::mentor_trust`: `converges_at` = the first shared beat after both paths' post-commit chains. `convergence_payoff` = 3 (commit + 2 post-commit per path).
 
-4. ~~**Commits timing validation:**~~ **Resolved.** Added to Phase 10. Validation warns if commits happens too early (<3 beats, no buildup) or too late (final 20%, gap after last reveal). See Phase 10 for heuristics.
+`dilemma::archive_nature`: hard, only canonical path — both fields null.
 
----
+### Phase 8
 
-## Design Principle: LLM Prepares, Human Decides
+4 arcs (2^1 from `mentor_trust` × 1 from `archive_nature`-canonical-only + no × from hard-with-canonical-only = 2 arcs). Wait: 2 paths × 1 path = 2 arcs. Each validated: complete, reaches terminal, one commit each.
 
-The complete beat graph is unwieldy for humans to navigate. The LLM's job is to **identify opportunities and surface decisions**, not wait for humans to find them.
+### Phase 9
 
-**Pattern across phases:**
+No unreachable beats. Freeze.
 
-| Phase | LLM Prepares | Human Decides |
-|-------|--------------|---------------|
-| ~~Path-agnostic~~ | ~~Removed~~ | |
-| Intersections | "These beat pairs could merge" | Approve/reject each |
-| Scene-type | "Beat X is a full scene, Beat Y is a sequel" | Approve/override tags |
-| Narrative gaps | "Path X needs a beat here, here's a draft" | Approve/edit/reject |
-| Pacing gaps | "Three scenes in a row—propose sequel here" | Approve/reject |
-| Entity arcs | "Entity X transforms A → B → C, pivoting at beat Y" | N/A (consumed by FILL) |
-| Spine | "Here are the 4 possible arcs, ranked by canonical coverage" | Select one |
-| Convergence | "Arcs A and B could rejoin here after commits" | Approve/reject |
-| Validation | "These 3 issues found, with suggested fixes" | Apply fix or override |
-
-**LLM should proactively:**
-- Surface all decision points before asking
-- Rank options where meaningful (canonical-ness, narrative flow)
-- Propose default choices (human can accept without deep analysis)
-- Explain trade-offs briefly ("merging these saves 2 beats but reduces dilemma buildup")
-
-**Human should not need to:**
-- Manually scan the graph for opportunities
-- Remember all constraints while deciding
-- Construct fixes from scratch
-
-This keeps human cognitive load manageable even with complex graphs.
-
----
-
-## Summary
-
-GROW is 11 phases (Phases 4 and 8 have sub-phases):
-
-| # | Phase | LLM | Human Gate |
-|---|-------|-----|------------|
-| 1 | Beat graph import | No | No |
-| ~~2~~ | ~~Path-agnostic assessment (removed)~~ | | |
-| 3 | Intersection detection | Yes (clustering) | Yes |
-| 4a | Scene-type tagging | Yes | Yes |
-| 4b | Narrative gap detection | Yes | Yes |
-| 4c | Pacing gap detection | Yes | Yes |
-| 4f | Entity arc descriptors | Yes (arc_line, pivot) | No |
-| 5 | Arc enumeration | No | Yes (spine) |
-| 6 | Divergence identification | No | No |
-| 7 | Convergence identification | No | Yes |
-| 8a | Passage creation | No | No |
-| 8b | Codeword creation | No | Yes |
-| 8c | Entity overlay creation | Yes (proposals) | Yes |
-| 9 | Choice derivation | Yes (labels) | No |
-| 10 | Validation | Optional | Yes |
-| 11 | Pruning | No | No |
-
-**Phase distribution:**
-- Deterministic (1, 5, 6, 8a, 8b, 11): Graph operations, no LLM
-- LLM-assisted (2, 3, 4a-c, 8c, 9, 10): Constrained proposals, clustering, tagging, overlay derivation, labeling
-- Human gates (2, 3, 4a-c, 5, 7, 8b, 8c, 10): Quality control and authorial decisions
-
-**Core principle:** LLM prepares decisions (surfaces opportunities, ranks options, proposes defaults). Human decides (approves, rejects, modifies). Human never needs to manually scan the graph.
-
----
-
-**Terminology Note:** This document uses the v5 terminology:
-- **dilemma** (not dilemma): Binary dramatic questions
-- **path** (not path): Routes exploring specific answers to dilemmas
-- **intersection** (not intersection): Beats serving multiple paths
-
-See the transition notes at the top of this document for terminology changes introduced by Documents 1 and 3.
+GROW complete.
