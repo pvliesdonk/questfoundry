@@ -6,10 +6,13 @@ BRAINSTORM is the expansive creative stage: it turns an approved Vision into raw
 
 ## Stage Input Contract
 
+*Must match DREAM §Stage Output Contract exactly.*
+
 1. Exactly one Vision node exists with non-empty `genre`, `tone`, `themes`, `audience`, `scope`.
-2. The Vision node has no graph edges.
-3. No Entity, Dilemma, or Answer nodes exist.
-4. Human approval of DREAM is recorded.
+2. The Vision node has no incoming or outgoing edges.
+3. `pov_style` is present and is one of `first_person`, `second_person`, `third_person_limited`, `third_person_omniscient`, or absent/null.
+4. No nodes other than the Vision exist in the graph.
+5. Human approval of DREAM is recorded.
 
 ---
 
