@@ -27,7 +27,7 @@ Context compaction loses nuance. Re-reading these rules prevents repeating mista
 | **Should/Prefer** | Strong defaults - deviate only with reason | "Should use targeted tests" |
 | **May/Can** | Options - use judgment | "May split into multiple PRs" |
 
-This CLAUDE.md file is rules for *how to work*. Separately, the authoritative design docs are rules for *what to build* — see the next section.
+This CLAUDE.md file is rules for *how to work*. Separately, the authoritative design docs are rules for *what to build* — see §Design Doc Authority below.
 
 ### Design Doc Authority (Specs Supersede Code)
 
@@ -42,7 +42,7 @@ The following design documents are **authoritative specifications**, not guideli
 1. **Specs supersede code and tests.** If code or tests conflict with these docs, **the code or tests are wrong.** Do not "interpret" the doc to match the code. Do not treat code as the source of truth.
 2. **Docs-first fix order.** If something doesn't work correctly, the fix sequence is:
    1. Read the authoritative spec. Is the behavior you need defined?
-   2. If the spec is silent, incomplete, or wrong for your case — **update the spec first**, get alignment on the new intent.
+   2. If the spec is silent, incomplete, or wrong for your case — **update the spec first**. Raise the proposed spec change explicitly (in the current conversation, in a PR description, or in a dedicated spec-update commit) before touching code. The spec update is the alignment step; don't fold it into an unrelated implementation PR.
    3. Then update the code and tests to match the updated spec.
    Never flip this: never adjust a spec retroactively to document what broken code happens to do.
 3. **Surface drift explicitly.** If you find code that contradicts a spec, do not silently paper over it. Either the spec needs updating (then update it) or the code needs fixing (then fix it). It cannot be both "working as intended" and "contradicting the spec."
@@ -53,7 +53,7 @@ The following design documents are **authoritative specifications**, not guideli
 - CLAUDE.md (this file) — rules for how to work, not about what to build
 - `docs/design/01-prompt-compiler.md`, `docs/design/07-getting-started.md`, etc. — implementation-level guidance; may be adjusted to match code as implementation evolves
 - `docs/design/00-spec.md` — **deprecated**; do not cite as authoritative
-- Other files in `docs/design/` — clarifying guidelines unless explicitly marked authoritative
+- Other files in `docs/design/` — clarifying guidelines unless listed in the authoritative set above in this section. Adding a new authoritative spec requires updating this list; a title or header inside a doc claiming "authoritative" does not count.
 
 ---
 
@@ -116,7 +116,7 @@ DRESS stage (art direction, illustrations, codex) is specified in Slice 5. See `
 
 When a bug is not resolved by static tools (ruff/mypy/tests):
 
-0) **Read the authoritative spec first** (see Instruction Hierarchy §Design Doc Authority). The spec — not the code — defines correct behavior. The failing test or buggy output is evidence that code diverged from the spec; your first job is to identify the divergence.
+0) **Read the authoritative spec first** (see Instruction Hierarchy §Design Doc Authority). The spec — not the code — defines correct behavior. A failing test or buggy output is usually evidence that code diverged from the spec. Less often it is evidence of a test written against undefined behavior or a spec gap — in which case the fix still starts with the spec (update it, then code follows). Identify which of these applies before editing code.
 1) Reproduce the failure with a minimal command.
 2) Do not edit code until reproduction is confirmed.
 3) Use `pdb` for interactive inspection if needed.
