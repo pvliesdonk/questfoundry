@@ -334,7 +334,7 @@ An intersection is represented as a grouping relationship between beats:
 - Each beat retains its existing `belongs_to` edges (one for post-commit beats; two for same-dilemma pre-commit beats — see Part 8, "Path Membership ≠ Scene Participation").
 - The intersection group carries the resolved scene context: shared location, shared entities, and a rationale for why these beats work as one scene.
 
-The grouping tells POLISH: "when you create passages, these beats should become one passage (or part of one passage)." It tells FILL: "write one scene that advances dilemma A through beat X AND dilemma B through beat Y simultaneously."
+The grouping informs GROW's own DAG assembly: beats declared as co-occurring are placed such that the resulting DAG makes it structurally possible for them to end up in adjacent positions. Once the DAG is assembled, intersection groups have served their purpose. They are not a constraint on POLISH — POLISH makes its own passage grouping assessment from the finalized DAG. The intersection group nodes remain in the graph as a record of GROW's reasoning (useful for debugging) but no stage downstream of GROW reads them as a requirement.
 
 ### How Intersections Are Found
 
@@ -367,10 +367,9 @@ The player does not see beats. The player sees **passages** — prose units with
 
 A passage is a prose container holding one or more beats. It is what FILL writes and what the player reads.
 
-Passages are created by POLISH through two mechanisms:
+Passages are created by POLISH by assessing the finalized beat DAG directly. POLISH does not read intersection groups — those were consumed by GROW during DAG assembly. POLISH makes its own fresh determination of what is narratable given the DAG as it actually emerged.
 
-- **Grouping by intersection** — beats that co-occur (from intersection groups declared in GROW) become one passage. The passage contains beats from different paths, and FILL writes one scene that advances multiple storylines.
-- **Grouping by collapse** — sequential beats from the same path with no choices between them become one passage. Three beats in a row — "search the study," "find the hidden letter," "read the letter" — collapse into one flowing scene. Collapse may produce multiple passages from a chain if the beats have incompatible entities or natural hard breaks.
+The primary grouping mechanism is **collapse**: sequential beats with no choices between them become one passage. Three beats in a row — "search the study," "find the hidden letter," "read the letter" — collapse into one flowing scene. Collapse may produce multiple passages from a chain if the beats have incompatible entities or natural hard breaks. Where GROW's co-occurrence placements resulted in adjacent beats from different paths, POLISH may group them into one passage as part of this assessment — but it is not required to, and may choose differently if the DAG has evolved in a way that makes a different grouping more narratable.
 
 A passage that contains a single beat is also valid — not everything collapses or intersects.
 
@@ -510,7 +509,7 @@ SEED is the heaviest mutation stage. It triages, scaffolds, orders, and sketches
 | **Edges created** | Predecessor/successor edges in the beat DAG, intersection grouping edges, `derived_from` (state flag → consequence) |
 | **Reads** | All SEED output (paths, beats, consequences, dilemma relationships, temporal hints) |
 | **Modifies** | Beat nodes (enriched with intersection membership), dilemma nodes (soft dilemmas gain `converges_at` and `convergence_payoff` from DAG topology), entity nodes (activates overlays with state flags — overlays are an embedded list on the entity, not a separate node type; see Part 6) |
-| **Consumes** | Entity flexibility annotations (used to find intersections, then discarded), temporal hints (used for interleaving, then discarded) |
+| **Consumes** | Entity flexibility annotations (used to find intersections, then discarded), temporal hints (used for interleaving, then discarded), intersection groups (created and used within this stage for DAG assembly — not passed forward as a constraint on later stages) |
 | **Validates** | Every computed arc traversal is complete and has no dead ends |
 
 GROW produces the beat DAG — the core structural artifact. It weaves independent paths into one coherent branched structure, identifies intersections, derives state flags from consequences, and creates entity overlays. It does not create passages or choices — that is POLISH's job.
@@ -534,7 +533,7 @@ POLISH operates in two phases:
 |---|---|
 | **Creates** | Passage nodes, choice edges, variant passages |
 | **Edges created** | Beat → passage (grouping), passage → passage (choices with labels/gates/grants), `variant_of` (variant → base passage) |
-| **Reads** | Finalized beat DAG, intersection groups, state flags |
+| **Reads** | Finalized beat DAG, state flags |
 | **Modifies** | Entity nodes (annotates with character arc metadata — an annotation on entity nodes, not a separate node type; see Part 1 "Character Arc Metadata") |
 | **Decides** | Passage grouping (collapse + intersection), prose feasibility, variant vs shared vs residue beat, false branch placement, character arc metadata |
 
