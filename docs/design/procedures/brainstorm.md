@@ -8,11 +8,12 @@ BRAINSTORM is the expansive creative stage: it turns an approved Vision into raw
 
 *Must match DREAM §Stage Output Contract exactly.*
 
-1. Exactly one Vision node exists with non-empty `genre`, `tone`, `themes`, `audience`, `scope`.
-2. The Vision node has no incoming or outgoing edges.
-3. `pov_style` is present and is one of `first_person`, `second_person`, `third_person_limited`, `third_person_omniscient`, or absent/null.
-4. No nodes other than the Vision exist in the graph.
-5. Human approval of DREAM is recorded.
+1. Exactly one Vision node exists in the graph.
+2. The Vision node has non-empty values for: `genre`, `tone`, `themes`, `audience`, `scope`.
+3. The Vision node has no incoming or outgoing edges.
+4. `pov_style`, if present, is one of `first_person`, `second_person`, `third_person_limited`, `third_person_omniscient`; absent or null if deferred to FILL.
+5. No other node types exist in the graph.
+6. Human approval of DREAM is recorded.
 
 ---
 
@@ -121,9 +122,9 @@ R-2.5. The LLM captures what was discussed; it does not invent entities to fill 
 
 **Rules:**
 
-R-3.1. Every Dilemma node has a non-empty `question` and a non-empty `why_it_matters`. The question ends with `?`. The `why_it_matters` is the seed of residue — what lasting mark the choice leaves.
+R-3.1. Every Dilemma node has a non-empty `question` and a non-empty `why_it_matters`. The question ends with `?`. The `why_it_matters` is the seed of residue — what lasting mark the choice leaves. → how-branching-stories-work.md §Common Language (Residue).
 
-R-3.2. Every Dilemma has exactly two `has_answer` edges to two distinct Answer nodes. Three-way or four-way dilemmas are forbidden — for nuanced situations, split into multiple binary dilemmas.
+R-3.2. Every Dilemma has exactly two `has_answer` edges to two distinct Answer nodes. Three-way or four-way dilemmas are forbidden — for nuanced situations, split into multiple binary dilemmas. → how-branching-stories-work.md §The Dilemmas.
 
 R-3.3. Both answers must be genuinely different and both must be compelling. Shades of gray ("protector" vs "well-meaning-but-flawed") and degenerate contrasts ("save now" vs "save later") are violations — they produce weak drama.
 
@@ -131,9 +132,9 @@ R-3.4. Exactly one Answer per Dilemma has `is_canonical: true`. The canonical an
 
 R-3.5. Every Answer has a non-empty `description` stating what this response means narratively.
 
-R-3.6. Every Dilemma has at least one `anchored_to` edge to a retained Entity. A dilemma anchored to nothing is meaningless — it has no grip on the world.
+R-3.6. Every Dilemma has at least one `anchored_to` edge to an Entity. A dilemma anchored to nothing is meaningless — it has no grip on the world. (Entity triage — cutting entities — is SEED's concern, not BRAINSTORM's.)
 
-R-3.7. Dilemma IDs use the `dilemma::` prefix (e.g., `dilemma::mentor_trust`). Answer IDs are unprefixed and scoped within their dilemma (e.g., `mentor_protector`).
+R-3.7. Dilemma IDs use the `dilemma::` prefix (e.g., `dilemma::mentor_trust`). Answer IDs are unprefixed and scoped within their parent Dilemma (e.g., `mentor_protector`). Answer ID uniqueness is enforced per Dilemma (the pair `<dilemma_id, answer_id>` is globally unique), not globally — two Dilemmas may each have an answer named `benevolent` without collision.
 
 R-3.8. No Path, Beat, Consequence, State Flag, Passage, or Intersection Group nodes are created. Those belong to later stages.
 
@@ -181,8 +182,9 @@ R-3.8. No Path, Beat, Consequence, State Flag, Passage, or Intersection Group no
 
 - **Context Enrichment:** The LLM call that proposes dilemmas must receive the full Vision node (genre, subgenre, tone, themes, audience, scope, content_notes) AND the full Entity list (names, categories, concepts, notes) — not just IDs or a genre string. Bare listings produce generic dilemmas. → CLAUDE.md §Context Enrichment Principle (CRITICAL)
 - **Prompt Context Formatting:** Entity and dilemma lists injected into prompts must be formatted as human-readable text (joined strings, bullet points), never as Python list or dict repr. → CLAUDE.md §Prompt Context Formatting (CRITICAL)
-- **Valid ID Injection:** Any LLM call that references entity IDs (e.g., for `anchored_to` edges) must receive an explicit `### Valid IDs` section listing every retained entity ID. → CLAUDE.md §Valid ID Injection Principle
+- **Valid ID Injection:** Any LLM call that references entity IDs (e.g., for `anchored_to` edges) must receive an explicit `### Valid IDs` section listing every Entity ID created in Phase 2. → CLAUDE.md §Valid ID Injection Principle
 - **Small Model Prompt Bias:** BRAINSTORM runs on small models during local dev. Fix the prompt before blaming the model for weak dilemmas. → CLAUDE.md §Small Model Prompt Bias (CRITICAL)
+- **Silent Degradation:** Validation of the binary-dilemma invariant (R-3.2), canonical marking (R-3.4), and anchored-to requirement (R-3.6) must produce hard errors, not fallbacks. A dilemma with three answers, two canonical markings, or zero anchors must halt BRAINSTORM — never silently serialize a partial result. → CLAUDE.md §Anti-Patterns to Avoid (Silent degradation of story structure constraints)
 
 ## Cross-References
 
@@ -212,8 +214,8 @@ R-3.3: Both answers are genuinely different and both compelling.
 R-3.4: Exactly one Answer per Dilemma has `is_canonical: true`.
 R-3.5: Every Answer has a non-empty `description`.
 R-3.6: Every Dilemma has at least one `anchored_to` edge.
-R-3.7: Dilemma IDs use the `dilemma::` prefix.
-R-3.8: No Path / Beat / Consequence / State Flag / Passage nodes exist after BRAINSTORM.
+R-3.7: Dilemma IDs use the `dilemma::` prefix; Answer IDs are unprefixed and scoped within their Dilemma.
+R-3.8: No Path / Beat / Consequence / State Flag / Passage / Intersection Group nodes exist after BRAINSTORM.
 
 ---
 

@@ -120,7 +120,7 @@ R-1.13. Rejection loops back to the operation that contains the misalignment —
 1. Exactly one Vision node exists in the graph.
 2. The Vision node has non-empty values for: `genre`, `tone`, `themes`, `audience`, `scope`.
 3. The Vision node has no incoming or outgoing edges.
-4. `pov_style` is present and is one of `first_person`, `second_person`, `third_person_limited`, `third_person_omniscient`, or absent/null if deferred to FILL.
+4. `pov_style`, if present, is one of `first_person`, `second_person`, `third_person_limited`, `third_person_omniscient`; absent or null if deferred to FILL.
 5. No other node types exist in the graph.
 6. Human approval is recorded.
 
@@ -243,13 +243,13 @@ vision:
     - "trust"
     - "corruption"
   audience: "adult readers of literary speculative fiction"
-  scope: short
+  scope: short                     # enum value — unquoted
   content_notes:
     - "single protagonist POV"
     - "no explicit magic system"
     - "no graphic violence"
     - "intimate scope (few key relationships)"
-  pov_style: third_person_limited
+  pov_style: third_person_limited  # enum value — unquoted
 ```
 
 ### Approval
