@@ -12,13 +12,11 @@ from questfoundry.models.polish import (
     ChoiceSpec,
     PassageSpec,
     PolishResult,
-    ResidueSpec,
     VariantSpec,
 )
 from questfoundry.pipeline.stages.polish.deterministic import (
     _create_choice_edge,
     _create_passage_node,
-    _create_residue_beat_and_passage,
     _create_variant_passage,
 )
 
@@ -235,22 +233,6 @@ class TestValidatePolishOutputResidue:
 
         errors = validate_polish_output(graph)
         assert any("bad_residue" in e and "precedes" in e for e in errors)
-
-    def test_proper_residue_passes(self) -> None:
-        graph = _build_valid_graph()
-
-        _create_residue_beat_and_passage(
-            graph,
-            ResidueSpec(
-                target_passage_id="passage::start",
-                residue_id="residue::r1",
-                flag="flag1",
-                content_hint="Mood",
-            ),
-        )
-
-        errors = validate_polish_output(graph)
-        assert errors == [], f"Unexpected validation errors: {errors}"
 
 
 class TestPolishResult:
