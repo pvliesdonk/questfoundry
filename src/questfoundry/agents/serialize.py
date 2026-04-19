@@ -2647,6 +2647,7 @@ async def serialize_convergence_analysis(
             "seed_analysis_defaulted",
             section="dilemma_analyses",
             reason="serialization_failed",
+            dilemma_ids=[d.dilemma_id for d in seed_artifact.dilemmas],
             error=str(e),
             error_type=type(e).__name__,
         )
@@ -2747,6 +2748,7 @@ async def serialize_dilemma_relationships(
             "seed_analysis_defaulted",
             section="dilemma_relationships",
             reason="serialization_failed",
+            dilemma_ids=[d.dilemma_id for d in pruned_artifact.dilemmas],
             error=str(e),
             error_type=type(e).__name__,
         )

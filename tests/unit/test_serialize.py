@@ -3105,3 +3105,144 @@ class TestBuildSharedBeatContext:
         )
 
         assert "character::butler" in result
+
+
+# ---------------------------------------------------------------------------
+# Task 13 (#1286): R-7.5 convergence-analysis LLM failure logged at WARNING
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_convergence_analysis_llm_failure_logs_warning_not_silent(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """R-7.5: on LLM failure, defaults may be applied but the failure MUST
+    be logged at WARNING with affected dilemma IDs. Silent default application
+    is forbidden."""
+    import logging
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    from questfoundry.agents.serialize import serialize_convergence_analysis
+    from questfoundry.models.seed import DilemmaDecision, SeedOutput
+
+    seed_artifact = SeedOutput(
+        entities=[],
+        dilemmas=[
+            DilemmaDecision(dilemma_id="mentor_trust", explored=["yes"], unexplored=["no"]),
+            DilemmaDecision(dilemma_id="archive_choice", explored=["open"], unexplored=["close"]),
+        ],
+        paths=[],
+        initial_beats=[],
+    )
+
+    mock_model = MagicMock()
+    mock_graph = MagicMock()
+
+    with (
+        caplog.at_level(logging.WARNING),
+        patch(
+            "questfoundry.agents.serialize.serialize_to_artifact",
+            new=AsyncMock(side_effect=RuntimeError("LLM unavailable")),
+        ),
+        patch(
+            "questfoundry.graph.context.format_dilemma_analysis_context",
+            return_value="ctx",
+        ),
+        patch(
+            "questfoundry.agents.serialize._load_seed_section_prompts",
+            return_value={"dilemma_analyses": "{dilemma_context}"},
+        ),
+    ):
+        analyses, tokens, _calls = await serialize_convergence_analysis(
+            model=mock_model,
+            seed_artifact=seed_artifact,
+            graph=mock_graph,
+        )
+
+    # Must return empty list on failure (soft failure).
+    assert analyses == []
+    assert tokens == 0
+
+    # Must log at WARNING — check for the event name and dilemma IDs.
+    warning_messages = [r.message for r in caplog.records if r.levelno >= logging.WARNING]
+    assert any("seed_analysis_defaulted" in msg for msg in warning_messages), (
+        "Expected 'seed_analysis_defaulted' WARNING event on LLM failure; "
+        f"got: {warning_messages!r}"
+    )
+    # The warning must include the affected dilemma IDs so operators know what was skipped.
+    all_warnings = " ".join(warning_messages)
+    assert "mentor_trust" in all_warnings or "archive_choice" in all_warnings, (
+        f"WARNING must include affected dilemma IDs (R-7.5); got: {warning_messages!r}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Task 14 (#1287): R-8.5 dilemma-ordering LLM failure logged at WARNING
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_dilemma_ordering_llm_failure_logs_warning_not_silent(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """R-8.5: on LLM failure, zero relationships may be produced but the
+    failure MUST be logged at WARNING with the affected dilemma pair count
+    or identifiers. Silent empty-list return is forbidden."""
+    import logging
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    from questfoundry.agents.serialize import serialize_dilemma_relationships
+    from questfoundry.models.seed import DilemmaDecision, SeedOutput
+
+    pruned_artifact = SeedOutput(
+        entities=[],
+        dilemmas=[
+            DilemmaDecision(dilemma_id="mentor_trust", explored=["yes"], unexplored=["no"]),
+            DilemmaDecision(dilemma_id="archive_choice", explored=["open"], unexplored=["close"]),
+        ],
+        paths=[],
+        initial_beats=[],
+    )
+
+    mock_model = MagicMock()
+    mock_graph = MagicMock()
+
+    with (
+        caplog.at_level(logging.WARNING),
+        patch(
+            "questfoundry.agents.serialize.serialize_to_artifact",
+            new=AsyncMock(side_effect=RuntimeError("LLM unavailable")),
+        ),
+        patch(
+            "questfoundry.graph.context.format_interaction_candidates_context",
+            return_value="## Candidate pairs\n- mentor_trust x archive_choice",
+        ),
+        patch(
+            "questfoundry.agents.serialize._load_seed_section_prompts",
+            return_value={"dilemma_relationships": "{candidate_pairs_context}"},
+        ),
+    ):
+        relationships, tokens, _calls = await serialize_dilemma_relationships(
+            model=mock_model,
+            pruned_artifact=pruned_artifact,
+            graph=mock_graph,
+        )
+
+    # Must return empty list on failure (soft failure).
+    assert relationships == []
+    assert tokens == 0
+
+    # Must log at WARNING — check for the event name and dilemma information.
+    warning_messages = [r.message for r in caplog.records if r.levelno >= logging.WARNING]
+    assert any("seed_analysis_defaulted" in msg for msg in warning_messages), (
+        "Expected 'seed_analysis_defaulted' WARNING event on LLM failure; "
+        f"got: {warning_messages!r}"
+    )
+    # The warning must include dilemma pair count or identifiers (R-8.5).
+    all_warnings = " ".join(warning_messages)
+    assert (
+        "mentor_trust" in all_warnings
+        or "archive_choice" in all_warnings
+        or "dilemma_pair" in all_warnings
+        or "dilemma_count" in all_warnings
+    ), f"WARNING must include affected dilemma pair info (R-8.5); got: {warning_messages!r}"
