@@ -22,7 +22,7 @@ reference the section anchors in this document.
 | M-BRAINSTORM-spec | issues-filed | 8 | #1272 | 8 |
 | M-SEED-spec | issues-filed | 14 | #1281 | 14 |
 | M-GROW-spec | issues-filed | 13 | #1296 | 13 |
-| M-POLISH-spec | pending | — | — | — |
+| M-POLISH-spec | drafted | 8 | — | — |
 | M-FILL-spec | pending | — | — | — |
 | M-DRESS-spec | pending | — | — | — |
 | M-SHIP-spec | pending | — | — | — |
@@ -624,6 +624,133 @@ compliance issues — they are a follow-on track.
 
 - R-2.2: Clustering LLM receives full beat context (not bare IDs). Requires inspecting the actual prompt rendering at runtime; code review of the prompt template is partial evidence but not sufficient to verify end-to-end without a live LLM call.
 - R-5.4: Transition-beat drafting LLM receives full context for both bridging beats. Same reasoning as R-2.2 — verifiable only at runtime with a live LLM.
+
+---
+
+## M-POLISH-spec
+
+### Summary
+- Rules checked: 72
+- Compliant: 59 | Drift: 8 | Missing: 3 | Uncheckable: 2
+
+*(Subagent originally included 9 additional "clusters" that it concluded were compliant — these are rolled back into the Compliant count in this summary.)*
+
+### Cluster: POLISH consumes intersection groups (spec violation — GROW-internal only)
+
+**Rules covered:** R-4a.4
+
+**Current state:** Code explicitly reads intersection groups in Phase 4a and creates passages directly from them (`grouping_type="intersection"`, `deterministic.py:213-234`). Code comment says "beats from intersection groups", confirming the design.
+
+**Gap:** Spec R-4a.4 states "POLISH does NOT consume Intersection Group nodes as a constraint on grouping." Current implementation creates passages directly from intersection group `beat_ids`, which violates this. The spec intends intersection groups to be GROW-internal only, with POLISH making fresh grouping assessment from the finalized DAG alone.
+
+**Recommended fix:** Remove the intersection-group iteration in `compute_beat_grouping()`. Fold all beats into collapse or singleton groupings based only on DAG topology and path membership. Intersection groups should not influence passage grouping during POLISH.
+
+**Code refs:** `src/questfoundry/pipeline/stages/polish/deterministic.py:213-234`
+
+**Test refs:** `tests/unit/test_polish*.py` (existing tests may validate intersection grouping as expected — need updating to verify grouping is DAG-driven instead)
+
+### Cluster: Zero-choice condition does not halt with ERROR
+
+**Rules covered:** R-4c.2
+
+**Current state:** Phase 4c computes choice edges from DAG divergences but contains no explicit check for zero-choice condition. If the DAG produces zero choices, this silently passes to Phase 6 without error.
+
+**Gap:** Per spec R-4c.2, zero choice edges indicate a SEED/GROW bug and MUST halt with ERROR identifying the broken upstream stage. The current code logs choices count but does not validate that it is non-zero. This violates the Silent Degradation policy.
+
+**Recommended fix:** Add validation after `plan.choice_specs = compute_choice_edges(...)` that checks `if not plan.choice_specs` and returns a failed PhaseResult with ERROR-level log and message identifying SEED/GROW as the upstream source of the failure.
+
+**Code refs:** `src/questfoundry/pipeline/stages/polish/deterministic.py:146`
+
+**Test refs:** `tests/unit/test_polish*.py` (no test for zero-choice detection)
+
+### Cluster: Residue beat passage-layer mapping decision not recorded in plan
+
+**Rules covered:** R-5.7, R-5.8
+
+**Current state:** Phase 5b (residue content generation) does not record which passage-layer mapping choice (residue-passage-with-variants vs. parallel-passages) was selected. `ResidueSpec` has no field to store this choice. Phase 6 applies residue beats assuming a fixed mapping strategy without reference to a spec-recorded decision.
+
+**Gap:** Spec R-5.8 requires "The chosen mapping is recorded in the plan so Phase 6 can apply it atomically." Current code cannot distinguish between the two mapping options per residue spec, violating atomic plan application independence and the separation between planning (Phase 5) and application (Phase 6).
+
+**Recommended fix:** Add a `mapping_strategy` field to `ResidueSpec` (enum: `"residue_passage_with_variants"` | `"parallel_passages"`). Phase 5b's LLM call should include context on both options and request a choice. Phase 6's `_create_residue_beat_and_passage()` should consult this field and apply the corresponding strategy.
+
+**Code refs:** `src/questfoundry/models/polish.py:181-194`, `src/questfoundry/pipeline/stages/polish/deterministic.py:1176-1241`
+
+**Test refs:** `tests/unit/test_polish_apply.py` (Phase 6 application tests should verify mapping choice is honored)
+
+### Cluster: Character arc metadata stored as separate nodes instead of entity annotations
+
+**Rules covered:** R-3.3
+
+**Current state:** Phase 3 creates `character_arc_metadata` nodes and links them via `has_arc_metadata` edges to entities (`llm_phases.py:286-299`). These are separate graph nodes of type `character_arc_metadata`.
+
+**Gap:** Spec R-3.3 mandates "Arc metadata is stored as an annotation on Entity nodes, not as separate graph nodes." Current implementation violates this by creating separate nodes and linking via edges, which contradicts the ontology's annotation pattern.
+
+**Recommended fix:** Instead of creating separate `character_arc_metadata` nodes, augment the entity node's data dict directly with a `character_arc` field containing `start`, `pivots`, `end_per_path`. Do not create separate nodes or `has_arc_metadata` edges. Update existing tests that expect the edge creation.
+
+**Code refs:** `src/questfoundry/pipeline/stages/polish/llm_phases.py:286-299`
+
+**Test refs:** `tests/unit/test_polish_phases.py:398-436` (`test_has_arc_metadata_edge_created` expects edge creation — must change to verify annotation)
+
+### Cluster: False-branch beat role name does not match spec
+
+**Rules covered:** R-5.10
+
+**Current state:** Sidetrack beats created in Phase 6 `_apply_sidetrack()` set `role: "sidetrack_beat"` (`deterministic.py:1349`). No `belongs_to` edges are added (compliant). Diamond alternative passages do not create beats; they are pure passage alternatives.
+
+**Gap:** Spec R-5.10 requires false-branch beats (both diamonds and sidetracks conceptually) to have `role: "false_branch_beat"`. Current code uses `"sidetrack_beat"` — nomenclature drift.
+
+**Recommended fix:** Rename role from `"sidetrack_beat"` to `"false_branch_beat"`. If diamond alternatives ever create beats, they should also receive this role. Update all code checking `role == "sidetrack_beat"` to `role == "false_branch_beat"`, plus related tests.
+
+**Code refs:** `src/questfoundry/pipeline/stages/polish/deterministic.py:1349`
+
+**Test refs:** `tests/unit/test_polish_apply.py`
+
+### Cluster: Post-convergence soft-dilemma gating incomplete
+
+**Rules covered:** R-4c.3, R-4c.4
+
+**Current state:** Phase 4c computes `requires` for intersection-passage choices by calling `compute_active_flags_at_beat()` on the target beat (`deterministic.py:790-813`). For non-intersection choices, `requires` is set to empty list (`deterministic.py:832`).
+
+**Gap:** Spec R-4c.3 requires ALL post-convergence soft-dilemma choices to have `requires` set to the appropriate state flag. Current code gates only intersection-passage choices, which is a subset. Non-intersection post-convergence soft-dilemma choices may not receive `requires` gating.
+
+**Recommended fix:** Expand the `requires` computation to detect post-convergence soft-dilemma choices (not just intersection-based) and set `requires` accordingly. Track which dilemmas are soft vs hard (from dilemma nodes). Hard-dilemma choices keep empty `requires` (R-4c.4).
+
+**Code refs:** `src/questfoundry/pipeline/stages/polish/deterministic.py:790-814`
+
+**Test refs:** `tests/unit/test_polish_deterministic.py` (choice-computation tests should verify `requires` gating for all post-convergence soft choices)
+
+### Cluster: Choice label distinctness within source passage not validated
+
+**Rules covered:** R-5.2
+
+**Current state:** Phase 5a receives choice contexts and the LLM generates labels. The code deduplicates on `(from_passage, to_passage)` key but does not verify that multiple choices from the same passage have distinct labels.
+
+**Gap:** Spec R-5.2 requires "Labels are distinct within a source passage — two choices from the same passage have clearly different labels." If two choices from the same passage receive the same label, it is silently applied.
+
+**Recommended fix:** After collecting labels in Phase 5a, group by `from_passage` and check that labels within each group are unique (case-insensitive). If duplicates found, either trigger an LLM re-call for that passage's labels or log a warning and flag for human review.
+
+**Code refs:** `src/questfoundry/pipeline/stages/polish/llm_phases.py:341-372`
+
+**Test refs:** `tests/unit/test_polish_llm_phases.py` (should test label-distinctness validation)
+
+### Cluster: Structural beats missing `created_by: POLISH` attribution
+
+**Rules covered:** R-2.5
+
+**Current state:** Phase 2 creates micro-beat nodes with `role: "micro_beat"`, zero `dilemma_impacts`, zero `belongs_to` (correct for R-2.1). The `created_by: POLISH` attribution (R-2.5) is NOT set on the node data dict. Same likely holds for residue beats and false-branch beats created in Phase 5/6.
+
+**Gap:** Spec R-2.5 requires `created_by: POLISH` attribution for stage-attribution tracking (consumed by `created_by` property for pipeline validation tools).
+
+**Recommended fix:** Add `"created_by": "POLISH"` to the beat-node data dict when creating micro-beats in Phase 2, residue beats in Phase 5/6, and false-branch beats in Phase 6. Update affected tests to assert the attribution field is set.
+
+**Code refs:** `src/questfoundry/pipeline/stages/polish/llm_phases.py:1004-1015`, `deterministic.py:1189-1200, 1342-1354`
+
+**Test refs:** `tests/unit/test_polish*.py` (should verify `created_by` field on structural beats)
+
+### Uncheckable rules
+
+- R-1.1: Reordering only within linear (single-predecessor, single-successor) sections. Enforced by code filtering logic; full verification requires LLM-mocked integration test to confirm reorderings never cross boundaries in practice.
+- R-5.4: Label-generation LLM call receives full context. Requires inspection of the rendered prompt at runtime; code review of templates is partial evidence but not sufficient.
 
 ---
 
