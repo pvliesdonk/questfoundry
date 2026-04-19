@@ -306,7 +306,7 @@ class TestDreamMutations:
             "themes": ["fear"],
             "tone": ["tense"],
             "audience": "adult",
-            "pov_style": "second",
+            "pov_style": "second_person",
             "protagonist_defined": True,
         }
 
@@ -314,7 +314,7 @@ class TestDreamMutations:
 
         vision = graph.get_node("vision")
         assert vision is not None
-        assert vision["pov_style"] == "second"
+        assert vision["pov_style"] == "second_person"
         assert vision["protagonist_defined"] is True
 
     def test_pov_fields_default_correctly(self) -> None:

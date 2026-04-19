@@ -60,7 +60,15 @@ class DreamArtifact(BaseModel):
     type: Literal["dream"] = "dream"
     version: int = Field(default=1, description="Schema version number", ge=1)
     # POV hints for downstream stages (optional)
-    pov_style: Literal["first", "second", "third_limited", "third_omniscient"] | None = Field(
+    pov_style: (
+        Literal[
+            "first_person",
+            "second_person",
+            "third_person_limited",
+            "third_person_omniscient",
+        ]
+        | None
+    ) = Field(
         default=None,
         description="Preferred narrative POV (hint for FILL, not mandate)",
     )
