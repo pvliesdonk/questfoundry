@@ -23,7 +23,7 @@ reference the section anchors in this document.
 | M-SEED-spec | issues-filed | 14 | #1281 | 14 |
 | M-GROW-spec | issues-filed | 13 | #1296 | 13 |
 | M-POLISH-spec | issues-filed | 8 | #1310 | 8 |
-| M-FILL-spec | pending | — | — | — |
+| M-FILL-spec | drafted | 5 | — | — |
 | M-DRESS-spec | pending | — | — | — |
 | M-SHIP-spec | pending | — | — | — |
 | M-logging-compliance | pending | — | — | — |
@@ -751,6 +751,94 @@ compliance issues — they are a follow-on track.
 
 - R-1.1: Reordering only within linear (single-predecessor, single-successor) sections. Enforced by code filtering logic; full verification requires LLM-mocked integration test to confirm reorderings never cross boundaries in practice.
 - R-5.4: Label-generation LLM call receives full context. Requires inspection of the rendered prompt at runtime; code review of templates is partial evidence but not sufficient.
+
+---
+
+## M-FILL-spec
+
+### Summary
+- Rules checked: 17
+- Compliant: 11 | Drift: 4 | Missing: 1 | Uncheckable: 1
+
+*(Subagent originally produced 14 clusters; several were self-described as compliant or spec-gap observations. Refined here to 5 actionable findings; compliant clusters rolled back into Compliant count.)*
+
+### Cluster: Voice Document approval gate auto-approves by default
+
+**Rules covered:** R-1.7
+
+**Current state:** `_phase_0_voice()` creates the Voice Document singleton, then proceeds through an `AutoApprovePhaseGate()` by default. No explicit enforcement that prose generation (Phase 2) cannot start without human approval of the voice document.
+
+**Gap:** R-1.7 requires "Human approval of the Voice Document is required before Phase 2." Auto-approve may be acceptable for tests/dev, but production runs risk starting prose generation against an unreviewed voice.
+
+**Recommended fix:** Make the human gate explicit and required by default in production. Document that `AutoApprovePhaseGate` is for test/dev only; CLI should install an interactive gate that requires explicit user confirmation. Alternatively, add a validation in Phase 2's entry that verifies the Voice node has an `approved_at` timestamp set by the gate.
+
+**Code refs:** `src/questfoundry/pipeline/stages/fill.py:817-886` (Phase 0), `src/questfoundry/pipeline/stages/fill.py:299-340` (execute flow with gate)
+
+**Test refs:** `tests/unit/test_fill_stage.py` (no test for voice approval gate enforcement)
+
+### Cluster: Entity-update silent skip on missing entity (R-2.14 + silent degradation + wrong log level)
+
+**Rules covered:** R-2.14, plus Silent Degradation (CLAUDE.md §Anti-Patterns), plus §Logging
+
+**Current state:** When `_resolve_entity_id()` returns None (entity not found in graph), the code logs at WARNING and silently skips the update. No escalation surface reaches the user; the narrative detail is lost silently.
+
+**Gap:** R-2.14 requires FILL to halt and escalate to SEED when a new entity is needed — silent skip is the opposite. The log level (WARNING) is also wrong per CLAUDE.md §Logging: a lost detail suggests either a phantom entity ID from the LLM or a graph inconsistency, both of which are failures, not "degraded state the system handled correctly." This is a compound finding: silent degradation + wrong log level + missing escalation.
+
+**Recommended fix:** Replace the skip-and-warn with an explicit escalation. Options: (a) raise `FillStageError` with a guidance message pointing to SEED, or (b) collect all missing-entity events into an escalation report surfaced to the CLI at stage end. Log at ERROR in either case. Do not silently skip.
+
+**Code refs:** `src/questfoundry/pipeline/stages/fill.py:179-210, 1293-1306, 1729-1739`, `src/questfoundry/models/fill.py:65-75`
+
+**Test refs:** `tests/unit/test_fill_stage.py` (no test for missing-entity handling)
+
+### Cluster: Convergence-passage lookahead asymmetric
+
+**Rules covered:** R-2.6
+
+**Current state:** `format_lookahead_context()` provides lookahead for branch passages approaching convergence (branch sees convergence prose), but does NOT provide the inverse: when writing a convergence passage during the spine pass, the context does not include beat summaries of all connecting branches.
+
+**Gap:** R-2.6 requires "At convergence points, the canonical-arc pass receives beat summaries of all arriving branches as lookahead so the convergence prose works for all arrivals." The asymmetry means canonical convergence prose is written without awareness of incoming branch context — later branches may arrive to prose that doesn't accommodate them.
+
+**Recommended fix:** In `format_lookahead_context()`, add a convergence-detection path: if the current passage is a convergence point in the canonical arc, identify all branch passages that converge here, extract their beat summaries, and include them in the context.
+
+**Code refs:** `src/questfoundry/graph/fill_context.py:877-950`, `src/questfoundry/pipeline/stages/fill.py:1196`
+
+**Test refs:** `tests/unit/test_fill_context.py` (no test for convergence-direction lookahead)
+
+### Cluster: Review-cycle cap escalation not visibly surfaced
+
+**Rules covered:** R-5.2
+
+**Current state:** After the final revision cycle (`final_cycle=True`), passages with unresolved flags are logged at WARNING as `upstream_escalation`. The stage completes with `status=completed` regardless. No ERROR, no stage failure, no structured escalation artifact for the user.
+
+**Gap:** R-5.2 requires "Persistent quality issues escalate upstream — do not ship silently-low-quality prose." Logging at WARNING buries the escalation. Ship-as-is combined with warning-only logging is silent degradation.
+
+**Recommended fix:** After the final revision cycle, if any passages retain unresolved flags: (a) log at ERROR (not WARNING), and (b) surface the escalation in the stage result (e.g., a structured `escalations` field on the FillResult) so the CLI can display it at stage end. Consider failing the stage with a clear message if the unresolved count exceeds a threshold.
+
+**Code refs:** `src/questfoundry/pipeline/stages/fill.py:280-296, 1825-1835, 1753-1765`
+
+**Test refs:** `tests/unit/test_fill_stage.py` (no test for escalation surfacing)
+
+### Cluster: Code has phases and mechanisms not defined in spec
+
+**Rules covered:** Spec-vs-code mismatch (multiple non-spec additions)
+
+**Current state:** Code implements several phases and mechanisms not described in `docs/design/procedures/fill.md`:
+- **Phase 1c: Mechanical Quality Gate** — deterministic prose-quality checks (near-duplicate detection via `rapidfuzz`, opening-trigram collision, vocabulary diversity, sentence-length variance). Runs between Phase 1 (generation) and Phase 2 (review).
+- **Phase 4: Arc-Level Validation** — `_phase_4_arc_validation()` calls `run_arc_validation()` with checks for intensity progression, dramatic-question closure, narrative-function variety, dilemma-prose coverage. Spec's Phase 4 is only "Optional Second Cycle."
+- **Two-step prose generation** (`_fill_prose_call` + `_fill_extract_call`) — default behavior; spec describes structured-output single-call.
+- **Lexical-diversity tracking** (`compute_lexical_diversity` over a rolling window) — not mentioned in spec.
+
+**Gap:** Per CLAUDE.md §Design Doc Authority, the spec supersedes code. Code-has-extras-not-in-spec is drift: either the spec must be updated to describe these mechanisms (preferred given their apparent value), or the mechanisms must be removed. Currently they exist in a grey zone where a reader of the spec has no way to know about them.
+
+**Recommended fix:** The right first step is a spec update (per CLAUDE.md: update spec first, then code). Document Phase 1c and Phase 4 in the spec, explain two-step generation as an allowed implementation choice, and note lexical-diversity tracking as implementation guidance. After the spec update, this cluster's findings resolve to compliant.
+
+**Code refs:** `src/questfoundry/pipeline/stages/fill.py:1349-1507` (Phase 1c), `src/questfoundry/pipeline/stages/fill.py:1864-1909` (Phase 4), `src/questfoundry/pipeline/stages/fill.py:630-716, 1215-1278` (two-step), `src/questfoundry/pipeline/stages/fill.py:1136-1247` (lexical diversity)
+
+**Test refs:** `tests/unit/test_fill_validation.py` (Phase 4 checks tested)
+
+### Uncheckable rules
+
+- R-2.3: Every prose call receives the Voice Document. Code passes `voice_document` into context; full verification requires inspecting the rendered prompt at runtime to confirm the LLM actually reads it.
 
 ---
 
