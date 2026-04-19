@@ -25,7 +25,7 @@ reference the section anchors in this document.
 | M-POLISH-spec | issues-filed | 8 | #1310 | 8 |
 | M-FILL-spec | issues-filed | 5 | #1319 | 5 |
 | M-DRESS-spec | issues-filed | 5 | #1325 | 5 |
-| M-SHIP-spec | pending | — | — | — |
+| M-SHIP-spec | drafted | 7 | — | — |
 | M-logging-compliance | pending | — | — | — |
 | M-silent-degradation | pending | — | — | — |
 | M-contract-chaining | pending | — | — | — |
@@ -925,6 +925,120 @@ compliance issues — they are a follow-on track.
 - R-2.4: Caption diegetic-voice enforcement. Prompt-enforced; verifying caption prose is in-world voice requires LLM-based critique, not programmatic.
 - R-3.4: Codex entries diegetic. Same reasoning as R-2.4.
 - R-3.5: Codex entries self-contained. Requires narrative judgment of whether each entry is readable without prior tiers; not programmatically verifiable.
+
+---
+
+## M-SHIP-spec
+
+### Summary
+- Rules checked: 26
+- Compliant: 15 | Drift: 7 | Missing: 4 | Uncheckable: 0
+
+*(Subagent originally produced 10 clusters; one was a compliant-with-deprecation-note observation and three were test-coverage-only gaps on otherwise-compliant behaviour. The three test-coverage items are bundled below; the deprecation note is dropped as non-actionable.)*
+
+### Cluster: Phase 4 Export Validation not implemented
+
+**Rules covered:** R-4.1, R-4.2, R-4.3, R-4.4
+
+**Current state:** SHIP lacks an explicit Phase 4 implementation for per-format validation. The stage runs exporters but does not parse Twee link reachability, headless-render HTML, schema-validate JSON, or verify PDF page count. No post-export validation gate.
+
+**Gap:** Spec requires Phase 4 to run per-format validation and halt with ERROR on failure (R-4.2). Currently, no validation code exists; broken exports (e.g., Twee referencing a non-existent passage, PDF page-count mismatch) would be delivered silently.
+
+**Recommended fix:** Implement per-exporter validation functions: Twee parser verifying reachability, JSON schema validator, HTML headless-render smoke check, PDF page-count checker. Add a post-export validation phase in `ShipStage.execute()` that raises `ShipStageError` on any failure. Validation logs at ERROR, halting bundle delivery.
+
+**Code refs:** `src/questfoundry/pipeline/stages/ship.py:43-164`
+
+**Test refs:** `tests/unit/test_ship_stage.py` (no validation tests)
+
+### Cluster: Deterministic metadata headers missing on exports
+
+**Rules covered:** R-3.6
+
+**Current state:** Exporters produce output files without metadata headers. Twee/HTML/JSON/PDF are generated without pipeline version, graph snapshot hash, format version, or generation timestamp.
+
+**Gap:** R-3.6 mandates every export include a deterministic header with those four fields. Required for reproducibility audits and provenance tracking.
+
+**Recommended fix:** Add a metadata generation function computing: pipeline version from package metadata; graph snapshot hash (deterministic content hash); format version per exporter; ISO timestamp. Embed this per format — Twee as a metadata passage, HTML as meta tags, JSON as top-level fields, PDF as a metadata section.
+
+**Code refs:** `src/questfoundry/export/twee_exporter.py`, `src/questfoundry/export/json_exporter.py`, `src/questfoundry/export/html_exporter.py`, `src/questfoundry/export/pdf_exporter.py`
+
+**Test refs:** `tests/unit/test_*_exporter.py` (no metadata header tests across all four)
+
+### Cluster: Codeword threshold warning missing
+
+**Rules covered:** R-1.7
+
+**Current state:** Codeword projection correctly filters to soft-dilemma flags (R-1.1 compliant). However, no threshold check triggers WARNING when projected codeword count exceeds the playability threshold of ~10.
+
+**Gap:** R-1.7 requires logging WARNING when codeword count > ~10 (a human-facing signal that the gamebook may become unwieldy). Currently the count is emitted at INFO without a threshold-based warning.
+
+**Recommended fix:** After `_project_state_flags_to_codewords()` returns, count the projected codewords. If count > 10, emit a WARNING log with the count and a note recommending reduction or manual review.
+
+**Code refs:** `src/questfoundry/export/context.py:130-175`
+
+**Test refs:** `tests/unit/test_export_context.py:287-343` (tests projection but not threshold)
+
+### Cluster: HTML voice-document styling not integrated
+
+**Rules covered:** R-3.3
+
+**Current state:** HTML exporter renders passages with fixed CSS. No voice-document data is read or applied to styling.
+
+**Gap:** R-3.3 requires HTML to use "voice-document-informed CSS/typography when available" — the voice document's register, sentence rhythm, and related fields should affect visual typography. Currently absent entirely.
+
+**Recommended fix:** Extend `ExportContext` to include voice-document fields. In the HTML exporter, apply CSS classes or inline styles based on those fields (e.g., `class="register-sparse"` applies tighter spacing). Fall back to default CSS when the voice document is absent.
+
+**Code refs:** `src/questfoundry/export/html_exporter.py`
+
+**Test refs:** `tests/unit/test_html_exporter.py` (no voice-document-aware styling tests)
+
+### Cluster: PDF pagination map not exported
+
+**Rules covered:** R-3.5
+
+**Current state:** PDF exporter uses seeded-random shuffling for passage numbering (R-3.5 reproducibility compliant). But the numbering map — passage-ID → PDF page — is not exported.
+
+**Gap:** Spec states "a page-number map is included in the JSON metadata for debugging." Currently the map is computed internally and discarded; users cannot trace which passage became which page after a bug report.
+
+**Recommended fix:** Compute the passage numbering in a shared utility (not only in the PDF exporter). Include the `passage_id → page_number` map as a field in the JSON export (or alongside the PDF as a sidecar `.map.json` file) when PDF format is targeted. Document the schema in the spec's Phase 3 notes.
+
+**Code refs:** `src/questfoundry/export/pdf_exporter.py:305-344`
+
+**Test refs:** `tests/unit/test_pdf_exporter.py` (no test for map output)
+
+### Cluster: Partial-DRESS presence not warned
+
+**Rules covered:** R-3.8
+
+**Current state:** DRESS-absent case is handled gracefully (empty lists, `None` for art direction). However, if DRESS produced a partial art direction (e.g., style present but palette missing), the exporter silently propagates the partial data without warning.
+
+**Gap:** R-3.8 requires graceful degradation — this case is silent rather than graceful. Partial art direction yields partial illustrations without signaling the gap to the user.
+
+**Recommended fix:** In `_extract_art_direction()`, check for expected fields (style, palette, composition_notes). If any are missing on an otherwise-present art direction, log WARNING identifying the missing fields. Continue execution; this is degradation, not failure.
+
+**Code refs:** `src/questfoundry/export/context.py:299-306`
+
+**Test refs:** `tests/unit/test_export_context.py:241-247` (tests absence but not partial presence)
+
+### Cluster: Cross-cutting test coverage gaps (determinism, format consistency, label verbatim)
+
+**Rules covered:** R-2.4, R-3.1, R-3.2 — all implementation is compliant; tests absent
+
+**Current state:** Three rules are correctly implemented in code but lack regression tests:
+- **R-2.4 determinism** — SHIP does not mutate the graph, but no test verifies that running SHIP twice on the same graph produces byte-identical output.
+- **R-3.1 format divergence** — All four exporters read from a single `ExportContext`, but no cross-format consistency test asserts that passage/choice/codeword/codex counts match across formats.
+- **R-3.2 Twee label verbatim** — `TweeExporter._render_choice()` uses `choice.label` unchanged, but no test asserts an exact-match verbatim preservation (e.g., round-tripping a label with special characters).
+
+**Gap:** Per the audit-design principle that the spec supersedes code AND tests, implementation-compliant-but-untested is still drift — regression tests are required to keep the implementation compliant as the code evolves.
+
+**Recommended fix:** Add three targeted tests:
+1. `tests/unit/test_ship_stage.py` — run SHIP twice on the same graph, assert `hash(output_1) == hash(output_2)` per format.
+2. `tests/integration/test_ship_format_consistency.py` — export the same story to all four formats; assert passage/choice/codeword/codex counts are identical.
+3. `tests/unit/test_twee_exporter.py` — create a choice with `label = "Trust the mentor—say nothing"` (em-dash, quotes); assert the Twee output contains that exact string.
+
+**Code refs:** `src/questfoundry/pipeline/stages/ship.py`, `src/questfoundry/export/twee_exporter.py:192-213`, all exporters.
+
+**Test refs:** (new tests to add — currently absent)
 
 ---
 
