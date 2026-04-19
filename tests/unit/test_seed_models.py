@@ -343,29 +343,10 @@ class TestDilemmaAnalysis:
         da = DilemmaAnalysis(**{**_ANALYSIS_KWARGS, "dilemma_role": policy})
         assert da.dilemma_role == policy
 
-    def test_flavor_migrated_to_soft(self) -> None:
-        """Deprecated 'flavor' value is migrated to 'soft' with cosmetic residue."""
-        import warnings
-
-        kwargs = {**_ANALYSIS_KWARGS, "dilemma_role": "flavor"}
-        del kwargs["residue_weight"]  # Let migration set default
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", DeprecationWarning)
-            da = DilemmaAnalysis(**kwargs)
-        assert da.dilemma_role == "soft"
-        assert da.residue_weight == "cosmetic"
-
-    def test_flavor_preserves_explicit_residue_weight(self) -> None:
-        """Flavor migration does not override explicit residue_weight."""
-        import warnings
-
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", DeprecationWarning)
-            da = DilemmaAnalysis(
-                **{**_ANALYSIS_KWARGS, "dilemma_role": "flavor", "residue_weight": "heavy"}
-            )
-        assert da.dilemma_role == "soft"
-        assert da.residue_weight == "heavy"
+    def test_flavor_role_rejected(self) -> None:
+        """R-7.1: 'flavor' is not a valid dilemma_role — it raises ValidationError."""
+        with pytest.raises(ValidationError, match="dilemma_role"):
+            DilemmaAnalysis(**{**_ANALYSIS_KWARGS, "dilemma_role": "flavor"})
 
     def test_convergence_policy_field_name_migrated(self) -> None:
         """Old 'convergence_policy' field name is migrated to 'dilemma_role'."""
@@ -375,19 +356,13 @@ class TestDilemmaAnalysis:
         da = DilemmaAnalysis.model_validate(data)
         assert da.dilemma_role == "hard"
 
-    def test_convergence_policy_flavor_migrated(self) -> None:
-        """Old 'convergence_policy: flavor' is fully migrated (field + value)."""
-        import warnings
-
+    def test_convergence_policy_flavor_rejected(self) -> None:
+        """R-7.1: 'convergence_policy: flavor' is field-name-migrated then rejected as invalid role."""
         data = {**_ANALYSIS_KWARGS}
         del data["dilemma_role"]
-        del data["residue_weight"]
         data["convergence_policy"] = "flavor"
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", DeprecationWarning)
-            da = DilemmaAnalysis.model_validate(data)
-        assert da.dilemma_role == "soft"
-        assert da.residue_weight == "cosmetic"
+        with pytest.raises(ValidationError, match="dilemma_role"):
+            DilemmaAnalysis.model_validate(data)
 
     def test_convergence_point_accepted(self) -> None:
         da = DilemmaAnalysis(**{**_ANALYSIS_KWARGS, "convergence_point": "The river crossing camp"})

@@ -393,29 +393,19 @@ class DilemmaAnalysis(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _migrate_legacy_fields(cls, data: Any) -> Any:
-        """Migrate deprecated field names and values.
+        """Migrate deprecated field names.
 
         - ``convergence_policy`` → ``dilemma_role`` (field rename)
-        - ``dilemma_role='flavor'`` → ``'soft'`` with ``residue_weight='cosmetic'``
+
+        Note: ``dilemma_role='flavor'`` was previously migrated to ``'soft'``
+        but is now rejected outright (R-7.1). Flavor-level choices are POLISH
+        false-branch concerns, not dilemma roles.
         """
         if not isinstance(data, dict):
             return data
         # Field-name migration: convergence_policy → dilemma_role
         if "convergence_policy" in data and "dilemma_role" not in data:
             data["dilemma_role"] = data.pop("convergence_policy")
-        # Value migration: flavor → soft
-        if data.get("dilemma_role") == "flavor":
-            import warnings
-
-            warnings.warn(
-                "dilemma_role='flavor' is deprecated — use 'soft' with "
-                "residue_weight='cosmetic' instead (see ADR-013/019)",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            data["dilemma_role"] = "soft"
-            if data.get("residue_weight") is None:
-                data["residue_weight"] = "cosmetic"
         return data
 
     ending_salience: EndingSalience = Field(
