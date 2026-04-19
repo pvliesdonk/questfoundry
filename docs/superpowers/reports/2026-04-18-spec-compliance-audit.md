@@ -24,7 +24,7 @@ reference the section anchors in this document.
 | M-GROW-spec | issues-filed | 13 | #1296 | 13 |
 | M-POLISH-spec | issues-filed | 8 | #1310 | 8 |
 | M-FILL-spec | issues-filed | 5 | #1319 | 5 |
-| M-DRESS-spec | pending | — | — | — |
+| M-DRESS-spec | drafted | 5 | — | — |
 | M-SHIP-spec | pending | — | — | — |
 | M-logging-compliance | pending | — | — | — |
 | M-silent-degradation | pending | — | — | — |
@@ -839,6 +839,92 @@ compliance issues — they are a follow-on track.
 ### Uncheckable rules
 
 - R-2.3: Every prose call receives the Voice Document. Code passes `voice_document` into context; full verification requires inspecting the rendered prompt at runtime to confirm the LLM actually reads it.
+
+---
+
+## M-DRESS-spec
+
+### Summary
+- Rules checked: 34
+- Compliant: 24 | Drift: 6 | Missing: 1 | Uncheckable: 3
+
+*(Subagent originally reported slightly different counts and non-matching rule numbers — reclassified to spec's R-1.x through R-5.x numbering. Two overlapping approval-recording clusters merged.)*
+
+### Cluster: EntityVisual per-Entity coverage not validated
+
+**Rules covered:** R-1.3, R-1.4
+
+**Current state:** Phase 1's LLM generates EntityVisual nodes for entities mentioned in the output, but code does not validate that ALL entities with an `appears` edge receive visual profiles. If the LLM omits an entity, no error is raised.
+
+**Gap:** R-1.3 requires "Every Entity with ≥1 `appears` edge has an EntityVisual node." R-1.4 requires non-empty `reference_prompt_fragment`. Neither is validated post-serialization — a DRESS run could complete with some appearing entities lacking a visual profile, leading to inconsistent illustrations downstream.
+
+**Recommended fix:** After Phase 1 serialization, iterate all entities with `appears` edges and confirm each has an EntityVisual with non-empty `reference_prompt_fragment`. On mismatch, log ERROR and either halt or inject a minimal fallback profile with a warning. Alternatively, include all appearing Entity IDs in the serialize prompt's Valid IDs section so the LLM cannot omit them.
+
+**Code refs:** `src/questfoundry/pipeline/stages/dress.py:500-507` (`apply_dress_art_direction`)
+
+**Test refs:** `tests/unit/test_dress_stage.py:214` (`test_phase0_creates_nodes` does not validate all-entities coverage)
+
+### Cluster: Passages pre-filtered out of brief generation
+
+**Rules covered:** R-2.1
+
+**Current state:** Phase 2 pre-filters passages by priority BEFORE brief generation. Passages with insufficient structural score or low LLM adjustment are skipped entirely — no brief is created.
+
+**Gap:** R-2.1 requires "Every Passage has exactly one IllustrationBrief node with a `targets` edge," including low-priority ones (which the spec labels `priority: skip` — still a brief, just not rendered). Pre-filtering means the user at Gate 2 cannot see or reprioritize low-scoring passages because no brief exists to review.
+
+**Recommended fix:** Generate briefs for every passage that has prose. Apply priority filtering as a brief-level attribute (`priority: skip`) rather than by suppressing brief creation. Phase 4 (Gate 2) then displays all briefs sorted by priority; the user can select, edit, or reprioritize.
+
+**Code refs:** `src/questfoundry/pipeline/stages/dress.py:668-706` (priority filtering happens before LLM calls)
+
+**Test refs:** `tests/unit/test_dress_stage.py` (no test for all-passages-get-briefs)
+
+### Cluster: Gate 2 (image budget) not interactive; approval mode not recorded
+
+**Rules covered:** R-4.1, R-4.4
+
+**Current state:** Phase 4 auto-approves all briefs via `AutoApprovePhaseGate` and does not present a budget selection dialog. There is no conditional interactive prompt based on CLI mode. The approval — whether interactive or auto via `--no-interactive` — is not recorded on any artifact.
+
+**Gap:** R-4.1 requires "Human explicitly sets the rendering budget." R-4.4 requires "Gate 2 approval recorded." `--no-interactive` is a legitimate pre-approval pattern, so auto-approving is compliant when that flag is set — but interactive mode should prompt, and either way the approval mode + timestamp should be recorded for traceability.
+
+**Recommended fix:** (1) In interactive mode, present briefs sorted by priority and prompt for budget selection (number of briefs to render or priority cutoff). (2) In `--no-interactive` mode, apply a default (e.g., "all priority 1 + priority 2") and record the default choice. (3) Stamp approval metadata (`approved_at`, `approval_mode: "interactive" | "no_interactive"`, `budget: {…}`) on an artifact visible to Phase 5 and SHIP.
+
+**Code refs:** `src/questfoundry/pipeline/stages/dress.py:932-978` (`_phase_3_review`), `src/questfoundry/pipeline/stages/dress.py:151` (`AutoApprovePhaseGate` hardcoded), `src/questfoundry/cli.py`
+
+**Test refs:** `tests/unit/test_dress_stage.py:379` (`test_selects_all_briefs` mocks gate, does not test interactive mode)
+
+### Cluster: Codex spoiler-ordering validation missing; no retry loop
+
+**Rules covered:** R-3.6
+
+**Current state:** Phase 3 generates codex entries in batches. `validate_dress_codex_entries()` checks that rank=1 exists and that state flag references are valid, but does not enforce spoiler ordering (lower-rank entries must not leak content gated behind higher-rank entries). No retry loop exists for failed batches.
+
+**Gap:** R-3.6 requires "A lower-ranked (earlier-visible) entry must not prematurely disclose content whose reveal is gated behind a higher-ranked tier." LLM validation for spoilers is mentioned in the spec with max 2 retries per entity. Currently: (a) no spoiler check, (b) no retry logic. An entry that leaks rank-2 content at rank 1 would pass silently.
+
+**Recommended fix:** (1) Add spoiler-leak detection: for each entity, cross-check lower-rank content against higher-rank reveals (either deterministic keyword/entity check or a secondary LLM "does rank N leak content from rank N+1" call). (2) Wrap batch processing in a retry loop (max 2 per entity per the spec). (3) On retry exhaustion, fall back to a minimal rank-1-only codex with a WARNING, rather than silently skipping.
+
+**Code refs:** `src/questfoundry/pipeline/stages/dress.py:859-926` (`_phase_2_codex`, no retry loop), `src/questfoundry/graph/dress_mutations.py:236-284` (`validate_dress_codex_entries`, no spoiler checks)
+
+**Test refs:** `tests/unit/test_dress_stage.py` (no spoiler-validation tests, no batch-failure recovery tests)
+
+### Cluster: Codex rank 1 `visible_when: []` invariant not validated
+
+**Rules covered:** R-3.2
+
+**Current state:** The CodexEntry model allows `visible_when` to default to empty list. Code assumes rank 1 is always visible, but no validator enforces that (a) at least one rank-1 entry exists per entity, and (b) that rank-1 entry has `visible_when: []`.
+
+**Gap:** R-3.2 requires "Rank 1 (rank=1) has `visible_when: []` — always visible from the start." Current validation checks that rank-1 exists but not that it is unconditional. A malformed rank-1 entry with a gate would pass.
+
+**Recommended fix:** In `validate_dress_codex_entries()`, for each entity's entries: assert that at least one entry has `rank=1`, and that entry's `visible_when == []`. Reject entries that violate either condition.
+
+**Code refs:** `src/questfoundry/graph/dress_mutations.py:256-262`
+
+**Test refs:** `tests/unit/test_dress_mutations.py` (no test for `visible_when=[]` on rank 1)
+
+### Uncheckable rules
+
+- R-2.4: Caption diegetic-voice enforcement. Prompt-enforced; verifying caption prose is in-world voice requires LLM-based critique, not programmatic.
+- R-3.4: Codex entries diegetic. Same reasoning as R-2.4.
+- R-3.5: Codex entries self-contained. Requires narrative judgment of whether each entry is readable without prior tiers; not programmatically verifiable.
 
 ---
 
