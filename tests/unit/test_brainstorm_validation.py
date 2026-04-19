@@ -233,7 +233,10 @@ def test_R_3_7_dilemma_id_missing_prefix() -> None:
     assert any("prefix" in e.lower() or "dilemma::" in e for e in errors)
 
 
-@pytest.mark.parametrize("forbidden", ["path", "beat", "consequence", "state_flag", "passage"])
+@pytest.mark.parametrize(
+    "forbidden",
+    ["path", "beat", "consequence", "state_flag", "passage", "intersection_group"],
+)
 def test_R_3_8_forbidden_node_type_present(compliant_graph: Graph, forbidden: str) -> None:
     compliant_graph.create_node(f"{forbidden}::x", {"type": forbidden, "raw_id": "x"})
     errors = validate_brainstorm_output(compliant_graph)
