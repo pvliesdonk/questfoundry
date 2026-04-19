@@ -14,9 +14,6 @@ Terminology (v5):
 - answer: Possible resolutions to dilemmas
 """
 
-# pyright: reportInvalidTypeForm=false
-# TODO(#1281): cleanup during M-SEED-spec compliance work; tracked in epic #1281
-
 from __future__ import annotations
 
 import warnings
@@ -855,7 +852,7 @@ def make_constrained_dilemmas_section(
     class ConstrainedDilemmaDecision(DilemmaDecision):
         """DilemmaDecision with enum-constrained IDs."""
 
-        dilemma_id: DilemmaIdEnum = Field(
+        dilemma_id: DilemmaIdEnum = Field(  # pyright: ignore[reportInvalidTypeForm]
             description="Dilemma ID from BRAINSTORM",
         )
         explored: list[AnswerIdEnum] = Field(  # type: ignore[assignment]
