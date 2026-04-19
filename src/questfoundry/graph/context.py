@@ -4,6 +4,9 @@ Provides functions to format graph data as context for LLM serialization,
 giving the model authoritative lists of valid IDs to reference.
 """
 
+# pyright: reportPossiblyUnboundVariable=false, reportInvalidTypeForm=false
+# TODO(#1319): cleanup during M-FILL-spec compliance work (lines-based functions used primarily by FILL context builders); tracked in epic #1319
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any

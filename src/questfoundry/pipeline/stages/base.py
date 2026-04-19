@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Coroutine
 from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
+    from langchain_core.callbacks import BaseCallbackHandler
     from langchain_core.language_models import BaseChatModel
 
 # Type aliases for interactive mode callbacks
@@ -33,7 +36,7 @@ class Stage(Protocol):
 
     name: str
 
-    async def execute(
+    def execute(
         self,
         model: BaseChatModel,
         user_prompt: str,
@@ -45,11 +48,16 @@ class Stage(Protocol):
         on_llm_start: LLMCallbackFn | None = None,
         on_llm_end: LLMCallbackFn | None = None,
         on_phase_progress: PhaseProgressFn | None = None,
+        project_path: Path | None = None,
+        callbacks: list[BaseCallbackHandler] | None = None,
         summarize_model: BaseChatModel | None = None,
         serialize_model: BaseChatModel | None = None,
         summarize_provider_name: str | None = None,
         serialize_provider_name: str | None = None,
-    ) -> tuple[dict[str, Any], int, int]:
+        unload_after_discuss: UnloadHookFn | None = None,
+        unload_after_summarize: UnloadHookFn | None = None,
+        **kwargs: Any,
+    ) -> Coroutine[Any, Any, tuple[dict[str, Any], int, int]]:
         """Execute the stage.
 
         Args:
@@ -61,10 +69,16 @@ class Stage(Protocol):
             on_assistant_message: Callback when assistant responds.
             on_llm_start: Callback when LLM call starts.
             on_llm_end: Callback when LLM call ends.
+            on_phase_progress: Callback for phase progress updates.
+            project_path: Path to project directory for graph access.
+            callbacks: LangChain callback handlers for logging LLM calls.
             summarize_model: Optional LLM model for summarize phase (defaults to model).
             serialize_model: Optional LLM model for serialize phase (defaults to model).
             summarize_provider_name: Provider name for summarize phase.
             serialize_provider_name: Provider name for serialize phase.
+            unload_after_discuss: Async hook to unload model from VRAM after discuss.
+            unload_after_summarize: Async hook to unload model from VRAM after summarize.
+            **kwargs: Additional stage-specific keyword arguments.
 
         Returns:
             Tuple of (artifact_data, llm_calls, tokens_used).

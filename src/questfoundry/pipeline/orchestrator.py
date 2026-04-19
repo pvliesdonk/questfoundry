@@ -1,5 +1,8 @@
 """Pipeline orchestrator for stage execution."""
 
+# pyright: reportReturnType=false, reportAttributeAccessIssue=false, reportGeneralTypeIssues=false
+# TODO(#1354): orchestrator tuple-return widening in provider resolution and langchain .close() API drift; tracked in issue #1354
+
 from __future__ import annotations
 
 import os

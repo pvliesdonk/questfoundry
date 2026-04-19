@@ -7,6 +7,9 @@ GrowStage inherits this mixin so ``execute()`` can delegate to
 ``self._phase_3_intersections()``, etc.
 """
 
+# pyright: reportPossiblyUnboundVariable=false, reportInvalidTypeForm=false
+# TODO(#1296): cleanup during M-GROW-spec compliance work; tracked in epic #1296
+
 from __future__ import annotations
 
 from functools import partial

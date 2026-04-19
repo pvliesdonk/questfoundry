@@ -13,6 +13,9 @@ direct structured output: context from graph state → single LLM call
 → validate → retry (max 3).
 """
 
+# pyright: reportArgumentType=false
+# TODO(#1310): cleanup during M-POLISH-spec compliance work; tracked in epic #1310
+
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable

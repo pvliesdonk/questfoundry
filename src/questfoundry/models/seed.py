@@ -14,6 +14,9 @@ Terminology (v5):
 - answer: Possible resolutions to dilemmas
 """
 
+# pyright: reportInvalidTypeForm=false
+# TODO(#1281): cleanup during M-SEED-spec compliance work; tracked in epic #1281
+
 from __future__ import annotations
 
 import warnings
