@@ -43,6 +43,7 @@ def validate_seed_output(graph: Graph) -> list[str]:
     _check_upstream_contract(graph, errors)
     _check_entities(graph, errors)
     _check_paths_and_consequences(graph, errors)
+    _check_beats(graph, errors)
     return errors
 
 
@@ -137,6 +138,39 @@ def _check_paths_and_consequences(graph: Graph, errors: list[str]) -> None:
         ripples = conseq.get("ripples", [])
         if not ripples:
             errors.append(f"R-3.4: consequence {conseq_id!r} has no ripples")
+
+
+def _check_beats(graph: Graph, errors: list[str]) -> None:
+    """Phase 3 beat structural rules (R-3.13, R-3.14, R-3.15)."""
+    beat_nodes = graph.get_nodes_by_type("beat")
+    belongs_to_edges = graph.get_edges(edge_type="belongs_to")
+    beats_with_path: dict[str, list[str]] = {}
+    for edge in belongs_to_edges:
+        beats_with_path.setdefault(edge["from"], []).append(edge["to"])
+
+    for beat_id, beat in sorted(beat_nodes.items()):
+        role = beat.get("role")
+        is_structural = role in {"setup", "epilogue"}
+
+        # R-3.13 + R-3.15: every beat has non-empty summary + entities.
+        if not beat.get("summary"):
+            errors.append(f"R-3.13: beat {beat_id!r} has empty summary")
+        if not beat.get("entities"):
+            errors.append(f"R-3.13: beat {beat_id!r} has empty entities list")
+
+        # R-3.14: structural beats must have zero belongs_to + zero commits impact.
+        if is_structural:
+            paths = beats_with_path.get(beat_id, [])
+            if paths:
+                errors.append(
+                    f"R-3.14: {role} beat {beat_id!r} must have zero belongs_to "
+                    f"edges, found {len(paths)}"
+                )
+            if any(impact.get("effect") == "commits" for impact in beat.get("dilemma_impacts", [])):
+                errors.append(
+                    f"R-3.14: {role} beat {beat_id!r} must not contain "
+                    f"dilemma_impacts.effect: commits"
+                )
 
 
 def _check_upstream_contract(graph: Graph, errors: list[str]) -> None:
