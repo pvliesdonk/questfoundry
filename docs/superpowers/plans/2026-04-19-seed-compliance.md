@@ -881,11 +881,20 @@ def validate_seed_output(graph: Graph) -> list[str]:
 
 
 def _check_upstream_contract(graph: Graph, errors: list[str]) -> None:
-    """Delegate to BRAINSTORM validator and prefix any violations."""
-    # Inline import avoids a module-load circular dependency.
+    """Delegate to BRAINSTORM validator (with downstream-node types allowed).
+
+    At SEED time, the graph legitimately contains beat/path/consequence nodes
+    that BRAINSTORM's R-3.8 would forbid — skip_forbidden_types=True relaxes
+    that one check while preserving all other upstream invariants.
+    """
+    # Inline import avoids module-load circular dependencies.
     from questfoundry.graph.brainstorm_validation import validate_brainstorm_output
 
-    upstream = validate_brainstorm_output(graph)
+    # NOTE: `skip_forbidden_types=True` bypasses BRAINSTORM R-3.8 (forbidden
+    # node types), which prohibits beat/path/consequence nodes — SEED
+    # legitimately creates those, so BRAINSTORM's forbidden-types check
+    # must not apply at SEED exit.
+    upstream = validate_brainstorm_output(graph, skip_forbidden_types=True)
     for e in upstream:
         errors.append(f"Output-0: BRAINSTORM contract violated post-SEED — {e}")
 ```

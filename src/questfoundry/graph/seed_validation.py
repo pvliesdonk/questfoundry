@@ -45,48 +45,15 @@ def validate_seed_output(graph: Graph) -> list[str]:
 
 
 def _check_upstream_contract(graph: Graph, errors: list[str]) -> None:
-    """Verify BRAINSTORM foundation hasn't been corrupted (minus forbidden-types check).
+    """Delegate to BRAINSTORM validator (with downstream-node types allowed).
 
-    At SEED time, we don't fail on beat nodes (which SEED creates), but we do
-    verify that entities and dilemmas remain valid per BRAINSTORM's contract.
+    At SEED time, the graph legitimately contains beat/path/consequence nodes
+    that BRAINSTORM's R-3.8 would forbid — skip_forbidden_types=True relaxes
+    that one check while preserving all other upstream invariants.
     """
-    # Inline imports avoid module-load circular dependencies.
-    from questfoundry.graph.brainstorm_validation import (
-        _check_dilemmas,
-        _check_entities,
-    )
-    from questfoundry.graph.dream_validation import validate_vision_node
+    # Inline import avoids module-load circular dependencies.
+    from questfoundry.graph.brainstorm_validation import validate_brainstorm_output
 
-    # Check DREAM foundation first.
-    vision_errors = validate_vision_node(graph)
-    for e in vision_errors:
-        errors.append(f"Output-0: DREAM contract violated post-SEED — {e}")
-
-    # Check entity and dilemma structure (but skip R-3.8 forbidden types).
-    entity_nodes = graph.get_nodes_by_type("entity")
-    dilemma_nodes = graph.get_nodes_by_type("dilemma")
-
-    # R-1.1: minimum floors — at least one entity and one dilemma
-    if not entity_nodes:
-        errors.append(
-            "Output-0: BRAINSTORM contract violated post-SEED — R-1.1: BRAINSTORM must produce at least one entity"
-        )
-    if not dilemma_nodes:
-        errors.append(
-            "Output-0: BRAINSTORM contract violated post-SEED — R-1.1: BRAINSTORM must produce at least one dilemma"
-        )
-
-    if entity_nodes:
-        entity_errors: list[str] = []
-        _check_entities(entity_nodes, entity_errors)
-        for e in entity_errors:
-            errors.append(f"Output-0: BRAINSTORM contract violated post-SEED — {e}")
-
-    # Gather edges for dilemma checks.
-    has_answer_edges = graph.get_edges(edge_type="has_answer")
-    anchored_to_edges = graph.get_edges(edge_type="anchored_to")
-
-    dilemma_errors: list[str] = []
-    _check_dilemmas(dilemma_nodes, has_answer_edges, anchored_to_edges, graph, dilemma_errors)
-    for e in dilemma_errors:
+    upstream = validate_brainstorm_output(graph, skip_forbidden_types=True)
+    for e in upstream:
         errors.append(f"Output-0: BRAINSTORM contract violated post-SEED — {e}")
