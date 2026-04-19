@@ -726,6 +726,20 @@ def validate_brainstorm_mutations(output: dict[str, Any]) -> list[BrainstormVali
                 )
             )
 
+    # R-2.4: ≥2 distinct location entities
+    location_count = sum(1 for e in entities if e.get("entity_category") == "location")
+    if location_count < 2:
+        errors.append(
+            BrainstormValidationError(
+                field_path="entities",
+                issue=(
+                    f"R-2.4: BRAINSTORM must produce ≥2 location entities, found {location_count}"
+                ),
+                available=[],
+                provided=f"{location_count} location entities",
+            )
+        )
+
     return errors
 
 
