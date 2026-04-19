@@ -44,6 +44,7 @@ def validate_seed_output(graph: Graph) -> list[str]:
     _check_entities(graph, errors)
     _check_paths_and_consequences(graph, errors)
     _check_beats(graph, errors)
+    _check_belongs_to_yshape(graph, errors)
     return errors
 
 
@@ -171,6 +172,98 @@ def _check_beats(graph: Graph, errors: list[str]) -> None:
                     f"R-3.14: {role} beat {beat_id!r} must not contain "
                     f"dilemma_impacts.effect: commits"
                 )
+
+
+def _check_belongs_to_yshape(graph: Graph, errors: list[str]) -> None:
+    """Y-shape guard rails and commit/post-commit counts (R-3.6 to R-3.12)."""
+    beat_nodes = graph.get_nodes_by_type("beat")
+    path_nodes = graph.get_nodes_by_type("path")
+    answer_nodes = graph.get_nodes_by_type("answer")
+    dilemma_nodes = graph.get_nodes_by_type("dilemma")
+
+    belongs_to_edges = graph.get_edges(edge_type="belongs_to")
+    beat_to_paths: dict[str, list[str]] = {}
+    for edge in belongs_to_edges:
+        beat_to_paths.setdefault(edge["from"], []).append(edge["to"])
+
+    path_dilemma: dict[str, str] = {
+        path_id: path.get("dilemma_id", "") for path_id, path in path_nodes.items()
+    }
+
+    commit_beats_per_path: dict[str, list[str]] = {}
+    post_beats_per_path: dict[str, list[str]] = {}
+    pre_commit_by_dilemma: dict[str, list[str]] = {}
+
+    for beat_id in sorted(beat_nodes.keys()):
+        beat = beat_nodes[beat_id]
+        role = beat.get("role")
+        if role in {"setup", "epilogue"}:
+            continue
+
+        paths = beat_to_paths.get(beat_id, [])
+        impacts = beat.get("dilemma_impacts", [])
+        has_commits_impact = any(imp.get("effect") == "commits" for imp in impacts)
+
+        dilemmas_of_this_beat = {path_dilemma.get(p, "") for p in paths if p in path_nodes}
+        dilemmas_of_this_beat.discard("")
+        if len(dilemmas_of_this_beat) > 1:
+            errors.append(
+                f"R-3.9: beat {beat_id!r} has cross-dilemma belongs_to — "
+                f"references paths of dilemmas {sorted(dilemmas_of_this_beat)}"
+            )
+
+        if has_commits_impact:
+            if len(paths) != 1:
+                errors.append(
+                    f"R-3.7: commit beat {beat_id!r} must have exactly one "
+                    f"belongs_to edge, found {len(paths)}"
+                )
+            for p in paths:
+                commit_beats_per_path.setdefault(p, []).append(beat_id)
+        elif len(paths) >= 2:
+            # Pre-commit: R-3.6
+            if len(dilemmas_of_this_beat) != 1:
+                errors.append(
+                    f"R-3.6: pre-commit beat {beat_id!r} belongs_to edges must "
+                    f"reference paths of the same dilemma, got "
+                    f"{sorted(dilemmas_of_this_beat)}"
+                )
+            for d in dilemmas_of_this_beat:
+                pre_commit_by_dilemma.setdefault(d, []).append(beat_id)
+        elif len(paths) == 1:
+            post_beats_per_path.setdefault(paths[0], []).append(beat_id)
+
+    # R-3.11: exactly one commit beat per path.
+    for path_id in sorted(path_nodes.keys()):
+        commits = commit_beats_per_path.get(path_id, [])
+        if len(commits) != 1:
+            errors.append(
+                f"R-3.11: path {path_id!r} must have exactly one commit beat, "
+                f"found {len(commits)}: {sorted(commits)}"
+            )
+
+    # R-3.12: 2-4 post-commit beats per path.
+    for path_id in sorted(path_nodes.keys()):
+        post = post_beats_per_path.get(path_id, [])
+        if len(post) < 2 or len(post) > 4:
+            errors.append(
+                f"R-3.12: path {path_id!r} must have 2-4 post-commit beats, found {len(post)}"
+            )
+
+    # R-3.10: every dilemma with 2 explored answers has ≥1 pre-commit beat.
+    has_answer_edges = graph.get_edges(edge_type="has_answer")
+    for dilemma_id in sorted(dilemma_nodes.keys()):
+        explored_answers = [
+            edge["to"]
+            for edge in has_answer_edges
+            if edge["from"] == dilemma_id and answer_nodes.get(edge["to"], {}).get("explored")
+        ]
+        if len(explored_answers) >= 2 and not pre_commit_by_dilemma.get(dilemma_id):
+            errors.append(
+                f"R-3.10: dilemma {dilemma_id!r} has {len(explored_answers)} "
+                f"explored answers but no pre-commit beats (beats with multiple "
+                f"belongs_to edges) -- Y-shape fork missing"
+            )
 
 
 def _check_upstream_contract(graph: Graph, errors: list[str]) -> None:
