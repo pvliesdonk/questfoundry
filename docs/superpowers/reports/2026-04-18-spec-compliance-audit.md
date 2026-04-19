@@ -18,7 +18,7 @@ reference the section anchors in this document.
 
 | Milestone | Status | Clusters | Epic | Filed |
 |---|---|---|---|---|
-| M-DREAM-spec | drafted | 3 | — | — |
+| M-DREAM-spec | issues-filed | 3 | #1268 | 3 |
 | M-BRAINSTORM-spec | pending | — | — | — |
 | M-SEED-spec | pending | — | — | — |
 | M-GROW-spec | pending | — | — | — |
