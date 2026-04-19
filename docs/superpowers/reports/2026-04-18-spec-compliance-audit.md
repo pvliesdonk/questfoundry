@@ -35,10 +35,14 @@ reference the section anchors in this document.
 ## Runtime-verification deferred list
 
 Rules that can only be verified against a live LLM run (prompt quality,
-diegetic voice, etc.). These accumulate here and are NOT filed as
-compliance issues — they are a follow-on track.
+diegetic voice, etc.) are NOT filed as compliance issues — they form a
+follow-on track. Each stage section's **Summary** line reports the
+uncheckable count for that stage; the individual rules are marked within
+each stage section as the audit passes over them.
 
-(none yet)
+**Uncheckable counts by stage:** DREAM 5 · BRAINSTORM 1 · SEED 1 · GROW 2 · POLISH 2 · FILL 1 · DRESS 3 · SHIP 0 — **15 total**.
+
+These rules remain open and are the input to a future "runtime-verification track" that will exercise them end-to-end with real LLM output.
 
 ---
 
@@ -1292,6 +1296,75 @@ POLISH is already compliant (keep as reference pattern).
 **Code refs:** `src/questfoundry/pipeline/stages/dream.py`, `brainstorm.py`, `seed.py`, `grow/stage.py`, `fill.py`, `dress.py` — each needs an exit hook alongside where `set_last_stage(...)` is called.
 
 **Test refs:** `tests/integration/test_stage_chaining.py` (same file as cluster 1) — fixtures that mutate a stage's output to violate the contract and assert the stage raises at exit, not silently saves.
+
+---
+
+## Final Summary
+
+**Audit completed:** 2026-04-19
+**Spec reference:** `docs/superpowers/specs/2026-04-18-spec-compliance-audit-design.md`
+**Branch:** `docs/spec-audit-design`
+
+### Findings by milestone
+
+| Milestone | Rules checked | Compliant | Drift | Missing | Uncheckable | Clusters | Epic | Issues filed |
+|---|---|---|---|---|---|---|---|---|
+| M-DREAM-spec | 13 | 4 | 2 | 2 | 5 | 3 | #1268 | #1269–#1271 |
+| M-BRAINSTORM-spec | 19 | 8 | 7 | 3 | 1 | 8 | #1272 | #1273–#1280 |
+| M-SEED-spec | 66 | 45 | 13 | 7 | 1 | 14 | #1281 | #1282–#1295 |
+| M-GROW-spec | 51 | 33 | 11 | 5 | 2 | 13 | #1296 | #1297–#1309 |
+| M-POLISH-spec | 72 | 59 | 8 | 3 | 2 | 8 | #1310 | #1311–#1318 |
+| M-FILL-spec | 17 | 11 | 4 | 1 | 1 | 5 | #1319 | #1320–#1324 |
+| M-DRESS-spec | 34 | 24 | 6 | 1 | 3 | 5 | #1325 | #1326–#1330 |
+| M-SHIP-spec | 26 | 15 | 7 | 4 | 0 | 7 | #1331 | #1332–#1338 |
+| M-logging-compliance | — | — | — | — | — | 3 | #1339 | #1340–#1342 |
+| M-silent-degradation | — | — | — | — | — | 3 (2 new + 1 xref) | #1343 | #1344–#1345 |
+| M-contract-chaining | — | — | — | — | — | 2 | #1346 | #1347–#1348 |
+| **Totals (stages)** | **298** | **199** | **58** | **26** | **15** | **63** | — | — |
+| **Totals (cross-cutting)** | — | — | — | — | — | **8** | — | — |
+| **Grand total** | 298 | 199 | 58 | 26 | 15 | **71** | 11 epics | 70 cluster issues |
+
+### Priority hotspots
+
+Ranked by structural impact, not just count:
+
+1. **M-SEED-spec (14 clusters)** — Largest audit surface. Hits the authoritative Y-shape + dilemma/path invariants that every downstream stage depends on. Expected drift because SEED was written by an LLM with the wrong mental model; audit confirmed significant divergence.
+2. **M-GROW-spec (13 clusters)** — Beat DAG + intersection formation + arc enumeration. Contains multiple silent-degradation findings (all-intersections-rejected, R-2.7 intersection edges silently dropped) that are the canonical examples CLAUDE.md §Anti-Patterns calls out.
+3. **M-POLISH-spec (8 clusters)** — Passage layer + choice edges. Zero-choice silent-pass is a structural-integrity bug that produces an unplayable story.
+4. **M-contract-chaining (2 clusters, 7 seams)** — 6 of 7 seams lack explicit contract validation. Fixing these surfaces upstream bugs at the right place and unlocks confidence in the other milestones.
+5. **M-silent-degradation (2 new + 1 xref)** — DAG cycle silent fallbacks and FILL LLM-failure silent continuations. Cross-references the per-stage silent-degradation findings to give a single pipeline-wide view.
+6. **M-SHIP-spec (7 clusters)** — Highest non-compliant ratio (11/26 = 42%). Per-format validation is entirely absent; broken exports currently ship.
+7. **M-BRAINSTORM-spec (8 clusters)** — Dilemma anchoring and the entity-with-disposition model.
+8. **M-FILL-spec (5)**, **M-DRESS-spec (5)**, **M-DREAM-spec (3)**, **M-logging-compliance (3)** — Smaller surfaces; can be scheduled after the structural milestones above.
+
+### Epic index
+
+- #1268 — [spec-audit] DREAM: epic
+- #1272 — [spec-audit] BRAINSTORM: epic
+- #1281 — [spec-audit] SEED: epic
+- #1296 — [spec-audit] GROW: epic
+- #1310 — [spec-audit] POLISH: epic
+- #1319 — [spec-audit] FILL: epic
+- #1325 — [spec-audit] DRESS: epic
+- #1331 — [spec-audit] SHIP: epic
+- #1339 — [spec-audit] logging-compliance: epic
+- #1343 — [spec-audit] silent-degradation: epic
+- #1346 — [spec-audit] contract-chaining: epic
+
+### What this audit did NOT do
+
+Per the audit design spec, the following are explicitly out of scope for this report:
+- No code or test changes. The report records gaps; fixes happen later.
+- No spec changes. A gap flagged `spec-gap` would become a separate task before any code work; this audit surfaced none.
+- No runtime / live-LLM verification. The 15 uncheckable rules form a separate follow-on track.
+- No TDD implementation plans for fixes. Each milestone gets its own implementation plan when it is picked up.
+
+### Next steps (not part of this audit)
+
+1. Schedule milestones in priority order (suggested above).
+2. Per milestone, write a TDD implementation plan in `docs/superpowers/plans/` and execute.
+3. Update CLAUDE.md with any new anti-patterns surfaced by the implementation.
+4. After all 11 milestones complete, schedule the runtime-verification track.
 
 ---
 
