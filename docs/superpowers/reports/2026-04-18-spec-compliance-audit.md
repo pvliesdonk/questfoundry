@@ -20,7 +20,7 @@ reference the section anchors in this document.
 |---|---|---|---|---|
 | M-DREAM-spec | issues-filed | 3 | #1268 | 3 |
 | M-BRAINSTORM-spec | issues-filed | 8 | #1272 | 8 |
-| M-SEED-spec | drafted | 14 | — | — |
+| M-SEED-spec | issues-filed | 14 | #1281 | 14 |
 | M-GROW-spec | pending | — | — | — |
 | M-POLISH-spec | pending | — | — | — |
 | M-FILL-spec | pending | — | — | — |
