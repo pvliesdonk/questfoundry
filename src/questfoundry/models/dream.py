@@ -76,3 +76,10 @@ class DreamArtifact(BaseModel):
         default=False,
         description="True if the story has a defined protagonist character",
     )
+    human_approved: bool = Field(
+        default=False,
+        description=(
+            "True when the human has explicitly approved the Vision "
+            "(--no-interactive implies pre-approval at invocation time)."
+        ),
+    )

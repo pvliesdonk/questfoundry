@@ -115,7 +115,14 @@ class TestApplyMutations:
     def test_routes_to_dream(self) -> None:
         """Routes dream stage to apply_dream_mutations."""
         graph = Graph.empty()
-        output = {"genre": "noir", "themes": ["trust"], "tone": ["dark"]}
+        output = {
+            "genre": "noir",
+            "themes": ["trust"],
+            "tone": ["dark"],
+            "audience": "adult",
+            "scope": {"story_size": "short"},
+            "human_approved": True,
+        }
 
         apply_mutations(graph, "dream", output)
 
@@ -236,6 +243,8 @@ class TestDreamMutations:
             "themes": ["trust", "betrayal"],
             "audience": "adult",
             "style_notes": "First person narration",
+            "scope": {"story_size": "short"},
+            "human_approved": True,
         }
 
         apply_dream_mutations(graph, output)
@@ -255,7 +264,17 @@ class TestDreamMutations:
         graph = Graph.empty()
         graph.create_node("vision", {"type": "vision", "genre": "fantasy"})
 
-        apply_dream_mutations(graph, {"genre": "noir", "themes": [], "tone": []})
+        apply_dream_mutations(
+            graph,
+            {
+                "genre": "noir",
+                "themes": ["trust"],
+                "tone": ["dark"],
+                "audience": "adult",
+                "scope": {"story_size": "short"},
+                "human_approved": True,
+            },
+        )
 
         assert graph.get_node("vision")["genre"] == "noir"
 
@@ -267,7 +286,9 @@ class TestDreamMutations:
             "themes": ["intrigue"],
             "tone": ["suspenseful"],
             "audience": "adult",
-            # No subgenre, style_notes, scope, content_notes
+            "scope": {"story_size": "medium"},
+            # No subgenre, style_notes, content_notes
+            "human_approved": True,
         }
 
         apply_dream_mutations(graph, output)
@@ -282,21 +303,18 @@ class TestDreamMutations:
         graph = Graph.empty()
         output = {
             "genre": "fantasy",
-            "themes": [],
-            "tone": [],
+            "themes": ["adventure"],
+            "tone": ["light"],
             "audience": "ya",
-            "scope": {
-                "estimated_passages": 50,
-                "target_word_count": 25000,
-                "branching_depth": "moderate",
-            },
+            "scope": {"story_size": "medium"},
+            "human_approved": True,
         }
 
         apply_dream_mutations(graph, output)
 
         vision = graph.get_node("vision")
         assert vision is not None
-        assert vision["scope"]["estimated_passages"] == 50
+        assert vision["scope"]["story_size"] == "medium"
 
     def test_includes_pov_fields_if_present(self) -> None:
         """Includes POV hint fields if present."""
@@ -306,8 +324,10 @@ class TestDreamMutations:
             "themes": ["fear"],
             "tone": ["tense"],
             "audience": "adult",
+            "scope": {"story_size": "short"},
             "pov_style": "second_person",
             "protagonist_defined": True,
+            "human_approved": True,
         }
 
         apply_dream_mutations(graph, output)
@@ -325,7 +345,9 @@ class TestDreamMutations:
             "themes": ["adventure"],
             "tone": ["light"],
             "audience": "ya",
+            "scope": {"story_size": "medium"},
             # No pov_style or protagonist_defined
+            "human_approved": True,
         }
 
         apply_dream_mutations(graph, output)
@@ -2687,6 +2709,8 @@ class TestMutationIntegration:
             "tone": ["atmospheric", "morally ambiguous"],
             "themes": ["forbidden knowledge", "trust"],
             "audience": "adult",
+            "scope": {"story_size": "short"},
+            "human_approved": True,
         }
         apply_mutations(graph, "dream", dream_output)
         graph.set_last_stage("dream")
