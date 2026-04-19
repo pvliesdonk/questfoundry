@@ -91,7 +91,9 @@ def test_R_1_9_invalid_pov_style() -> None:
 
 def test_R_1_9_pov_style_absent_is_ok(compliant_graph: Graph) -> None:
     # pov_style is optional per R-1.9.
-    data = dict(compliant_graph.get_node("vision"))
+    node = compliant_graph.get_node("vision")
+    assert node is not None
+    data = dict(node)
     data.pop("pov_style", None)
     graph = Graph()
     graph.create_node("vision", data)
