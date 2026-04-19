@@ -46,6 +46,7 @@ def validate_seed_output(graph: Graph) -> list[str]:
     _check_beats(graph, errors)
     _check_belongs_to_yshape(graph, errors)
     _check_convergence_and_ordering(graph, errors)
+    _check_arc_count_and_approval(graph, errors)
     return errors
 
 
@@ -315,6 +316,52 @@ def _check_convergence_and_ordering(graph: Graph, errors: list[str]) -> None:
             f"R-8.4: shared_entity edges are forbidden (derived from anchored_to, "
             f"not declared); found {len(shared_entity_edges)}"
         )
+
+
+def _check_arc_count_and_approval(graph: Graph, errors: list[str]) -> None:
+    """Phase 5 arc-count guardrail (R-5.1), Phase 6 approval (R-6.4),
+    and Stage Output Contract item 16 (forbidden node types)."""
+    dilemma_nodes = graph.get_nodes_by_type("dilemma")
+    answer_nodes = graph.get_nodes_by_type("answer")
+
+    # R-5.1: arc count = 2 ^ (# dilemmas with both answers explored).
+    fully_explored_dilemmas = 0
+    has_answer_edges = graph.get_edges(edge_type="has_answer")
+    answers_by_dilemma: dict[str, list[str]] = {}
+    for edge in has_answer_edges:
+        answers_by_dilemma.setdefault(edge["from"], []).append(edge["to"])
+    for dilemma_id in dilemma_nodes:
+        ans_ids = answers_by_dilemma.get(dilemma_id, [])
+        explored = [a_id for a_id in ans_ids if answer_nodes.get(a_id, {}).get("explored")]
+        if len(explored) >= 2:
+            fully_explored_dilemmas += 1
+    arc_count = 2**fully_explored_dilemmas if fully_explored_dilemmas else 1
+    if arc_count > _MAX_ARC_COUNT:
+        errors.append(
+            f"R-5.1: arc count {arc_count} exceeds maximum {_MAX_ARC_COUNT} "
+            f"({fully_explored_dilemmas} fully explored dilemmas)"
+        )
+
+    # R-6.4: path freeze human approval recorded.
+    freeze = graph.get_node("seed_freeze")
+    if freeze is None:
+        errors.append(
+            "R-6.4: SEED Path Freeze approval is not recorded "
+            "(expected seed_freeze node with human_approved: True)"
+        )
+    elif not freeze.get("human_approved"):
+        errors.append(
+            "R-6.4: SEED Path Freeze is not approved (seed_freeze.human_approved is not True)"
+        )
+
+    # Output-16: no forbidden node types.
+    for node_type in sorted(_FORBIDDEN_NODE_TYPES):
+        forbidden = graph.get_nodes_by_type(node_type)
+        if forbidden:
+            errors.append(
+                f"Output-16: SEED must not create {node_type!r} nodes; "
+                f"found {len(forbidden)}: {sorted(forbidden.keys())[:3]}"
+            )
 
 
 def _check_upstream_contract(graph: Graph, errors: list[str]) -> None:
