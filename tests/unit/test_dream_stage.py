@@ -9,6 +9,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 
 from questfoundry.artifacts import DreamArtifact, Scope
 from questfoundry.pipeline.stages import DreamStage, get_stage
+from questfoundry.pipeline.stages.dream import DreamStageError
 
 # --- Stage Registration Tests ---
 
@@ -56,7 +57,7 @@ async def test_execute_calls_all_three_phases() -> None:
             tone=["epic"],
             audience="adult",
             themes=["heroism"],
-            scope=Scope(story_size="standard"),
+            scope=Scope(story_size="medium"),
         )
         mock_serialize.return_value = (mock_artifact, 200)
 
@@ -103,7 +104,7 @@ async def test_execute_emits_phase_progress() -> None:
             tone=["epic"],
             audience="adult",
             themes=["heroism"],
-            scope=Scope(story_size="standard"),
+            scope=Scope(story_size="medium"),
         )
         mock_serialize.return_value = (mock_artifact, 200)
 
@@ -141,7 +142,7 @@ async def test_execute_passes_model_to_all_phases() -> None:
             tone=["dark"],
             audience="adult",
             themes=["justice"],
-            scope=Scope(story_size="standard"),
+            scope=Scope(story_size="medium"),
         )
         mock_serialize.return_value = (mock_artifact, 100)
 
@@ -172,7 +173,7 @@ async def test_execute_passes_user_prompt_to_discuss() -> None:
             tone=["epic"],
             audience="adult",
             themes=["exploration"],
-            scope=Scope(story_size="standard"),
+            scope=Scope(story_size="medium"),
         )
         mock_serialize.return_value = (mock_artifact, 100)
 
@@ -205,7 +206,7 @@ async def test_execute_passes_messages_to_summarize() -> None:
             tone=["epic"],
             audience="adult",
             themes=["magic"],
-            scope=Scope(story_size="standard"),
+            scope=Scope(story_size="medium"),
         )
         mock_serialize.return_value = (mock_artifact, 100)
 
@@ -233,7 +234,7 @@ async def test_execute_passes_brief_to_serialize() -> None:
             tone=["epic"],
             audience="adult",
             themes=["adventure"],
-            scope=Scope(story_size="standard"),
+            scope=Scope(story_size="medium"),
         )
         mock_serialize.return_value = (mock_artifact, 100)
 
@@ -261,7 +262,7 @@ async def test_execute_passes_provider_name_to_serialize() -> None:
             tone=["dark"],
             audience="adult",
             themes=["fear"],
-            scope=Scope(story_size="standard"),
+            scope=Scope(story_size="medium"),
         )
         mock_serialize.return_value = (mock_artifact, 100)
 
@@ -293,7 +294,7 @@ async def test_execute_passes_dream_artifact_schema() -> None:
             tone=["sweet"],
             audience="adult",
             themes=["love"],
-            scope=Scope(story_size="standard"),
+            scope=Scope(story_size="medium"),
         )
         mock_serialize.return_value = (mock_artifact, 100)
 
@@ -322,7 +323,7 @@ async def test_execute_returns_artifact_as_dict() -> None:
             tone=["tense", "dark"],
             audience="adult",
             themes=["paranoia"],
-            scope=Scope(story_size="standard"),
+            scope=Scope(story_size="medium"),
         )
         mock_serialize.return_value = (mock_artifact, 100)
 
@@ -355,7 +356,7 @@ async def test_execute_uses_research_tools() -> None:
             tone=["suspenseful"],
             audience="adult",
             themes=["secrets"],
-            scope=Scope(story_size="standard"),
+            scope=Scope(story_size="medium"),
         )
         mock_serialize.return_value = (mock_artifact, 100)
 
@@ -363,3 +364,136 @@ async def test_execute_uses_research_tools() -> None:
 
         mock_get_tools.assert_called_once()
         assert mock_discuss.call_args.kwargs["tools"] == mock_tools
+
+
+# --- Human Approval Tests (R-1.12) ---
+
+
+def _make_mock_artifact(genre: str = "fantasy") -> DreamArtifact:
+    return DreamArtifact(
+        genre=genre,
+        tone=["epic"],
+        audience="adult",
+        themes=["heroism"],
+        scope=Scope(story_size="medium"),
+    )
+
+
+def _mock_phases(
+    mock_discuss: MagicMock,
+    mock_summarize: MagicMock,
+    mock_serialize: MagicMock,
+    mock_tools: MagicMock,
+    artifact: DreamArtifact,
+) -> None:
+    mock_tools.return_value = []
+    mock_discuss.return_value = ([], 1, 100)
+    mock_summarize.return_value = ("Brief", 50)
+    mock_serialize.return_value = (artifact, 100)
+
+
+@pytest.mark.asyncio
+async def test_execute_non_interactive_sets_human_approved() -> None:
+    """Non-interactive execution sets human_approved=True (R-1.12 pre-approval)."""
+    stage = DreamStage()
+
+    with (
+        patch("questfoundry.pipeline.stages.dream.run_discuss_phase") as mock_discuss,
+        patch("questfoundry.pipeline.stages.dream.summarize_discussion") as mock_summarize,
+        patch("questfoundry.pipeline.stages.dream.serialize_to_artifact") as mock_serialize,
+        patch("questfoundry.pipeline.stages.dream.get_all_research_tools") as mock_get_tools,
+    ):
+        _mock_phases(
+            mock_discuss, mock_summarize, mock_serialize, mock_get_tools, _make_mock_artifact()
+        )
+
+        artifact, _, _ = await stage.execute(
+            model=MagicMock(),
+            user_prompt="An epic quest",
+            interactive=False,
+        )
+
+    assert artifact["human_approved"] is True
+
+
+@pytest.mark.asyncio
+async def test_execute_interactive_approved_sets_human_approved() -> None:
+    """Interactive execution with 'y' response sets human_approved=True."""
+    stage = DreamStage()
+
+    async def user_input_fn_yes() -> str:
+        return "y"
+
+    with (
+        patch("questfoundry.pipeline.stages.dream.run_discuss_phase") as mock_discuss,
+        patch("questfoundry.pipeline.stages.dream.summarize_discussion") as mock_summarize,
+        patch("questfoundry.pipeline.stages.dream.serialize_to_artifact") as mock_serialize,
+        patch("questfoundry.pipeline.stages.dream.get_all_research_tools") as mock_get_tools,
+        patch("questfoundry.pipeline.stages.dream.get_interactive_tools", return_value=[]),
+    ):
+        _mock_phases(
+            mock_discuss, mock_summarize, mock_serialize, mock_get_tools, _make_mock_artifact()
+        )
+
+        artifact, _, _ = await stage.execute(
+            model=MagicMock(),
+            user_prompt="An epic quest",
+            interactive=True,
+            user_input_fn=user_input_fn_yes,
+        )
+
+    assert artifact["human_approved"] is True
+
+
+@pytest.mark.asyncio
+async def test_execute_interactive_rejected_raises_error() -> None:
+    """Interactive execution with 'n' response raises DreamStageError."""
+    stage = DreamStage()
+
+    async def user_input_fn_no() -> str:
+        return "n"
+
+    with (
+        patch("questfoundry.pipeline.stages.dream.run_discuss_phase") as mock_discuss,
+        patch("questfoundry.pipeline.stages.dream.summarize_discussion") as mock_summarize,
+        patch("questfoundry.pipeline.stages.dream.serialize_to_artifact") as mock_serialize,
+        patch("questfoundry.pipeline.stages.dream.get_all_research_tools") as mock_get_tools,
+        patch("questfoundry.pipeline.stages.dream.get_interactive_tools", return_value=[]),
+    ):
+        _mock_phases(
+            mock_discuss, mock_summarize, mock_serialize, mock_get_tools, _make_mock_artifact()
+        )
+
+        with pytest.raises(DreamStageError, match="rejected by human"):
+            await stage.execute(
+                model=MagicMock(),
+                user_prompt="An epic quest",
+                interactive=True,
+                user_input_fn=user_input_fn_no,
+            )
+
+
+@pytest.mark.asyncio
+async def test_execute_interactive_no_user_input_fn_pre_approves() -> None:
+    """Interactive mode without user_input_fn falls back to pre-approval."""
+    stage = DreamStage()
+
+    with (
+        patch("questfoundry.pipeline.stages.dream.run_discuss_phase") as mock_discuss,
+        patch("questfoundry.pipeline.stages.dream.summarize_discussion") as mock_summarize,
+        patch("questfoundry.pipeline.stages.dream.serialize_to_artifact") as mock_serialize,
+        patch("questfoundry.pipeline.stages.dream.get_all_research_tools") as mock_get_tools,
+        patch("questfoundry.pipeline.stages.dream.get_interactive_tools", return_value=[]),
+    ):
+        _mock_phases(
+            mock_discuss, mock_summarize, mock_serialize, mock_get_tools, _make_mock_artifact()
+        )
+
+        artifact, _, _ = await stage.execute(
+            model=MagicMock(),
+            user_prompt="An epic quest",
+            interactive=True,
+            user_input_fn=None,
+        )
+
+    assert artifact["human_approved"] is True

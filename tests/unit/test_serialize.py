@@ -2268,8 +2268,8 @@ class TestSizeProfileInjectedIntoBeatPrompts:
         assert "1-2" in rendered_shared
         assert "{size_shared_beats_per_dilemma}" not in rendered_shared
 
-    def test_default_profile_uses_standard_range(self) -> None:
-        """Without explicit size_profile, standard preset (2-4) is used."""
+    def test_default_profile_uses_medium_range(self) -> None:
+        """Without explicit size_profile, medium preset (2-4) is used."""
         from questfoundry.pipeline.size import size_template_vars
 
         size_vars = size_template_vars(None)

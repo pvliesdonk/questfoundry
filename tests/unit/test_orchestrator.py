@@ -1059,31 +1059,62 @@ def test_orchestrator_image_provider_none_by_default(tmp_path: Path) -> None:
 # Re-run snapshot restoration for orchestrator-managed stages
 # ---------------------------------------------------------------------------
 
+# Minimal compliant vision node data for test graph setup.
+# Tests that call apply_brainstorm_mutations require a fully compliant vision node
+# because the BRAINSTORM contract validator checks DREAM contract compatibility.
+_COMPLIANT_VISION = {
+    "type": "vision",
+    "genre": "fantasy",
+    "tone": ["dark"],
+    "themes": ["betrayal"],
+    "audience": "adult",
+    "scope": {"story_size": "short"},
+    "human_approved": True,
+}
+
 # Minimal DREAM artifact for apply_dream_mutations (uses upsert_node)
+# Must include scope.story_size (R-1.8) and human_approved=True (R-1.12/Output-6)
 _DREAM_ARTIFACT = {
     "genre": "fantasy",
     "tone": ["dark"],
     "themes": ["betrayal"],
     "audience": "adult",
+    "scope": {"story_size": "short"},
+    "human_approved": True,
 }
 
-# Minimal BRAINSTORM artifact with one entity and one dilemma
+# Minimal BRAINSTORM artifact with entities (incl. 2 locations per R-2.4) and one dilemma.
+# Uses description (not answer_text) and dilemma:: prefix per current contract.
 _BRAINSTORM_ARTIFACT = {
     "entities": [
         {
             "entity_id": "test_hero",
             "entity_category": "character",
+            "name": "The Hero",
             "concept": "A brave hero",
+        },
+        {
+            "entity_id": "test_village",
+            "entity_category": "location",
+            "name": "The Village",
+            "concept": "A quiet rural settlement",
+        },
+        {
+            "entity_id": "test_castle",
+            "entity_category": "location",
+            "name": "The Castle",
+            "concept": "A fortress on the hill",
         },
     ],
     "dilemmas": [
         {
-            "dilemma_id": "fight_or_flee",
+            "dilemma_id": "dilemma::fight_or_flee",
             "question": "Fight or flee?",
-            "central_entity_ids": ["test_hero"],
+            "why_it_matters": "Defines the hero's moral core.",
+            "central_entity_ids": ["character::test_hero"],
             "answers": [
-                {"answer_id": "fight", "answer_text": "Fight", "is_canonical": True},
-                {"answer_id": "flee", "answer_text": "Flee", "is_canonical": False},
+                {"answer_id": "fight", "description": "Confront the danger", "is_canonical": True},
+                {"answer_id": "flee", "description": "Retreat to regroup", "is_canonical": False},
             ],
         },
     ],
@@ -1116,7 +1147,7 @@ class TestMutationRerunDetection:
         """First brainstorm run saves a pre-stage snapshot."""
         # Set up: graph with last_stage=dream (brainstorm prerequisite)
         graph = Graph.empty()
-        graph.upsert_node("vision", {"type": "vision", "genre": "fantasy"})
+        graph.upsert_node("vision", _COMPLIANT_VISION)
         graph.set_last_stage("dream")
         graph.save(tmp_path / "graph.db")
 
@@ -1134,7 +1165,7 @@ class TestMutationRerunDetection:
         """Re-running brainstorm restores the clean pre-stage snapshot."""
         # First run
         graph = Graph.empty()
-        graph.upsert_node("vision", {"type": "vision", "genre": "fantasy"})
+        graph.upsert_node("vision", _COMPLIANT_VISION)
         graph.set_last_stage("dream")
         graph.save(tmp_path / "graph.db")
 
@@ -1151,17 +1182,39 @@ class TestMutationRerunDetection:
                 {
                     "entity_id": "rerun_hero",
                     "entity_category": "character",
+                    "name": "The Rerun Hero",
                     "concept": "A different hero",
+                },
+                {
+                    "entity_id": "rerun_town",
+                    "entity_category": "location",
+                    "name": "Rerun Town",
+                    "concept": "A replacement settlement",
+                },
+                {
+                    "entity_id": "rerun_keep",
+                    "entity_category": "location",
+                    "name": "Rerun Keep",
+                    "concept": "A replacement fortress",
                 },
             ],
             "dilemmas": [
                 {
-                    "dilemma_id": "stay_or_go",
+                    "dilemma_id": "dilemma::stay_or_go",
                     "question": "Stay or go?",
-                    "central_entity_ids": ["rerun_hero"],
+                    "why_it_matters": "Defines the hero's commitment.",
+                    "central_entity_ids": ["character::rerun_hero"],
                     "answers": [
-                        {"answer_id": "stay", "answer_text": "Stay", "is_canonical": True},
-                        {"answer_id": "go", "answer_text": "Go", "is_canonical": False},
+                        {
+                            "answer_id": "stay",
+                            "description": "Remain and fight",
+                            "is_canonical": True,
+                        },
+                        {
+                            "answer_id": "go",
+                            "description": "Retreat and regroup",
+                            "is_canonical": False,
+                        },
                     ],
                 },
             ],
@@ -1177,7 +1230,7 @@ class TestMutationRerunDetection:
         """Brainstorm re-run after seed has completed restores pre-brainstorm snapshot."""
         # Set up: run dream, then brainstorm
         graph = Graph.empty()
-        graph.upsert_node("vision", {"type": "vision", "genre": "fantasy"})
+        graph.upsert_node("vision", _COMPLIANT_VISION)
         graph.set_last_stage("dream")
         graph.save(tmp_path / "graph.db")
 
@@ -1199,7 +1252,7 @@ class TestMutationRerunDetection:
         """Seed run after brainstorm re-run treats seed as first run (saves new snapshot)."""
         # Set up: dream → brainstorm → seed
         graph = Graph.empty()
-        graph.upsert_node("vision", {"type": "vision", "genre": "fantasy"})
+        graph.upsert_node("vision", _COMPLIANT_VISION)
         graph.set_last_stage("dream")
         graph.save(tmp_path / "graph.db")
 
@@ -1223,7 +1276,7 @@ class TestMutationRerunDetection:
         """Re-run without snapshot raises ValueError with guidance."""
         # Set up: graph with last_stage=brainstorm but no snapshot file
         graph = Graph.empty()
-        graph.upsert_node("vision", {"type": "vision", "genre": "fantasy"})
+        graph.upsert_node("vision", _COMPLIANT_VISION)
         graph.set_last_stage("brainstorm")
         graph.save(tmp_path / "graph.db")
 

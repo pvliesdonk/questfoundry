@@ -28,6 +28,11 @@ from questfoundry.tools.langchain_tools import (
 
 log = get_logger(__name__)
 
+
+class DreamStageError(Exception):
+    """Error during DREAM stage execution (includes contract failures)."""
+
+
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -182,6 +187,41 @@ class DreamStage:
 
         # Convert to dict for return
         artifact_data = artifact.model_dump()
+
+        # R-1.12: Record human approval on the Vision artifact.
+        # Non-interactive runs imply human pre-approval at invocation time.
+        # Interactive runs must explicitly approve via the prompt below.
+        if not interactive:
+            artifact_data["human_approved"] = True
+        else:
+            # Minimal approval gate — full R-1.13 rejection-loop UX deferred.
+            # See follow-up issue for per-operation loop-back UI.
+            approval_prompt = "Vision drafted. Approve and continue to BRAINSTORM? (y/n): "
+            if on_assistant_message is not None:
+                on_assistant_message(approval_prompt)
+            if user_input_fn is not None:
+                try:
+                    response = await user_input_fn()
+                except (
+                    EOFError,
+                    RuntimeError,
+                    KeyboardInterrupt,
+                ):  # pragma: no cover - user_input_fn edge case
+                    response = ""
+                response = response or ""
+                if response.strip().lower().startswith("y"):
+                    artifact_data["human_approved"] = True
+                else:
+                    log.info("dream_vision_rejected_by_human")
+                    raise DreamStageError("Vision rejected by human — re-run DREAM to revise.")
+            else:
+                # No user_input_fn provided in interactive mode; treat as pre-approved
+                # to avoid blocking in contexts without interactive I/O (e.g., tests).
+                log.warning(
+                    "dream_approval_fallback_no_input_fn",
+                    reason="interactive=True but no user_input_fn provided; auto-approving",
+                )
+                artifact_data["human_approved"] = True
 
         log.info(
             "dream_stage_completed",

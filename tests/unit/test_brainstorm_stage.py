@@ -11,6 +11,37 @@ from langchain_core.messages import AIMessage, HumanMessage
 from questfoundry.models import BrainstormOutput
 from questfoundry.pipeline.stages import BrainstormStage, BrainstormStageError, get_stage
 
+
+def _setup_mock_graph_with_vision(mock_graph: MagicMock, vision_data: dict | None = None) -> None:
+    """Configure mock graph to pass DREAM contract validation.
+
+    Args:
+        mock_graph: MagicMock instance to configure.
+        vision_data: Optional dict to override vision node fields. Defaults to minimal valid vision.
+    """
+    if vision_data is None:
+        vision_data = {
+            "genre": "fantasy",
+            "tone": ["epic"],
+            "themes": ["heroism"],
+            "audience": "adult",
+            "scope": {"story_size": "short"},
+            "human_approved": True,
+        }
+
+    # Mock get_node for direct vision lookup
+    mock_graph.get_node.return_value = vision_data
+
+    # Mock get_nodes_by_type for validate_dream_output vision contract check
+    mock_graph.get_nodes_by_type.return_value = {"vision": vision_data}
+
+    # Mock edges to pass R-1.10 check (no edges on vision)
+    mock_graph.get_edges.return_value = []
+
+    # Mock all_node_ids for Output-5 check (only vision node)
+    mock_graph.all_node_ids.return_value = ["vision"]
+
+
 # --- Stage Registration Tests ---
 
 
@@ -70,11 +101,7 @@ async def test_execute_calls_all_three_phases() -> None:
 
     mock_model = MagicMock()
     mock_graph = MagicMock()
-    mock_graph.get_node.return_value = {
-        "genre": "fantasy",
-        "tone": ["epic"],
-        "themes": ["heroism"],
-    }
+    _setup_mock_graph_with_vision(mock_graph)
 
     with (
         patch("questfoundry.pipeline.stages.brainstorm.Graph") as MockGraph,
@@ -93,11 +120,16 @@ async def test_execute_calls_all_three_phases() -> None:
         mock_summarize.return_value = ("Brief summary", 100)
         mock_artifact = BrainstormOutput(
             entities=[
-                {"entity_id": "hero", "entity_category": "character", "concept": "A brave warrior"}
+                {
+                    "entity_id": "hero",
+                    "entity_category": "character",
+                    "name": "Hero",
+                    "concept": "A brave warrior",
+                }
             ],
             dilemmas=[
                 {
-                    "dilemma_id": "quest",
+                    "dilemma_id": "dilemma::quest",
                     "question": "Will the hero succeed?",
                     "answers": [
                         {
@@ -143,7 +175,7 @@ async def test_execute_emits_phase_progress() -> None:
 
     mock_model = MagicMock()
     mock_graph = MagicMock()
-    mock_graph.get_node.return_value = {"genre": "fantasy"}
+    _setup_mock_graph_with_vision(mock_graph)
     on_phase_progress = MagicMock()
 
     with (
@@ -163,11 +195,16 @@ async def test_execute_emits_phase_progress() -> None:
         mock_summarize.return_value = ("Brief summary", 100)
         mock_artifact = BrainstormOutput(
             entities=[
-                {"entity_id": "hero", "entity_category": "character", "concept": "A brave warrior"}
+                {
+                    "entity_id": "hero",
+                    "entity_category": "character",
+                    "name": "Hero",
+                    "concept": "A brave warrior",
+                }
             ],
             dilemmas=[
                 {
-                    "dilemma_id": "quest",
+                    "dilemma_id": "dilemma::quest",
                     "question": "Will the hero succeed?",
                     "answers": [
                         {
@@ -210,12 +247,16 @@ async def test_execute_passes_vision_context_to_discuss() -> None:
 
     mock_model = MagicMock()
     mock_graph = MagicMock()
-    mock_graph.get_node.return_value = {
+    noir_vision = {
         "genre": "noir",
         "subgenre": "detective",
         "tone": ["dark", "moody"],
         "themes": ["corruption", "justice"],
+        "audience": "adult",
+        "scope": {"story_size": "short"},
+        "human_approved": True,
     }
+    _setup_mock_graph_with_vision(mock_graph, noir_vision)
 
     with (
         patch("questfoundry.pipeline.stages.brainstorm.Graph") as MockGraph,
@@ -232,7 +273,27 @@ async def test_execute_passes_vision_context_to_discuss() -> None:
         mock_prompt.return_value = "System prompt with vision"
         mock_discuss.return_value = ([], 1, 100)
         mock_summarize.return_value = ("Brief", 50)
-        mock_artifact = BrainstormOutput(entities=[], dilemmas=[])
+        mock_artifact = BrainstormOutput(
+            entities=[
+                {
+                    "entity_id": "stub",
+                    "entity_category": "character",
+                    "name": "Stub",
+                    "concept": "c",
+                }
+            ],
+            dilemmas=[
+                {
+                    "dilemma_id": "dilemma::stub",
+                    "question": "A question?",
+                    "why_it_matters": "stakes",
+                    "answers": [
+                        {"answer_id": "yes", "description": "Yes", "is_canonical": True},
+                        {"answer_id": "no", "description": "No", "is_canonical": False},
+                    ],
+                }
+            ],
+        )
         mock_serialize.return_value = (mock_artifact, 100)
 
         await stage.execute(
@@ -256,7 +317,7 @@ async def test_execute_passes_brainstorm_output_schema() -> None:
 
     mock_model = MagicMock()
     mock_graph = MagicMock()
-    mock_graph.get_node.return_value = {"genre": "fantasy"}
+    _setup_mock_graph_with_vision(mock_graph)
 
     with (
         patch("questfoundry.pipeline.stages.brainstorm.Graph") as MockGraph,
@@ -269,7 +330,27 @@ async def test_execute_passes_brainstorm_output_schema() -> None:
         mock_tools.return_value = []
         mock_discuss.return_value = ([], 1, 100)
         mock_summarize.return_value = ("Brief", 50)
-        mock_artifact = BrainstormOutput(entities=[], dilemmas=[])
+        mock_artifact = BrainstormOutput(
+            entities=[
+                {
+                    "entity_id": "stub",
+                    "entity_category": "character",
+                    "name": "Stub",
+                    "concept": "c",
+                }
+            ],
+            dilemmas=[
+                {
+                    "dilemma_id": "dilemma::stub",
+                    "question": "A question?",
+                    "why_it_matters": "stakes",
+                    "answers": [
+                        {"answer_id": "yes", "description": "Yes", "is_canonical": True},
+                        {"answer_id": "no", "description": "No", "is_canonical": False},
+                    ],
+                }
+            ],
+        )
         mock_serialize.return_value = (mock_artifact, 100)
 
         await stage.execute(
@@ -288,7 +369,7 @@ async def test_execute_uses_brainstorm_summarize_prompt() -> None:
 
     mock_model = MagicMock()
     mock_graph = MagicMock()
-    mock_graph.get_node.return_value = {"genre": "fantasy"}
+    _setup_mock_graph_with_vision(mock_graph)
 
     with (
         patch("questfoundry.pipeline.stages.brainstorm.Graph") as MockGraph,
@@ -305,7 +386,27 @@ async def test_execute_uses_brainstorm_summarize_prompt() -> None:
         mock_prompt.return_value = "Brainstorm summarize prompt"
         mock_discuss.return_value = ([], 1, 100)
         mock_summarize.return_value = ("Brief", 50)
-        mock_artifact = BrainstormOutput(entities=[], dilemmas=[])
+        mock_artifact = BrainstormOutput(
+            entities=[
+                {
+                    "entity_id": "stub",
+                    "entity_category": "character",
+                    "name": "Stub",
+                    "concept": "c",
+                }
+            ],
+            dilemmas=[
+                {
+                    "dilemma_id": "dilemma::stub",
+                    "question": "A question?",
+                    "why_it_matters": "stakes",
+                    "answers": [
+                        {"answer_id": "yes", "description": "Yes", "is_canonical": True},
+                        {"answer_id": "no", "description": "No", "is_canonical": False},
+                    ],
+                }
+            ],
+        )
         mock_serialize.return_value = (mock_artifact, 100)
 
         await stage.execute(
@@ -326,7 +427,7 @@ async def test_execute_returns_artifact_as_dict() -> None:
 
     mock_model = MagicMock()
     mock_graph = MagicMock()
-    mock_graph.get_node.return_value = {"genre": "fantasy"}
+    _setup_mock_graph_with_vision(mock_graph)
 
     with (
         patch("questfoundry.pipeline.stages.brainstorm.Graph") as MockGraph,
@@ -341,11 +442,16 @@ async def test_execute_returns_artifact_as_dict() -> None:
         mock_summarize.return_value = ("Brief", 50)
         mock_artifact = BrainstormOutput(
             entities=[
-                {"entity_id": "kay", "entity_category": "character", "concept": "Protagonist"}
+                {
+                    "entity_id": "kay",
+                    "entity_category": "character",
+                    "name": "Kay",
+                    "concept": "Protagonist",
+                }
             ],
             dilemmas=[
                 {
-                    "dilemma_id": "trust",
+                    "dilemma_id": "dilemma::trust",
                     "question": "Can Kay trust the mentor?",
                     "answers": [
                         {"answer_id": "yes", "description": "Trust", "is_canonical": True},
@@ -366,7 +472,7 @@ async def test_execute_returns_artifact_as_dict() -> None:
 
         assert isinstance(artifact, dict)
         assert artifact["entities"][0]["entity_id"] == "kay"
-        assert artifact["dilemmas"][0]["dilemma_id"] == "trust"
+        assert artifact["dilemmas"][0]["dilemma_id"] == "dilemma::trust"
 
 
 # --- Vision Context Formatting Tests ---
@@ -422,11 +528,16 @@ def test_brainstorm_output_model_validates() -> None:
     """BrainstormOutput model validates correctly."""
     output = BrainstormOutput(
         entities=[
-            {"entity_id": "hero", "entity_category": "character", "concept": "The protagonist"}
+            {
+                "entity_id": "hero",
+                "entity_category": "character",
+                "name": "Hero",
+                "concept": "The protagonist",
+            }
         ],
         dilemmas=[
             {
-                "dilemma_id": "quest",
+                "dilemma_id": "dilemma::quest",
                 "question": "Will the hero complete the quest?",
                 "answers": [
                     {
@@ -449,7 +560,7 @@ def test_brainstorm_output_model_validates() -> None:
     assert len(output.entities) == 1
     assert len(output.dilemmas) == 1
     assert output.entities[0].entity_id == "hero"
-    assert output.dilemmas[0].dilemma_id == "quest"
+    assert output.dilemmas[0].dilemma_id == "dilemma::quest"
 
 
 def test_dilemma_requires_two_answers() -> None:
@@ -460,7 +571,7 @@ def test_dilemma_requires_two_answers() -> None:
 
     with pytest.raises(ValidationError, match="List should have at least 2 items"):
         Dilemma(
-            dilemma_id="test",
+            dilemma_id="dilemma::test",
             question="Test?",
             answers=[{"answer_id": "one", "description": "Only one", "is_canonical": True}],
             central_entity_ids=[],
@@ -476,7 +587,7 @@ def test_dilemma_requires_one_default_path_answer() -> None:
 
     with pytest.raises(ValidationError, match=r"one.*default path"):
         Dilemma(
-            dilemma_id="test",
+            dilemma_id="dilemma::test",
             question="Test?",
             answers=[
                 {"answer_id": "one", "description": "First", "is_canonical": True},
@@ -534,6 +645,92 @@ def test_entity_types() -> None:
         entity = Entity(
             entity_id="test",
             entity_category=entity_category,
+            name="Test Entity",
             concept="Test concept",
         )
         assert entity.entity_category == entity_category
+
+
+def test_dilemma_question_must_end_with_qmark() -> None:
+    """R-3.1: dilemma question must end with ?."""
+    import pytest
+    from pydantic import ValidationError
+
+    from questfoundry.models.brainstorm import Dilemma
+
+    with pytest.raises(ValidationError) as exc:
+        Dilemma(
+            dilemma_id="dilemma::x",
+            question="not a question",
+            why_it_matters="stakes",
+            answers=[
+                {"answer_id": "a", "description": "d", "is_canonical": True},
+                {"answer_id": "b", "description": "d", "is_canonical": False},
+            ],
+        )
+    assert "?" in str(exc.value)
+
+
+def test_entity_name_must_be_non_empty() -> None:
+    """R-2.1: entity name is required and non-empty."""
+    import pytest
+    from pydantic import ValidationError
+
+    from questfoundry.models.brainstorm import Entity
+
+    with pytest.raises(ValidationError):
+        Entity(entity_id="kay", entity_category="character", concept="c")  # no name
+
+    with pytest.raises(ValidationError):
+        Entity(entity_id="kay", entity_category="character", name="", concept="c")
+
+    with pytest.raises(ValidationError):
+        Entity(entity_id="kay", entity_category="character", name=None, concept="c")
+
+
+def test_dilemma_id_must_have_prefix() -> None:
+    """R-3.7: dilemma_id must start with 'dilemma::'."""
+    import pytest
+    from pydantic import ValidationError
+
+    from questfoundry.models.brainstorm import Dilemma
+
+    with pytest.raises(ValidationError) as exc:
+        Dilemma(
+            dilemma_id="mentor_trust",  # missing prefix
+            question="Q?",
+            why_it_matters="stakes",
+            answers=[
+                {"answer_id": "a", "description": "d", "is_canonical": True},
+                {"answer_id": "b", "description": "d", "is_canonical": False},
+            ],
+        )
+    assert "dilemma::" in str(exc.value)
+
+
+def test_brainstorm_output_rejects_unknown_fields() -> None:
+    """R-3.8 defensive: BrainstormOutput must not silently accept foreign node data."""
+    import pytest
+    from pydantic import ValidationError
+
+    from questfoundry.models.brainstorm import BrainstormOutput
+
+    with pytest.raises(ValidationError):
+        BrainstormOutput.model_validate(
+            {
+                "entities": [],
+                "dilemmas": [],
+                "paths": [{"path_id": "x"}],  # not an allowed field
+            }
+        )
+
+
+def test_brainstorm_output_minimum_floor() -> None:
+    """R-1.1 floor: must produce ≥1 entity and ≥1 dilemma."""
+    import pytest
+    from pydantic import ValidationError
+
+    from questfoundry.models.brainstorm import BrainstormOutput
+
+    with pytest.raises(ValidationError):
+        BrainstormOutput.model_validate({"entities": [], "dilemmas": []})

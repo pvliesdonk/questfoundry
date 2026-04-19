@@ -34,6 +34,22 @@ def _blocking_errors(errors: list[SeedValidationError]) -> list[SeedValidationEr
     return [e for e in errors if e.category != SeedErrorCategory.WARNING]
 
 
+def _create_compliant_vision(graph: Graph) -> None:
+    """Create a vision node that satisfies DREAM contract."""
+    graph.create_node(
+        "vision",
+        {
+            "type": "vision",
+            "genre": "dark fantasy",
+            "tone": ["atmospheric"],
+            "themes": ["forbidden knowledge"],
+            "audience": "adult",
+            "scope": {"story_size": "short"},
+            "human_approved": True,
+        },
+    )
+
+
 class TestHasMutationHandler:
     """Test the mutation handler check function."""
 
@@ -115,7 +131,14 @@ class TestApplyMutations:
     def test_routes_to_dream(self) -> None:
         """Routes dream stage to apply_dream_mutations."""
         graph = Graph.empty()
-        output = {"genre": "noir", "themes": ["trust"], "tone": ["dark"]}
+        output = {
+            "genre": "noir",
+            "themes": ["trust"],
+            "tone": ["dark"],
+            "audience": "adult",
+            "scope": {"story_size": "short"},
+            "human_approved": True,
+        }
 
         apply_mutations(graph, "dream", output)
 
@@ -124,11 +147,52 @@ class TestApplyMutations:
     def test_routes_to_brainstorm(self) -> None:
         """Routes brainstorm stage to apply_brainstorm_mutations."""
         graph = Graph.empty()
+
+        # DREAM stage must run first to create vision node
+        dream_output = {
+            "genre": "test",
+            "tone": ["neutral"],
+            "themes": ["test"],
+            "audience": "adult",
+            "scope": {"story_size": "short"},
+            "human_approved": True,
+        }
+        apply_mutations(graph, "dream", dream_output)
+        graph.set_last_stage("dream")
+
         output = {
             "entities": [
-                {"entity_id": "char_001", "entity_category": "character", "concept": "Test"}
+                {
+                    "entity_id": "char_001",
+                    "entity_category": "character",
+                    "name": "Character",
+                    "concept": "Test",
+                },
+                {
+                    "entity_id": "loc_001",
+                    "entity_category": "location",
+                    "name": "Place 1",
+                    "concept": "Place 1",
+                },
+                {
+                    "entity_id": "loc_002",
+                    "entity_category": "location",
+                    "name": "Place 2",
+                    "concept": "Place 2",
+                },
             ],
-            "dilemmas": [],
+            "dilemmas": [
+                {
+                    "dilemma_id": "d1",
+                    "question": "Q?",
+                    "why_it_matters": "stakes",
+                    "central_entity_ids": ["char_001"],
+                    "answers": [
+                        {"answer_id": "a", "description": "A", "is_canonical": True},
+                        {"answer_id": "b", "description": "B", "is_canonical": False},
+                    ],
+                }
+            ],
         }
 
         apply_mutations(graph, "brainstorm", output)
@@ -236,6 +300,8 @@ class TestDreamMutations:
             "themes": ["trust", "betrayal"],
             "audience": "adult",
             "style_notes": "First person narration",
+            "scope": {"story_size": "short"},
+            "human_approved": True,
         }
 
         apply_dream_mutations(graph, output)
@@ -255,7 +321,17 @@ class TestDreamMutations:
         graph = Graph.empty()
         graph.create_node("vision", {"type": "vision", "genre": "fantasy"})
 
-        apply_dream_mutations(graph, {"genre": "noir", "themes": [], "tone": []})
+        apply_dream_mutations(
+            graph,
+            {
+                "genre": "noir",
+                "themes": ["trust"],
+                "tone": ["dark"],
+                "audience": "adult",
+                "scope": {"story_size": "short"},
+                "human_approved": True,
+            },
+        )
 
         assert graph.get_node("vision")["genre"] == "noir"
 
@@ -267,7 +343,9 @@ class TestDreamMutations:
             "themes": ["intrigue"],
             "tone": ["suspenseful"],
             "audience": "adult",
-            # No subgenre, style_notes, scope, content_notes
+            "scope": {"story_size": "medium"},
+            # No subgenre, style_notes, content_notes
+            "human_approved": True,
         }
 
         apply_dream_mutations(graph, output)
@@ -282,21 +360,18 @@ class TestDreamMutations:
         graph = Graph.empty()
         output = {
             "genre": "fantasy",
-            "themes": [],
-            "tone": [],
+            "themes": ["adventure"],
+            "tone": ["light"],
             "audience": "ya",
-            "scope": {
-                "estimated_passages": 50,
-                "target_word_count": 25000,
-                "branching_depth": "moderate",
-            },
+            "scope": {"story_size": "medium"},
+            "human_approved": True,
         }
 
         apply_dream_mutations(graph, output)
 
         vision = graph.get_node("vision")
         assert vision is not None
-        assert vision["scope"]["estimated_passages"] == 50
+        assert vision["scope"]["story_size"] == "medium"
 
     def test_includes_pov_fields_if_present(self) -> None:
         """Includes POV hint fields if present."""
@@ -306,15 +381,17 @@ class TestDreamMutations:
             "themes": ["fear"],
             "tone": ["tense"],
             "audience": "adult",
-            "pov_style": "second",
+            "scope": {"story_size": "short"},
+            "pov_style": "second_person",
             "protagonist_defined": True,
+            "human_approved": True,
         }
 
         apply_dream_mutations(graph, output)
 
         vision = graph.get_node("vision")
         assert vision is not None
-        assert vision["pov_style"] == "second"
+        assert vision["pov_style"] == "second_person"
         assert vision["protagonist_defined"] is True
 
     def test_pov_fields_default_correctly(self) -> None:
@@ -325,7 +402,9 @@ class TestDreamMutations:
             "themes": ["adventure"],
             "tone": ["light"],
             "audience": "ya",
+            "scope": {"story_size": "medium"},
             # No pov_style or protagonist_defined
+            "human_approved": True,
         }
 
         apply_dream_mutations(graph, output)
@@ -390,21 +469,42 @@ class TestBrainstormMutations:
     def test_creates_entity_nodes(self) -> None:
         """Creates entity nodes from brainstorm output."""
         graph = Graph.empty()
+        _create_compliant_vision(graph)
+
         output = {
             "entities": [
                 {
                     "entity_id": "kay",
                     "entity_category": "character",
+                    "name": "Kay",
                     "concept": "Young archivist",
                     "notes": "Curious and brave",
                 },
                 {
                     "entity_id": "archive",
                     "entity_category": "location",
+                    "name": "Archive",
                     "concept": "Ancient repository",
                 },
+                {
+                    "entity_id": "tower",
+                    "entity_category": "location",
+                    "name": "Tower",
+                    "concept": "Tall structure",
+                },
             ],
-            "dilemmas": [],
+            "dilemmas": [
+                {
+                    "dilemma_id": "d1",
+                    "question": "Q?",
+                    "why_it_matters": "stakes",
+                    "central_entity_ids": ["kay"],
+                    "answers": [
+                        {"answer_id": "a", "description": "A", "is_canonical": True},
+                        {"answer_id": "b", "description": "B", "is_canonical": False},
+                    ],
+                }
+            ],
         }
 
         apply_brainstorm_mutations(graph, output)
@@ -426,6 +526,8 @@ class TestBrainstormMutations:
     def test_stores_entity_name(self) -> None:
         """Entity.name is stored on graph node when provided (#1010)."""
         graph = Graph.empty()
+        _create_compliant_vision(graph)
+
         output = {
             "entities": [
                 {
@@ -437,11 +539,28 @@ class TestBrainstormMutations:
                 {
                     "entity_id": "manor",
                     "entity_category": "location",
+                    "name": "Manor House",
                     "concept": "A crumbling estate",
-                    # name omitted — should not appear on node
+                },
+                {
+                    "entity_id": "tower",
+                    "entity_category": "location",
+                    "name": "The Tower",
+                    "concept": "A tall tower",
                 },
             ],
-            "dilemmas": [],
+            "dilemmas": [
+                {
+                    "dilemma_id": "d1",
+                    "question": "Q?",
+                    "why_it_matters": "stakes",
+                    "central_entity_ids": ["beatrice"],
+                    "answers": [
+                        {"answer_id": "a", "description": "A", "is_canonical": True},
+                        {"answer_id": "b", "description": "B", "is_canonical": False},
+                    ],
+                }
+            ],
         }
 
         apply_brainstorm_mutations(graph, output)
@@ -452,23 +571,39 @@ class TestBrainstormMutations:
 
         manor = graph.get_node("location::manor")
         assert manor is not None
-        assert "name" not in manor  # _clean_dict removes None values
+        assert manor["name"] == "Manor House"
 
     def test_strips_scope_prefixes_in_raw_ids(self) -> None:
         """Scoped IDs are stored unscoped in raw_id fields."""
         graph = Graph.empty()
+        _create_compliant_vision(graph)
+
         output = {
             "entities": [
                 {
                     "entity_id": "entity::kay",
                     "entity_category": "character",
+                    "name": "Kay",
                     "concept": "Young archivist",
-                }
+                },
+                {
+                    "entity_id": "entity::archive",
+                    "entity_category": "location",
+                    "name": "Archive",
+                    "concept": "Archive",
+                },
+                {
+                    "entity_id": "entity::tower",
+                    "entity_category": "location",
+                    "name": "Tower",
+                    "concept": "Tower",
+                },
             ],
             "dilemmas": [
                 {
                     "dilemma_id": "dilemma::mentor_trust",
                     "question": "Can the mentor be trusted?",
+                    "why_it_matters": "stakes",
                     "central_entity_ids": ["entity::kay"],
                     "answers": [
                         {
@@ -511,10 +646,34 @@ class TestBrainstormMutations:
     def test_creates_dilemma_with_alternatives(self) -> None:
         """Creates dilemma nodes with linked answers."""
         graph = Graph.empty()
+        _create_compliant_vision(graph)
+
         output = {
             "entities": [
-                {"entity_id": "kay", "entity_category": "character", "concept": "Protagonist"},
-                {"entity_id": "mentor", "entity_category": "character", "concept": "Guide"},
+                {
+                    "entity_id": "kay",
+                    "entity_category": "character",
+                    "name": "Kay",
+                    "concept": "Protagonist",
+                },
+                {
+                    "entity_id": "mentor",
+                    "entity_category": "character",
+                    "name": "Mentor",
+                    "concept": "Guide",
+                },
+                {
+                    "entity_id": "archive",
+                    "entity_category": "location",
+                    "name": "Archive",
+                    "concept": "Archive",
+                },
+                {
+                    "entity_id": "tower",
+                    "entity_category": "location",
+                    "name": "Tower",
+                    "concept": "Tower",
+                },
             ],
             "dilemmas": [
                 {
@@ -566,13 +725,75 @@ class TestBrainstormMutations:
         assert len(edges) == 2
 
     def test_handles_empty_brainstorm(self) -> None:
-        """Handles empty entities and dilemmas."""
+        """Handles minimum required output with locations and one dilemma."""
         graph = Graph.empty()
-        output = {"entities": [], "dilemmas": []}
+        _create_compliant_vision(graph)
+
+        output = {
+            "entities": [
+                {
+                    "entity_id": "archive",
+                    "entity_category": "location",
+                    "name": "Archive",
+                    "concept": "Archive",
+                },
+                {
+                    "entity_id": "tower",
+                    "entity_category": "location",
+                    "name": "Tower",
+                    "concept": "Tower",
+                },
+            ],
+            "dilemmas": [
+                {
+                    "dilemma_id": "d1",
+                    "question": "Q?",
+                    "why_it_matters": "stakes",
+                    "central_entity_ids": ["archive"],  # At least one entity must be anchored
+                    "answers": [
+                        {"answer_id": "a", "description": "A", "is_canonical": True},
+                        {"answer_id": "b", "description": "B", "is_canonical": False},
+                    ],
+                }
+            ],
+        }
 
         apply_brainstorm_mutations(graph, output)
 
-        assert len(graph.to_dict()["nodes"]) == 0
+        # Should have vision node + 2 location nodes + 1 dilemma node + 2 answer nodes
+        assert len(graph.to_dict()["nodes"]) == 6
+
+    def test_apply_brainstorm_mutations_fails_on_unresolvable_entity(self) -> None:
+        """R-3.6: dilemma referencing non-existent entity must raise, not silently drop."""
+        graph = Graph.empty()
+        output = {
+            "entities": [
+                {
+                    "entity_id": "kay",
+                    "entity_category": "character",
+                    "name": "Kay",
+                    "concept": "archivist",
+                },
+                {"entity_id": "a", "entity_category": "location", "name": "A", "concept": "x"},
+                {"entity_id": "b", "entity_category": "location", "name": "B", "concept": "x"},
+            ],
+            "dilemmas": [
+                {
+                    "dilemma_id": "dilemma::mentor_trust",
+                    "question": "Can we trust?",
+                    "why_it_matters": "stakes",
+                    "central_entity_ids": ["character::ghost"],  # does not exist
+                    "answers": [
+                        {"answer_id": "yes", "description": "d", "is_canonical": True},
+                        {"answer_id": "no", "description": "d", "is_canonical": False},
+                    ],
+                }
+            ],
+        }
+
+        with pytest.raises((MutationError, ValueError)) as exc_info:
+            apply_brainstorm_mutations(graph, output)
+        assert "ghost" in str(exc_info.value) or "anchored_to" in str(exc_info.value).lower()
 
 
 class TestValidateBrainstormMutations:
@@ -584,6 +805,8 @@ class TestValidateBrainstormMutations:
             "entities": [
                 {"entity_id": "kay", "entity_category": "character", "concept": "Archivist"},
                 {"entity_id": "mentor", "entity_category": "character", "concept": "Mentor"},
+                {"entity_id": "archive", "entity_category": "location", "concept": "Archive"},
+                {"entity_id": "tower", "entity_category": "location", "concept": "Tower"},
             ],
             "dilemmas": [
                 {
@@ -616,6 +839,16 @@ class TestValidateBrainstormMutations:
                     "entity_category": "character",
                     "concept": "Mentor",
                 },
+                {
+                    "entity_id": "entity::archive",
+                    "entity_category": "location",
+                    "concept": "Archive",
+                },
+                {
+                    "entity_id": "entity::tower",
+                    "entity_category": "location",
+                    "concept": "Tower",
+                },
             ],
             "dilemmas": [
                 {
@@ -639,6 +872,8 @@ class TestValidateBrainstormMutations:
         output = {
             "entities": [
                 {"entity_id": "kay", "entity_category": "character", "concept": "Archivist"},
+                {"entity_id": "archive", "entity_category": "location", "concept": "Archive"},
+                {"entity_id": "tower", "entity_category": "location", "concept": "Tower"},
             ],
             "dilemmas": [
                 {
@@ -690,7 +925,10 @@ class TestValidateBrainstormMutations:
     def test_no_default_path_detected(self) -> None:
         """Detects when no answer has is_canonical=True."""
         output = {
-            "entities": [],
+            "entities": [
+                {"entity_id": "archive", "entity_category": "location", "concept": "Archive"},
+                {"entity_id": "tower", "entity_category": "location", "concept": "Tower"},
+            ],
             "dilemmas": [
                 {
                     "dilemma_id": "trust",
@@ -712,7 +950,10 @@ class TestValidateBrainstormMutations:
     def test_multiple_default_paths_detected(self) -> None:
         """Detects when multiple answers have is_canonical=True."""
         output = {
-            "entities": [],
+            "entities": [
+                {"entity_id": "archive", "entity_category": "location", "concept": "Archive"},
+                {"entity_id": "tower", "entity_category": "location", "concept": "Tower"},
+            ],
             "dilemmas": [
                 {
                     "dilemma_id": "trust",
@@ -752,14 +993,16 @@ class TestValidateBrainstormMutations:
 
         errors = validate_brainstorm_mutations(output)
 
-        # Should find: 2 phantom entity errors + 1 no default error
-        assert len(errors) == 3
+        # Should find: 2 phantom entity errors + 1 no default error + 1 location count error
+        assert len(errors) == 4
 
     def test_empty_dilemmas_valid(self) -> None:
         """Empty dilemmas list is valid."""
         output = {
             "entities": [
                 {"entity_id": "kay", "entity_category": "character", "concept": "Archivist"},
+                {"entity_id": "archive", "entity_category": "location", "concept": "Archive"},
+                {"entity_id": "tower", "entity_category": "location", "concept": "Tower"},
             ],
             "dilemmas": [],
         }
@@ -771,7 +1014,10 @@ class TestValidateBrainstormMutations:
     def test_empty_alternatives_detected(self) -> None:
         """Dilemma with no answers fails default path validation."""
         output = {
-            "entities": [],
+            "entities": [
+                {"entity_id": "archive", "entity_category": "location", "concept": "Archive"},
+                {"entity_id": "tower", "entity_category": "location", "concept": "Tower"},
+            ],
             "dilemmas": [
                 {
                     "dilemma_id": "trust",
@@ -890,6 +1136,34 @@ class TestValidateBrainstormMutations:
         assert len(duplicate_errors) == 1
         assert "trust_or_betray" in duplicate_errors[0].issue
         assert "index 0" in duplicate_errors[0].issue
+
+    def test_validate_brainstorm_mutations_requires_two_locations(self) -> None:
+        """R-2.4: BRAINSTORM output with <2 locations must fail validation."""
+        output = {
+            "entities": [
+                {"entity_id": "kay", "entity_category": "character", "name": "Kay", "concept": "x"},
+                {
+                    "entity_id": "archive",
+                    "entity_category": "location",
+                    "name": "Archive",
+                    "concept": "x",
+                },
+            ],
+            "dilemmas": [
+                {
+                    "dilemma_id": "dilemma::x",
+                    "question": "Q?",
+                    "why_it_matters": "stakes",
+                    "central_entity_ids": ["character::kay"],
+                    "answers": [
+                        {"answer_id": "y", "description": "d", "is_canonical": True},
+                        {"answer_id": "n", "description": "d", "is_canonical": False},
+                    ],
+                }
+            ],
+        }
+        errors = validate_brainstorm_mutations(output)
+        assert any("location" in e.issue.lower() for e in errors)
 
 
 class TestBrainstormMutationError:
@@ -2687,6 +2961,8 @@ class TestMutationIntegration:
             "tone": ["atmospheric", "morally ambiguous"],
             "themes": ["forbidden knowledge", "trust"],
             "audience": "adult",
+            "scope": {"story_size": "short"},
+            "human_approved": True,
         }
         apply_mutations(graph, "dream", dream_output)
         graph.set_last_stage("dream")
@@ -2694,11 +2970,29 @@ class TestMutationIntegration:
         # BRAINSTORM stage
         brainstorm_output = {
             "entities": [
-                {"entity_id": "kay", "entity_category": "character", "concept": "Young archivist"},
+                {
+                    "entity_id": "kay",
+                    "entity_category": "character",
+                    "name": "Kay",
+                    "concept": "Young archivist",
+                },
                 {
                     "entity_id": "mentor",
                     "entity_category": "character",
+                    "name": "Mentor",
                     "concept": "Senior archivist",
+                },
+                {
+                    "entity_id": "archive",
+                    "entity_category": "location",
+                    "name": "Archive",
+                    "concept": "Ancient library",
+                },
+                {
+                    "entity_id": "tower",
+                    "entity_category": "location",
+                    "name": "Tower",
+                    "concept": "Tall observatory",
                 },
             ],
             "dilemmas": [
@@ -2730,6 +3024,8 @@ class TestMutationIntegration:
             "entities": [
                 {"entity_id": "kay", "disposition": "retained"},
                 {"entity_id": "mentor", "disposition": "retained"},
+                {"entity_id": "archive", "disposition": "retained"},
+                {"entity_id": "tower", "disposition": "retained"},
             ],
             # Completeness: decisions for all dilemmas
             "dilemmas": [
@@ -2786,7 +3082,7 @@ class TestMutationIntegration:
 
         # Check node counts by type
         assert len(graph.get_nodes_by_type("vision")) == 1
-        assert len(graph.get_nodes_by_type("entity")) == 2
+        assert len(graph.get_nodes_by_type("entity")) == 4  # kay, mentor, archive, tower
         assert len(graph.get_nodes_by_type("dilemma")) == 1
         assert len(graph.get_nodes_by_type("answer")) == 2
         assert len(graph.get_nodes_by_type("path")) == 1

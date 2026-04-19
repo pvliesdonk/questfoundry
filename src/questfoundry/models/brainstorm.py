@@ -41,12 +41,11 @@ class Entity(BaseModel):
     entity_category: EntityType = Field(
         description="Entity category: character, location, object, or faction"
     )
-    name: str | None = Field(
-        default=None,
+    name: str = Field(
         min_length=1,
         description=(
-            "Canonical display name if it emerges naturally during brainstorming "
-            "(e.g., 'Dr. Aris Chen', 'Maya's Bakery'). SEED will generate if missing."
+            "Canonical display name (e.g., 'Dr. Aris Chen', 'Maya\u2019s Bakery'). "
+            "Required per R-2.1."
         ),
     )
     concept: str = Field(min_length=1, description="One-line essence of the entity")
@@ -113,12 +112,22 @@ class Dilemma(BaseModel):
             "'dilemma::murder_weapon')"
         ),
     )
-    question: str = Field(min_length=1, description="Dramatic question (should end with ?)")
+    question: str = Field(min_length=1, description="Dramatic question (must end with ?)")
+
+    @field_validator("question")
+    @classmethod
+    def validate_question_ends_with_qmark(cls, v: str) -> str:
+        """R-3.1: dilemma question must end with '?'."""
+        if not v.rstrip().endswith("?"):
+            raise ValueError(f"dilemma question must end with '?' (got {v!r}). See R-3.1.")
+        return v
 
     @field_validator("dilemma_id")
     @classmethod
-    def validate_dilemma_id_no_trailing_or(cls, v: str) -> str:
-        """Reject dilemma IDs ending with '_or_' (common LLM generation error)."""
+    def validate_dilemma_id_format(cls, v: str) -> str:
+        """R-3.7: dilemma_id must have 'dilemma::' prefix; reject trailing '_or_'."""
+        if not v.startswith("dilemma::"):
+            raise ValueError(f"dilemma_id '{v}' missing required 'dilemma::' prefix. See R-3.7.")
         raw = v.removeprefix("dilemma::")
         if raw.endswith("_or_") or raw.endswith("_or"):
             msg = (
@@ -181,11 +190,13 @@ class BrainstormOutput(BaseModel):
         dilemmas: All generated dramatic dilemmas.
     """
 
+    model_config = {"extra": "forbid"}
+
     entities: list[Entity] = Field(
-        default_factory=list,
-        description="Generated story entities",
+        min_length=1,
+        description="Generated story entities (at least 1 required per R-1.1).",
     )
     dilemmas: list[Dilemma] = Field(
-        default_factory=list,
-        description="Generated dramatic dilemmas",
+        min_length=1,
+        description="Generated dramatic dilemmas (at least 1 required per R-1.1).",
     )
