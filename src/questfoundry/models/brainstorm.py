@@ -41,12 +41,11 @@ class Entity(BaseModel):
     entity_category: EntityType = Field(
         description="Entity category: character, location, object, or faction"
     )
-    name: str | None = Field(
-        default=None,
+    name: str = Field(
         min_length=1,
         description=(
-            "Canonical display name if it emerges naturally during brainstorming "
-            "(e.g., 'Dr. Aris Chen', 'Maya's Bakery'). SEED will generate if missing."
+            "Canonical display name (e.g., 'Dr. Aris Chen', 'Maya\u2019s Bakery'). "
+            "Required per R-2.1."
         ),
     )
     concept: str = Field(min_length=1, description="One-line essence of the entity")

@@ -93,7 +93,12 @@ async def test_execute_calls_all_three_phases() -> None:
         mock_summarize.return_value = ("Brief summary", 100)
         mock_artifact = BrainstormOutput(
             entities=[
-                {"entity_id": "hero", "entity_category": "character", "concept": "A brave warrior"}
+                {
+                    "entity_id": "hero",
+                    "entity_category": "character",
+                    "name": "Hero",
+                    "concept": "A brave warrior",
+                }
             ],
             dilemmas=[
                 {
@@ -163,7 +168,12 @@ async def test_execute_emits_phase_progress() -> None:
         mock_summarize.return_value = ("Brief summary", 100)
         mock_artifact = BrainstormOutput(
             entities=[
-                {"entity_id": "hero", "entity_category": "character", "concept": "A brave warrior"}
+                {
+                    "entity_id": "hero",
+                    "entity_category": "character",
+                    "name": "Hero",
+                    "concept": "A brave warrior",
+                }
             ],
             dilemmas=[
                 {
@@ -341,7 +351,12 @@ async def test_execute_returns_artifact_as_dict() -> None:
         mock_summarize.return_value = ("Brief", 50)
         mock_artifact = BrainstormOutput(
             entities=[
-                {"entity_id": "kay", "entity_category": "character", "concept": "Protagonist"}
+                {
+                    "entity_id": "kay",
+                    "entity_category": "character",
+                    "name": "Kay",
+                    "concept": "Protagonist",
+                }
             ],
             dilemmas=[
                 {
@@ -422,7 +437,12 @@ def test_brainstorm_output_model_validates() -> None:
     """BrainstormOutput model validates correctly."""
     output = BrainstormOutput(
         entities=[
-            {"entity_id": "hero", "entity_category": "character", "concept": "The protagonist"}
+            {
+                "entity_id": "hero",
+                "entity_category": "character",
+                "name": "Hero",
+                "concept": "The protagonist",
+            }
         ],
         dilemmas=[
             {
