@@ -45,6 +45,7 @@ def validate_seed_output(graph: Graph) -> list[str]:
     _check_paths_and_consequences(graph, errors)
     _check_beats(graph, errors)
     _check_belongs_to_yshape(graph, errors)
+    _check_convergence_and_ordering(graph, errors)
     return errors
 
 
@@ -264,6 +265,56 @@ def _check_belongs_to_yshape(graph: Graph, errors: list[str]) -> None:
                 f"explored answers but no pre-commit beats (beats with multiple "
                 f"belongs_to edges) -- Y-shape fork missing"
             )
+
+
+def _check_convergence_and_ordering(graph: Graph, errors: list[str]) -> None:
+    """Phase 7 dilemma analysis + Phase 8 ordering (R-7.1 to R-7.3, R-8.3, R-8.4)."""
+    dilemma_nodes = graph.get_nodes_by_type("dilemma")
+
+    for dilemma_id, dilemma in sorted(dilemma_nodes.items()):
+        role = dilemma.get("dilemma_role")
+        weight = dilemma.get("residue_weight")
+        salience = dilemma.get("ending_salience")
+        if role is None:
+            errors.append(f"R-7.1: dilemma {dilemma_id!r} missing dilemma_role")
+        elif role not in _VALID_DILEMMA_ROLES:
+            errors.append(
+                f"R-7.1: dilemma {dilemma_id!r} has invalid dilemma_role {role!r}; "
+                f"must be one of {sorted(_VALID_DILEMMA_ROLES)}"
+            )
+        if weight is None:
+            errors.append(f"R-7.2: dilemma {dilemma_id!r} missing residue_weight")
+        elif weight not in _VALID_RESIDUE_WEIGHTS:
+            errors.append(
+                f"R-7.2: dilemma {dilemma_id!r} has invalid residue_weight {weight!r}; "
+                f"must be one of {sorted(_VALID_RESIDUE_WEIGHTS)}"
+            )
+        if salience is None:
+            errors.append(f"R-7.3: dilemma {dilemma_id!r} missing ending_salience")
+        elif salience not in _VALID_ENDING_SALIENCES:
+            errors.append(
+                f"R-7.3: dilemma {dilemma_id!r} has invalid ending_salience "
+                f"{salience!r}; must be one of {sorted(_VALID_ENDING_SALIENCES)}"
+            )
+
+    ordering_nodes = graph.get_nodes_by_type("ordering")
+    for ord_id, ord_node in sorted(ordering_nodes.items()):
+        rel = ord_node.get("relationship")
+        if rel not in _VALID_ORDERING_RELATIONSHIPS:
+            errors.append(f"R-8.1: ordering {ord_id!r} has invalid relationship {rel!r}")
+        a, b = ord_node.get("dilemma_a"), ord_node.get("dilemma_b")
+        if rel == "concurrent" and a and b and a > b:
+            errors.append(
+                f"R-8.3: concurrent ordering {ord_id!r} must have lex-smaller "
+                f"dilemma as dilemma_a (got {a!r} > {b!r})"
+            )
+
+    shared_entity_edges = graph.get_edges(edge_type="shared_entity")
+    if shared_entity_edges:
+        errors.append(
+            f"R-8.4: shared_entity edges are forbidden (derived from anchored_to, "
+            f"not declared); found {len(shared_entity_edges)}"
+        )
 
 
 def _check_upstream_contract(graph: Graph, errors: list[str]) -> None:
