@@ -190,6 +190,8 @@ class BrainstormOutput(BaseModel):
         dilemmas: All generated dramatic dilemmas.
     """
 
+    model_config = {"extra": "forbid"}
+
     entities: list[Entity] = Field(
         default_factory=list,
         description="Generated story entities",
