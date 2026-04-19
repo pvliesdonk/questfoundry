@@ -31,6 +31,10 @@ from questfoundry.graph.dream_validation import (
     DreamContractError,
     validate_dream_output,
 )
+from questfoundry.graph.seed_validation import (
+    SeedContractError,
+    validate_seed_output,
+)
 from questfoundry.observability.logging import get_logger
 
 if TYPE_CHECKING:
@@ -2057,6 +2061,13 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
             a_node,
             b_node,
             description=relationship.get("description", ""),
+        )
+
+    contract_errors = validate_seed_output(graph)
+    if contract_errors:
+        log.error("seed_contract_violated", errors=contract_errors)
+        raise SeedContractError(
+            "SEED stage output contract violated:\n  - " + "\n  - ".join(contract_errors)
         )
 
 
