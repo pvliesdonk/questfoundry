@@ -28,7 +28,7 @@ reference the section anchors in this document.
 | M-SHIP-spec | issues-filed | 7 | #1331 | 7 |
 | M-logging-compliance | issues-filed | 3 | #1339 | 3 |
 | M-silent-degradation | issues-filed | 3 | #1343 | 2 |
-| M-contract-chaining | pending | — | — | — |
+| M-contract-chaining | drafted | 2 | — | — |
 
 ---
 
@@ -1209,6 +1209,89 @@ Voice-research: degraded prose quality but not structurally broken → option 2.
 **Code refs:** See each linked issue / stage-milestone cluster.
 
 **Test refs:** See each linked issue.
+
+---
+
+## M-contract-chaining
+
+### Summary
+
+Cross-cutting audit of Stage Input Contract / Stage Output Contract enforcement at the 7 adjacent-stage seams. Per the authoritative specs, each stage's procedure doc defines an explicit contract for what must be true at entry and what will be true at exit, and the "verbatim match" claim requires Stage N Input ≡ Stage N-1 Output.
+
+**Per-seam summary:**
+
+| Seam | Entry-contract check | Exit-contract check | Classification |
+|---|---|---|---|
+| DREAM → BRAINSTORM | Vision node existence only (`BrainstormStage._get_vision_context`) | None | drift — minimal entry, no exit |
+| BRAINSTORM → SEED | Loads brainstorm context from graph; no explicit validator | None | missing — implicit seam |
+| SEED → GROW | `last_stage` sentinel check only (`grow/stage.py:287-291`) | None | missing — sentinel-only seam |
+| GROW → POLISH | **Explicit `validate_grow_output(graph)`** (`polish/stage.py:239`) | Exit: **`validate_polish_output(graph)`** (`polish/deterministic.py:1395-1397`) | **compliant** — both sides enforce |
+| POLISH → FILL | `last_stage` sentinel check only (`fill.py:391-396`) | None | missing — sentinel-only seam |
+| FILL → DRESS | `last_stage` sentinel check only (`dress.py:283-286`) | None | missing — sentinel-only seam |
+| DRESS → SHIP | `last_stage`-like: checks "passages have prose" only (`ship.py:76-89`); does not validate DRESS output contract | None | drift — partial entry, wrong upstream |
+
+- Seams total: 7
+- Compliant: 1 (GROW → POLISH)
+- Drift: 2 (DREAM → BRAINSTORM; DRESS → SHIP)
+- Missing: 4 (BRAINSTORM → SEED; SEED → GROW; POLISH → FILL; FILL → DRESS)
+- Clusters: 2
+
+### Cluster: Stage entry skips explicit upstream-contract validation (6 of 7 seams)
+
+**Rules covered:** Cross-stage contract invariant — Stage N Input Contract ≡ Stage N-1 Output Contract, per every `docs/design/procedures/*.md` "Stage Input Contract" section.
+
+**Pattern:** Each downstream stage relies on a `last_stage` sentinel (or a narrow existence check) as a proxy for upstream completion. Only POLISH runs an explicit validator that mirrors the upstream (GROW) Stage Output Contract.
+
+**Current state — seams 1–6 (excluding GROW→POLISH):**
+- `src/questfoundry/pipeline/stages/brainstorm.py:152-160` — DREAM→BRAINSTORM: checks `graph.get_node("vision") is not None`. Does not validate the vision has the fields the DREAM Stage Output Contract requires (genre, tone, themes, audience, scope, etc.).
+- `src/questfoundry/pipeline/stages/seed.py:291` — BRAINSTORM→SEED: loads brainstorm context from graph via `_get_brainstorm_context`. No structural validation; relies on implicit "the LLM will cope."
+- `src/questfoundry/pipeline/stages/grow/stage.py:287-291` — SEED→GROW: `last_stage in ("seed", "grow", …)` sentinel; no validator.
+- `src/questfoundry/pipeline/stages/fill.py:391-396` — POLISH→FILL: `last_stage in ("polish", …)` sentinel; no validator.
+- `src/questfoundry/pipeline/stages/dress.py:283-286` — FILL→DRESS: `last_stage in ("fill", …)` sentinel; no validator.
+- `src/questfoundry/pipeline/stages/ship.py:76-89` — DRESS→SHIP: checks "passages have prose" (which is really a FILL contract, not a DRESS contract); no DRESS-output validator.
+
+**Gap:** Each seam is a point where the "verbatim match" claim in the procedure docs can drift silently. A malformed or partial upstream artifact passes through as long as the sentinel says the stage ran. When downstream later fails, the error message points at downstream code rather than the upstream contract break.
+
+The GROW→POLISH seam demonstrates the correct pattern: `validate_grow_output(graph)` runs at POLISH entry, and a contract break produces a clear error that identifies GROW as the broken upstream.
+
+**Recommended fix:** For each of the 6 seams, create a `validate_<upstream>_output(graph) -> list[str]` helper alongside the upstream stage (mirroring `polish_validation.validate_grow_output`). Call it at the downstream stage's entry, after rewind and before any phase dispatch. On errors, raise with a message that names the upstream stage explicitly (so the failure lands on the right step).
+
+Recommended new helpers:
+- `validate_dream_output(graph)` — vision node field coverage per DREAM Stage Output Contract
+- `validate_brainstorm_output(graph)` — entities + dilemmas + answers counts, required fields, anchored_to coverage
+- `validate_seed_output(graph)` — paths, commit/pre-commit beats, Y-shape skeleton invariants
+- `validate_fill_output(graph)` — every passage has non-empty prose
+- `validate_dress_output(graph)` — codex entries + entity appears edges + art direction (see also cluster 2 below)
+
+Stage-owning milestones (not this epic) will own implementing these — this epic only tracks the entry-validation wiring.
+
+**Code refs:** see Current state list.
+
+**Test refs:** `tests/integration/test_stage_chaining.py` (new) — fixtures that produce partial upstream artifacts and assert the downstream stage halts with a clear error pointing at the upstream.
+
+### Cluster: Stage exit contract not enforced (6 of 7 stages produce output without validation)
+
+**Rules covered:** Every procedure doc's "Stage Output Contract" section; Design Doc Authority (specs supersede code, so if the spec says an output has N fields, the code must produce all N).
+
+**Pattern:** The upstream side of a seam — the stage's exit — produces an artifact and calls `graph.set_last_stage(...)` without validating that the artifact actually satisfies its documented Stage Output Contract. Only POLISH runs `validate_polish_output(graph)` at exit (`polish/deterministic.py:1395-1397`).
+
+**Current state:** DREAM, BRAINSTORM, SEED, GROW, FILL, DRESS all lack an explicit exit-validation call. Errors that slip through downstream become hard to localize because the upstream was allowed to "succeed" with a malformed artifact.
+
+Examples of issues this hides (cross-referenced from per-stage milestones):
+- BRAINSTORM #1273 — dilemma written without an `anchored_to` edge; no exit-validator would have caught this.
+- SEED `explored` silent break (M-SEED-spec cluster) — no runtime check.
+- GROW all-intersections-rejected / R-2.7 silent drop (M-GROW-spec clusters).
+- FILL degraded passage (M-FILL-spec #1321 + M-silent-degradation #1345).
+
+**Gap:** Exit validation is the mirror of entry validation. Without it, the seam is only single-sided enforcement at best. If the downstream stage never checks (see cluster 1), malformed artifacts pass through both sides of the seam unnoticed.
+
+**Recommended fix:** For each of DREAM, BRAINSTORM, SEED, GROW, FILL, DRESS, add a stage-exit call to the stage's `validate_<stage>_output(graph)` (the same function created in cluster 1). The call runs after the last phase / last mutation and before `graph.set_last_stage(...)`. On errors, raise the stage-local error type, so the stage that produced the bad artifact owns the failure.
+
+POLISH is already compliant (keep as reference pattern).
+
+**Code refs:** `src/questfoundry/pipeline/stages/dream.py`, `brainstorm.py`, `seed.py`, `grow/stage.py`, `fill.py`, `dress.py` — each needs an exit hook alongside where `set_last_stage(...)` is called.
+
+**Test refs:** `tests/integration/test_stage_chaining.py` (same file as cluster 1) — fixtures that mutate a stage's output to violate the contract and assert the stage raises at exit, not silently saves.
 
 ---
 
