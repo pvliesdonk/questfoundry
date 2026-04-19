@@ -1,7 +1,7 @@
 """Pipeline orchestrator for stage execution."""
 
-# pyright: reportReturnType=false, reportAttributeAccessIssue=false, reportGeneralTypeIssues=false
-# TODO(#1354): orchestrator tuple-return widening in provider resolution and langchain .close() API drift; tracked in issue #1354
+# pyright: reportReturnType=false, reportAttributeAccessIssue=false
+# TODO(#1354): cleanup during orchestrator tuple-return widening work
 
 from __future__ import annotations
 
@@ -852,7 +852,7 @@ class PipelineOrchestrator:
                 if callable(close_method):
                     result = close_method()
                     if hasattr(result, "__await__"):
-                        await result
+                        await result  # pyright: ignore[reportGeneralTypeIssues]
             self._creative_model = None
 
         # Clear other model references
