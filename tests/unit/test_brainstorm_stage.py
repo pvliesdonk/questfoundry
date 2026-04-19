@@ -534,6 +534,92 @@ def test_entity_types() -> None:
         entity = Entity(
             entity_id="test",
             entity_category=entity_category,
+            name="Test Entity",
             concept="Test concept",
         )
         assert entity.entity_category == entity_category
+
+
+def test_dilemma_question_must_end_with_qmark() -> None:
+    """R-3.1: dilemma question must end with ?."""
+    import pytest
+    from pydantic import ValidationError
+
+    from questfoundry.models.brainstorm import Dilemma
+
+    with pytest.raises(ValidationError) as exc:
+        Dilemma(
+            dilemma_id="dilemma::x",
+            question="not a question",
+            why_it_matters="stakes",
+            answers=[
+                {"answer_id": "a", "description": "d", "is_canonical": True},
+                {"answer_id": "b", "description": "d", "is_canonical": False},
+            ],
+        )
+    assert "?" in str(exc.value)
+
+
+def test_entity_name_must_be_non_empty() -> None:
+    """R-2.1: entity name is required and non-empty."""
+    import pytest
+    from pydantic import ValidationError
+
+    from questfoundry.models.brainstorm import Entity
+
+    with pytest.raises(ValidationError):
+        Entity(entity_id="kay", entity_category="character", concept="c")  # no name
+
+    with pytest.raises(ValidationError):
+        Entity(entity_id="kay", entity_category="character", name="", concept="c")
+
+    with pytest.raises(ValidationError):
+        Entity(entity_id="kay", entity_category="character", name=None, concept="c")
+
+
+def test_dilemma_id_must_have_prefix() -> None:
+    """R-3.7: dilemma_id must start with 'dilemma::'."""
+    import pytest
+    from pydantic import ValidationError
+
+    from questfoundry.models.brainstorm import Dilemma
+
+    with pytest.raises(ValidationError) as exc:
+        Dilemma(
+            dilemma_id="mentor_trust",  # missing prefix
+            question="Q?",
+            why_it_matters="stakes",
+            answers=[
+                {"answer_id": "a", "description": "d", "is_canonical": True},
+                {"answer_id": "b", "description": "d", "is_canonical": False},
+            ],
+        )
+    assert "dilemma::" in str(exc.value)
+
+
+def test_brainstorm_output_rejects_unknown_fields() -> None:
+    """R-3.8 defensive: BrainstormOutput must not silently accept foreign node data."""
+    import pytest
+    from pydantic import ValidationError
+
+    from questfoundry.models.brainstorm import BrainstormOutput
+
+    with pytest.raises(ValidationError):
+        BrainstormOutput.model_validate(
+            {
+                "entities": [],
+                "dilemmas": [],
+                "paths": [{"path_id": "x"}],  # not an allowed field
+            }
+        )
+
+
+def test_brainstorm_output_minimum_floor() -> None:
+    """R-1.1 floor: must produce ≥1 entity and ≥1 dilemma."""
+    import pytest
+    from pydantic import ValidationError
+
+    from questfoundry.models.brainstorm import BrainstormOutput
+
+    with pytest.raises(ValidationError):
+        BrainstormOutput.model_validate({"entities": [], "dilemmas": []})

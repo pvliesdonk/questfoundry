@@ -113,7 +113,15 @@ class Dilemma(BaseModel):
             "'dilemma::murder_weapon')"
         ),
     )
-    question: str = Field(min_length=1, description="Dramatic question (should end with ?)")
+    question: str = Field(min_length=1, description="Dramatic question (must end with ?)")
+
+    @field_validator("question")
+    @classmethod
+    def validate_question_ends_with_qmark(cls, v: str) -> str:
+        """R-3.1: dilemma question must end with '?'."""
+        if not v.rstrip().endswith("?"):
+            raise ValueError(f"dilemma question must end with '?' (got {v!r}). See R-3.1.")
+        return v
 
     @field_validator("dilemma_id")
     @classmethod
