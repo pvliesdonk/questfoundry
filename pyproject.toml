@@ -171,7 +171,9 @@ module = [
 ignore_missing_imports = true
 
 [tool.pyright]
-# Editor / pyright-lsp only. CI still uses mypy (see [tool.mypy]).
+# Runs in CI alongside mypy; pyright-lsp picks this up in the editor too.
+# Per-file ignores in late-stage code are tagged TODO(#<epic>) and removed
+# as each stage's spec-compliance PR lands.
 venvPath = "."
 venv = ".venv"
 pythonVersion = "3.11"
