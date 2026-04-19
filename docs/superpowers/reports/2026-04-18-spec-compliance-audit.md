@@ -70,7 +70,7 @@ compliance issues — they are a follow-on track.
 
 **Gap:** The authoritative spec (dream.md, line 51) states scope presets should be "e.g., `micro`, `short`, `medium`, `long`, or their equivalent implementation values." The spec examples include `micro` and `medium`, but the code uses `vignette` and `standard` instead. While the spec does say "or their equivalent implementation values," using entirely different names (`vignette` vs. `micro`, `standard` vs. `medium`) creates ambiguity about whether these are truly equivalent or a silent divergence.
 
-**Recommended fix:** Either update the scope preset names to match the spec examples (`micro`, `short`, `medium`, `long`), or update the spec to formally document the equivalence (`micro` ↔ `vignette`, `medium` ↔ `standard`) with clear justification. If keeping the current names, add a comment to the model explaining the mapping.
+**Recommended fix:** Align terminology to match the spec exactly. Rename the enum values to `micro`, `short`, `medium`, `long`. Update `src/questfoundry/models/dream.py:34`, `src/questfoundry/prompts/templates/dream.yaml:16`, and any downstream consumers that match against the old names (BRAINSTORM/SEED preset lookups, CLI help text, tests).
 
 **Code refs:** `src/questfoundry/models/dream.py:34`, `src/questfoundry/prompts/templates/dream.yaml:16`
 
