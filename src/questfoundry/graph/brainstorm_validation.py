@@ -182,11 +182,6 @@ def validate_brainstorm_output(graph: Graph) -> list[str]:
             f"Output-11: DREAM contract violated post-BRAINSTORM — {e}" for e in vision_contract
         )
 
-    # Output-11: vision node must still be present (BRAINSTORM must not remove it)
-    vision_nodes = graph.get_nodes_by_type("vision")
-    if not vision_nodes:
-        errors.append("Output-11: vision node is missing (BRAINSTORM must not remove it)")
-
     entity_nodes = graph.get_nodes_by_type("entity")
     dilemma_nodes = graph.get_nodes_by_type("dilemma")
 

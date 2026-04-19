@@ -32,13 +32,14 @@ class TestEntityNameField:
         assert entity.name == "Lady Beatrice Ashford"
 
     def test_entity_without_name(self) -> None:
-        """Entity can omit name (SEED will generate one)."""
-        entity = Entity(
-            entity_id="butler",
-            entity_category="character",
-            concept="The manor's long-serving butler",
-        )
-        assert entity.name is None
+        """Entity without name is rejected — R-2.1 now requires a non-empty name."""
+        with pytest.raises(ValidationError) as exc:
+            Entity(  # type: ignore[call-arg]
+                entity_id="butler",
+                entity_category="character",
+                concept="The manor's long-serving butler",
+            )
+        assert "name" in str(exc.value)
 
     def test_entity_name_min_length(self) -> None:
         """Empty string name is rejected (must be None or non-empty)."""
