@@ -596,6 +596,38 @@ class TestBrainstormMutations:
 
         assert len(graph.to_dict()["nodes"]) == 0
 
+    def test_apply_brainstorm_mutations_fails_on_unresolvable_entity(self) -> None:
+        """R-3.6: dilemma referencing non-existent entity must raise, not silently drop."""
+        graph = Graph.empty()
+        output = {
+            "entities": [
+                {
+                    "entity_id": "kay",
+                    "entity_category": "character",
+                    "name": "Kay",
+                    "concept": "archivist",
+                },
+                {"entity_id": "a", "entity_category": "location", "name": "A", "concept": "x"},
+                {"entity_id": "b", "entity_category": "location", "name": "B", "concept": "x"},
+            ],
+            "dilemmas": [
+                {
+                    "dilemma_id": "dilemma::mentor_trust",
+                    "question": "Can we trust?",
+                    "why_it_matters": "stakes",
+                    "central_entity_ids": ["character::ghost"],  # does not exist
+                    "answers": [
+                        {"answer_id": "yes", "description": "d", "is_canonical": True},
+                        {"answer_id": "no", "description": "d", "is_canonical": False},
+                    ],
+                }
+            ],
+        }
+
+        with pytest.raises((MutationError, ValueError)) as exc_info:
+            apply_brainstorm_mutations(graph, output)
+        assert "ghost" in str(exc_info.value) or "anchored_to" in str(exc_info.value).lower()
+
 
 class TestValidateBrainstormMutations:
     """Test BRAINSTORM semantic validation."""

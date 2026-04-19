@@ -912,18 +912,20 @@ def apply_brainstorm_mutations(graph: Graph, output: dict[str, Any]) -> None:
         dilemma_node_id = _prefix_id("dilemma", raw_id)
         raw_id = strip_scope_prefix(dilemma_node_id)
 
-        # Resolve entity references for anchored_to edges
+        # Resolve entity references for anchored_to edges.
+        # R-3.6: every Dilemma needs ≥1 anchored_to edge. An unresolvable
+        # reference is a structural failure — raise, do not silently drop.
         raw_central_entities = dilemma.get("central_entity_ids", [])
         prefixed_central_entities = []
         for eid in raw_central_entities:
             try:
                 prefixed_central_entities.append(_resolve_entity_ref(graph, eid))
-            except ValueError:
-                log.warning(
-                    "anchored_to_entity_not_found",
-                    dilemma_id=raw_id,
-                    entity_id=eid,
-                )
+            except ValueError as exc:
+                raise MutationError(
+                    f"Dilemma '{raw_id}' references unknown entity '{eid}' "
+                    f"in central_entity_ids (R-3.6 requires all anchored_to "
+                    f"targets to exist in the entity list)."
+                ) from exc
 
         # Create dilemma node (central entities stored as edges, not properties)
         dilemma_data = {
