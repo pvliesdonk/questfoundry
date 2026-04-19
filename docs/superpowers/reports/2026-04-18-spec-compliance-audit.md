@@ -76,19 +76,19 @@ compliance issues — they are a follow-on track.
 
 **Test refs:** `tests/unit/test_dream_stage.py` (tests use `standard` directly), `tests/integration/test_dream_pipeline.py:59` (tests validate artifact structure but not scope values against spec)
 
-### Cluster: Missing Human Approval Gate for Vision Node
+### Cluster: Vision approval not explicitly recorded; rejection loop missing
 
 **Rules covered:** R-1.12, R-1.13
 
-**Current state:** The DREAM stage executes (discuss → summarize → serialize) and writes the Vision node to the graph via `apply_dream_mutations()`, but there is no explicit human approval step before the stage marks itself complete. The CLI command `qf dream` runs the stage and saves the artifact without waiting for user confirmation. There is no rejection loop mechanism for the user to request changes and loop back.
+**Current state:** The DREAM stage runs discuss → summarize → serialize and writes the Vision via `apply_dream_mutations()`. When `qf dream` is run with `--no-interactive`, the flag implies explicit user pre-approval of all gates, so the stage completing without an interactive prompt is legitimate. In interactive mode a prompt is shown. However, (a) the approval mode is not recorded on the Vision node, and (b) no rejection loop exists in the interactive mode — rejection currently re-runs the whole stage rather than re-entering the operation with the misalignment.
 
-**Gap:** The authoritative spec (dream.md, R-1.12 and R-1.13) requires DREAM to be "not complete until the human explicitly approves the Vision node" and rejection must "loop back to the operation that contains the misalignment." The current implementation skips both. The Vision node is upserted to the graph immediately after serialization with no approval gate. If the user is unsatisfied, there is no in-pipeline mechanism to request changes and re-run a specific operation (spark exploration, constraint definition, or synthesis).
+**Gap:** R-1.12 is satisfied by the `--no-interactive` pre-approval pattern plus interactive-mode prompting; the gap is traceability — the Vision node looks identical regardless of approval mode. R-1.13 is not satisfied: rejection does not loop back to a specific operation (spark exploration / constraint definition / synthesis); it only restarts the stage.
 
-**Recommended fix:** Introduce an approval gate after the serialize phase: display the serialized Vision to the user and require an explicit approve/reject response before marking DREAM complete. On rejection, support user indication of which operation failed (spark exploration, constraint definition, or synthesis) and re-enter that operation rather than re-serializing. This may require changes to the orchestrator's phase-progression model and the CLI's interactive flow.
+**Recommended fix:** (1) Stamp the Vision node at gate-pass time with `approved_at: <timestamp>` and `approval_mode: "interactive" | "no_interactive"`. (2) On interactive rejection, prompt the user to identify which operation to re-enter (spark exploration / constraint definition / synthesis) and re-run from that operation rather than restarting the stage. (3) Downstream stages (BRAINSTORM) can assert the Vision has the approval stamp before proceeding.
 
-**Code refs:** `src/questfoundry/pipeline/stages/dream.py:170-191` (no approval check), `src/questfoundry/graph/mutations.py:561-591` (upsert without approval), `src/questfoundry/cli.py:784-869` (no approval prompt)
+**Code refs:** `src/questfoundry/pipeline/stages/dream.py:170-191`, `src/questfoundry/graph/mutations.py:561-591`, `src/questfoundry/cli.py:784-869`
 
-**Test refs:** `tests/unit/test_dream_stage.py` (no tests for approval gate), `tests/integration/test_dream_pipeline.py` (no approval simulation)
+**Test refs:** `tests/unit/test_dream_stage.py`, `tests/integration/test_dream_pipeline.py`
 
 ### Uncheckable rules
 
@@ -412,17 +412,17 @@ compliance issues — they are a follow-on track.
 
 **Test refs:** `tests/unit/test_seed_models.py` (no Consequence ripple validation test)
 
-### Cluster: Path Freeze approval gate not recorded
+### Cluster: Path Freeze approval not explicitly recorded
 
 **Rules covered:** R-6.4
 
-**Current state:** The spec requires "Path Freeze: Human approval is required and explicitly recorded." The code does not show a mechanism for recording or checking this approval. No gate or flag is set after Phase 6. Nothing prevents Phase 6 output from being consumed by GROW if the human did not explicitly approve Path Freeze.
+**Current state:** When `qf seed` is run with `--no-interactive`, the flag implies explicit user pre-approval of all gates including Path Freeze. Interactive mode uses an interactive gate. The gate mechanism itself is compliant with R-6.4's "approval is required." What is missing is the "explicitly recorded" half — the graph state after Phase 6 does not carry a marker indicating the approval mode or timestamp.
 
-**Gap:** R-6.4 is a code-side requirement (the approval must be explicitly recorded somewhere checkable by downstream stages). There is no recorded approval state in the artifact or graph.
+**Gap:** R-6.4 requires approval to be "explicitly recorded." The gate pass is enforced but not recorded. GROW cannot check whether Path Freeze was user-approved (interactive) vs auto-approved (`--no-interactive`), and has no recorded timestamp to verify recency.
 
-**Recommended fix:** Add an explicit approval flag/timestamp to the SEED artifact or a graph-level marker (e.g., a `path_freeze_approved_at` field). Downstream stages (GROW) should check for this flag before proceeding. The CLI layer should prompt for approval at stage completion and set the flag only on explicit confirmation.
+**Recommended fix:** Stamp a graph-level marker at Path Freeze gate-pass time (e.g., a `path_freeze_approved_at: <timestamp>` and `path_freeze_approval_mode: "interactive" | "no_interactive"` pair — either on a dedicated PathFreeze node or as metadata on an existing stage-boundary artifact). GROW's Stage Input Contract validation should check the marker exists before proceeding.
 
-**Code refs:** `src/questfoundry/pipeline/stages/seed.py` (no approval gate visible)
+**Code refs:** `src/questfoundry/pipeline/stages/seed.py` (no approval stamping)
 
 **Test refs:** None (approval state not currently representable)
 
@@ -762,19 +762,19 @@ compliance issues — they are a follow-on track.
 
 *(Subagent originally produced 14 clusters; several were self-described as compliant or spec-gap observations. Refined here to 5 actionable findings; compliant clusters rolled back into Compliant count.)*
 
-### Cluster: Voice Document approval gate auto-approves by default
+### Cluster: Voice Document approval not explicitly recorded on the node
 
 **Rules covered:** R-1.7
 
-**Current state:** `_phase_0_voice()` creates the Voice Document singleton, then proceeds through an `AutoApprovePhaseGate()` by default. No explicit enforcement that prose generation (Phase 2) cannot start without human approval of the voice document.
+**Current state:** `_phase_0_voice()` creates the Voice Document singleton, then proceeds through an `AutoApprovePhaseGate()` when the CLI is invoked with `--no-interactive` (which implies user pre-approval of all gates). Interactive mode uses an interactive gate. The approval itself — whether interactive or auto — is not recorded on the Voice node.
 
-**Gap:** R-1.7 requires "Human approval of the Voice Document is required before Phase 2." Auto-approve may be acceptable for tests/dev, but production runs risk starting prose generation against an unreviewed voice.
+**Gap:** R-1.7 requires "Human approval of the Voice Document is required before Phase 2." `--no-interactive` is a legitimate form of pre-approval (the user has explicitly opted in at invocation time), so the gate mechanism itself is compliant. The gap is that the approval is not explicitly recorded on the artifact — a Voice node after Phase 0 looks identical whether it was interactively approved or auto-approved, and downstream readers can't tell.
 
-**Recommended fix:** Make the human gate explicit and required by default in production. Document that `AutoApprovePhaseGate` is for test/dev only; CLI should install an interactive gate that requires explicit user confirmation. Alternatively, add a validation in Phase 2's entry that verifies the Voice node has an `approved_at` timestamp set by the gate.
+**Recommended fix:** Stamp the Voice node at gate-pass time with `approved_at: <timestamp>` and `approval_mode: "interactive" | "no_interactive"`. Phase 2 entry can assert the stamp exists before starting prose generation. This makes the approval traceable without changing the approval flow.
 
 **Code refs:** `src/questfoundry/pipeline/stages/fill.py:817-886` (Phase 0), `src/questfoundry/pipeline/stages/fill.py:299-340` (execute flow with gate)
 
-**Test refs:** `tests/unit/test_fill_stage.py` (no test for voice approval gate enforcement)
+**Test refs:** `tests/unit/test_fill_stage.py` (no test for approval stamping)
 
 ### Cluster: Entity-update silent skip on missing entity (R-2.14 + silent degradation + wrong log level)
 
