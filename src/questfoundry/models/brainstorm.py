@@ -124,8 +124,10 @@ class Dilemma(BaseModel):
 
     @field_validator("dilemma_id")
     @classmethod
-    def validate_dilemma_id_no_trailing_or(cls, v: str) -> str:
-        """Reject dilemma IDs ending with '_or_' (common LLM generation error)."""
+    def validate_dilemma_id_format(cls, v: str) -> str:
+        """R-3.7: dilemma_id must have 'dilemma::' prefix; reject trailing '_or_'."""
+        if not v.startswith("dilemma::"):
+            raise ValueError(f"dilemma_id '{v}' missing required 'dilemma::' prefix. See R-3.7.")
         raw = v.removeprefix("dilemma::")
         if raw.endswith("_or_") or raw.endswith("_or"):
             msg = (

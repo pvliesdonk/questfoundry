@@ -102,7 +102,7 @@ async def test_execute_calls_all_three_phases() -> None:
             ],
             dilemmas=[
                 {
-                    "dilemma_id": "quest",
+                    "dilemma_id": "dilemma::quest",
                     "question": "Will the hero succeed?",
                     "answers": [
                         {
@@ -177,7 +177,7 @@ async def test_execute_emits_phase_progress() -> None:
             ],
             dilemmas=[
                 {
-                    "dilemma_id": "quest",
+                    "dilemma_id": "dilemma::quest",
                     "question": "Will the hero succeed?",
                     "answers": [
                         {
@@ -360,7 +360,7 @@ async def test_execute_returns_artifact_as_dict() -> None:
             ],
             dilemmas=[
                 {
-                    "dilemma_id": "trust",
+                    "dilemma_id": "dilemma::trust",
                     "question": "Can Kay trust the mentor?",
                     "answers": [
                         {"answer_id": "yes", "description": "Trust", "is_canonical": True},
@@ -381,7 +381,7 @@ async def test_execute_returns_artifact_as_dict() -> None:
 
         assert isinstance(artifact, dict)
         assert artifact["entities"][0]["entity_id"] == "kay"
-        assert artifact["dilemmas"][0]["dilemma_id"] == "trust"
+        assert artifact["dilemmas"][0]["dilemma_id"] == "dilemma::trust"
 
 
 # --- Vision Context Formatting Tests ---
@@ -446,7 +446,7 @@ def test_brainstorm_output_model_validates() -> None:
         ],
         dilemmas=[
             {
-                "dilemma_id": "quest",
+                "dilemma_id": "dilemma::quest",
                 "question": "Will the hero complete the quest?",
                 "answers": [
                     {
@@ -469,7 +469,7 @@ def test_brainstorm_output_model_validates() -> None:
     assert len(output.entities) == 1
     assert len(output.dilemmas) == 1
     assert output.entities[0].entity_id == "hero"
-    assert output.dilemmas[0].dilemma_id == "quest"
+    assert output.dilemmas[0].dilemma_id == "dilemma::quest"
 
 
 def test_dilemma_requires_two_answers() -> None:
@@ -480,7 +480,7 @@ def test_dilemma_requires_two_answers() -> None:
 
     with pytest.raises(ValidationError, match="List should have at least 2 items"):
         Dilemma(
-            dilemma_id="test",
+            dilemma_id="dilemma::test",
             question="Test?",
             answers=[{"answer_id": "one", "description": "Only one", "is_canonical": True}],
             central_entity_ids=[],
@@ -496,7 +496,7 @@ def test_dilemma_requires_one_default_path_answer() -> None:
 
     with pytest.raises(ValidationError, match=r"one.*default path"):
         Dilemma(
-            dilemma_id="test",
+            dilemma_id="dilemma::test",
             question="Test?",
             answers=[
                 {"answer_id": "one", "description": "First", "is_canonical": True},
