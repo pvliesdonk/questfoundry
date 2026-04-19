@@ -242,7 +242,27 @@ async def test_execute_passes_vision_context_to_discuss() -> None:
         mock_prompt.return_value = "System prompt with vision"
         mock_discuss.return_value = ([], 1, 100)
         mock_summarize.return_value = ("Brief", 50)
-        mock_artifact = BrainstormOutput(entities=[], dilemmas=[])
+        mock_artifact = BrainstormOutput(
+            entities=[
+                {
+                    "entity_id": "stub",
+                    "entity_category": "character",
+                    "name": "Stub",
+                    "concept": "c",
+                }
+            ],
+            dilemmas=[
+                {
+                    "dilemma_id": "dilemma::stub",
+                    "question": "A question?",
+                    "why_it_matters": "stakes",
+                    "answers": [
+                        {"answer_id": "yes", "description": "Yes", "is_canonical": True},
+                        {"answer_id": "no", "description": "No", "is_canonical": False},
+                    ],
+                }
+            ],
+        )
         mock_serialize.return_value = (mock_artifact, 100)
 
         await stage.execute(
@@ -279,7 +299,27 @@ async def test_execute_passes_brainstorm_output_schema() -> None:
         mock_tools.return_value = []
         mock_discuss.return_value = ([], 1, 100)
         mock_summarize.return_value = ("Brief", 50)
-        mock_artifact = BrainstormOutput(entities=[], dilemmas=[])
+        mock_artifact = BrainstormOutput(
+            entities=[
+                {
+                    "entity_id": "stub",
+                    "entity_category": "character",
+                    "name": "Stub",
+                    "concept": "c",
+                }
+            ],
+            dilemmas=[
+                {
+                    "dilemma_id": "dilemma::stub",
+                    "question": "A question?",
+                    "why_it_matters": "stakes",
+                    "answers": [
+                        {"answer_id": "yes", "description": "Yes", "is_canonical": True},
+                        {"answer_id": "no", "description": "No", "is_canonical": False},
+                    ],
+                }
+            ],
+        )
         mock_serialize.return_value = (mock_artifact, 100)
 
         await stage.execute(
@@ -315,7 +355,27 @@ async def test_execute_uses_brainstorm_summarize_prompt() -> None:
         mock_prompt.return_value = "Brainstorm summarize prompt"
         mock_discuss.return_value = ([], 1, 100)
         mock_summarize.return_value = ("Brief", 50)
-        mock_artifact = BrainstormOutput(entities=[], dilemmas=[])
+        mock_artifact = BrainstormOutput(
+            entities=[
+                {
+                    "entity_id": "stub",
+                    "entity_category": "character",
+                    "name": "Stub",
+                    "concept": "c",
+                }
+            ],
+            dilemmas=[
+                {
+                    "dilemma_id": "dilemma::stub",
+                    "question": "A question?",
+                    "why_it_matters": "stakes",
+                    "answers": [
+                        {"answer_id": "yes", "description": "Yes", "is_canonical": True},
+                        {"answer_id": "no", "description": "No", "is_canonical": False},
+                    ],
+                }
+            ],
+        )
         mock_serialize.return_value = (mock_artifact, 100)
 
         await stage.execute(

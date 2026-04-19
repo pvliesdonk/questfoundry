@@ -193,10 +193,10 @@ class BrainstormOutput(BaseModel):
     model_config = {"extra": "forbid"}
 
     entities: list[Entity] = Field(
-        default_factory=list,
-        description="Generated story entities",
+        min_length=1,
+        description="Generated story entities (at least 1 required per R-1.1).",
     )
     dilemmas: list[Dilemma] = Field(
-        default_factory=list,
-        description="Generated dramatic dilemmas",
+        min_length=1,
+        description="Generated dramatic dilemmas (at least 1 required per R-1.1).",
     )
