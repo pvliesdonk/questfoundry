@@ -524,6 +524,17 @@ class Graph:
         """
         return self._store.get_nodes_by_type(node_type)
 
+    def all_node_ids(self) -> list[str]:
+        """Return every node ID in the graph regardless of type.
+
+        Delegates to the storage backend. Useful for validators that need
+        to enforce "only X node types allowed" constraints.
+
+        Returns:
+            List of all node IDs.
+        """
+        return self._store.all_node_ids()
+
     def _infer_type_from_id(self, node_id: str) -> str | None:
         """Infer node type from ID prefix (e.g., 'entity::kay' -> 'entity')."""
         if "::" in node_id:

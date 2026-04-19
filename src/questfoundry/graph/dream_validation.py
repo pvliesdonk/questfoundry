@@ -19,6 +19,15 @@ class DreamContractError(ValueError):
     """Raised when DREAM's Stage Output Contract is violated."""
 
 
+def _node_type(node_id: str) -> str:
+    """Extract the node-type prefix, mirroring the codebase convention.
+
+    The vision node has the bare ID 'vision'; all other nodes use a
+    '<type>::<raw_id>' scheme.
+    """
+    return node_id.split("::", 1)[0] if "::" in node_id else node_id
+
+
 _ALLOWED_POV_STYLES = frozenset(
     {
         "first_person",
@@ -86,8 +95,8 @@ def validate_dream_output(graph: Graph) -> list[str]:
         )
 
     # Output-5: no node types other than 'vision' may exist
-    all_node_ids = graph._store.all_node_ids()
-    forbidden_node_ids = [nid for nid in all_node_ids if not nid.startswith("vision")]
+    all_node_ids = graph.all_node_ids()
+    forbidden_node_ids = [nid for nid in all_node_ids if _node_type(nid) != "vision"]
     if forbidden_node_ids:
         forbidden_types = sorted(
             {nid.split("::")[0] if "::" in nid else nid for nid in forbidden_node_ids}
