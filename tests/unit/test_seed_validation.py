@@ -227,7 +227,7 @@ def test_R_1_4_two_location_minimum_survives(compliant_graph: Graph) -> None:
 
 
 def test_R_3_1_explored_answer_missing_path(compliant_graph: Graph) -> None:
-    compliant_graph.delete_node("path::mentor_trust__manipulator")
+    compliant_graph.delete_node("path::mentor_trust__manipulator", cascade=True)
     errors = validate_seed_output(compliant_graph)
     assert any("path" in e.lower() and "manipulator" in e.lower() for e in errors)
 
@@ -352,7 +352,7 @@ def test_R_3_9_cross_dilemma_belongs_to_forbidden(compliant_graph: Graph) -> Non
 
 def test_R_3_10_explored_dilemma_missing_precommit(compliant_graph: Graph) -> None:
     # Remove the pre-commit beat entirely.
-    compliant_graph.delete_node("beat::pre_mentor_01")
+    compliant_graph.delete_node("beat::pre_mentor_01", cascade=True)
     errors = validate_seed_output(compliant_graph)
     assert any("pre-commit" in e.lower() or "R-3.10" in e for e in errors)
 
@@ -378,8 +378,8 @@ def test_R_3_11_path_needs_exactly_one_commit_beat(compliant_graph: Graph) -> No
 
 def test_R_3_12_post_commit_count_below_min(compliant_graph: Graph) -> None:
     # Remove two post-commit beats on protector path.
-    compliant_graph.delete_node("beat::post_protector_02")
-    compliant_graph.delete_node("beat::post_protector_03")
+    compliant_graph.delete_node("beat::post_protector_02", cascade=True)
+    compliant_graph.delete_node("beat::post_protector_03", cascade=True)
     errors = validate_seed_output(compliant_graph)
     assert any("post-commit" in e.lower() or "2" in e for e in errors)
 
@@ -419,7 +419,7 @@ def test_R_3_14_setup_beat_must_not_belong_to_path(compliant_graph: Graph) -> No
 
 
 def test_R_3_3_path_without_consequence(compliant_graph: Graph) -> None:
-    compliant_graph.delete_node("consequence::mentor_trust__protector")
+    compliant_graph.delete_node("consequence::mentor_trust__protector", cascade=True)
     errors = validate_seed_output(compliant_graph)
     assert any("consequence" in e.lower() for e in errors)
 

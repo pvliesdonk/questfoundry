@@ -42,6 +42,7 @@ def validate_seed_output(graph: Graph) -> list[str]:
     errors: list[str] = []
     _check_upstream_contract(graph, errors)
     _check_entities(graph, errors)
+    _check_paths_and_consequences(graph, errors)
     return errors
 
 
@@ -87,6 +88,55 @@ def _check_entities(graph: Graph, errors: list[str]) -> None:
         errors.append(
             f"R-1.4: SEED must retain ≥2 location entities, found {retained_location_count}"
         )
+
+
+def _check_paths_and_consequences(graph: Graph, errors: list[str]) -> None:
+    """Phase 3 path structure (R-3.1, R-3.2, R-3.3, R-3.4)."""
+    path_nodes = graph.get_nodes_by_type("path")
+    answer_nodes = graph.get_nodes_by_type("answer")
+    consequence_nodes = graph.get_nodes_by_type("consequence")
+
+    # R-3.1 + R-3.2: each explored answer has exactly one Path via `explores`.
+    explores_edges = graph.get_edges(edge_type="explores")
+    path_by_answer: dict[str, list[str]] = {}
+    for edge in sorted(explores_edges, key=lambda e: (e["from"], e["to"])):
+        path_by_answer.setdefault(edge["to"], []).append(edge["from"])
+
+    for answer_id, answer in sorted(answer_nodes.items()):
+        if not answer.get("explored"):
+            continue
+        paths = path_by_answer.get(answer_id, [])
+        if len(paths) == 0:
+            errors.append(
+                f"R-3.1: explored answer {answer_id!r} has no path (expected exactly one)"
+            )
+        elif len(paths) > 1:
+            errors.append(
+                f"R-3.1: explored answer {answer_id!r} has {len(paths)} paths; "
+                f"expected exactly one: {sorted(paths)}"
+            )
+
+    for path_id in sorted(path_nodes.keys()):
+        if not path_id.startswith("path::"):
+            errors.append(f"R-3.2: path id {path_id!r} missing 'path::' prefix")
+
+    # R-3.3: every Path has ≥1 has_consequence edge.
+    has_consequence_edges = graph.get_edges(edge_type="has_consequence")
+    consequences_per_path: dict[str, list[str]] = {}
+    for edge in has_consequence_edges:
+        consequences_per_path.setdefault(edge["from"], []).append(edge["to"])
+
+    for path_id in sorted(path_nodes.keys()):
+        if not consequences_per_path.get(path_id):
+            errors.append(f"R-3.3: path {path_id!r} has no has_consequence edge")
+
+    # R-3.4: every Consequence has non-empty description + ≥1 ripple.
+    for conseq_id, conseq in sorted(consequence_nodes.items()):
+        if not conseq.get("description"):
+            errors.append(f"R-3.4: consequence {conseq_id!r} has empty description")
+        ripples = conseq.get("ripples", [])
+        if not ripples:
+            errors.append(f"R-3.4: consequence {conseq_id!r} has no ripples")
 
 
 def _check_upstream_contract(graph: Graph, errors: list[str]) -> None:
