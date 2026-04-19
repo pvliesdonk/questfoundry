@@ -81,7 +81,7 @@ dev = [
     "pytest-asyncio>=0.24",
     "pytest-cov>=5.0",
     "mypy>=1.11",
-    "pyright>=1.1",
+    "pyright>=1.1,<2",
     "ruff>=0.6",
     "pre-commit>=3.8",
     "types-jsonschema>=4.0",
@@ -171,9 +171,7 @@ module = [
 ignore_missing_imports = true
 
 [tool.pyright]
-# Runs in CI alongside mypy; pyright-lsp picks this up in the editor too.
-# Per-file ignores in late-stage code are tagged TODO(#<epic>) and removed
-# as each stage's spec-compliance PR lands.
+# Runs in CI alongside mypy; also picked up by pyright-lsp in editors.
 venvPath = "."
 venv = ".venv"
 pythonVersion = "3.11"

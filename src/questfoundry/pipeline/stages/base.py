@@ -36,6 +36,11 @@ class Stage(Protocol):
 
     name: str
 
+    # Declared as sync `def … -> Coroutine[...]` rather than `async def` because
+    # concrete implementations wrap `execute` in `@traceable`, which pyright
+    # infers as returning `collections.abc.Coroutine` instead of the
+    # `CoroutineType` produced by `async def`. Semantically equivalent at
+    # runtime; keeps conforming classes compatible with `@traceable`.
     def execute(
         self,
         model: BaseChatModel,
