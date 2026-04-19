@@ -28,6 +28,11 @@ from questfoundry.tools.langchain_tools import (
 
 log = get_logger(__name__)
 
+
+class DreamStageError(Exception):
+    """Error during DREAM stage execution (includes contract failures)."""
+
+
 if TYPE_CHECKING:
     from pathlib import Path
 

@@ -16,12 +16,20 @@ from difflib import SequenceMatcher
 from enum import Enum, auto
 from typing import TYPE_CHECKING, Any
 
+from questfoundry.graph.brainstorm_validation import (
+    BrainstormContractError,
+    validate_brainstorm_output,
+)
 from questfoundry.graph.context import (
     ENTITY_CATEGORIES,
     format_entity_id,
     is_entity_id,
     parse_scoped_id,
     strip_scope_prefix,
+)
+from questfoundry.graph.dream_validation import (
+    DreamContractError,
+    validate_dream_output,
 )
 from questfoundry.observability.logging import get_logger
 
@@ -561,14 +569,17 @@ def apply_mutations(graph: Graph, stage: str, output: dict[str, Any]) -> None:
 def apply_dream_mutations(graph: Graph, output: dict[str, Any]) -> None:
     """Apply DREAM stage output to graph.
 
-    Creates or replaces the "vision" node with the dream artifact data.
+    Creates or replaces the "vision" node with the dream artifact data and
+    validates the resulting graph against DREAM's Stage Output Contract.
 
     Args:
         graph: Graph to mutate.
         output: DREAM stage output (DreamArtifact fields).
+
+    Raises:
+        DreamContractError: if the resulting vision does not satisfy the
+            DREAM Stage Output Contract.
     """
-    # Extract fields, ensuring we have the right structure
-    # The output from DREAM stage is a DreamArtifact-like dict
     vision_data = {
         "type": "vision",
         "genre": output.get("genre"),
@@ -579,16 +590,20 @@ def apply_dream_mutations(graph: Graph, output: dict[str, Any]) -> None:
         "style_notes": output.get("style_notes"),
         "scope": output.get("scope"),
         "content_notes": output.get("content_notes"),
-        # POV hints (optional, may be None)
         "pov_style": output.get("pov_style"),
         "protagonist_defined": output.get("protagonist_defined", False),
+        # Record human approval. Per R-1.12, absence == unapproved.
+        # Orchestrators running in --no-interactive mode set this True via output.
+        "human_approved": bool(output.get("human_approved", False)),
     }
-
-    # Remove None values for cleaner storage
     vision_data = _clean_dict(vision_data)
-
-    # Use upsert to allow re-running DREAM stage (replaces existing vision)
     graph.upsert_node("vision", vision_data)
+
+    errors = validate_dream_output(graph)
+    if errors:
+        raise DreamContractError(
+            "DREAM stage output contract violated:\n  - " + "\n  - ".join(errors)
+        )
 
 
 def validate_brainstorm_mutations(output: dict[str, Any]) -> list[BrainstormValidationError]:
@@ -942,6 +957,12 @@ def apply_brainstorm_mutations(graph: Graph, output: dict[str, Any]) -> None:
             answer_data = _clean_dict(answer_data)
             graph.create_node(answer_node_id, answer_data)
             graph.add_edge("has_answer", dilemma_node_id, answer_node_id)
+
+    errors = validate_brainstorm_output(graph)
+    if errors:
+        raise BrainstormContractError(
+            "BRAINSTORM stage output contract violated:\n  - " + "\n  - ".join(errors)
+        )
 
 
 def _cross_type_hint(

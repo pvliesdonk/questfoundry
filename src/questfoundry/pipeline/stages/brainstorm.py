@@ -26,6 +26,7 @@ from questfoundry.agents import (
 )
 from questfoundry.export.i18n import get_output_language_instruction
 from questfoundry.graph import Graph
+from questfoundry.graph.dream_validation import validate_dream_output
 from questfoundry.graph.mutations import (
     BrainstormMutationError,
     validate_brainstorm_mutations,
@@ -138,7 +139,7 @@ class BrainstormStage:
         self.project_path = project_path
 
     def _get_vision_context(self, project_path: Path) -> str:
-        """Load and format vision from graph.
+        """Load and format vision from graph, enforcing DREAM output contract.
 
         Args:
             project_path: Path to project directory.
@@ -147,16 +148,20 @@ class BrainstormStage:
             Formatted vision context string.
 
         Raises:
-            BrainstormStageError: If vision not found in graph.
+            BrainstormStageError: If DREAM's Stage Output Contract is not satisfied.
         """
         graph = Graph.load(project_path)
-        vision_node = graph.get_node("vision")
 
-        if vision_node is None:
+        contract_errors = validate_dream_output(graph)
+        if contract_errors:
             raise BrainstormStageError(
-                "BRAINSTORM requires DREAM stage to complete first. "
-                "No vision found in graph. Run 'qf dream' first."
+                "BRAINSTORM requires DREAM stage to complete first.\n"
+                "DREAM output contract violated:\n  - " + "\n  - ".join(contract_errors)
             )
+
+        vision_node = graph.get_node("vision")
+        # vision_node is guaranteed non-None by validate_dream_output.
+        assert vision_node is not None
 
         return _format_vision_context(vision_node)
 
