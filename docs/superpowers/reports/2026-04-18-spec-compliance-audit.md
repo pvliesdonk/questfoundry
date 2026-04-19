@@ -26,7 +26,7 @@ reference the section anchors in this document.
 | M-FILL-spec | issues-filed | 5 | #1319 | 5 |
 | M-DRESS-spec | issues-filed | 5 | #1325 | 5 |
 | M-SHIP-spec | issues-filed | 7 | #1331 | 7 |
-| M-logging-compliance | drafted | 4 | — | — |
+| M-logging-compliance | issues-filed | 3 | #1339 | 3 |
 | M-silent-degradation | pending | — | — | — |
 | M-contract-chaining | pending | — | — | — |
 
