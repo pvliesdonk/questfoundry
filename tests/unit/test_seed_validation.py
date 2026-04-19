@@ -575,3 +575,78 @@ def test_output16_forbidden_node_type_present(compliant_graph: Graph, forbidden:
     )
     errors = validate_seed_output(compliant_graph)
     assert any(forbidden in e for e in errors)
+
+
+# --------------------------------------------------------------------------
+# Task 21 — arc-count invariant through Phase 7/8 (R-5.1)
+# --------------------------------------------------------------------------
+
+
+def test_R_5_1_arc_count_preserved_through_phase_7_analysis(compliant_graph: Graph) -> None:
+    """R-5.1: Phase 7 (dilemma analysis) does not create Path nodes.
+
+    Adding dilemma_role, residue_weight, ending_salience onto existing dilemma
+    nodes must not change the arc count. This is a construction invariant:
+    Phase 7 only updates dilemma fields, never creates Paths.
+    """
+    # Count path nodes before adding analysis fields
+    pre_paths = list(compliant_graph.get_nodes_by_type("path").keys())
+
+    # Simulate Phase 7 update (add analysis fields to an existing dilemma)
+    compliant_graph.update_node(
+        "dilemma::mentor_trust",
+        dilemma_role="soft",
+        residue_weight="light",
+        ending_salience="low",
+    )
+
+    # Phase 7 must not have created any Path nodes
+    post_paths = list(compliant_graph.get_nodes_by_type("path").keys())
+    assert pre_paths == post_paths, (
+        f"Phase 7 (dilemma analysis) must not create Path nodes; "
+        f"before={len(pre_paths)}, after={len(post_paths)}"
+    )
+
+    # validate_seed_output must report no R-5.1 violation on a ≤16-arc graph
+    errors = validate_seed_output(compliant_graph)
+    arc_errors = [e for e in errors if "R-5.1" in e or "arc count" in e.lower()]
+    assert arc_errors == [], f"Unexpected R-5.1 errors after Phase 7: {arc_errors}"
+
+
+def test_R_5_1_arc_count_preserved_through_phase_8_ordering(compliant_graph: Graph) -> None:
+    """R-5.1: Phase 8 (ordering relationships) does not create Path nodes.
+
+    Adding ordering edges between dilemmas must not change the arc count.
+    Ordering edges only relate dilemma nodes — they never produce new Paths.
+    """
+    # Count path nodes before adding ordering edges
+    pre_paths = list(compliant_graph.get_nodes_by_type("path").keys())
+
+    # Simulate Phase 8: add a concurrent ordering edge
+    # (compliant_graph already has dilemma::mentor_trust; add a second dilemma to relate)
+    compliant_graph.create_node(
+        "dilemma::side_quest",
+        {
+            "type": "dilemma",
+            "raw_id": "side_quest",
+            "question": "Take the side quest?",
+            "why_it_matters": "x",
+            "dilemma_role": "soft",
+            "residue_weight": "cosmetic",
+            "ending_salience": "none",
+        },
+    )
+    compliant_graph.add_edge("anchored_to", "dilemma::side_quest", "character::kay")
+    compliant_graph.add_edge("concurrent", "dilemma::mentor_trust", "dilemma::side_quest")
+
+    # Phase 8 must not have created any Path nodes
+    post_paths = list(compliant_graph.get_nodes_by_type("path").keys())
+    assert pre_paths == post_paths, (
+        f"Phase 8 (ordering) must not create Path nodes; "
+        f"before={len(pre_paths)}, after={len(post_paths)}"
+    )
+
+    # validate_seed_output must report no R-5.1 violation
+    errors = validate_seed_output(compliant_graph)
+    arc_errors = [e for e in errors if "R-5.1" in e or "arc count" in e.lower()]
+    assert arc_errors == [], f"Unexpected R-5.1 errors after Phase 8: {arc_errors}"
