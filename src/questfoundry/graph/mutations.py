@@ -2063,6 +2063,14 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
             description=relationship.get("description", ""),
         )
 
+    graph.upsert_node(
+        "seed_freeze",
+        {
+            "type": "seed_freeze",
+            "human_approved": bool(output.get("human_approved_paths", False)),
+        },
+    )
+
     contract_errors = validate_seed_output(graph)
     if contract_errors:
         log.error("seed_contract_violated", errors=contract_errors)

@@ -521,6 +521,32 @@ class SeedStage:
         # Convert to dict for return
         artifact_data = pruned_artifact.model_dump()
 
+        # R-6.4: Record human approval on the Path Freeze artifact.
+        # Non-interactive runs imply human pre-approval at invocation time.
+        # Interactive runs must explicitly approve via the prompt below.
+        if not interactive:
+            artifact_data["human_approved_paths"] = True
+        else:
+            # Minimal approval gate — full R-6.4 loop-back UX deferred.
+            # See follow-up issue for per-phase loop-back UI.
+            approval_prompt = "SEED Path Freeze: approve and continue to GROW? (y/n): "
+            if on_assistant_message is not None:
+                on_assistant_message(approval_prompt)
+            if user_input_fn is not None:
+                response = (await user_input_fn()) or ""
+                if response.strip().lower().startswith("y"):
+                    artifact_data["human_approved_paths"] = True
+                else:
+                    log.info("seed_paths_rejected_by_human")
+                    raise SeedStageError("Path Freeze rejected by human — re-run SEED to revise.")
+            else:
+                # interactive=True but no user_input_fn — test/headless mode.
+                log.warning(
+                    "seed_approval_fallback_no_input_fn",
+                    reason="interactive=True but no user_input_fn; auto-approving",
+                )
+                artifact_data["human_approved_paths"] = True
+
         # Log summary statistics
         entity_count = len(artifact_data.get("entities", []))
         path_count = len(artifact_data.get("paths", []))

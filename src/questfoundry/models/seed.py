@@ -555,6 +555,13 @@ class SeedOutput(BaseModel):
         default_factory=list,
         description="Pairwise dilemma ordering relationships (Section 8, post-prune)",
     )
+    human_approved_paths: bool = Field(
+        default=False,
+        description=(
+            "True when the human has explicitly approved the Path Freeze "
+            "(--no-interactive implies pre-approval at invocation time)."
+        ),
+    )
 
 
 # Section wrapper models for iterative serialization

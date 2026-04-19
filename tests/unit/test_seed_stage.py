@@ -879,6 +879,130 @@ async def test_low_arc_count_raises_seed_stage_error() -> None:
             )
 
 
+# --- Path Freeze Approval Gate Tests (R-6.4) ---
+
+
+def _make_seed_mocks(mock_artifact: SeedOutput) -> dict:
+    """Return a dict of patch targets and their return values for a minimal SEED execute run."""
+    return {
+        "mock_artifact": mock_artifact,
+    }
+
+
+def _build_mock_graph_with_data() -> MagicMock:
+    """Build a MagicMock graph with minimal entity/dilemma data for SEED."""
+    mock_graph = MagicMock()
+    mock_graph.get_nodes_by_type.side_effect = lambda t: (
+        {"entity1": {"type": "entity", "concept": "Protagonist"}}
+        if t == "entity"
+        else {"dilemma1": {"type": "dilemma", "question": "?"}}
+        if t == "dilemma"
+        else {}
+    )
+    mock_graph.get_edges.return_value = []
+    return mock_graph
+
+
+async def _run_seed_execute(stage: SeedStage, mock_artifact: SeedOutput, **execute_kwargs):
+    """Run SeedStage.execute with all phases mocked; return (artifact, llm_calls, tokens)."""
+    mock_graph = _build_mock_graph_with_data()
+    with (
+        patch("questfoundry.pipeline.stages.seed.Graph") as MockGraph,
+        patch("questfoundry.pipeline.stages.seed.run_discuss_phase") as mock_discuss,
+        patch("questfoundry.pipeline.stages.seed.summarize_seed_chunked") as mock_summarize,
+        patch("questfoundry.pipeline.stages.seed.serialize_seed_as_function") as mock_serialize,
+        patch(
+            "questfoundry.pipeline.stages.seed.serialize_convergence_analysis"
+        ) as mock_convergence,
+        patch(
+            "questfoundry.pipeline.stages.seed.serialize_dilemma_relationships"
+        ) as mock_constraints,
+        patch("questfoundry.pipeline.stages.seed.get_all_research_tools") as mock_tools,
+        patch("questfoundry.pipeline.stages.seed.get_interactive_tools", return_value=[]),
+        patch("questfoundry.pipeline.stages.seed.compute_arc_count", return_value=4),
+    ):
+        MockGraph.load.return_value = mock_graph
+        mock_tools.return_value = []
+        mock_discuss.return_value = ([], 1, 100)
+        mock_summarize.return_value = (_MOCK_SECTION_BRIEFS, 50)
+        mock_serialize.return_value = SerializeResult(
+            artifact=mock_artifact, tokens_used=100, semantic_errors=[]
+        )
+        mock_convergence.return_value = ([], 10, 1)
+        mock_constraints.return_value = ([], 10, 1)
+
+        return await stage.execute(
+            model=MagicMock(),
+            user_prompt="test",
+            project_path=Path("/test/project"),
+            **execute_kwargs,
+        )
+
+
+@pytest.mark.asyncio
+async def test_seed_non_interactive_pre_approves() -> None:
+    """Non-interactive mode implies Path Freeze pre-approval (R-6.4)."""
+    stage = SeedStage()
+    mock_artifact = SeedOutput(entities=[], dilemmas=[], paths=[], initial_beats=[])
+
+    artifact, _, _ = await _run_seed_execute(stage, mock_artifact, interactive=False)
+
+    assert artifact["human_approved_paths"] is True
+
+
+@pytest.mark.asyncio
+async def test_seed_interactive_approved_sets_paths_approved() -> None:
+    """Interactive 'y' response sets human_approved_paths True (R-6.4)."""
+    stage = SeedStage()
+    mock_artifact = SeedOutput(entities=[], dilemmas=[], paths=[], initial_beats=[])
+
+    async def user_input_fn_yes() -> str:
+        return "y"
+
+    artifact, _, _ = await _run_seed_execute(
+        stage,
+        mock_artifact,
+        interactive=True,
+        user_input_fn=user_input_fn_yes,
+    )
+
+    assert artifact["human_approved_paths"] is True
+
+
+@pytest.mark.asyncio
+async def test_seed_interactive_rejected_raises_seed_stage_error() -> None:
+    """Interactive 'n' response raises SeedStageError (R-6.4)."""
+    stage = SeedStage()
+    mock_artifact = SeedOutput(entities=[], dilemmas=[], paths=[], initial_beats=[])
+
+    async def user_input_fn_no() -> str:
+        return "n"
+
+    with pytest.raises(SeedStageError, match="rejected by human"):
+        await _run_seed_execute(
+            stage,
+            mock_artifact,
+            interactive=True,
+            user_input_fn=user_input_fn_no,
+        )
+
+
+@pytest.mark.asyncio
+async def test_seed_interactive_no_user_input_fn_pre_approves() -> None:
+    """Interactive mode without user_input_fn auto-approves (headless/test mode)."""
+    stage = SeedStage()
+    mock_artifact = SeedOutput(entities=[], dilemmas=[], paths=[], initial_beats=[])
+
+    artifact, _, _ = await _run_seed_execute(
+        stage,
+        mock_artifact,
+        interactive=True,
+        user_input_fn=None,
+    )
+
+    assert artifact["human_approved_paths"] is True
+
+
 # --- PathBeatsSection Validation Tests ---
 
 

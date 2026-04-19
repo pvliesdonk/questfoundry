@@ -229,6 +229,7 @@ class TestApplyMutations:
                 {"path_id": "path_2", "dilemma_id": "t1", "answer_id": "a"},
                 {"path_id": "path_3", "dilemma_id": "t1", "answer_id": "b"},
             ],
+            "human_approved_paths": True,
             "initial_beats": [
                 # Each path needs a commits beat AND at least one post-commit
                 # consequence beat (enforced by COMPLETENESS validation).
@@ -1276,6 +1277,7 @@ class TestSeedMutations:
             ],
             "paths": [],
             "initial_beats": [],
+            "human_approved_paths": True,
         }
 
         apply_seed_mutations(graph, output)
@@ -1333,6 +1335,7 @@ class TestSeedMutations:
                     ],
                 },
             ],
+            "human_approved_paths": True,
         }
 
         apply_seed_mutations(graph, output)
@@ -1441,6 +1444,7 @@ class TestSeedMutations:
                     ],
                 },
             ],
+            "human_approved_paths": True,
         }
 
         apply_seed_mutations(graph, output)
@@ -1534,6 +1538,7 @@ class TestSeedMutations:
                     ],
                 },
             ],
+            "human_approved_paths": True,
         }
 
         apply_seed_mutations(graph, output)
@@ -1643,6 +1648,7 @@ class TestSeedMutations:
                     ],
                 },
             ],
+            "human_approved_paths": True,
         }
 
         apply_seed_mutations(graph, output)
@@ -1704,6 +1710,7 @@ class TestSeedMutations:
                     ],
                 },
             ],
+            "human_approved_paths": True,
         }
 
         apply_seed_mutations(graph, output)
@@ -1767,6 +1774,7 @@ class TestSeedMutations:
                     ],
                 },
             ],
+            "human_approved_paths": True,
         }
 
         apply_seed_mutations(graph, output)
@@ -1806,7 +1814,7 @@ class TestSeedMutations:
     def test_handles_empty_seed(self) -> None:
         """Handles empty seed output."""
         graph = Graph.empty()
-        output = {"entities": [], "paths": [], "initial_beats": []}
+        output = {"entities": [], "paths": [], "initial_beats": [], "human_approved_paths": True}
 
         apply_seed_mutations(graph, output)
         # No errors, no changes
@@ -2573,6 +2581,7 @@ class TestSeedArcStructureValidation:
                 }
             ],
             "initial_beats": initial_beats,
+            "human_approved_paths": True,
         }
 
     def test_complete_arc_no_warnings(self) -> None:
@@ -3058,6 +3067,7 @@ class TestMutationIntegration:
                     ],
                 },
             ],
+            "human_approved_paths": True,
         }
         apply_mutations(graph, "seed", seed_output)
         graph.set_last_stage("seed")
@@ -4998,6 +5008,7 @@ class TestBackfillIntegrationWithApplySeedMutations:
                     ],
                 },
             ],
+            "human_approved_paths": True,
         }
 
         # Should NOT raise because backfill fixes the data before validation
@@ -5271,6 +5282,7 @@ class TestApplySeedConvergenceAnalysis:
                     "dilemma_impacts": [{"dilemma_id": "stay_or_go", "effect": "advances"}],
                 },
             ],
+            "human_approved_paths": True,
         }
 
     def test_dilemma_role_stored_on_dilemma_node(self) -> None:
@@ -5682,6 +5694,7 @@ def _trust_seed_output(initial_beats: list[dict[str, Any]] | None = None) -> dic
             },
         ],
         "initial_beats": initial_beats,
+        "human_approved_paths": True,
     }
 
 
@@ -5772,6 +5785,7 @@ def _two_dilemma_seed_output(initial_beats: list[dict[str, Any]] | None = None) 
             },
         ],
         "initial_beats": initial_beats,
+        "human_approved_paths": True,
     }
 
 
