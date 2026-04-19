@@ -34,6 +34,22 @@ def _blocking_errors(errors: list[SeedValidationError]) -> list[SeedValidationEr
     return [e for e in errors if e.category != SeedErrorCategory.WARNING]
 
 
+def _create_compliant_vision(graph: Graph) -> None:
+    """Create a vision node that satisfies DREAM contract."""
+    graph.create_node(
+        "vision",
+        {
+            "type": "vision",
+            "genre": "dark fantasy",
+            "tone": ["atmospheric"],
+            "themes": ["forbidden knowledge"],
+            "audience": "adult",
+            "scope": {"story_size": "short"},
+            "human_approved": True,
+        },
+    )
+
+
 class TestHasMutationHandler:
     """Test the mutation handler check function."""
 
@@ -453,8 +469,7 @@ class TestBrainstormMutations:
     def test_creates_entity_nodes(self) -> None:
         """Creates entity nodes from brainstorm output."""
         graph = Graph.empty()
-        # Add vision node from DREAM stage
-        graph.create_node("vision::default", {"type": "vision"})
+        _create_compliant_vision(graph)
 
         output = {
             "entities": [
@@ -511,8 +526,7 @@ class TestBrainstormMutations:
     def test_stores_entity_name(self) -> None:
         """Entity.name is stored on graph node when provided (#1010)."""
         graph = Graph.empty()
-        # Add vision node from DREAM stage
-        graph.create_node("vision::default", {"type": "vision"})
+        _create_compliant_vision(graph)
 
         output = {
             "entities": [
@@ -562,8 +576,7 @@ class TestBrainstormMutations:
     def test_strips_scope_prefixes_in_raw_ids(self) -> None:
         """Scoped IDs are stored unscoped in raw_id fields."""
         graph = Graph.empty()
-        # Add vision node from DREAM stage
-        graph.create_node("vision::default", {"type": "vision"})
+        _create_compliant_vision(graph)
 
         output = {
             "entities": [
@@ -633,8 +646,7 @@ class TestBrainstormMutations:
     def test_creates_dilemma_with_alternatives(self) -> None:
         """Creates dilemma nodes with linked answers."""
         graph = Graph.empty()
-        # Add vision node from DREAM stage
-        graph.create_node("vision::default", {"type": "vision"})
+        _create_compliant_vision(graph)
 
         output = {
             "entities": [
@@ -715,8 +727,7 @@ class TestBrainstormMutations:
     def test_handles_empty_brainstorm(self) -> None:
         """Handles minimum required output with locations and one dilemma."""
         graph = Graph.empty()
-        # Add vision node from DREAM stage
-        graph.create_node("vision::default", {"type": "vision"})
+        _create_compliant_vision(graph)
 
         output = {
             "entities": [

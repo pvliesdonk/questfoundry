@@ -263,3 +263,10 @@ def test_R_1_1_no_dilemmas() -> None:
     _seed_entity(graph, "location::b", "location")
     errors = validate_brainstorm_output(graph)
     assert any("dilemma" in e.lower() for e in errors)
+
+
+def test_output11_vision_corrupted_by_brainstorm(compliant_graph: Graph) -> None:
+    """If BRAINSTORM somehow wipes a required vision field, validate_brainstorm_output must fail."""
+    compliant_graph.update_node("vision", genre=None)
+    errors = validate_brainstorm_output(compliant_graph)
+    assert any("genre" in e.lower() for e in errors)

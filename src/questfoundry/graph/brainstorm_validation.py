@@ -173,6 +173,15 @@ def validate_brainstorm_output(graph: Graph) -> list[str]:
     """
     errors: list[str] = []
 
+    # Inline import avoids any circular-dependency risk at module load.
+    from questfoundry.graph.dream_validation import _validate_vision_node
+
+    vision_contract = _validate_vision_node(graph)
+    if vision_contract:
+        errors.extend(
+            f"Output-11: DREAM contract violated post-BRAINSTORM — {e}" for e in vision_contract
+        )
+
     # Output-11: vision node must still be present (BRAINSTORM must not remove it)
     vision_nodes = graph.get_nodes_by_type("vision")
     if not vision_nodes:

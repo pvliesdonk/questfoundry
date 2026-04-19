@@ -11,6 +11,37 @@ from langchain_core.messages import AIMessage, HumanMessage
 from questfoundry.models import BrainstormOutput
 from questfoundry.pipeline.stages import BrainstormStage, BrainstormStageError, get_stage
 
+
+def _setup_mock_graph_with_vision(mock_graph: MagicMock, vision_data: dict | None = None) -> None:
+    """Configure mock graph to pass DREAM contract validation.
+
+    Args:
+        mock_graph: MagicMock instance to configure.
+        vision_data: Optional dict to override vision node fields. Defaults to minimal valid vision.
+    """
+    if vision_data is None:
+        vision_data = {
+            "genre": "fantasy",
+            "tone": ["epic"],
+            "themes": ["heroism"],
+            "audience": "adult",
+            "scope": {"story_size": "short"},
+            "human_approved": True,
+        }
+
+    # Mock get_node for direct vision lookup
+    mock_graph.get_node.return_value = vision_data
+
+    # Mock get_nodes_by_type for validate_dream_output vision contract check
+    mock_graph.get_nodes_by_type.return_value = {"vision": vision_data}
+
+    # Mock edges to pass R-1.10 check (no edges on vision)
+    mock_graph.get_edges.return_value = []
+
+    # Mock all_node_ids for Output-5 check (only vision node)
+    mock_graph.all_node_ids.return_value = ["vision"]
+
+
 # --- Stage Registration Tests ---
 
 
@@ -70,11 +101,7 @@ async def test_execute_calls_all_three_phases() -> None:
 
     mock_model = MagicMock()
     mock_graph = MagicMock()
-    mock_graph.get_node.return_value = {
-        "genre": "fantasy",
-        "tone": ["epic"],
-        "themes": ["heroism"],
-    }
+    _setup_mock_graph_with_vision(mock_graph)
 
     with (
         patch("questfoundry.pipeline.stages.brainstorm.Graph") as MockGraph,
@@ -148,7 +175,7 @@ async def test_execute_emits_phase_progress() -> None:
 
     mock_model = MagicMock()
     mock_graph = MagicMock()
-    mock_graph.get_node.return_value = {"genre": "fantasy"}
+    _setup_mock_graph_with_vision(mock_graph)
     on_phase_progress = MagicMock()
 
     with (
@@ -220,12 +247,16 @@ async def test_execute_passes_vision_context_to_discuss() -> None:
 
     mock_model = MagicMock()
     mock_graph = MagicMock()
-    mock_graph.get_node.return_value = {
+    noir_vision = {
         "genre": "noir",
         "subgenre": "detective",
         "tone": ["dark", "moody"],
         "themes": ["corruption", "justice"],
+        "audience": "adult",
+        "scope": {"story_size": "short"},
+        "human_approved": True,
     }
+    _setup_mock_graph_with_vision(mock_graph, noir_vision)
 
     with (
         patch("questfoundry.pipeline.stages.brainstorm.Graph") as MockGraph,
@@ -286,7 +317,7 @@ async def test_execute_passes_brainstorm_output_schema() -> None:
 
     mock_model = MagicMock()
     mock_graph = MagicMock()
-    mock_graph.get_node.return_value = {"genre": "fantasy"}
+    _setup_mock_graph_with_vision(mock_graph)
 
     with (
         patch("questfoundry.pipeline.stages.brainstorm.Graph") as MockGraph,
@@ -338,7 +369,7 @@ async def test_execute_uses_brainstorm_summarize_prompt() -> None:
 
     mock_model = MagicMock()
     mock_graph = MagicMock()
-    mock_graph.get_node.return_value = {"genre": "fantasy"}
+    _setup_mock_graph_with_vision(mock_graph)
 
     with (
         patch("questfoundry.pipeline.stages.brainstorm.Graph") as MockGraph,
@@ -396,7 +427,7 @@ async def test_execute_returns_artifact_as_dict() -> None:
 
     mock_model = MagicMock()
     mock_graph = MagicMock()
-    mock_graph.get_node.return_value = {"genre": "fantasy"}
+    _setup_mock_graph_with_vision(mock_graph)
 
     with (
         patch("questfoundry.pipeline.stages.brainstorm.Graph") as MockGraph,

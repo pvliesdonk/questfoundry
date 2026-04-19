@@ -40,15 +40,17 @@ _ALLOWED_POV_STYLES = frozenset(
 _REQUIRED_NON_EMPTY_FIELDS = ("genre", "tone", "themes", "audience", "scope")
 
 
-def validate_dream_output(graph: Graph) -> list[str]:
-    """Verify the graph satisfies DREAM's Stage Output Contract.
+def _validate_vision_node(graph: Graph) -> list[str]:
+    """Validate the vision node itself (R-1.7 through R-1.10, Output-6).
+
+    Used by both DREAM (full contract) and BRAINSTORM (compatibility check).
+    Does NOT validate Output-5 (which is DREAM-specific).
 
     Args:
-        graph: Graph expected to contain a vision node after DREAM.
+        graph: The graph instance.
 
     Returns:
-        List of human-readable error strings. Empty means compliant.
-        Pure read-only — never mutates the graph.
+        List of error strings for vision node violations.
     """
     errors: list[str] = []
 
@@ -94,7 +96,32 @@ def validate_dream_output(graph: Graph) -> list[str]:
             f"found {len(vision_edges_out)} outgoing and {len(vision_edges_in)} incoming"
         )
 
-    # Output-5: no node types other than 'vision' may exist
+    # Output-6: human approval must be recorded as True
+    if not vision.get("human_approved"):
+        errors.append(
+            "Output-6: DREAM vision missing recorded human approval "
+            "(vision.human_approved must be True)"
+        )
+
+    return errors
+
+
+def validate_dream_output(graph: Graph) -> list[str]:
+    """Verify the graph satisfies DREAM's Stage Output Contract.
+
+    Args:
+        graph: Graph expected to contain a vision node after DREAM.
+
+    Returns:
+        List of human-readable error strings. Empty means compliant.
+        Pure read-only — never mutates the graph.
+    """
+    errors: list[str] = []
+
+    # Validate the vision node itself (R-1.7 through R-1.10, Output-6)
+    errors.extend(_validate_vision_node(graph))
+
+    # Output-5: no node types other than 'vision' may exist (DREAM-specific)
     all_node_ids = graph.all_node_ids()
     forbidden_node_ids = [nid for nid in all_node_ids if _node_type(nid) != "vision"]
     if forbidden_node_ids:
@@ -104,13 +131,6 @@ def validate_dream_output(graph: Graph) -> list[str]:
         errors.append(
             f"Output-5: only vision nodes are allowed after DREAM; "
             f"found other node type(s): {forbidden_types}"
-        )
-
-    # Output-6: human approval must be recorded as True
-    if not vision.get("human_approved"):
-        errors.append(
-            "Output-6: DREAM vision missing recorded human approval "
-            "(vision.human_approved must be True)"
         )
 
     return errors
