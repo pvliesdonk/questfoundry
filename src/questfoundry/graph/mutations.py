@@ -2045,6 +2045,24 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
     for relationship in output.get("dilemma_relationships", []):
         a_raw = relationship.get("dilemma_a", "")
         b_raw = relationship.get("dilemma_b", "")
+        edge_type = relationship.get("ordering", "concurrent")
+
+        # R-8.4: shared_entity is derived from anchored_to edges, never declared.
+        if edge_type == "shared_entity":
+            raise MutationError(
+                f"Dilemma relationship 'shared_entity' is forbidden (R-8.4): "
+                "shared_entity is derived from anchored_to edges, not declared. "
+                f"Relationship: dilemma_a={a_raw!r}, dilemma_b={b_raw!r}."
+            )
+
+        # R-8.3: normalize concurrent (symmetric) pairs to lex-smaller dilemma_a.
+        # Directional orderings (wraps, serial) preserve the supplied order.
+        if edge_type == "concurrent":
+            a_node_candidate = _prefix_id("dilemma", a_raw)
+            b_node_candidate = _prefix_id("dilemma", b_raw)
+            if a_node_candidate > b_node_candidate:
+                a_raw, b_raw = b_raw, a_raw
+
         a_node = _prefix_id("dilemma", a_raw)
         b_node = _prefix_id("dilemma", b_raw)
         if not graph.has_node(a_node) or not graph.has_node(b_node):
@@ -2055,7 +2073,6 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
                 reason="node_missing",
             )
             continue
-        edge_type = relationship.get("ordering", "concurrent")
         graph.add_edge(
             edge_type,
             a_node,

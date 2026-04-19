@@ -5550,6 +5550,144 @@ class TestApplySeedConvergenceAnalysis:
 
 
 # ---------------------------------------------------------------------------
+# Tasks 19 + 20 — concurrent normalization (R-8.3) and shared_entity rejection (R-8.4)
+# ---------------------------------------------------------------------------
+
+
+class TestApplySeedConcurrentOrdering:
+    """R-8.3: concurrent ordering must be stored with lex-smaller dilemma_id as dilemma_a."""
+
+    def _graph_with_two_dilemmas(self) -> Graph:
+        graph = Graph.empty()
+        graph.create_node(
+            "entity::kay", {"type": "entity", "raw_id": "kay", "entity_type": "character"}
+        )
+        for raw_id, question in [("mentor_trust", "Trust mentor?"), ("z_later", "Go later?")]:
+            node_id = f"dilemma::{raw_id}"
+            graph.create_node(node_id, {"type": "dilemma", "raw_id": raw_id, "question": question})
+            graph.add_edge("anchored_to", node_id, "entity::kay")
+            ans_id = f"{node_id}::alt::yes"
+            graph.create_node(ans_id, {"type": "answer", "raw_id": "yes", "is_canonical": True})
+            graph.add_edge("has_answer", node_id, ans_id)
+        return graph
+
+    def _base_output(self) -> dict:
+        return {
+            "entities": [{"entity_id": "kay", "disposition": "retained"}],
+            "dilemmas": [
+                {"dilemma_id": "mentor_trust", "explored": ["yes"], "unexplored": []},
+                {"dilemma_id": "z_later", "explored": ["yes"], "unexplored": []},
+            ],
+            "paths": [
+                {
+                    "path_id": "mentor_trust__yes",
+                    "name": "Trust",
+                    "dilemma_id": "mentor_trust",
+                    "answer_id": "yes",
+                    "path_importance": "major",
+                    "description": "Trust the mentor",
+                },
+                {
+                    "path_id": "z_later__yes",
+                    "name": "Later",
+                    "dilemma_id": "z_later",
+                    "answer_id": "yes",
+                    "path_importance": "major",
+                    "description": "Go later",
+                },
+            ],
+            "consequences": [],
+            "initial_beats": [
+                {
+                    "beat_id": "b1",
+                    "summary": "Commit mentor trust",
+                    "paths": ["mentor_trust__yes"],
+                    "dilemma_impacts": [{"dilemma_id": "mentor_trust", "effect": "commits"}],
+                },
+                {
+                    "beat_id": "b1_post",
+                    "summary": "After mentor trust",
+                    "paths": ["mentor_trust__yes"],
+                    "dilemma_impacts": [{"dilemma_id": "mentor_trust", "effect": "advances"}],
+                },
+                {
+                    "beat_id": "b2",
+                    "summary": "Commit z later",
+                    "paths": ["z_later__yes"],
+                    "dilemma_impacts": [{"dilemma_id": "z_later", "effect": "commits"}],
+                },
+                {
+                    "beat_id": "b2_post",
+                    "summary": "After z later",
+                    "paths": ["z_later__yes"],
+                    "dilemma_impacts": [{"dilemma_id": "z_later", "effect": "advances"}],
+                },
+            ],
+            "human_approved_paths": True,
+        }
+
+    def test_concurrent_ordering_normalized_to_lex_smaller_a(self) -> None:
+        """R-8.3: reversed concurrent pair is normalized so lex-smaller dilemma is dilemma_a."""
+        graph = self._graph_with_two_dilemmas()
+        output = self._base_output()
+        output["dilemma_relationships"] = [
+            {
+                "dilemma_a": "z_later",  # lex-larger — should be swapped
+                "dilemma_b": "mentor_trust",
+                "ordering": "concurrent",
+                "description": "Both run at the same time.",
+                "reasoning": "They overlap narratively.",
+            }
+        ]
+        apply_seed_mutations(graph, output)
+
+        # Edge should exist FROM lex-smaller (mentor_trust) TO lex-larger (z_later)
+        edges_from_mentor = graph.get_edges(from_id="dilemma::mentor_trust", edge_type="concurrent")
+        assert len(edges_from_mentor) == 1
+        assert edges_from_mentor[0]["to"] == "dilemma::z_later"
+
+        # No edge in the reversed direction
+        edges_from_z = graph.get_edges(from_id="dilemma::z_later", edge_type="concurrent")
+        assert len(edges_from_z) == 0
+
+    def test_concurrent_already_ordered_unchanged(self) -> None:
+        """R-8.3: pair already in lex order is written as-is."""
+        graph = self._graph_with_two_dilemmas()
+        output = self._base_output()
+        output["dilemma_relationships"] = [
+            {
+                "dilemma_a": "mentor_trust",  # lex-smaller — already correct
+                "dilemma_b": "z_later",
+                "ordering": "concurrent",
+                "description": "Both run at the same time.",
+                "reasoning": "They overlap.",
+            }
+        ]
+        apply_seed_mutations(graph, output)
+        edges = graph.get_edges(from_id="dilemma::mentor_trust", edge_type="concurrent")
+        assert len(edges) == 1
+        assert edges[0]["to"] == "dilemma::z_later"
+
+    def test_shared_entity_relationship_raises_mutation_error(self) -> None:
+        """R-8.4: shared_entity is derived, never declared; apply_seed_mutations must raise."""
+        from questfoundry.graph.mutations import MutationError
+
+        graph = self._graph_with_two_dilemmas()
+        output = self._base_output()
+        output["dilemma_relationships"] = [
+            {
+                "dilemma_a": "mentor_trust",
+                "dilemma_b": "z_later",
+                "ordering": "shared_entity",  # forbidden
+                "description": "They share an entity.",
+                "reasoning": "Same entity.",
+            }
+        ]
+        with pytest.raises(MutationError, match="shared_entity"):
+            apply_seed_mutations(graph, output)
+
+
+# ---------------------------------------------------------------------------
 # Phase 2 - Y-shape dual belongs_to tests (Tasks 2.1-2.7)
 # ---------------------------------------------------------------------------
 
