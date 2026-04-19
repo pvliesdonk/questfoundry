@@ -27,7 +27,7 @@ reference the section anchors in this document.
 | M-DRESS-spec | issues-filed | 5 | #1325 | 5 |
 | M-SHIP-spec | issues-filed | 7 | #1331 | 7 |
 | M-logging-compliance | issues-filed | 3 | #1339 | 3 |
-| M-silent-degradation | pending | — | — | — |
+| M-silent-degradation | drafted | 3 | — | — |
 | M-contract-chaining | pending | — | — | — |
 
 ---
@@ -1123,6 +1123,92 @@ Expect ~30–50 sites to move from WARNING to INFO/DEBUG.
 **Code refs:** Cross-reference #1321 (FILL), #1273 (BRAINSTORM).
 
 **Test refs:** See the linked issues.
+
+---
+
+## M-silent-degradation
+
+### Summary
+
+Cross-cutting audit against CLAUDE.md §Anti-Patterns ("Silent degradation of story structure constraints"). Per the policy: *"if the pipeline cannot satisfy a structural requirement (cross-dilemma ordering, intersection formation, DAG consistency), it MUST fail loudly. Silently skipping constraints and producing a weaker story is not acceptable."*
+
+The audit combines (a) direct grep of known violation signatures and (b) aggregation of silent-degradation findings already surfaced by the 8 per-stage audits. Per-stage findings are rolled up by reference — the cross-cutting milestone adds clusters that cut across stages or that were missed by the stage audits.
+
+- Direct new findings: 2 clusters
+- Cross-referenced from stage audits: 1 roll-up cluster
+- Clusters total: 3
+
+### Cluster: Topological-sort cycle silently falls back to sorted order (DAG-integrity violation)
+
+**Rules covered:** CLAUDE.md §Anti-Patterns ("Silent degradation of story structure constraints"), Story Graph Ontology Part 8 (beat DAG invariants), indirect: POLISH R-4c.1 (upstream DAG must be acyclic).
+
+**Pattern:** Topological-sort helpers catch cycle conditions and return a sorted-by-ID fallback instead of raising. The rest of the pipeline treats the degraded output as valid order.
+
+**Current state:** Three sites silently produce wrong beat order on cycle:
+- `src/questfoundry/graph/algorithms.py:366-369` — `_topological_sort_subset`. Docstring explicitly says *"Falls back to sorted order if cycles are detected."* No log, no raise. Wraps the Kahn's-algorithm loop and appends any remaining (cyclic) beats in alphabetical order.
+- `src/questfoundry/graph/grow_algorithms.py:677-678` — `except ValueError: pass  # Fallback: no reference if global beat set has cycles` inside `enumerate_arcs`. Leaves `reference_positions = {}`; subsequent per-arc sort proceeds without reference.
+- `src/questfoundry/graph/grow_algorithms.py:699-700` — inside the same `enumerate_arcs` per-arc loop: `except ValueError: sequence = sorted(beat_set)  # Fallback for cycles`. No log.
+- `src/questfoundry/graph/grow_algorithms.py:2607-2615` — `get_path_beat_sequence` logs WARNING `interleave_path_cycle_fallback` and returns `sorted(beats)`. Comment says "should not happen."
+
+**Gap:** A cycle in the beat DAG is a structural invariant violation, not a recoverable condition. The "should not happen" comments confirm this. Silently producing sorted output means downstream POLISH operates on a degraded sequence (wrong narrative order); the cycle is never surfaced. Per CLAUDE.md, this must fail loudly.
+
+**Recommended fix:** Replace each silent/warning fallback with `raise PipelineInvariantError` (or an equivalent loud exception type). Let it propagate to the phase runner so the phase status becomes `failed` and the stage halts. If callers currently rely on the fallback for defensive purposes, add an explicit invariant check earlier in the phase so the failure site is clear.
+
+**Code refs:** `src/questfoundry/graph/algorithms.py:332-371`, `src/questfoundry/graph/grow_algorithms.py:670-710`, `src/questfoundry/graph/grow_algorithms.py:2596-2616`.
+
+**Test refs:** `tests/unit/test_grow_algorithms.py` — add cycle-input tests that assert the exception is raised.
+
+### Cluster: FILL LLM-failure silent continuation (voice / blueprint / extract)
+
+**Rules covered:** CLAUDE.md §Anti-Patterns (Silent degradation), FILL procedure general "escalate, don't swallow" posture (related to R-2.14 / R-5.2 already filed under #1321 and FILL quality escalation cluster).
+
+**Pattern:** Broad `except Exception:` around LLM sub-calls in FILL, logs WARNING, continues with an empty / skipped result. The stage completes successfully with a degraded artifact.
+
+**Current state:** Three sites:
+- `src/questfoundry/pipeline/stages/fill.py:835-842` — voice research: `except Exception: log.warning("voice_research_failed", exc_info=True)`. `research_notes` stays `None`, prose generation proceeds without voice guidance; no indication in the final artifact.
+- `src/questfoundry/pipeline/stages/fill.py:1091-1097` — blueprint validation: `except Exception: log.warning("blueprint_validation_failed", passage_id=full_pid); continue`. A passage proceeds without its expand blueprint; downstream generation falls back to defaults silently.
+- `src/questfoundry/pipeline/stages/fill.py:1260-1276` — entity extraction: `except (ValidationError, ValueError, RuntimeError): log.warning("entity_extract_failed", ...)`. `entity_updates` stays empty; narrative entity state diverges from the generated prose with no surfaced signal.
+
+**Gap:** Each case is LLM failure absorbed as a shrug. The degraded output ships. Per the Silent Degradation policy, LLM failures in structural paths must surface loudly (ERROR, halt, or an explicit degradation report). Logging at WARNING and continuing is exactly the pattern CLAUDE.md names as a violation.
+
+**Recommended fix:** For each site, pick one of:
+1. **Raise a `FillStageError`** with context (which sub-call failed, which passage). Pipeline halts. Appropriate when the missing output corrupts the artifact.
+2. **Accumulate failures into a FILL-stage escalation report** surfaced at stage completion (e.g., `GrowPhaseResult.detail` analog, or an explicit summary in the run output). Log at ERROR. User sees "FILL completed with N degraded passages: …" and can decide.
+
+Voice-research: degraded prose quality but not structurally broken → option 2. Blueprint + entity-extract: structural → option 1, or option 2 if repeatable per-passage and bounded.
+
+**Code refs:** `src/questfoundry/pipeline/stages/fill.py:835-842`, `src/questfoundry/pipeline/stages/fill.py:1091-1097`, `src/questfoundry/pipeline/stages/fill.py:1260-1276`.
+
+**Test refs:** `tests/unit/test_fill_stage.py` — add tests that inject LLM-call failures and assert the stage either raises or surfaces the degradation report.
+
+### Cluster: Roll-up of per-stage silent-degradation findings (cross-reference, no new issue)
+
+**Pattern:** Silent-degradation findings that were already surfaced and filed as compliance issues under their owning stage. Listed here so the cross-cutting milestone shows the full picture without duplicating the per-stage issues.
+
+**Cross-referenced per-stage issues:**
+
+| Stage | Issue | Finding |
+|---|---|---|
+| BRAINSTORM | #1273 | Dilemma `anchored_to` edge silently dropped when entity_id cannot be resolved |
+| SEED | (cluster: convergence LLM failure silent default, R-7.5) — filed under M-SEED-spec | LLM failure in convergence analysis applies defaults without WARNING |
+| SEED | (cluster: dilemma ordering LLM failure silent application) | `serialize_dilemma_relationships()` returns empty on LLM failure with no log |
+| SEED | (cluster: `explored` invariant silent break) | If pruning ever mutates `explored`, no runtime check catches it |
+| GROW | (cluster: all-intersections-rejected not raised to ERROR) | Zero intersection groups formed when signals suggested some should is logged at WARNING; must be ERROR + halt |
+| GROW | (cluster: R-2.7 intersection edge silently dropped) | Intersection edge across path-shared commit beats silently ignored during traversal |
+| POLISH | (cluster: zero-choice silent pass to Phase 6) | Choice count of zero passes through; spec requires ERROR halt |
+| POLISH | (cluster: duplicate choice labels silently applied) | Two choices from same source with same label silently accepted |
+| FILL | #1321 | Entity-update silent skip on missing entity (R-2.14 + wrong log level + missing escalation) |
+| FILL | (cluster: quality-escalation silent) | Persistent quality issues shipped with WARNING instead of escalating upstream per R-5.2 |
+| DRESS | (cluster: spoiler-leak silent pass) | No spoiler-leak detection; rank-1 can silently disclose rank-2 content |
+| SHIP | (cluster: per-format validation missing) | Broken exports (dangling Twee passage refs, PDF page mismatch) shipped silently |
+| SHIP | (cluster: partial DRESS propagation) | Partial art direction (e.g., style without palette) silently propagated by exporters |
+| logging | #1340 | Rejection/skip events logged at WARNING hide real warnings — tangentially masks silent-degradation visibility |
+
+**Recommended fix:** Fixed by resolving the linked issues. No new issue filed under M-silent-degradation for this cluster.
+
+**Code refs:** See each linked issue / stage-milestone cluster.
+
+**Test refs:** See each linked issue.
 
 ---
 
