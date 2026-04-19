@@ -169,6 +169,15 @@ module = [
 ]
 ignore_missing_imports = true
 
+[tool.pyright]
+# Point the pyright-lsp plugin (invoked by editors / Claude Code) at the
+# uv-managed virtual environment. Without this, pyright uses its bundled
+# typeshed only and cannot resolve third-party imports such as
+# langchain_core — producing noise that doesn't match `uv run mypy`.
+venvPath = "."
+venv = ".venv"
+pythonVersion = "3.11"
+
 [tool.ruff]
 target-version = "py311"
 line-length = 100
