@@ -329,6 +329,15 @@ class InitialBeat(BaseModel):
             raise ValueError(msg)
         return self
 
+    role: Literal["setup", "epilogue"] | None = Field(
+        default=None,
+        description=(
+            "Structural role: 'setup' (story opener before any dilemma is introduced), "
+            "'epilogue' (story closer after all dilemmas resolve), or None for "
+            "dilemma-owned beats. Structural beats have zero belongs_to edges and "
+            "zero dilemma_impacts (R-3.14)."
+        ),
+    )
     dilemma_impacts: list[DilemmaImpact] = Field(
         default_factory=list,
         description="How this beat affects dilemmas",

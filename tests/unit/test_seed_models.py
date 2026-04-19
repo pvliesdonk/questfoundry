@@ -1173,3 +1173,51 @@ def test_initial_beat_also_belongs_to_empty_string_is_rejected() -> None:
             path_id="path::trust__protector",
             also_belongs_to="",
         )
+
+
+# ---------------------------------------------------------------------------
+# Task 16 — InitialBeat.role field (R-3.14, R-3.15)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "role",
+    [
+        pytest.param("setup", id="setup"),
+        pytest.param("epilogue", id="epilogue"),
+        pytest.param(None, id="none"),
+    ],
+)
+def test_initial_beat_role_accepts_setup_and_epilogue(role: str | None) -> None:
+    """R-3.14/R-3.15: role may be 'setup', 'epilogue', or absent (None)."""
+    beat = InitialBeat(
+        beat_id="b1",
+        summary="The story begins.",
+        path_id="path::trust_or_betray__trust",
+        entities=["character::protagonist"],
+        role=role,
+    )
+    assert beat.role == role
+
+
+def test_initial_beat_role_defaults_to_none() -> None:
+    """R-3.14: role is optional; defaults to None for dilemma-owned beats."""
+    beat = InitialBeat(
+        beat_id="b1",
+        summary="A dilemma beat.",
+        path_id="path::trust_or_betray__trust",
+        entities=["character::protagonist"],
+    )
+    assert beat.role is None
+
+
+def test_initial_beat_role_rejects_invalid_values() -> None:
+    """R-3.14: only 'setup' and 'epilogue' are valid structural roles."""
+    with pytest.raises(ValidationError):
+        InitialBeat(
+            beat_id="b1",
+            summary="Invalid role.",
+            path_id="path::trust_or_betray__trust",
+            entities=["character::protagonist"],
+            role="something_else",  # type: ignore[arg-type]
+        )
