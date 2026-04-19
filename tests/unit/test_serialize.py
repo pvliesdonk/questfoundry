@@ -1488,7 +1488,7 @@ class TestBeatRetryAndContextRefresh:
                 "dilemma_impacts": [
                     {"dilemma_id": "dilemma::test_dilemma", "effect": "commits", "note": "x"}
                 ],
-                "entities": [],
+                "entities": ["char_test"],
                 "location": "location::place",
             },
         ]
@@ -1528,7 +1528,7 @@ class TestBeatRetryAndContextRefresh:
             "dilemma_impacts": [
                 {"dilemma_id": "dilemma::test_dilemma", "effect": "reveals", "note": "x"}
             ],
-            "entities": [],
+            "entities": ["char_test"],
             "location": "location::place",
         }
 
@@ -2956,7 +2956,7 @@ class TestSerializeSeedAsFunctionSharedBeats:
             "path_id": "path::host_benevolent_or_selfish__benevolent",
             "also_belongs_to": "path::host_benevolent_or_selfish__selfish",
             "dilemma_impacts": [],
-            "entities": [],
+            "entities": ["char_test"],
             "location": None,
             "location_alternatives": [],
             "temporal_hint": None,
@@ -2967,7 +2967,7 @@ class TestSerializeSeedAsFunctionSharedBeats:
             "path_id": "path::host_benevolent_or_selfish__benevolent",
             "also_belongs_to": None,
             "dilemma_impacts": [],
-            "entities": [],
+            "entities": ["char_test"],
             "location": None,
             "location_alternatives": [],
             "temporal_hint": None,

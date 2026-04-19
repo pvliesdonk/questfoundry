@@ -132,6 +132,7 @@ async def test_execute_calls_all_three_phases() -> None:
                     "beat_id": "beat1",
                     "summary": "Opening beat",
                     "path_id": "path::trust__yes",
+                    "entities": ["entity::kay"],
                 }
             ],
         )
@@ -389,6 +390,7 @@ async def test_execute_returns_artifact_as_dict() -> None:
                     "beat_id": "beat1",
                     "summary": "Test beat",
                     "path_id": "path::t1__a1",
+                    "entities": ["entity::kay"],
                 }
             ],
         )
@@ -485,6 +487,7 @@ def test_seed_output_model_validates() -> None:
                 "beat_id": "beat1",
                 "summary": "Opening scene",
                 "path_id": "path::trust__yes",
+                "entities": ["entity::kay"],
             }
         ],
     )
@@ -1018,6 +1021,7 @@ class TestPathBeatsSectionValidation:
                 beat_id=f"beat_{i}",
                 summary=f"Beat {i}",
                 paths=["path_a"],
+                entities=["char_x"],
             )
             for i in range(4)
         ]
@@ -1029,8 +1033,8 @@ class TestPathBeatsSectionValidation:
         from questfoundry.models.seed import InitialBeat, PathBeatsSection
 
         beats = [
-            InitialBeat(beat_id="beat_0", summary="Start", paths=["path_a"]),
-            InitialBeat(beat_id="beat_1", summary="End", paths=["path_a"]),
+            InitialBeat(beat_id="beat_0", summary="Start", paths=["path_a"], entities=["char_x"]),
+            InitialBeat(beat_id="beat_1", summary="End", paths=["path_a"], entities=["char_x"]),
         ]
         section = PathBeatsSection(initial_beats=beats)
         assert len(section.initial_beats) == 2
@@ -1044,7 +1048,9 @@ class TestPathBeatsSectionValidation:
         with pytest.raises(ValidationError, match="initial_beats"):
             PathBeatsSection(
                 initial_beats=[
-                    InitialBeat(beat_id="beat_0", summary="Only one", paths=["path_a"]),
+                    InitialBeat(
+                        beat_id="beat_0", summary="Only one", paths=["path_a"], entities=["char_x"]
+                    ),
                 ]
             )
 
@@ -1059,6 +1065,7 @@ class TestPathBeatsSectionValidation:
                 beat_id=f"beat_{i}",
                 summary=f"Beat {i}",
                 paths=["path_a"],
+                entities=["char_x"],
             )
             for i in range(7)
         ]
@@ -1072,8 +1079,8 @@ class TestPathBeatsSectionValidation:
         from questfoundry.models.seed import InitialBeat, PathBeatsSection
 
         beats = [
-            InitialBeat(beat_id="same_id", summary="First", paths=["path_a"]),
-            InitialBeat(beat_id="same_id", summary="Second", paths=["path_a"]),
+            InitialBeat(beat_id="same_id", summary="First", paths=["path_a"], entities=["char_x"]),
+            InitialBeat(beat_id="same_id", summary="Second", paths=["path_a"], entities=["char_x"]),
         ]
         with pytest.raises(ValidationError, match="Duplicates found for beat_id"):
             PathBeatsSection(initial_beats=beats)

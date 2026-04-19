@@ -1548,7 +1548,7 @@ class _LLMPhaseMixin:
             derived_from_id = sf_data.get("derived_from", "")
             cons_data = consequence_nodes.get(derived_from_id, {})
             cons_desc = cons_data.get("description", "unknown consequence")
-            narrative_effects: list[str] = cons_data.get("narrative_effects", [])
+            narrative_effects: list[str] = cons_data.get("ripples", [])
 
             # Trace: consequence → path → dilemma for rich context
             path_id = cons_data.get("path_id", "")

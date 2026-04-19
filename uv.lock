@@ -2039,7 +2039,7 @@ requires-dist = [
     { name = "pvl-webtools", marker = "extra == 'research'", git = "https://github.com/pvliesdonk/pvl-webtools.git" },
     { name = "pvl-webtools", marker = "extra == 'research-web'", git = "https://github.com/pvliesdonk/pvl-webtools.git" },
     { name = "pydantic", specifier = ">=2.0" },
-    { name = "pyright", marker = "extra == 'dev'", specifier = ">=1.1" },
+    { name = "pyright", marker = "extra == 'dev'", specifier = ">=1.1,<2" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.24" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5.0" },

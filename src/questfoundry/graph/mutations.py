@@ -1874,7 +1874,9 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
             "raw_id": raw_id,
             "path_id": prefixed_path_id,
             "description": consequence.get("description"),
-            "narrative_effects": consequence.get("narrative_effects", []),
+            # The spec (R-3.4) and validator use "ripples" as the graph field name.
+            # The Pydantic model calls this "narrative_effects"; translate here.
+            "ripples": consequence.get("narrative_effects", []),
         }
         consequence_data = _clean_dict(consequence_data)
         graph.create_node(consequence_id, consequence_data)
@@ -2026,16 +2028,19 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
                     fallback="soft/2",
                 )
             data = analysis or {}
+            # R-7.1/7.2/7.3: all three analysis fields are required on the graph node.
+            # When an analysis entry is absent, fall back to the most conservative defaults
+            # so the SEED contract validator does not reject a partially-analyzed output.
             update_fields: dict[str, Any] = {
                 "dilemma_role": data.get("dilemma_role", "soft"),
                 "payoff_budget": data.get("payoff_budget", 2),
+                "ending_salience": data.get("ending_salience", "none"),
+                "residue_weight": data.get("residue_weight", "cosmetic"),
             }
             for key in (
                 "convergence_point",
                 "residue_note",
                 "ending_tone",
-                "ending_salience",
-                "residue_weight",
             ):
                 if key in data:
                     update_fields[key] = data[key]
