@@ -522,15 +522,15 @@ compliance issues — they are a follow-on track.
 
 **Test refs:** `tests/unit/test_grow_algorithms.py` (arc enumeration tests)
 
-### Cluster: Passage/Choice creation in GROW violates Stage Output Contract Item 16
+### Cluster: Dead passage/choice counting code from pre-split era
 
-**Rules covered:** Stage Output Contract item 16 (no Passage, Choice, variant passage, residue beat, character arc metadata after GROW)
+**Rules covered:** Stage Output Contract item 16 (tangential — dead code hygiene)
 
-**Current state:** Code at `stage.py:359-362` counts passage and choice nodes in the graph at GROW completion. If these are non-zero, either GROW created them (spec violation) or POLISH has already run (pipeline order violation).
+**Current state:** Code at `stage.py:359-362` counts passage and choice nodes in the graph at GROW completion. This is a leftover from before POLISH was spun out as a separate stage; those node types should never exist at the end of GROW now.
 
-**Gap:** The Stage Output Contract explicitly forbids Passage/Choice/variant/residue-beat/character-arc-metadata nodes after GROW. Passage-layer creation is POLISH's responsibility. The fact that the code even COUNTS these node types hints they may be created upstream; this must be investigated and enforced.
+**Gap:** The counting code is dead (always zero in a correctly-ordered pipeline) but left in place. Per the CLAUDE.md anti-pattern about Dead Code / Backward-Compatibility shims, leftover references to removed scope should be deleted directly rather than lingering as "just in case" guards.
 
-**Recommended fix:** Add an end-of-stage validation check that asserts passage, choice, variant-passage, residue-beat, and character-arc-metadata node counts are all zero. If any are non-zero, log at ERROR and halt with a stage-integrity error. If upstream phases create these nodes, remove that creation code and defer all passage-layer work to POLISH.
+**Recommended fix:** Remove the passage/choice (and variant-passage, residue-beat, character-arc-metadata) counting from `stage.py`. Replace with an end-of-stage assertion that these node counts are zero; if non-zero, halt with a stage-integrity ERROR identifying which node type leaked (indicates a pipeline-ordering bug).
 
 **Code refs:** `src/questfoundry/pipeline/stages/grow/stage.py:359-362, 376`
 
