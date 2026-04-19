@@ -6108,7 +6108,11 @@ def test_apply_seed_mutations_rejects_precommit_with_mismatched_dilemmas() -> No
 
 # ---------------------------------------------------------------------------
 # Task 12 (#1283): post-apply property test — no beat has cross-dilemma
-# belongs_to edges in the resulting graph (R-3.9)
+# belongs_to edges in the resulting graph (R-3.9).
+#
+# This test covers the *broader* prohibition: not just the primary path_id +
+# also_belongs_to pair, but any beat in the graph after apply completes.
+# If future code adds a second belongs_to write path this test catches it.
 # ---------------------------------------------------------------------------
 
 
@@ -6118,7 +6122,10 @@ def test_apply_seed_mutations_never_produces_cross_dilemma_belongs_to() -> None:
 
     The exit validator is patched so we can focus on the graph-state invariant
     independently of fixture completeness. This is a property test of the write
-    path, not of the exit validator."""
+    path, not of the exit validator.
+
+    Broader than Task 11 (#1282): that test guards the primary path_id +
+    also_belongs_to pair; this test inspects the full resulting graph."""
     from unittest.mock import patch
 
     from questfoundry.graph.mutations import apply_seed_mutations
