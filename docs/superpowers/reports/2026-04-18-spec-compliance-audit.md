@@ -20,7 +20,7 @@ reference the section anchors in this document.
 |---|---|---|---|---|
 | M-DREAM-spec | issues-filed | 3 | #1268 | 3 |
 | M-BRAINSTORM-spec | issues-filed | 8 | #1272 | 8 |
-| M-SEED-spec | pending | — | — | — |
+| M-SEED-spec | drafted | 14 | — | — |
 | M-GROW-spec | pending | — | — | — |
 | M-POLISH-spec | pending | — | — | — |
 | M-FILL-spec | pending | — | — | — |
@@ -221,6 +221,214 @@ compliance issues — they are a follow-on track.
 ### Uncheckable rules
 
 - R-3.3: Both answers are genuinely different and both compelling — requires LLM-level narrative judgment of drama and contrast quality, not programmatically verifiable. Human review at Phase 3 gate determines this.
+
+---
+
+## M-SEED-spec
+
+### Summary
+- Rules checked: 66
+- Compliant: 45 | Drift: 13 | Missing: 7 | Uncheckable: 1
+
+### Cluster: Missing Y-shape shared beat enforcement
+
+**Rules covered:** R-3.6, R-3.10
+
+**Current state:** The Y-shape structure is described in code comments and YAML migration logic (`_migrate_paths_to_path_id`, `also_belongs_to` field), but SEED prompts, context builders, and beat-generation serialization do not explicitly enforce or verify that dilemmas produce pre-commit beats with `also_belongs_to` set.
+
+**Gap:** R-3.10 requires "every Dilemma with two explored Answers has ≥1 pre-commit beat," but there is no mechanism validating this in `validate_seed_mutations()`. The function checks beat count per path and commit/post-commit beat properties, but does not assert that each dilemma has at least one beat with `also_belongs_to` set to both explored paths of that dilemma.
+
+**Recommended fix:** Add a validation rule in `validate_seed_mutations()` that iterates each dilemma with two explored answers and verifies at least one beat with `also_belongs_to` is assigned to both of its explored paths. If missing, report a COMPLETENESS error with guidance to regenerate beats.
+
+**Code refs:** `src/questfoundry/graph/mutations.py:1068-1500`, `src/questfoundry/models/seed.py:235-353`
+
+**Test refs:** `tests/unit/test_seed_stage.py` (lacks explicit Y-shape validation test)
+
+### Cluster: Cross-dilemma `belongs_to` prohibition not enforced
+
+**Rules covered:** R-3.9
+
+**Current state:** The YAML model (`InitialBeat._migrate_paths_to_path_id`) rejects `paths` with more than 2 entries, preventing >2 `belongs_to` edges. However, there is no validation that both `path_id` and `also_belongs_to` belong to the same dilemma.
+
+**Gap:** R-3.9 forbids "beats must not have `belongs_to` edges referencing Paths from different Dilemmas." A beat could theoretically be created with `path_id: path::mentor_trust__protector` and `also_belongs_to: path::artifact_nature__salvation`. No semantic validator catches this violation.
+
+**Recommended fix:** Add a post-model validator in `InitialBeat` (after `_also_belongs_to_differs_from_path_id`) or in `validate_seed_mutations()` that extracts the dilemma_id from both path IDs and asserts they match. If they differ, raise ValueError with a clear message citing R-3.9.
+
+**Code refs:** `src/questfoundry/models/seed.py:322-327`, `src/questfoundry/graph/mutations.py:1328-1340`
+
+**Test refs:** `tests/unit/test_seed_models.py` (no cross-dilemma Y-shape test)
+
+### Cluster: Setup and epilogue beat semantics not validated
+
+**Rules covered:** R-3.14, R-3.15
+
+**Current state:** `InitialBeat` model does not enforce that setup/epilogue beats are structural (zero `belongs_to`, zero `dilemma_impacts`). The model allows any beat to declare itself as setup/epilogue via comment or metadata, but no field flags them and no validator enforces the zero-`belongs_to` constraint.
+
+**Gap:** R-3.14 requires setup/epilogue beats to be "structural beats with zero `belongs_to` edges and zero `dilemma_impacts`." Currently, a beat with `path_id: path_x` could still be labeled as setup in prose/comments without validation catching the violation.
+
+**Recommended fix:** Add an optional `beat_type` field to `InitialBeat` (enum: `"narrative" | "setup" | "epilogue"`; default "narrative"). Add post-model validator asserting that setup/epilogue beats have null `path_id`, null `also_belongs_to`, and empty `dilemma_impacts`.
+
+**Code refs:** `src/questfoundry/models/seed.py:235-353`
+
+**Test refs:** `tests/unit/test_seed_models.py`, `tests/unit/test_seed_stage.py`
+
+### Cluster: `explored` field immutability not enforced or tested
+
+**Rules covered:** R-2.3, R-5.2
+
+**Current state:** Phase 5 calls `prune_to_arc_limit()` from `src/questfoundry/graph/seed_pruning.py`. The pruning logic drops Path nodes from the artifact but must preserve the `explored` field on DilemmaDecision objects unchanged. No assertion or test verifies this invariant: `pruned_artifact.dilemmas[i].explored` should remain identical to the pre-pruning value for each dilemma. Existing Phase 5 tests check final arc count but do not verify `explored` immutability before/after pruning.
+
+**Gap:** If the pruning code ever modifies `explored` (e.g., by dropping demoted answers), this invariant is silently broken. Both the runtime check and the test coverage are missing.
+
+**Recommended fix:** In `seed.py:execute()` after `prune_to_arc_limit()` returns, add an assertion loop comparing original and pruned artifact dilemma `explored` fields. Log an ERROR and raise `SeedStageError` on mismatch. Add a test case that creates an artifact with 5 dilemmas (3 of which are demoted by pruning), serializes it, and verifies that the pruned artifact's `dilemmas[i].explored` matches the original for all dilemmas.
+
+**Code refs:** `src/questfoundry/pipeline/stages/seed.py:467-476`, `src/questfoundry/graph/seed_pruning.py`
+
+**Test refs:** `tests/unit/test_seed_stage.py:838-879` (tests final arc count, not explored immutability)
+
+### Cluster: Convergence analysis LLM failure handling missing
+
+**Rules covered:** R-7.5
+
+**Current state:** Phase 4 (Convergence Analysis) calls `serialize_convergence_analysis()`. If the LLM call fails or returns invalid role/weight values, the result is returned as-is. There is no explicit WARNING log if defaults are applied.
+
+**Gap:** R-7.5 requires "On LLM failure, defaults are applied... but the failure is logged at WARNING level with the Dilemma IDs affected. Silent default application is forbidden." The code does not handle LLM failure in the convergence analysis phase or log fallback application.
+
+**Recommended fix:** Modify `serialize_convergence_analysis()` and/or its call site to catch and handle LLM failures (malformed response, validation failure). If defaults are applied for any dilemma, log at WARNING with affected dilemma IDs and the reason for fallback.
+
+**Code refs:** `src/questfoundry/pipeline/stages/seed.py:451-461`, `src/questfoundry/agents/serialize.py`
+
+**Test refs:** `tests/unit/test_seed_stage.py` (no convergence analysis failure test)
+
+### Cluster: Dilemma ordering LLM failure silent application
+
+**Rules covered:** R-8.5
+
+**Current state:** Phase 8 (Dilemma Ordering Relationships) calls `serialize_dilemma_relationships()`. If the LLM fails, the code silently returns empty relationships (or a partial list) without logging a WARNING.
+
+**Gap:** R-8.5 states "If the LLM call fails, no relationships are declared — the graph is left with zero ordering edges. Failure logged at WARNING." The code does not log at WARNING on LLM failure during relationship serialization.
+
+**Recommended fix:** Modify `serialize_dilemma_relationships()` to wrap the LLM call in a try/except block. On failure, log at WARNING with the error details and affected dilemma count. Return an empty list rather than propagating the exception.
+
+**Code refs:** `src/questfoundry/pipeline/stages/seed.py:502-514`, `src/questfoundry/agents/serialize.py`
+
+**Test refs:** None (no test for dilemma relationships LLM failure)
+
+### Cluster: Dilemma role "flavor" deprecation incomplete
+
+**Rules covered:** R-7.1
+
+**Current state:** `DilemmaAnalysis` model has a `_migrate_legacy_fields` validator that converts `dilemma_role='flavor'` to `'soft'` with a DeprecationWarning. However, the role field's docstring and enum values do not explicitly forbid `'flavor'`.
+
+**Gap:** R-7.1 requires `dilemma_role ∈ {hard, soft}` exactly. The migration silently upgrades `'flavor'` to `'soft'`, hiding the real intent. Future code reading stored artifacts may not know that a soft dilemma with `residue_weight='cosmetic'` was originally `'flavor'`.
+
+**Recommended fix:** Update the `_migrate_legacy_fields` logic to log at WARNING when `'flavor'` is encountered, including the dilemma_id and note that `'soft' + 'cosmetic'` is the canonical form. Ensure tests verify the migration and logging.
+
+**Code refs:** `src/questfoundry/models/seed.py:376-403`
+
+**Test refs:** `tests/unit/test_seed_models.py` (no flavor migration test found)
+
+### Cluster: Concurrent dilemma ordering normalization not enforced post-serialization
+
+**Rules covered:** R-8.3
+
+**Current state:** `DilemmaRelationship._validate_and_normalize_pair()` normalizes `concurrent` pairs to canonical order (dilemma_a < dilemma_b alphabetically). The test suite does not verify this normalization or reject non-normalized pairs created directly.
+
+**Gap:** If code bypasses the Pydantic validator (e.g., direct dict insertion into graph), non-normalized concurrent pairs could exist. The code provides no post-serialization check that all concurrent edges in the artifact are normalized.
+
+**Recommended fix:** Add a validator in Phase 8 (after `serialize_dilemma_relationships()` returns) that iterates all concurrent relationships and asserts lex ordering. If violation found, log at ERROR and raise exception before returning.
+
+**Code refs:** `src/questfoundry/models/seed.py:490-503`, `src/questfoundry/pipeline/stages/seed.py:502-514`
+
+**Test refs:** `tests/unit/test_seed_models.py` (DilemmaRelationship normalization test needed)
+
+### Cluster: Shared entity derivation vs. declaration guard absent
+
+**Rules covered:** R-8.4
+
+**Current state:** The `DilemmaRelationship` model does not have a `shared_entity` field. Relationships are created only as `wraps`, `concurrent`, or `serial`. The code structure implies `shared_entity` should be derived from graph `anchored_to` edges in downstream stages.
+
+**Gap:** R-8.4 states "`shared_entity` is NOT a declared relationship — it is derived from `anchored_to` edges. Do not create `shared_entity` edges." No validation prevents a human or LLM from incorrectly declaring a `shared_entity` edge type in SEED output if such a field were added to the model later.
+
+**Recommended fix:** Add a note/docstring to the stage specifying that `shared_entity` relationships are computed downstream and should never be hand-declared. If a model field or edge type for `shared_entity` is ever added, include a validator rejecting it with a clear error message.
+
+**Code refs:** `src/questfoundry/models/seed.py:453-509`
+
+**Test refs:** None (design constraint, not runtime check)
+
+### Cluster: Arc count threshold guardrail weakened by optional Phase 7/8
+
+**Rules covered:** R-5.1
+
+**Current state:** Phase 5 prunes to arc limit (`max_arcs=size_profile.max_arcs`). After pruning, the artifact is checked for minimum arcs. However, phases 7 and 8 run after this check and could theoretically further reduce arc count if they drop dilemmas.
+
+**Gap:** R-5.1 requires "Arc count ≤ 16" and implies the pruning phase is the enforcement point. If Phase 7 (Convergence Analysis) or Phase 8 (Dilemma Ordering) later decide to drop a dilemma (due to LLM classification), the final artifact could violate the guardrail. The code does not re-validate arc count after these phases.
+
+**Recommended fix:** Add a post-Phase-8 arc count check (before returning from `execute()`) that logs at WARNING if final arc count has drifted below minimum, and ERROR if above max. Document that phases 7/8 must not reduce arc count.
+
+**Code refs:** `src/questfoundry/pipeline/stages/seed.py:487-514`
+
+**Test refs:** `tests/unit/test_seed_stage.py:838-879`
+
+### Cluster: Beat entities field validation missing for narrative beats
+
+**Rules covered:** R-3.13
+
+**Current state:** `InitialBeat` model requires `summary` and `entities` fields with `min_length=1` for `summary`. However, validation does NOT check that `entities` is non-empty for narrative beats (it may be empty for structural beats, but narrative beats must reference entities).
+
+**Gap:** R-3.13 states "Every beat has non-empty `summary` and `entities`." The model allows `entities: []` by default. For narrative beats (not setup/epilogue), this violates the rule. The model lacks a conditional validator enforcing `entities` ≥ 1 for non-structural beats.
+
+**Recommended fix:** Extend `InitialBeat` with a post-model validator that checks: if `beat_type` (see the Setup/epilogue cluster) is `"narrative"`, then `len(entities) >= 1`. If not set, assume narrative and require entities.
+
+**Code refs:** `src/questfoundry/models/seed.py:235-353`
+
+**Test refs:** `tests/unit/test_seed_stage.py:958-1029` (tests shared beat structure but not entity list completeness)
+
+### Cluster: `path_importance` field not defined in spec
+
+**Rules covered:** R-3.1 (tangential) — spec-vs-code mismatch
+
+**Current state:** The `Path` model includes a `path_importance: PathTier = Literal["major", "minor"]` field. This field is persisted and indexed for LLM context but does not appear in the authoritative SEED procedure spec.
+
+**Gap:** Per CLAUDE.md §Design Doc Authority, specs supersede code — fields that exist in code but not in spec are code drift. The spec does not define `path_importance` or how it affects branching, pruning, or prose generation. This is either (a) a field to be removed from code, or (b) a field the spec should formally add (which is a separate spec-update track — not part of this audit's fix).
+
+**Recommended fix:** Raise the `path_importance` field with maintainers. If kept: update the spec to define it as a Hint (similar to `temporal_hint`) and describe its downstream effect. If dropped: remove from the `Path` model and any downstream consumers. Default stance per CLAUDE.md: the code matches the spec — if kept, spec must be updated first.
+
+**Code refs:** `src/questfoundry/models/seed.py:177-179`
+
+**Test refs:** `tests/unit/test_seed_stage.py:499-512`
+
+### Cluster: Consequence ripples validation absent
+
+**Rules covered:** R-3.4
+
+**Current state:** The `Consequence` model has a `narrative_effects: list[str]` field described as "Story effects this consequence implies (cascading impacts)." There is no model validation that this list is non-empty.
+
+**Gap:** R-3.4 requires "Every Consequence has a non-empty `description` and at least one ripple." The model allows `narrative_effects: []` by default. No validator enforces `len(narrative_effects) >= 1` for any Consequence.
+
+**Recommended fix:** Add a post-model validator in `Consequence` that asserts `len(narrative_effects) >= 1`. If empty, raise ValueError with guidance to describe at least one story effect.
+
+**Code refs:** `src/questfoundry/models/seed.py:122-143`
+
+**Test refs:** `tests/unit/test_seed_models.py` (no Consequence ripple validation test)
+
+### Cluster: Path Freeze approval gate not recorded
+
+**Rules covered:** R-6.4
+
+**Current state:** The spec requires "Path Freeze: Human approval is required and explicitly recorded." The code does not show a mechanism for recording or checking this approval. No gate or flag is set after Phase 6. Nothing prevents Phase 6 output from being consumed by GROW if the human did not explicitly approve Path Freeze.
+
+**Gap:** R-6.4 is a code-side requirement (the approval must be explicitly recorded somewhere checkable by downstream stages). There is no recorded approval state in the artifact or graph.
+
+**Recommended fix:** Add an explicit approval flag/timestamp to the SEED artifact or a graph-level marker (e.g., a `path_freeze_approved_at` field). Downstream stages (GROW) should check for this flag before proceeding. The CLI layer should prompt for approval at stage completion and set the flag only on explicit confirmation.
+
+**Code refs:** `src/questfoundry/pipeline/stages/seed.py` (no approval gate visible)
+
+**Test refs:** None (approval state not currently representable)
+
+### Uncheckable rules
+
+- R-3.5: Consequences describe world state vs. player actions — requires semantic understanding of prose. Cannot be programmatically checked at the model level. Enforced via SEED prompt engineering; any runtime check would require an LLM-based critique call. Deferred to runtime-verification follow-on track.
 
 ---
 
