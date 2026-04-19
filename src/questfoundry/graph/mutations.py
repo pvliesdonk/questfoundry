@@ -601,6 +601,7 @@ def apply_dream_mutations(graph: Graph, output: dict[str, Any]) -> None:
 
     errors = validate_dream_output(graph)
     if errors:
+        log.error("dream_contract_violated", errors=errors)
         raise DreamContractError(
             "DREAM stage output contract violated:\n  - " + "\n  - ".join(errors)
         )
@@ -960,6 +961,7 @@ def apply_brainstorm_mutations(graph: Graph, output: dict[str, Any]) -> None:
 
     errors = validate_brainstorm_output(graph)
     if errors:
+        log.error("brainstorm_contract_violated", errors=errors)
         raise BrainstormContractError(
             "BRAINSTORM stage output contract violated:\n  - " + "\n  - ".join(errors)
         )
