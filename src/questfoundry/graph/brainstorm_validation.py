@@ -33,7 +33,7 @@ def _check_entities(entity_nodes: dict[str, dict[str, Any]], errors: list[str]) 
         errors: Accumulator list; violations are appended in rule order.
     """
     location_count = 0
-    for entity_id, entity in entity_nodes.items():
+    for entity_id, entity in sorted(entity_nodes.items()):
         category = entity.get("category")
         if not entity.get("name"):
             errors.append(f"R-2.1: entity {entity_id!r} has empty/missing name")
@@ -94,7 +94,7 @@ def _check_dilemmas(
     for edge in anchored_to_edges:
         anchors_per_dilemma.setdefault(edge["from"], []).append(edge["to"])
 
-    for dilemma_id, dilemma in dilemma_nodes.items():
+    for dilemma_id, dilemma in sorted(dilemma_nodes.items()):
         # R-3.7: dilemma id must start with 'dilemma::'
         if not dilemma_id.startswith("dilemma::"):
             errors.append(f"R-3.7: dilemma id {dilemma_id!r} missing 'dilemma::' prefix")
@@ -127,7 +127,7 @@ def _check_dilemmas(
 
         # R-3.4 / R-3.5: answer field checks
         canonical_count = 0
-        for ans_id in distinct_answers:
+        for ans_id in sorted(distinct_answers):
             ans = graph.get_node(ans_id)
             if ans is None:
                 errors.append(
@@ -152,7 +152,7 @@ def _check_forbidden_types(graph: Graph, errors: list[str]) -> None:
         graph: The graph instance to inspect.
         errors: Accumulator list; violations are appended in rule order.
     """
-    for node_type in _FORBIDDEN_NODE_TYPES:
+    for node_type in sorted(_FORBIDDEN_NODE_TYPES):
         forbidden = graph.get_nodes_by_type(node_type)
         if forbidden:
             errors.append(
@@ -174,9 +174,9 @@ def validate_brainstorm_output(graph: Graph) -> list[str]:
     errors: list[str] = []
 
     # Inline import avoids any circular-dependency risk at module load.
-    from questfoundry.graph.dream_validation import _validate_vision_node
+    from questfoundry.graph.dream_validation import validate_vision_node
 
-    vision_contract = _validate_vision_node(graph)
+    vision_contract = validate_vision_node(graph)
     if vision_contract:
         errors.extend(
             f"Output-11: DREAM contract violated post-BRAINSTORM — {e}" for e in vision_contract

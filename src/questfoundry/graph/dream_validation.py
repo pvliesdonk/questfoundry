@@ -40,7 +40,7 @@ _ALLOWED_POV_STYLES = frozenset(
 _REQUIRED_NON_EMPTY_FIELDS = ("genre", "tone", "themes", "audience", "scope")
 
 
-def _validate_vision_node(graph: Graph) -> list[str]:
+def validate_vision_node(graph: Graph) -> list[str]:
     """Validate the vision node itself (R-1.7 through R-1.10, Output-6).
 
     Used by both DREAM (full contract) and BRAINSTORM (compatibility check).
@@ -65,7 +65,8 @@ def _validate_vision_node(graph: Graph) -> list[str]:
             f"R-1.7: expected exactly one vision node, found {len(vision_nodes)}: {node_ids}"
         )
 
-    vision_id, vision = next(iter(vision_nodes.items()))
+    vision_id = sorted(vision_nodes.keys())[0]
+    vision = vision_nodes[vision_id]
 
     # R-1.8: required fields must be present and non-empty
     for field in _REQUIRED_NON_EMPTY_FIELDS:
@@ -119,15 +120,13 @@ def validate_dream_output(graph: Graph) -> list[str]:
     errors: list[str] = []
 
     # Validate the vision node itself (R-1.7 through R-1.10, Output-6)
-    errors.extend(_validate_vision_node(graph))
+    errors.extend(validate_vision_node(graph))
 
     # Output-5: no node types other than 'vision' may exist (DREAM-specific)
     all_node_ids = graph.all_node_ids()
     forbidden_node_ids = [nid for nid in all_node_ids if _node_type(nid) != "vision"]
     if forbidden_node_ids:
-        forbidden_types = sorted(
-            {nid.split("::")[0] if "::" in nid else nid for nid in forbidden_node_ids}
-        )
+        forbidden_types = sorted({_node_type(nid) for nid in forbidden_node_ids})
         errors.append(
             f"Output-5: only vision nodes are allowed after DREAM; "
             f"found other node type(s): {forbidden_types}"

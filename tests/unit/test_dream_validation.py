@@ -108,6 +108,14 @@ def test_R_1_10_vision_has_no_edges(compliant_graph: Graph) -> None:
     assert any("edge" in e.lower() for e in errors)
 
 
+def test_R_1_10_incoming_edge_to_vision(compliant_graph: Graph) -> None:
+    """R-1.10: incoming edges to the vision node are also forbidden."""
+    compliant_graph.create_node("entity::kay", {"type": "entity", "name": "Kay"})
+    compliant_graph.add_edge("anchored_to", "entity::kay", "vision")  # incoming
+    errors = validate_dream_output(compliant_graph)
+    assert any("edge" in e.lower() for e in errors)
+
+
 def test_output5_no_other_node_types_exist(compliant_graph: Graph) -> None:
     compliant_graph.create_node("entity::kay", {"type": "entity", "name": "Kay"})
     errors = validate_dream_output(compliant_graph)

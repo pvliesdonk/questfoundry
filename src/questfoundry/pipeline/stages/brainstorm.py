@@ -104,7 +104,12 @@ def _format_vision_context(vision_node: dict[str, Any]) -> str:
         parts.append(f"**POV**: {pov_style}")
 
     if scope := vision_node.get("scope"):
-        parts.append(f"**Scope**: {scope}")
+        if isinstance(scope, dict):
+            story_size = scope.get("story_size") or ""
+            scope_text = story_size or "unspecified"
+        else:
+            scope_text = str(scope)
+        parts.append(f"**Scope**: {scope_text}")
 
     return "\n".join(parts) if parts else "No creative vision available."
 

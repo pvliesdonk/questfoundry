@@ -202,7 +202,11 @@ class DreamStage:
             if user_input_fn is not None:
                 try:
                     response = await user_input_fn()
-                except Exception:  # pragma: no cover - user_input_fn edge case
+                except (
+                    EOFError,
+                    RuntimeError,
+                    KeyboardInterrupt,
+                ):  # pragma: no cover - user_input_fn edge case
                     response = ""
                 response = response or ""
                 if response.strip().lower().startswith("y"):
