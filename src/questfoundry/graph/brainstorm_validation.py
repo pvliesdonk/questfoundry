@@ -8,7 +8,7 @@ Called at BRAINSTORM exit (from apply_brainstorm_mutations).
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from questfoundry.graph.graph import Graph
@@ -25,30 +25,13 @@ _FORBIDDEN_NODE_TYPES = frozenset(
 )
 
 
-def validate_brainstorm_output(graph: Graph) -> list[str]:
-    """Verify the graph satisfies BRAINSTORM's Stage Output Contract.
+def _check_entities(entity_nodes: dict[str, dict[str, Any]], errors: list[str]) -> None:
+    """Check R-2.1, R-2.2, R-2.3, R-2.4 entity field invariants.
 
-    Returns:
-        List of human-readable error strings. Empty means compliant.
-        Pure read-only — never mutates the graph.
+    Args:
+        entity_nodes: Mapping of entity_id → entity data from the graph.
+        errors: Accumulator list; violations are appended in rule order.
     """
-    errors: list[str] = []
-
-    # Output-11: vision node must still be present (BRAINSTORM must not remove it)
-    vision_nodes = graph.get_nodes_by_type("vision")
-    if not vision_nodes:
-        errors.append("Output-11: vision node is missing (BRAINSTORM must not remove it)")
-
-    entity_nodes = graph.get_nodes_by_type("entity")
-    dilemma_nodes = graph.get_nodes_by_type("dilemma")
-
-    # R-1.1: minimum floors — at least one entity and one dilemma
-    if not entity_nodes:
-        errors.append("R-1.1: BRAINSTORM must produce at least one entity")
-    if not dilemma_nodes:
-        errors.append("R-1.1: BRAINSTORM must produce at least one dilemma")
-
-    # R-2.1 / R-2.2 / R-2.3 / R-2.4: entity field checks
     location_count = 0
     for entity_id, entity in entity_nodes.items():
         category = entity.get("category")
@@ -86,10 +69,23 @@ def validate_brainstorm_output(graph: Graph) -> list[str]:
             f"R-2.4: BRAINSTORM must produce at least 2 location entities, found {location_count}"
         )
 
-    # Gather edges once for dilemma checks.
-    has_answer_edges = graph.get_edges(edge_type="has_answer")
-    anchored_to_edges = graph.get_edges(edge_type="anchored_to")
 
+def _check_dilemmas(
+    dilemma_nodes: dict[str, dict[str, Any]],
+    has_answer_edges: list[dict[str, Any]],
+    anchored_to_edges: list[dict[str, Any]],
+    graph: Graph,
+    errors: list[str],
+) -> None:
+    """Check R-3.1, R-3.2, R-3.4, R-3.5, R-3.6, R-3.7 dilemma + answer invariants.
+
+    Args:
+        dilemma_nodes: Mapping of dilemma_id → dilemma data from the graph.
+        has_answer_edges: All has_answer edges from the graph.
+        anchored_to_edges: All anchored_to edges from the graph.
+        graph: The graph instance (used to look up answer nodes).
+        errors: Accumulator list; violations are appended in rule order.
+    """
     answers_per_dilemma: dict[str, list[str]] = {}
     for edge in has_answer_edges:
         answers_per_dilemma.setdefault(edge["from"], []).append(edge["to"])
@@ -98,7 +94,6 @@ def validate_brainstorm_output(graph: Graph) -> list[str]:
     for edge in anchored_to_edges:
         anchors_per_dilemma.setdefault(edge["from"], []).append(edge["to"])
 
-    # R-3.1 / R-3.2 / R-3.4 / R-3.5 / R-3.6 / R-3.7: dilemma + answer checks
     for dilemma_id, dilemma in dilemma_nodes.items():
         # R-3.7: dilemma id must start with 'dilemma::'
         if not dilemma_id.startswith("dilemma::"):
@@ -133,7 +128,12 @@ def validate_brainstorm_output(graph: Graph) -> list[str]:
         # R-3.4 / R-3.5: answer field checks
         canonical_count = 0
         for ans_id in distinct_answers:
-            ans = graph.get_node(ans_id) or {}
+            ans = graph.get_node(ans_id)
+            if ans is None:
+                errors.append(
+                    f"R-3.2: dilemma {dilemma_id!r} has_answer edge to missing node {ans_id!r}"
+                )
+                continue
             if ans.get("is_canonical") is True:
                 canonical_count += 1
             if not ans.get("description"):
@@ -144,7 +144,14 @@ def validate_brainstorm_output(graph: Graph) -> list[str]:
                 f"found {canonical_count}"
             )
 
-    # R-3.8: forbidden node types must not be present
+
+def _check_forbidden_types(graph: Graph, errors: list[str]) -> None:
+    """Check R-3.8: BRAINSTORM must not create certain node types.
+
+    Args:
+        graph: The graph instance to inspect.
+        errors: Accumulator list; violations are appended in rule order.
+    """
     for node_type in _FORBIDDEN_NODE_TYPES:
         forbidden = graph.get_nodes_by_type(node_type)
         if forbidden:
@@ -152,5 +159,42 @@ def validate_brainstorm_output(graph: Graph) -> list[str]:
                 f"R-3.8: BRAINSTORM must not create {node_type!r} nodes; "
                 f"found {len(forbidden)}: {sorted(forbidden.keys())[:3]}"
             )
+
+
+def validate_brainstorm_output(graph: Graph) -> list[str]:
+    """Verify the graph satisfies BRAINSTORM's Stage Output Contract.
+
+    Args:
+        graph: Graph expected to contain entities and dilemmas after BRAINSTORM.
+
+    Returns:
+        List of human-readable error strings. Empty means compliant.
+        Pure read-only — never mutates the graph.
+    """
+    errors: list[str] = []
+
+    # Output-11: vision node must still be present (BRAINSTORM must not remove it)
+    vision_nodes = graph.get_nodes_by_type("vision")
+    if not vision_nodes:
+        errors.append("Output-11: vision node is missing (BRAINSTORM must not remove it)")
+
+    entity_nodes = graph.get_nodes_by_type("entity")
+    dilemma_nodes = graph.get_nodes_by_type("dilemma")
+
+    # R-1.1: minimum floors — at least one entity and one dilemma
+    if not entity_nodes:
+        errors.append("R-1.1: BRAINSTORM must produce at least one entity")
+    if not dilemma_nodes:
+        errors.append("R-1.1: BRAINSTORM must produce at least one dilemma")
+
+    if entity_nodes:
+        _check_entities(entity_nodes, errors)
+
+    # Gather edges once for dilemma checks.
+    has_answer_edges = graph.get_edges(edge_type="has_answer")
+    anchored_to_edges = graph.get_edges(edge_type="anchored_to")
+
+    _check_dilemmas(dilemma_nodes, has_answer_edges, anchored_to_edges, graph, errors)
+    _check_forbidden_types(graph, errors)
 
     return errors
