@@ -102,7 +102,11 @@ class DilemmaDecision(BaseModel):
     dilemma_id: str = Field(min_length=1, description="Dilemma ID from BRAINSTORM")
     explored: list[str] = Field(
         min_length=1,
-        description="Answer IDs the LLM intended to explore as paths",
+        frozen=True,
+        description=(
+            "Answer IDs the LLM intended to explore as paths. "
+            "Immutable after construction (R-2.3, R-5.2): pruning must not mutate this field."
+        ),
     )
     unexplored: list[str] = Field(
         default_factory=list,

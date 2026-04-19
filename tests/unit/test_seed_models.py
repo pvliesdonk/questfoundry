@@ -1221,3 +1221,32 @@ def test_initial_beat_role_rejects_invalid_values() -> None:
             entities=["character::protagonist"],
             role="something_else",  # type: ignore[arg-type]
         )
+
+
+# ---------------------------------------------------------------------------
+# Task 17 — DilemmaDecision.explored immutability (R-2.3, R-5.2)
+# ---------------------------------------------------------------------------
+
+
+def test_explored_field_is_frozen() -> None:
+    """R-2.3/R-5.2: explored is immutable post-construction; reassignment raises."""
+    from questfoundry.models.seed import DilemmaDecision
+
+    decision = DilemmaDecision(
+        dilemma_id="dilemma::trust_or_betray",
+        explored=["trust"],
+        unexplored=["betray"],
+    )
+    with pytest.raises(ValidationError, match="frozen"):
+        decision.explored = ["betray"]  # type: ignore[misc]
+
+
+def test_explored_value_survives_construction() -> None:
+    """explored value is correctly stored and accessible post-construction."""
+    from questfoundry.models.seed import DilemmaDecision
+
+    decision = DilemmaDecision(
+        dilemma_id="dilemma::fight_or_flee",
+        explored=["fight", "flee"],
+    )
+    assert decision.explored == ["fight", "flee"]
