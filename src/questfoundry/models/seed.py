@@ -347,8 +347,8 @@ class InitialBeat(BaseModel):
         description="How this beat affects dilemmas",
     )
     entities: list[str] = Field(
-        default_factory=list,
-        description="Entity IDs present in this beat",
+        min_length=1,
+        description="Entity IDs present in this beat (non-empty per R-3.13)",
     )
     location: str | None = Field(
         default=None,

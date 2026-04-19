@@ -207,15 +207,17 @@ class TestConsequencesSectionDedup:
 class TestPathBeatsSectionDedup:
     """PathBeatsSection should deduplicate identical beats."""
 
-    _BEAT_A: ClassVar[dict[str, str]] = {
+    _BEAT_A: ClassVar[dict] = {
         "beat_id": "beat_a",
         "summary": "Something happens",
         "path_id": "path::trust_or_betray__trust",
+        "entities": ["character::protagonist"],
     }
-    _BEAT_B: ClassVar[dict[str, str]] = {
+    _BEAT_B: ClassVar[dict] = {
         "beat_id": "beat_b",
         "summary": "Something else happens",
         "path_id": "path::trust_or_betray__trust",
+        "entities": ["character::protagonist"],
     }
 
     def test_unique_beats_accepted(self) -> None:
@@ -246,6 +248,7 @@ class TestPathBeatsSectionDedup:
                 "beat_id": f"beat_{i}",
                 "summary": f"Beat {i}",
                 "path_id": "path::trust_or_betray__trust",
+                "entities": ["character::protagonist"],
             }
             for i in range(5)
         ]
@@ -259,6 +262,7 @@ class TestPathBeatsSectionDedup:
                 "beat_id": f"beat_{i}",
                 "summary": f"Beat {i}",
                 "path_id": "path::trust_or_betray__trust",
+                "entities": ["character::protagonist"],
             }
             for i in range(7)
         ]
@@ -675,6 +679,7 @@ def _make_shared_beat_dict(
         "summary": summary,
         "path_id": path_id,
         "also_belongs_to": also_belongs_to,
+        "entities": ["character::protagonist"],
         "dilemma_impacts": [
             {
                 "dilemma_id": "dilemma::trust_or_betray",
@@ -958,10 +963,11 @@ class TestMakeConstrainedDilemmasSection:
 # TemporalHint and InitialBeat.temporal_hint (#1001)
 # ---------------------------------------------------------------------------
 
-_BEAT_KWARGS: dict[str, str] = {
+_BEAT_KWARGS: dict[str, str | list] = {
     "beat_id": "trust_beat_01",
     "summary": "The protagonist confronts the mentor about the hidden letter.",
     "path_id": "path::trust_or_betray__trust",
+    "entities": ["character::protagonist"],
 }
 
 
@@ -1049,6 +1055,7 @@ class TestInitialBeatPathId:
             beat_id="b1",
             summary="Test",
             path_id="path::trust__yes",
+            entities=["character::protagonist"],
         )
         assert beat.path_id == "path::trust__yes"
 
@@ -1058,6 +1065,7 @@ class TestInitialBeatPathId:
             beat_id="b1",
             summary="Test",
             paths=["path::trust__yes"],
+            entities=["character::protagonist"],
         )
         assert beat.path_id == "path::trust__yes"
 
@@ -1068,18 +1076,29 @@ class TestInitialBeatPathId:
                 beat_id="b1",
                 summary="Test",
                 paths=["path::a__x", "path::b__y"],
+                entities=["character::protagonist"],
             )
         assert beat.path_id == "path::a__x"
         assert beat.also_belongs_to == "path::b__y"
 
     def test_empty_path_id_rejected(self) -> None:
         with pytest.raises(ValidationError, match="path_id"):
-            InitialBeat(beat_id="b1", summary="Test", path_id="")
+            InitialBeat(
+                beat_id="b1",
+                summary="Test",
+                path_id="",
+                entities=["character::protagonist"],
+            )
 
     def test_legacy_empty_paths_rejected(self) -> None:
         """Empty paths list raises ValueError — beats must belong to a path."""
         with pytest.raises(ValidationError, match="must belong to at least one path"):
-            InitialBeat(beat_id="b1", summary="Test", paths=[])
+            InitialBeat(
+                beat_id="b1",
+                summary="Test",
+                paths=[],
+                entities=["character::protagonist"],
+            )
 
 
 def test_initial_beat_pre_commit_dual_belongs_to() -> None:
@@ -1089,6 +1108,7 @@ def test_initial_beat_pre_commit_dual_belongs_to() -> None:
         summary="Shared setup before the fork.",
         path_id="path::trust__protector",
         also_belongs_to="path::trust__manipulator",
+        entities=["character::protagonist"],
     )
     assert beat.path_id == "path::trust__protector"
     assert beat.also_belongs_to == "path::trust__manipulator"
@@ -1100,6 +1120,7 @@ def test_initial_beat_post_commit_single_belongs_to_default() -> None:
         beat_id="b1",
         summary="Payoff beat.",
         path_id="path::trust__protector",
+        entities=["character::protagonist"],
     )
     assert beat.also_belongs_to is None
 
@@ -1112,6 +1133,7 @@ def test_initial_beat_also_belongs_to_equal_path_id_is_rejected() -> None:
             summary="Broken dual.",
             path_id="path::trust__protector",
             also_belongs_to="path::trust__protector",
+            entities=["character::protagonist"],
         )
 
 
@@ -1123,6 +1145,7 @@ def test_initial_beat_legacy_paths_two_elements_becomes_dual() -> None:
             beat_id="b1",
             summary="Legacy dual.",
             paths=["path::trust__protector", "path::trust__manipulator"],
+            entities=["character::protagonist"],
         )
 
     assert beat.path_id == "path::trust__protector"
@@ -1137,6 +1160,7 @@ def test_initial_beat_legacy_paths_three_elements_is_rejected() -> None:
             beat_id="b1",
             summary="Bad.",
             paths=["p_a", "p_b", "p_c"],
+            entities=["character::protagonist"],
         )
 
 
@@ -1147,6 +1171,7 @@ def test_initial_beat_also_belongs_to_empty_string_is_rejected() -> None:
             summary="Test.",
             path_id="path::trust__protector",
             also_belongs_to="",
+            entities=["character::protagonist"],
         )
 
 
@@ -1225,3 +1250,41 @@ def test_explored_value_survives_construction() -> None:
         explored=["fight", "flee"],
     )
     assert decision.explored == ["fight", "flee"]
+
+
+# ---------------------------------------------------------------------------
+# Task 22 — InitialBeat.entities non-empty at model level (R-3.13)
+# ---------------------------------------------------------------------------
+
+
+def test_initial_beat_entities_must_be_non_empty() -> None:
+    """R-3.13: entities must contain at least one entity ID."""
+    with pytest.raises(ValidationError):
+        InitialBeat(
+            beat_id="b1",
+            summary="A beat with no entities.",
+            path_id="path::trust_or_betray__trust",
+            entities=[],  # R-3.13 violation
+        )
+
+
+def test_initial_beat_entities_with_one_entity_accepted() -> None:
+    """R-3.13: a single entity satisfies the non-empty requirement."""
+    beat = InitialBeat(
+        beat_id="b1",
+        summary="A beat.",
+        path_id="path::trust_or_betray__trust",
+        entities=["character::protagonist"],
+    )
+    assert beat.entities == ["character::protagonist"]
+
+
+def test_initial_beat_entities_with_multiple_accepted() -> None:
+    """R-3.13: multiple entities are accepted."""
+    beat = InitialBeat(
+        beat_id="b1",
+        summary="A beat.",
+        path_id="path::trust_or_betray__trust",
+        entities=["character::protagonist", "location::manor"],
+    )
+    assert len(beat.entities) == 2
