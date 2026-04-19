@@ -6,9 +6,9 @@ downstream stages use the resolved SizeProfile to coordinate entity counts,
 arc limits, beat counts, and prompt guidance.
 
 Presets:
-    vignette: Tight single-thread story (5-15 passages)
+    micro: Tight single-thread story (5-15 passages)
     short: Modest branching (15-30 passages)
-    standard: Full branching, current default (30-60 passages)
+    medium: Full branching, current default (30-60 passages)
     long: Extensive branching (60-120 passages)
 """
 
