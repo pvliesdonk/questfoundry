@@ -576,11 +576,13 @@ class TestScopedIdStandardization:
                     consequence_id="cons_a",
                     path_id="path::th_a",  # Scoped
                     description="Consequence for path A",
+                    narrative_effects=["path A ripple"],
                 ),
                 Consequence(
                     consequence_id="cons_b",
                     path_id="path::th_b",  # Scoped
                     description="Consequence for path B",
+                    narrative_effects=["path B ripple"],
                 ),
             ],
             initial_beats=[

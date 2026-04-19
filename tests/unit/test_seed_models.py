@@ -9,6 +9,7 @@ import pytest
 from pydantic import ValidationError
 
 from questfoundry.models.seed import (
+    Consequence,
     ConsequencesSection,
     DilemmaAnalysis,
     DilemmaAnalysisSection,
@@ -167,10 +168,11 @@ class TestPathsSectionDedup:
 class TestConsequencesSectionDedup:
     """ConsequencesSection should deduplicate identical, reject conflicting."""
 
-    _CONSEQUENCE: ClassVar[dict[str, str]] = {
+    _CONSEQUENCE: ClassVar[dict[str, object]] = {
         "consequence_id": "trust_rewarded",
         "path_id": "path::trust_or_betray__trust",
         "description": "Trust pays off",
+        "narrative_effects": ["ally loyalty increases"],
     }
 
     def test_unique_consequences_accepted(self) -> None:
@@ -181,6 +183,7 @@ class TestConsequencesSectionDedup:
                     "consequence_id": "betrayal_revealed",
                     "path_id": "path::trust_or_betray__betray",
                     "description": "Betrayal is exposed",
+                    "narrative_effects": ["reputation collapses"],
                 },
             ]
         )
@@ -1288,3 +1291,41 @@ def test_initial_beat_entities_with_multiple_accepted() -> None:
         entities=["character::protagonist", "location::manor"],
     )
     assert len(beat.entities) == 2
+
+
+# ---------------------------------------------------------------------------
+# R-3.4: Every Consequence has ≥1 ripple (narrative_effects)
+# ---------------------------------------------------------------------------
+
+
+def test_consequence_requires_at_least_one_ripple() -> None:
+    """R-3.4: empty narrative_effects must be rejected at model construction."""
+    with pytest.raises(ValidationError):
+        Consequence(
+            consequence_id="c1",
+            path_id="path::trust_or_betray__trust",
+            description="the mentor becomes hostile",
+            narrative_effects=[],  # R-3.4 violation
+        )
+
+
+def test_consequence_missing_narrative_effects_rejected() -> None:
+    """R-3.4: absent narrative_effects (no default) must be rejected."""
+    with pytest.raises(ValidationError):
+        Consequence(
+            consequence_id="c1",
+            path_id="path::trust_or_betray__trust",
+            description="the mentor becomes hostile",
+            # narrative_effects omitted — no default, must fail
+        )
+
+
+def test_consequence_with_ripples_valid() -> None:
+    """R-3.4: at least one ripple is accepted."""
+    c = Consequence(
+        consequence_id="c1",
+        path_id="path::trust_or_betray__trust",
+        description="the mentor becomes hostile",
+        narrative_effects=["trust collapses", "faction mistrust rises"],
+    )
+    assert len(c.narrative_effects) == 2

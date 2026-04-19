@@ -144,8 +144,8 @@ class Consequence(BaseModel):
     path_id: str = Field(min_length=1, description="Path this belongs to (references path_id)")
     description: str = Field(min_length=1, description="Narrative meaning of this path")
     narrative_effects: list[str] = Field(
-        default_factory=list,
-        description="Story effects this consequence implies (cascading impacts)",
+        min_length=1,
+        description="Concrete downstream story effects (≥1 required per R-3.4).",
     )
 
 
