@@ -21,7 +21,7 @@ reference the section anchors in this document.
 | M-DREAM-spec | issues-filed | 3 | #1268 | 3 |
 | M-BRAINSTORM-spec | issues-filed | 8 | #1272 | 8 |
 | M-SEED-spec | issues-filed | 14 | #1281 | 14 |
-| M-GROW-spec | pending | — | — | — |
+| M-GROW-spec | drafted | 13 | — | — |
 | M-POLISH-spec | pending | — | — | — |
 | M-FILL-spec | pending | — | — | — |
 | M-DRESS-spec | pending | — | — | — |
@@ -429,6 +429,201 @@ compliance issues — they are a follow-on track.
 ### Uncheckable rules
 
 - R-3.5: Consequences describe world state vs. player actions — requires semantic understanding of prose. Cannot be programmatically checked at the model level. Enforced via SEED prompt engineering; any runtime check would require an LLM-based critique call. Deferred to runtime-verification follow-on track.
+
+---
+
+## M-GROW-spec
+
+### Summary
+- Rules checked: 51
+- Compliant: 33 | Drift: 11 | Missing: 5 | Uncheckable: 2
+
+### Cluster: All-intersections-rejected not raised to ERROR (silent degradation)
+
+**Rules covered:** R-2.3, R-2.8
+
+**Current state:** Phase 3 (`_phase_3_intersections`) attempts to validate and apply intersections but logs rejections at WARNING/DEBUG and returns `status="failed"` only when all proposals are rejected after structural retry exhaustion. No explicit ERROR log occurs when the all-rejected outcome is reached.
+
+**Gap:** Per CLAUDE.md §Anti-Patterns (Silent degradation), an all-intersections-rejected outcome is a pipeline failure, not a warning. R-2.8 requires rejection logs at INFO, but the aggregate failure mode (zero groups formed when signals suggested some should) must be ERROR and halt.
+
+**Recommended fix:** When all intersection proposals are rejected, log at ERROR with the rejection reasons aggregated and halt the pipeline. Per-candidate rejection logging stays at INFO (R-2.8). Differentiate "some accepted, some rejected" (normal, INFO) from "all rejected" (ERROR, halt).
+
+**Code refs:** `src/questfoundry/pipeline/stages/grow/llm_phases.py:299-312`, `src/questfoundry/pipeline/stages/grow/llm_phases.py:329-336`
+
+**Test refs:** `tests/unit/test_grow_gates.py`, `tests/unit/test_grow_validators.py`
+
+### Cluster: Temporal hint acyclicity invariant violation not logged at ERROR
+
+**Rules covered:** R-3.2, R-3.3, R-3.6, R-3.7
+
+**Current state:** Phase 3 `_phase_resolve_temporal_hints` applies mandatory drops, requests LLM resolution for swap pairs, and calls `verify_hints_acyclic()` as a postcondition. The function raises `TemporalHintResolutionInvariantError` if surviving hints cycle, caught by the stage executor as `status="failed"`.
+
+**Gap:** The error is propagated as a phase failure but not logged at ERROR level before the exception is raised. R-3.7 requires a hard invariant violation to halt with an error and be visible in logs — currently the log entry (if any) is at the phase-result level, not as an explicit ERROR for the invariant.
+
+**Recommended fix:** Log at ERROR level before raising `TemporalHintResolutionInvariantError` with full context (surviving beat IDs, cycle path). Ensure the exception propagates to the stage executor without being swallowed.
+
+**Code refs:** `src/questfoundry/pipeline/stages/grow/llm_phases.py:553-558`, `src/questfoundry/graph/errors.py`
+
+**Test refs:** `tests/unit/test_grow_deterministic.py` (temporal hint tests)
+
+### Cluster: State flag derivation edge validation missing
+
+**Rules covered:** R-6.1, R-6.4
+
+**Current state:** Phase 8b `phase_state_flags` creates one state flag per consequence and adds a `derived_from` edge to that consequence. The edge type is hardcoded without validation that the consequence actually exists.
+
+**Gap:** R-6.1 mandates every State Flag has a `derived_from` edge to exactly one Consequence, no ad-hoc creation. If a consequence is missing or the edge creation silently no-ops, no validation catches this.
+
+**Recommended fix:** Add a post-creation validation check in `phase_state_flags` that iterates every created state flag and asserts a `derived_from` edge exists pointing to an existing consequence node. Log at ERROR if any flag has no target.
+
+**Code refs:** `src/questfoundry/pipeline/stages/grow/deterministic.py:594-603`
+
+**Test refs:** `tests/unit/test_grow_models.py`, `tests/unit/test_grow_validators.py`
+
+### Cluster: Transition beat zero-overlap seam detection missing
+
+**Rules covered:** R-5.1, R-5.2, R-5.3
+
+**Current state:** Phase 5 `_phase_transition_gaps` is scheduled in the registry but the implementation does not show explicit zero-overlap seam detection before inserting transition beats. The code calls `_validate_and_insert_gaps()` without the deterministic seam-detection algorithm required by R-5.2.
+
+**Gap:** R-5.2 specifies transition beats are inserted ONLY at cross-dilemma seams with zero entity/location overlap. Without this check, transition beats may be inserted at seams with partial overlap, violating the spec.
+
+**Recommended fix:** Before the LLM phase for transition drafting, implement a deterministic seam-detection algorithm that checks every cross-dilemma `predecessor` edge for entity/location overlap. Only flag seams with zero overlap as candidates for LLM transition drafting.
+
+**Code refs:** `src/questfoundry/pipeline/stages/grow/llm_phases.py` (`_phase_transition_gaps`, offset ~1250-1350)
+
+**Test refs:** `tests/unit/test_grow_stage.py` (transition beat tests if present)
+
+### Cluster: Soft dilemma without structural convergence — no halt on classification error
+
+**Rules covered:** R-7.1, R-7.3, R-7.4
+
+**Current state:** Phase 7 `phase_convergence` computes convergence beats for soft dilemmas using `find_dag_convergence_beat()` and persists `converges_at` and `convergence_payoff`. If no convergence is found, the code continues without halting. Hard dilemmas are left with null fields.
+
+**Gap:** R-7.4 states: "If a soft Dilemma has no structural convergence beat, this is a classification error — the Dilemma should be hard. Halt with error identifying the Dilemma." Current code logs at WARNING but does not halt. A mis-classified dilemma proceeds through the pipeline.
+
+**Recommended fix:** After computing convergence for each soft dilemma, check if `converges_at` is None. If so, log at ERROR and halt with a classification-error message identifying the dilemma by ID.
+
+**Code refs:** `src/questfoundry/pipeline/stages/grow/deterministic.py:480-507`
+
+**Test refs:** `tests/unit/test_grow_deterministic.py` (convergence tests)
+
+### Cluster: Materialized arc data prefix convention unenforced
+
+**Rules covered:** R-8.2
+
+**Current state:** Arcs are computed on-the-fly by `enumerate_arcs()` and returned as Arc dataclass instances. No arc nodes are stored in the graph. Comments correctly state arcs are computed, not stored.
+
+**Gap:** R-8.2 states "If materialized for debugging, they must use the `materialized_` prefix." No code uses or enforces this prefix. If debugging code ever materializes arcs, the convention must be applied, but there is no enforcement mechanism.
+
+**Recommended fix:** Add a note in code comments clarifying the `materialized_` prefix requirement for any future arc materialization. If arc nodes are ever created, enforce the prefix at creation time with a validation check that rejects non-prefixed arc nodes.
+
+**Code refs:** `src/questfoundry/graph/grow_algorithms.py:603-748` (enumerate_arcs docstring)
+
+**Test refs:** `tests/unit/test_grow_algorithms.py` (arc enumeration tests)
+
+### Cluster: Passage/Choice creation in GROW violates Stage Output Contract Item 16
+
+**Rules covered:** Stage Output Contract item 16 (no Passage, Choice, variant passage, residue beat, character arc metadata after GROW)
+
+**Current state:** Code at `stage.py:359-362` counts passage and choice nodes in the graph at GROW completion. If these are non-zero, either GROW created them (spec violation) or POLISH has already run (pipeline order violation).
+
+**Gap:** The Stage Output Contract explicitly forbids Passage/Choice/variant/residue-beat/character-arc-metadata nodes after GROW. Passage-layer creation is POLISH's responsibility. The fact that the code even COUNTS these node types hints they may be created upstream; this must be investigated and enforced.
+
+**Recommended fix:** Add an end-of-stage validation check that asserts passage, choice, variant-passage, residue-beat, and character-arc-metadata node counts are all zero. If any are non-zero, log at ERROR and halt with a stage-integrity error. If upstream phases create these nodes, remove that creation code and defer all passage-layer work to POLISH.
+
+**Code refs:** `src/questfoundry/pipeline/stages/grow/stage.py:359-362, 376`
+
+**Test refs:** `tests/unit/test_grow_stage.py` (output contract tests)
+
+### Cluster: Logging-level misuse at validation failure sites
+
+**Rules covered:** CLAUDE.md §Logging (cross-cutting — see M-logging-compliance milestone for full treatment)
+
+**Current state:** Phase validation (`phase_validation`) logs fail results at ERROR (correct). Phase 3 logs intersection rejections at WARNING. Temporal hint resolution logs at INFO on success but WARNING on LLM failure.
+
+**Gap:** Per CLAUDE.md §Logging litmus test, WARNING is for degraded states that do not stop execution; ERROR is for failures that stop execution. Some sites use WARNING where ERROR is correct (e.g., phase returns `status="failed"`). Some use WARNING for individual rejections that are retried (which is actually compliant per R-2.8 requiring INFO, so these may be over-leveled).
+
+**Recommended fix:** Audit all phase failures and ensure they log at ERROR when the pipeline halts. Use INFO for per-candidate decisions that are normal (rejection + retry with another candidate). Use WARNING only for degraded states where the pipeline continues but attention is warranted.
+
+**Code refs:** `src/questfoundry/pipeline/stages/grow/llm_phases.py:234-240, 299-312`
+
+**Test refs:** `tests/unit/test_grow_stage.py` (logging checks)
+
+### Cluster: Intra-path predecessor Y-fork postcondition unchecked
+
+**Rules covered:** R-1.3, R-1.4, R-1.5, R-1.6
+
+**Current state:** Phase 1a `phase_intra_path_predecessors` builds per-path beat chains, filtering to chainable beats (exclusive or intra-dilemma shared) and linking them via `predecessor` edges. Beats are sorted with intra-dilemma shared beats first, then exclusive beats.
+
+**Gap:** R-1.4 specifies "The last shared pre-commit beat has one `predecessor` successor per explored path of its Dilemma." No postcondition verifies this: if a shared beat is missing a successor, the phase does not detect it. This breaks the Y-shape the pipeline requires.
+
+**Recommended fix:** After building intra-path predecessor chains, add a validation check that the last intra-dilemma shared beat of each dilemma has exactly one successor per path of that dilemma. Log at ERROR if any shared pre-commit beat has fewer successors than paths.
+
+**Code refs:** `src/questfoundry/pipeline/stages/grow/deterministic.py:198-248`
+
+**Test refs:** `tests/unit/test_grow_deterministic.py` (intra-path predecessor tests)
+
+### Cluster: No-Conditional-Prerequisites invariant not checked
+
+**Rules covered:** R-2.7
+
+**Current state:** Phase 2 (intersections) runs before Phase 1b (interleave). After intersections are applied, Phase 1b creates cross-path `predecessor` edges. The phase does NOT explicitly check R-2.7 (`paths(B) ⊇ paths(A_post_intersection)`) before or after applying intersections.
+
+**Gap:** If R-2.7 is violated, arc enumeration will drop the edge silently during traversal, producing inconsistent orderings and `passage_dag_cycles` failures in POLISH. The code does not validate this invariant before accepting intersections.
+
+**Recommended fix:** Implement a deterministic check in `check_intersection_compatibility()` (or as a pre-interleave step) verifying: for each intersection group and each beat A in the group, every beat B that is a direct successor of A has `paths(B) ⊇ paths(A_post_intersection)`. Log at DEBUG for all intersections checked; log at INFO (per R-2.8) and reject any intersection that fails this check.
+
+**Code refs:** `src/questfoundry/graph/grow_algorithms.py:check_intersection_compatibility` (location not visible in audit — check around line 1300+)
+
+**Test refs:** `tests/unit/test_grow_validators.py` (intersection compatibility tests)
+
+### Cluster: State flag names not validated for world-state phrasing
+
+**Rules covered:** R-6.2
+
+**Current state:** Phase 8b creates state flag names using `f"{cons_raw}_committed"`. If a consequence is named for a player action, the resulting flag will be action-phrased.
+
+**Gap:** R-6.2 requires "State flag names express world state, not player actions." A consequence named `player_chose_distrust` produces flag `player_chose_distrust_committed` — action-phrased. Spec examples use flags like `mentor_hostile_adversary` (world state).
+
+**Recommended fix:** Add a validation check in `phase_state_flags` that verifies each created flag name does not contain action-verb patterns (e.g., "chose", "decided", "picked", "selected"). Log at WARNING for apparently action-phrased flags. Document the expected world-state naming convention for consequences in SEED's stage contract (this may drive a SEED-side fix too).
+
+**Code refs:** `src/questfoundry/pipeline/stages/grow/deterministic.py:590-603`
+
+**Test refs:** `tests/unit/test_grow_models.py` (state flag naming tests)
+
+### Cluster: Entity overlay composition not validated
+
+**Rules covered:** R-6.7, R-6.8
+
+**Current state:** Phase 8c `_phase_8c_overlays` creates overlays on entity nodes, each with a `when` list of state flag IDs and a `details` dict. Multiple overlays can apply to the same entity when multiple flags are active.
+
+**Gap:** R-6.7 states "Overlays may be composed — if multiple state flags affect the same entity, multiple overlays apply on arcs where their flags are all active." The code creates overlays but does not validate composition: no check for conflicting `details` keys across overlays, no check that hard-dilemma entities also receive overlays (R-6.8), no rejection of overlays with empty `when`.
+
+**Recommended fix:** After creating overlays, validate: (a) no two overlays for the same entity have conflicting `details` keys (or define a merge strategy); (b) hard-dilemma entities have overlays created despite paths not converging (R-6.8); (c) overlays with empty `when` lists are rejected — every overlay must have activation conditions. Log WARNING for composition conflicts, ERROR for invalid overlay configs.
+
+**Code refs:** `src/questfoundry/pipeline/stages/grow/llm_phases.py:_phase_8c_overlays` (offset 1320+)
+
+**Test refs:** `tests/unit/test_grow_validators.py` (overlay composition tests)
+
+### Cluster: Intersection candidate signals unverified as deterministic
+
+**Rules covered:** R-2.1
+
+**Current state:** Intersection candidate generation (`build_intersection_candidates`) uses signals "derivable from the graph": anchored_to overlap, flexibility-based entity substitutability, temporal proximity. The implementation is not fully visible in the audit.
+
+**Gap:** R-2.1 requires these signals to be DETERMINISTIC — no LLM calls during candidate generation (LLM is only for clustering). If the function makes any LLM calls during generation, R-2.1 is violated.
+
+**Recommended fix:** Verify `build_intersection_candidates()` uses only deterministic, graph-derivable signals. Document the algorithm for each signal type. Add unit tests that verify candidate generation is deterministic (same graph always produces same candidates).
+
+**Code refs:** `src/questfoundry/graph/grow_algorithms.py:build_intersection_candidates` (location around line 1300+)
+
+**Test refs:** `tests/unit/test_grow_algorithms.py` (intersection candidate tests)
+
+### Uncheckable rules
+
+- R-2.2: Clustering LLM receives full beat context (not bare IDs). Requires inspecting the actual prompt rendering at runtime; code review of the prompt template is partial evidence but not sufficient to verify end-to-end without a live LLM call.
+- R-5.4: Transition-beat drafting LLM receives full context for both bridging beats. Same reasoning as R-2.2 — verifiable only at runtime with a live LLM.
 
 ---
 
