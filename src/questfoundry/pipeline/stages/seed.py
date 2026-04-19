@@ -465,7 +465,7 @@ class SeedStage:
         # the arc limit.  Soft/flavor dilemmas add mid-story variety without
         # multiplying endings.
         original_arc_count = compute_arc_count(result.artifact)
-        size_profile = kwargs.get("size_profile") or get_size_profile("standard")
+        size_profile = kwargs.get("size_profile") or get_size_profile("medium")
         max_arcs = size_profile.max_arcs
         pruned_artifact = prune_to_arc_limit(
             result.artifact,

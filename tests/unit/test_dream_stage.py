@@ -56,7 +56,7 @@ async def test_execute_calls_all_three_phases() -> None:
             tone=["epic"],
             audience="adult",
             themes=["heroism"],
-            scope=Scope(story_size="standard"),
+            scope=Scope(story_size="medium"),
         )
         mock_serialize.return_value = (mock_artifact, 200)
 
@@ -103,7 +103,7 @@ async def test_execute_emits_phase_progress() -> None:
             tone=["epic"],
             audience="adult",
             themes=["heroism"],
-            scope=Scope(story_size="standard"),
+            scope=Scope(story_size="medium"),
         )
         mock_serialize.return_value = (mock_artifact, 200)
 
@@ -141,7 +141,7 @@ async def test_execute_passes_model_to_all_phases() -> None:
             tone=["dark"],
             audience="adult",
             themes=["justice"],
-            scope=Scope(story_size="standard"),
+            scope=Scope(story_size="medium"),
         )
         mock_serialize.return_value = (mock_artifact, 100)
 
@@ -172,7 +172,7 @@ async def test_execute_passes_user_prompt_to_discuss() -> None:
             tone=["epic"],
             audience="adult",
             themes=["exploration"],
-            scope=Scope(story_size="standard"),
+            scope=Scope(story_size="medium"),
         )
         mock_serialize.return_value = (mock_artifact, 100)
 
@@ -205,7 +205,7 @@ async def test_execute_passes_messages_to_summarize() -> None:
             tone=["epic"],
             audience="adult",
             themes=["magic"],
-            scope=Scope(story_size="standard"),
+            scope=Scope(story_size="medium"),
         )
         mock_serialize.return_value = (mock_artifact, 100)
 
@@ -233,7 +233,7 @@ async def test_execute_passes_brief_to_serialize() -> None:
             tone=["epic"],
             audience="adult",
             themes=["adventure"],
-            scope=Scope(story_size="standard"),
+            scope=Scope(story_size="medium"),
         )
         mock_serialize.return_value = (mock_artifact, 100)
 
@@ -261,7 +261,7 @@ async def test_execute_passes_provider_name_to_serialize() -> None:
             tone=["dark"],
             audience="adult",
             themes=["fear"],
-            scope=Scope(story_size="standard"),
+            scope=Scope(story_size="medium"),
         )
         mock_serialize.return_value = (mock_artifact, 100)
 
@@ -293,7 +293,7 @@ async def test_execute_passes_dream_artifact_schema() -> None:
             tone=["sweet"],
             audience="adult",
             themes=["love"],
-            scope=Scope(story_size="standard"),
+            scope=Scope(story_size="medium"),
         )
         mock_serialize.return_value = (mock_artifact, 100)
 
@@ -322,7 +322,7 @@ async def test_execute_returns_artifact_as_dict() -> None:
             tone=["tense", "dark"],
             audience="adult",
             themes=["paranoia"],
-            scope=Scope(story_size="standard"),
+            scope=Scope(story_size="medium"),
         )
         mock_serialize.return_value = (mock_artifact, 100)
 
@@ -355,7 +355,7 @@ async def test_execute_uses_research_tools() -> None:
             tone=["suspenseful"],
             audience="adult",
             themes=["secrets"],
-            scope=Scope(story_size="standard"),
+            scope=Scope(story_size="medium"),
         )
         mock_serialize.return_value = (mock_artifact, 100)
 

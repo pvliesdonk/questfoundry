@@ -89,8 +89,8 @@ class SizeProfile:
 
 
 PRESETS: dict[str, SizeProfile] = {
-    "vignette": SizeProfile(
-        preset="vignette",
+    "micro": SizeProfile(
+        preset="micro",
         max_arcs=2,
         fully_explored=1,
         characters_min=2,
@@ -147,8 +147,8 @@ PRESETS: dict[str, SizeProfile] = {
         tone_words_min=3,
         tone_words_max=4,
     ),
-    "standard": SizeProfile(
-        preset="standard",
+    "medium": SizeProfile(
+        preset="medium",
         max_arcs=16,
         fully_explored=4,
         characters_min=5,
@@ -210,11 +210,11 @@ PRESETS: dict[str, SizeProfile] = {
 VALID_PRESETS = frozenset(PRESETS.keys())
 
 
-def get_size_profile(preset: str = "standard") -> SizeProfile:
+def get_size_profile(preset: str = "medium") -> SizeProfile:
     """Resolve a preset name to a SizeProfile.
 
     Args:
-        preset: One of "vignette", "short", "standard", "long".
+        preset: One of "micro", "short", "medium", "long".
 
     Returns:
         The corresponding SizeProfile with all coordinated parameters.
@@ -233,7 +233,7 @@ def resolve_size_from_graph(graph: Graph) -> SizeProfile:
     """Read story_size from the DREAM vision node and resolve to a SizeProfile.
 
     Looks up the vision node's ``scope.story_size`` field. Falls back to
-    ``"standard"`` if the vision node, scope, or story_size field is missing
+    ``"medium"`` if the vision node, scope, or story_size field is missing
     (backward compatibility with projects created before size presets).
 
     Args:
@@ -244,10 +244,10 @@ def resolve_size_from_graph(graph: Graph) -> SizeProfile:
     """
     vision = graph.get_node("vision") or {}
     scope = vision.get("scope") or {}
-    story_size = scope.get("story_size", "standard")
+    story_size = scope.get("story_size", "medium")
 
     if story_size not in PRESETS:
-        story_size = "standard"
+        story_size = "medium"
 
     return get_size_profile(story_size)
 
@@ -256,7 +256,7 @@ def size_template_vars(profile: SizeProfile | None = None) -> dict[str, str]:
     """Build template variable dict from a size profile.
 
     Returns a dict mapping ``{size_*}`` template variable names to formatted
-    range strings. Falls back to ``standard`` preset if no profile is given.
+    range strings. Falls back to ``medium`` preset if no profile is given.
 
     Args:
         profile: Size profile to extract ranges from. Defaults to standard.
@@ -264,7 +264,7 @@ def size_template_vars(profile: SizeProfile | None = None) -> dict[str, str]:
     Returns:
         Dict with keys like ``size_characters``, ``size_dilemmas``, etc.
     """
-    p = profile or get_size_profile("standard")
+    p = profile or get_size_profile("medium")
     return {
         "size_characters": p.range_str("characters"),
         "size_locations": p.range_str("locations"),

@@ -31,8 +31,8 @@ class Scope(BaseModel):
     pick one word.
     """
 
-    story_size: Literal["vignette", "short", "standard", "long"] = Field(
-        description='Story size preset: "vignette", "short", "standard", or "long"',
+    story_size: Literal["micro", "short", "medium", "long"] = Field(
+        description='Story size preset: "micro", "short", "medium", or "long"',
     )
 
 
