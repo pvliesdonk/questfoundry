@@ -208,11 +208,15 @@ class DreamStage:
                 if response.strip().lower().startswith("y"):
                     artifact_data["human_approved"] = True
                 else:
-                    log.warning("dream_vision_rejected_by_human")
+                    log.info("dream_vision_rejected_by_human")
                     raise DreamStageError("Vision rejected by human — re-run DREAM to revise.")
             else:
                 # No user_input_fn provided in interactive mode; treat as pre-approved
                 # to avoid blocking in contexts without interactive I/O (e.g., tests).
+                log.warning(
+                    "dream_approval_fallback_no_input_fn",
+                    reason="interactive=True but no user_input_fn provided; auto-approving",
+                )
                 artifact_data["human_approved"] = True
 
         log.info(
