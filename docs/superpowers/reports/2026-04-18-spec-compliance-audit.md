@@ -28,7 +28,7 @@ reference the section anchors in this document.
 | M-SHIP-spec | issues-filed | 7 | #1331 | 7 |
 | M-logging-compliance | issues-filed | 3 | #1339 | 3 |
 | M-silent-degradation | issues-filed | 3 | #1343 | 2 |
-| M-contract-chaining | drafted | 2 | — | — |
+| M-contract-chaining | issues-filed | 2 | #1346 | 2 |
 
 ---
 
