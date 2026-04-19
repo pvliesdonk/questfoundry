@@ -26,7 +26,7 @@ reference the section anchors in this document.
 | M-FILL-spec | issues-filed | 5 | #1319 | 5 |
 | M-DRESS-spec | issues-filed | 5 | #1325 | 5 |
 | M-SHIP-spec | issues-filed | 7 | #1331 | 7 |
-| M-logging-compliance | pending | — | — | — |
+| M-logging-compliance | drafted | 4 | — | — |
 | M-silent-degradation | pending | — | — | — |
 | M-contract-chaining | pending | — | — | — |
 
@@ -1039,6 +1039,90 @@ compliance issues — they are a follow-on track.
 **Code refs:** `src/questfoundry/pipeline/stages/ship.py`, `src/questfoundry/export/twee_exporter.py:192-213`, all exporters.
 
 **Test refs:** (new tests to add — currently absent)
+
+---
+
+## M-logging-compliance
+
+### Summary
+
+Cross-cutting audit of all 486 log call sites in `src/questfoundry/` against CLAUDE.md §Logging. Pattern-based audit (individual classification of 486 sites was infeasible); findings drawn from targeted grep + sample inspection of high-density modules.
+
+- Log call sites total: 486
+- Sites matching a misuse pattern (estimated): ~50–80
+- Clusters: 4
+
+### Cluster: LLM-proposal rejection/skip events logged at WARNING (should be INFO)
+
+**Pattern:** `log.warning("phase3_insufficient_valid_beats", …)`, `log.warning("phase3_incompatible_intersection", …)`, `log.warning("phase3_stage1_compatibility_failed", …)`, `log.warning("serialize_paths_retry_failed", …)`, `log.warning("missing_section_brief", …)`, etc.
+
+**CLAUDE.md litmus test:** *"If the system detected a problem AND handled it correctly (rejected bad input, used a fallback, skipped an invalid proposal), that's `INFO` or `DEBUG` — not `WARNING`."*
+
+**Current state:** High concentration of WARNING logs in `grow/llm_phases.py` (23 calls), `agents/serialize.py` (17), `polish/llm_phases.py` (11), `grow/llm_helper.py` (12) — many are per-proposal rejections where the pipeline continues with other proposals. These are "handled correctly," not "something unexpected happened that warrants attention."
+
+**Gap:** These events are normal pipeline operation (candidate rejected → try next), not degraded states. WARNING obscures the real warnings (e.g., actual contract violations or recovery fallbacks).
+
+**Recommended fix:** Audit the rejection/skip warnings in the four high-density modules listed above. Reclassify:
+- Per-candidate rejection during retry loop → INFO (or DEBUG for high-frequency)
+- Actual degraded state that may produce lower-quality output → WARNING (keep)
+- Failure mode requiring user attention that the pipeline cannot auto-recover from → ERROR
+
+Expect ~30–50 sites to move from WARNING to INFO/DEBUG.
+
+**Code refs:** `src/questfoundry/pipeline/stages/grow/llm_phases.py:234, 245, 291, 479, 498, 507, 523, 639, 888, 972`, `src/questfoundry/agents/serialize.py:2082, 2487`, `src/questfoundry/pipeline/stages/polish/llm_phases.py`, `src/questfoundry/pipeline/stages/grow/llm_helper.py`
+
+**Test refs:** None (log-level tests typically absent; not prioritized as regression concern)
+
+### Cluster: Fallback-with-default at WARNING — some should be INFO, others ERROR
+
+**Pattern:** `log.warning("invalid_aspect_ratio", raw=raw, fallback="16:9")`, `log.warning("unknown_aspect_ratio", aspect_ratio=aspect_ratio, fallback="1:1")`, `log.warning("convergence_dilemma_role_missing", dilemma_id=...)`, `log.warning("asset_missing", path=..., passage=...)`, `log.warning("entity_missing_type", entity_id=...)`, `log.warning("missing_scene_type", beat_id=...)`, `log.warning("validation_skipped", reason=...)`.
+
+**Current state:** Mixed bag of fallback logs. Some represent "invalid input from external source, defaulted cleanly" (benign → INFO). Others represent "graph integrity issue detected" (real WARNING or ERROR).
+
+**Gap:** Per CLAUDE.md litmus:
+- `invalid_aspect_ratio ... fallback="16:9"`: input mistyped, default applied. System handled correctly → INFO.
+- `asset_missing path=... passage=...`: file referenced but not on disk. This is a real integrity problem. Should be ERROR.
+- `convergence_dilemma_role_missing dilemma_id=...`: dilemma missing its role field. This violates the SEED contract per R-7.1; should be ERROR.
+- `entity_missing_type` / `missing_scene_type`: similar — upstream contract violation, should be ERROR.
+- `validation_skipped`: depends on why. If intentional user opt-out → INFO; if a skip-because-we-failed → ERROR.
+
+**Recommended fix:** Reclassify each listed site per the litmus test. Rough estimate: 3–5 sites should move from WARNING to ERROR (integrity issues); a few should move from WARNING to INFO (clean defaults for malformed external input).
+
+**Code refs:** `src/questfoundry/pipeline/stages/dress.py:116`, `src/questfoundry/pipeline/stages/grow/deterministic.py:483`, `src/questfoundry/providers/image_placeholder.py:118`, `src/questfoundry/export/assets.py:56, 101`, `src/questfoundry/inspection.py:523`, `src/questfoundry/graph/fill_context.py:1493`, `src/questfoundry/graph/grow_algorithms.py:1251, 2572`
+
+**Test refs:** None
+
+### Cluster: Silent `except ... pass` handlers without compensating log
+
+**Pattern:** Narrow `except` blocks with bare `pass` or `pass` preceded by a comment.
+
+**Current state:** 5+ sites across:
+- `src/questfoundry/agents/summarize.py:153-154` — "If parsing fails, stick with the raw content" — benign-ish.
+- `src/questfoundry/providers/factory.py:372-373` — `except ValueError: pass` — context unclear without inspection.
+- `src/questfoundry/observability/langchain_callbacks.py:46-47` — `except ValueError: pass` in callback parsing — likely benign.
+- `src/questfoundry/artifacts/validator.py:489-490, 496-497` — skipping invalid class types — benign.
+
+**Gap:** Per CLAUDE.md Silent Degradation policy, silent failure of structural operations is forbidden. Most of these sites are defensive narrow exceptions, but a log at DEBUG level would make them visible without being noisy. Currently there's no record if any of these fire unexpectedly.
+
+**Recommended fix:** Add DEBUG log to each `except...pass` site identifying the swallowed exception type and a brief reason. Audit whether each site really represents a benign case or whether the handler is masking a real bug (per-site judgment required).
+
+**Code refs:** see Current state list.
+
+**Test refs:** None
+
+### Cluster: Entity-update silent-skip logging (cross-reference)
+
+**Pattern:** `log.warning("entity_update_skipped", entity_id=...)` on missing-entity lookup.
+
+**Current state:** In `fill.py:1302-1306, 1734-1739` and `graph/mutations.py` (entity lookup in BRAINSTORM phase — see M-BRAINSTORM-spec §Dilemma-to-entity anchoring cluster).
+
+**Gap:** Already filed as compliance issues under FILL (#1321) and BRAINSTORM (#1273) as full silent-degradation violations, not just logging issues. Noted here so the logging cross-cutting audit does not treat the sites as independent findings.
+
+**Recommended fix:** Resolved by fixing #1321 and #1273. No separate action required in M-logging-compliance.
+
+**Code refs:** Cross-reference #1321 (FILL), #1273 (BRAINSTORM).
+
+**Test refs:** See the linked issues.
 
 ---
 
