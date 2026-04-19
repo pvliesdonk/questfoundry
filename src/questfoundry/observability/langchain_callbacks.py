@@ -4,6 +4,9 @@ Provides callback handlers that integrate with QuestFoundry's logging system,
 including JSONL logging for LLM calls.
 """
 
+# pyright: reportAttributeAccessIssue=false
+# TODO(#1353): langchain API drift — BaseMessage.tool_calls and Generation.message attribute access; tracked in issue #1353
+
 # ruff: noqa: ARG002 - Callback interface methods require unused parameters
 
 from __future__ import annotations

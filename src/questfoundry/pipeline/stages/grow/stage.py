@@ -16,6 +16,9 @@ LLM phases use direct structured output (not discuss→summarize→serialize):
 context from graph state → single LLM call → validate → retry (max 3).
 """
 
+# pyright: reportArgumentType=false
+# TODO(#1296): cleanup during M-GROW-spec compliance work; tracked in epic #1296
+
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable

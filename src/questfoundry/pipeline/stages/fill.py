@@ -13,6 +13,9 @@ LLM phases use direct structured output: context from graph state →
 single LLM call → validate → retry (max 3).
 """
 
+# pyright: reportPossiblyUnboundVariable=false
+# TODO(#1319): cleanup during M-FILL-spec compliance work; tracked in epic #1319
+
 from __future__ import annotations
 
 import re
