@@ -6047,3 +6047,133 @@ def test_apply_seed_mutations_rejects_dual_on_commit_beat() -> None:
     )
     with pytest.raises(ValueError, match="guard rail 2"):
         apply_seed_mutations(graph, seed)
+
+
+# ---------------------------------------------------------------------------
+# Task 11 (#1282): write-time cross-dilemma rejection (R-3.6 / R-3.9)
+# ---------------------------------------------------------------------------
+
+
+def test_apply_seed_mutations_rejects_precommit_with_mismatched_dilemmas() -> None:
+    """R-3.6 / R-3.9: pre-commit dual belongs_to must reference paths of the
+    same dilemma. Mismatched dilemmas must raise at write time, not slip
+    through to the exit validator."""
+    from questfoundry.graph.mutations import apply_seed_mutations
+
+    # Reuse the two-dilemma fixture: dilemma_a and dilemma_b are separate.
+    graph = _two_dilemma_graph()
+    seed = _two_dilemma_seed_output(
+        initial_beats=[
+            {
+                "beat_id": "bad_precommit",
+                "summary": "Cross-dilemma pre-commit beat.",
+                "path_id": "dilemma_a__answer_a1",
+                "also_belongs_to": "dilemma_b__answer_b1",
+                "dilemma_impacts": [
+                    {"dilemma_id": "dilemma_a", "effect": "advances", "note": "x"},
+                ],
+            },
+            # Commits for each path to satisfy other validation rules.
+            {
+                "beat_id": "commit_a",
+                "summary": "Dilemma A commits.",
+                "path_id": "dilemma_a__answer_a1",
+                "dilemma_impacts": [{"dilemma_id": "dilemma_a", "effect": "commits", "note": "x"}],
+            },
+            {
+                "beat_id": "post_a",
+                "summary": "Dilemma A aftermath.",
+                "path_id": "dilemma_a__answer_a1",
+                "dilemma_impacts": [{"dilemma_id": "dilemma_a", "effect": "advances", "note": "x"}],
+            },
+            {
+                "beat_id": "commit_b",
+                "summary": "Dilemma B commits.",
+                "path_id": "dilemma_b__answer_b1",
+                "dilemma_impacts": [{"dilemma_id": "dilemma_b", "effect": "commits", "note": "x"}],
+            },
+            {
+                "beat_id": "post_b",
+                "summary": "Dilemma B aftermath.",
+                "path_id": "dilemma_b__answer_b1",
+                "dilemma_impacts": [{"dilemma_id": "dilemma_b", "effect": "advances", "note": "x"}],
+            },
+        ]
+    )
+
+    # Must raise at write time (before the exit validator is reached).
+    with pytest.raises((ValueError, Exception), match="cross-dilemma dual belongs_to"):
+        apply_seed_mutations(graph, seed)
+
+
+# ---------------------------------------------------------------------------
+# Task 12 (#1283): post-apply property test — no beat has cross-dilemma
+# belongs_to edges in the resulting graph (R-3.9)
+# ---------------------------------------------------------------------------
+
+
+def test_apply_seed_mutations_never_produces_cross_dilemma_belongs_to() -> None:
+    """R-3.9: after the beat-write phase of apply_seed_mutations, no beat in the
+    graph has ``belongs_to`` edges to paths of more than one dilemma.
+
+    The exit validator is patched so we can focus on the graph-state invariant
+    independently of fixture completeness. This is a property test of the write
+    path, not of the exit validator."""
+    from unittest.mock import patch
+
+    from questfoundry.graph.mutations import apply_seed_mutations
+
+    graph = _two_dilemma_graph()
+    seed = _two_dilemma_seed_output(
+        initial_beats=[
+            {
+                "beat_id": "commit_a",
+                "summary": "Dilemma A commits.",
+                "path_id": "dilemma_a__answer_a1",
+                "dilemma_impacts": [{"dilemma_id": "dilemma_a", "effect": "commits", "note": "x"}],
+            },
+            {
+                "beat_id": "post_a",
+                "summary": "Dilemma A aftermath.",
+                "path_id": "dilemma_a__answer_a1",
+                "dilemma_impacts": [{"dilemma_id": "dilemma_a", "effect": "advances", "note": "x"}],
+            },
+            {
+                "beat_id": "commit_b",
+                "summary": "Dilemma B commits.",
+                "path_id": "dilemma_b__answer_b1",
+                "dilemma_impacts": [{"dilemma_id": "dilemma_b", "effect": "commits", "note": "x"}],
+            },
+            {
+                "beat_id": "post_b",
+                "summary": "Dilemma B aftermath.",
+                "path_id": "dilemma_b__answer_b1",
+                "dilemma_impacts": [{"dilemma_id": "dilemma_b", "effect": "advances", "note": "x"}],
+            },
+        ]
+    )
+
+    # Patch exit validator so we can inspect the graph state without requiring
+    # a fully-compliant fixture (R-7.1/R-7.2/R-7.3/R-6.4/etc. would fail).
+    with patch("questfoundry.graph.mutations.validate_seed_output", return_value=[]):
+        apply_seed_mutations(graph, seed)
+
+    # Collect all belongs_to edges and group by source beat.
+    beat_to_paths: dict[str, list[str]] = {}
+    for edge in graph.get_edges(edge_type="belongs_to"):
+        src = edge["from"]
+        tgt = edge["to"]
+        beat_to_paths.setdefault(src, []).append(tgt)
+
+    # For every beat, all its belongs_to targets must share one dilemma_id.
+    for beat_id, path_ids in beat_to_paths.items():
+        dilemmas: set[str | None] = set()
+        for pid in path_ids:
+            node = graph.get_node(pid)
+            if node:
+                dilemmas.add(node.get("dilemma_id"))
+        dilemmas.discard(None)
+        assert len(dilemmas) <= 1, (
+            f"Beat {beat_id!r} has cross-dilemma belongs_to edges: "
+            f"paths {path_ids!r} span dilemmas {dilemmas!r}"
+        )
