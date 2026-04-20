@@ -631,13 +631,13 @@ A beat's `belongs_to` edges are a **narrative** statement: "this beat furthers t
 
 Cross-dilemma co-occurrence (a scene that serves two dilemmas at once) is **not** represented as a beat belonging to two dilemmas. It is represented as two distinct beats (one per dilemma) linked by an `intersection_group`. This preserves guard rail 1 below (no cross-dilemma dual `belongs_to`).
 
-**Grouping rules for zero-`belongs_to` beats.** The uniform "singleton passage" rule does not hold across all structural sub-types — passage-layer grouping is driven by sub-type:
+**Grouping rules for zero-`belongs_to` beats.** POLISH Phase 4a groups all beats — narrative and structural alike — by the maximal-linear-collapse rule (see `docs/design/procedures/polish.md` §R-4a.3). Passage boundaries sit at DAG divergences and convergences, not at `belongs_to` set boundaries. `belongs_to` edges are narrative bookkeeping; they do not constrain passage grouping. Sub-types differ only in *when* they enter the DAG and *whether* Phase 4a places them or a later phase does:
 
-- **Setup, epilogue, transition, micro-beat** — may be singleton passages, or may collapse with adjacent structural beats (of any structural sub-type) into a multi-paragraph passage. Collapse produces prose in which different paragraphs address different beats. These sub-types do not collapse with path-specific chains: the collapse rule requires exact path-set equality, and the empty set matches only itself.
-- **Residue beat** — forms flag-gated variant passages, either alone (residue passage with two variants before a shared passage) or combined with a following shared beat (two parallel passages, each gating residue + shared content by flag). See Part 5 "Residue Beats and Residue Passages."
-- **False branch beat** — may group with other false-branch beats on the same cosmetic-fork arm into one passage (a multi-beat sidetrack).
+- **Setup, epilogue, transition, micro-beat** — already in the finalized DAG at Phase 4a. Grouped uniformly with adjacent beats (of any sub-type, including path-specific narrative beats) by DAG topology. A setup or transition beat in a linear run collapses into the surrounding passage; at a divergence or convergence, it closes or opens a passage like any other beat.
+- **Residue beat** — created by POLISH in Phase 6, *after* Phase 4a completes. Forms flag-gated variant passages, either alone (residue passage with two variants before a shared passage) or combined with a following shared beat (two parallel passages, each gating residue + shared content by flag). See Part 5 "Residue Beats and Residue Passages."
+- **False branch beat** — created by POLISH in Phase 6. May group with other false-branch beats on the same cosmetic-fork arm into one passage (a multi-beat sidetrack).
 
-The common thread across all sub-types: zero-`belongs_to` beats never collapse into a *path-specific chain* (their path-set is empty). Among themselves, structural beats of different sub-types can collapse together when they are adjacent in the DAG. Residue and false-branch beats have additional sub-type-specific grouping logic driven by flag gating and cosmetic-fork arms.
+For residue and false-branch beats, passage placement is governed by the Phase 6 creation rules rather than Phase 4a's topology rule, because those beats are inserted into the passage layer with pre-determined placement rather than grouped out of the finalized beat DAG.
 
 Guard rails:
 
