@@ -23,8 +23,8 @@ from pathlib import Path  # noqa: TC003 - used at runtime
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from questfoundry.graph.graph import Graph
+from questfoundry.graph.grow_validation import validate_grow_output
 from questfoundry.graph.invariants import assert_predecessor_dag_acyclic
-from questfoundry.graph.polish_validation import validate_grow_output
 from questfoundry.graph.snapshots import save_snapshot
 from questfoundry.models.pipeline import PhaseResult
 from questfoundry.pipeline.gates import AutoApprovePhaseGate

@@ -377,7 +377,6 @@ class TestGrowResult:
     def test_default_values(self) -> None:
         result = GrowResult()
         assert result.arc_count == 0
-        assert result.passage_count == 0
         assert result.state_flag_count == 0
         assert result.phases_completed == []
         assert result.spine_arc_id is None
@@ -385,7 +384,6 @@ class TestGrowResult:
     def test_with_phases(self) -> None:
         result = GrowResult(
             arc_count=4,
-            passage_count=8,
             state_flag_count=2,
             phases_completed=[
                 GrowPhaseResult(phase="validate", status="completed"),
@@ -412,7 +410,6 @@ class TestGrowResult:
     def test_model_validate_from_dict(self) -> None:
         data = {
             "arc_count": 3,
-            "passage_count": 6,
             "state_flag_count": 1,
             "phases_completed": [
                 {"phase": "validate", "status": "completed", "detail": ""},

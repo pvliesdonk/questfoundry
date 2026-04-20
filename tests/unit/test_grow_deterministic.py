@@ -198,6 +198,85 @@ class TestPhaseIntraPathPredecessors:
         assert result.status == "completed"
         assert "No path nodes" in result.detail
 
+    @pytest.mark.asyncio
+    async def test_yfork_postcondition_fails_when_commit_beat_missing_for_one_path(
+        self,
+    ) -> None:
+        """R-1.4: phase must return failed when a pre-commit beat has a commit-beat
+        successor for only one of its two paths.
+
+        Setup:
+        - dilemma d1, paths a and b.
+        - shared_02 is a pre-commit beat belonging to both paths.
+        - a_commit belongs to path a only, has 'commits' impact.
+        - b_commit belongs to path b only, has 'commits' impact.
+        - A pre-existing reverse edge predecessor(shared_02, b_commit) blocks the
+          phase from wiring b_commit as a successor of shared_02.
+        - After the phase runs, shared_02 has a commit successor only for path a.
+        - The postcondition must fire and return status='failed'.
+        """
+        graph = Graph.empty()
+
+        graph.create_node("dilemma::d1", {"type": "dilemma", "raw_id": "d1"})
+        graph.create_node(
+            "path::a",
+            {"type": "path", "raw_id": "a", "dilemma_id": "dilemma::d1"},
+        )
+        graph.create_node(
+            "path::b",
+            {"type": "path", "raw_id": "b", "dilemma_id": "dilemma::d1"},
+        )
+
+        # Shared pre-commit beat: belongs to BOTH paths, no commits impact.
+        graph.create_node(
+            "beat::shared_02",
+            {
+                "type": "beat",
+                "raw_id": "shared_02",
+                "dilemma_impacts": [],
+            },
+        )
+        graph.add_edge("belongs_to", "beat::shared_02", "path::a")
+        graph.add_edge("belongs_to", "beat::shared_02", "path::b")
+
+        # Commit beat for path a — will get wired normally.
+        graph.create_node(
+            "beat::a_commit",
+            {
+                "type": "beat",
+                "raw_id": "a_commit",
+                "dilemma_impacts": [{"dilemma_id": "dilemma::d1", "effect": "commits"}],
+            },
+        )
+        graph.add_edge("belongs_to", "beat::a_commit", "path::a")
+
+        # Commit beat for path b — blocked by a reverse edge so the phase cannot
+        # wire it as a successor of shared_02.
+        graph.create_node(
+            "beat::b_commit",
+            {
+                "type": "beat",
+                "raw_id": "b_commit",
+                "dilemma_impacts": [{"dilemma_id": "dilemma::d1", "effect": "commits"}],
+            },
+        )
+        graph.add_edge("belongs_to", "beat::b_commit", "path::b")
+
+        # Pre-existing reverse edge: shared_02 as successor of b_commit.
+        # This blocks the phase from adding predecessor(b_commit, shared_02)
+        # (which would create the Y-fork), so shared_02 never gains b_commit
+        # as a commit-beat successor.
+        graph.add_edge("predecessor", "beat::shared_02", "beat::b_commit")
+
+        result = await phase_intra_path_predecessors(graph, _make_mock_model())
+
+        assert result.status == "failed", (
+            f"Expected 'failed' (R-1.4 Y-fork postcondition), got {result.status!r}: "
+            f"{result.detail}"
+        )
+        assert "R-1.4" in result.detail
+        assert "b_commit" in result.detail or "path::b" in result.detail
+
 
 # ---------------------------------------------------------------------------
 # TestPhaseConvergencePersistence

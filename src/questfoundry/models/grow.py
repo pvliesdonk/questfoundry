@@ -365,9 +365,7 @@ class GrowResult(BaseModel):
     """Overall GROW stage result."""
 
     arc_count: int = 0
-    passage_count: int = 0
     state_flag_count: int = 0
-    choice_count: int = 0
     overlay_count: int = 0
     phases_completed: list[GrowPhaseResult] = Field(default_factory=list)
     spine_arc_id: str | None = None

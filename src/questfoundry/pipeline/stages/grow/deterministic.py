@@ -237,6 +237,67 @@ async def phase_intra_path_predecessors(
         edges_created=edges_created,
         paths_processed=paths_processed,
     )
+
+    # --- Y-fork postcondition (R-1.4) ---
+    # Every last shared pre-commit beat must have one commit-beat successor per
+    # explored path of its dilemma.  If ANY path is missing its commit successor,
+    # the wired DAG cannot form a Y-fork and the phase fails loudly — silent
+    # Y-fork loss is forbidden by the silent-degradation anti-pattern.
+    #
+    # Algorithm mirrors _check_beat_dag in grow_validation.py but runs at
+    # write time for an earlier, more specific error.
+    all_predecessor_edges = graph.get_edges(edge_type="predecessor")
+    # Rebuild beat_paths from the *full* belongs_to edge set (includes edges not
+    # restricted to chainable beats, because non-chainable commit beats still have
+    # belongs_to edges we need here).
+    full_beat_to_paths: dict[str, list[str]] = {}
+    for edge in graph.get_edges(edge_type="belongs_to"):
+        full_beat_to_paths.setdefault(edge["from"], []).append(edge["to"])
+
+    # successors_by_beat[X] = list of beat IDs Y where predecessor(Y, X) exists,
+    # i.e. Y comes AFTER X in topological order.
+    successors_by_beat: dict[str, list[str]] = {}
+    for edge in all_predecessor_edges:
+        successors_by_beat.setdefault(edge["to"], []).append(edge["from"])
+
+    current_beat_nodes = graph.get_nodes_by_type("beat")
+    for beat_id, beat_data in sorted(current_beat_nodes.items()):
+        paths = full_beat_to_paths.get(beat_id, [])
+        impacts = beat_data.get("dilemma_impacts", [])
+        has_commits = any(i.get("effect") == "commits" for i in impacts)
+        if len(paths) < 2 or has_commits:
+            continue  # not a pre-commit beat
+
+        successors = successors_by_beat.get(beat_id, [])
+        commit_successor_paths: set[str] = set()
+        for s in successors:
+            s_beat = current_beat_nodes.get(s, {})
+            s_paths = full_beat_to_paths.get(s, [])
+            s_impacts = s_beat.get("dilemma_impacts", [])
+            s_has_commits = any(i.get("effect") == "commits" for i in s_impacts)
+            if s_has_commits and len(s_paths) == 1:
+                commit_successor_paths.update(s_paths)
+
+        if commit_successor_paths:
+            # This beat is a Y-fork tip — verify all paths are covered.
+            missing = set(paths) - commit_successor_paths
+            if missing:
+                detail = (
+                    f"R-1.4 Y-fork postcondition: pre-commit beat {beat_id!r} has "
+                    f"commit successors for {sorted(commit_successor_paths)} but "
+                    f"is missing commit beats for path(s) {sorted(missing)}"
+                )
+                log.error(
+                    "yfork_postcondition_failed",
+                    beat_id=beat_id,
+                    missing_paths=sorted(missing),
+                )
+                return GrowPhaseResult(
+                    phase="intra_path_predecessors",
+                    status="failed",
+                    detail=detail,
+                )
+
     return GrowPhaseResult(
         phase="intra_path_predecessors",
         status="completed",
@@ -490,20 +551,40 @@ async def phase_convergence(graph: Graph, model: BaseChatModel) -> GrowPhaseResu
             dilemma_id,
             dilemma_paths=dilemma_paths_map.get(dilemma_id),
         )
-        if result is not None:
-            converges_at, payoff = result
-            graph.update_node(
-                dilemma_id,
-                converges_at=converges_at,
-                convergence_payoff=payoff,
-            )
-            persisted += 1
-            log.debug(
-                "convergence_persisted",
+        if result is None:
+            # R-7.4: a soft dilemma with no structural convergence beat is a
+            # classification error — the dilemma should be hard, or the paths
+            # need rework so they rejoin.  Silent null is forbidden.  Return a
+            # failed GrowPhaseResult so the stage loop can run its savepoint
+            # cleanup (release/save) before raising GrowMutationError.  Reserve
+            # GrowContractError for stage exit, not intra-phase failures.
+            log.error(
+                "soft_dilemma_no_convergence",
                 dilemma_id=dilemma_id,
-                converges_at=converges_at,
-                convergence_payoff=payoff,
+                reason="classification error — soft dilemma paths never rejoin",
             )
+            return GrowPhaseResult(
+                phase="convergence",
+                status="failed",
+                detail=(
+                    f"R-7.4: soft dilemma {dilemma_id!r} has no structural convergence "
+                    "beat — misclassified as soft (paths never rejoin; should be "
+                    "hard, or paths need rework)."
+                ),
+            )
+        converges_at, payoff = result
+        graph.update_node(
+            dilemma_id,
+            converges_at=converges_at,
+            convergence_payoff=payoff,
+        )
+        persisted += 1
+        log.debug(
+            "convergence_persisted",
+            dilemma_id=dilemma_id,
+            converges_at=converges_at,
+            convergence_payoff=payoff,
+        )
 
     # --- Arc-level convergence: diagnostic logging (existing behavior) ---
     arcs = enumerate_arcs(graph)

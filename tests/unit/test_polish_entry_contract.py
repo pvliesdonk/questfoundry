@@ -3,94 +3,190 @@
 from __future__ import annotations
 
 from questfoundry.graph.graph import Graph
-from questfoundry.graph.polish_validation import validate_grow_output
+from questfoundry.graph.grow_validation import validate_grow_output
 
 
 def _make_valid_grow_graph() -> Graph:
     """Create a minimal valid GROW output graph for testing.
 
-    Contains:
-    - 2 beat nodes with summaries and dilemma_impacts
-    - 1 dilemma with dilemma_role set
-    - 1 path
-    - belongs_to edges (each beat -> path)
-    - predecessor edge (beat_b -> beat_a)
-    - 1 state_flag node referencing the dilemma
+    Layered over the tightened DREAM + BRAINSTORM + SEED upstream contract so
+    `validate_grow_output` passes cleanly on the baseline.  Existing tests
+    mutate this baseline to exercise specific failure modes.
+
+    Structure:
+    - DREAM vision node.
+    - BRAINSTORM: 2 character + 2 location entities with name/category/
+      disposition, 1 hard dilemma `courage_or_caution` with why_it_matters,
+      2 answers (1 canonical) with descriptions, anchored_to an entity.
+    - SEED: 2 paths (brave = canonical, cautious = alt), each with a
+      consequence (with ripples), Y-shape beats (shared pre-commit `intro`,
+      per-path commit beats, 2 post-commit beats per path), seed_freeze node.
+    - GROW: predecessor edges, state flags per consequence.
     """
     graph = Graph.empty()
 
-    # Create dilemma
+    # DREAM
+    graph.create_node(
+        "vision",
+        {
+            "type": "vision",
+            "genre": "dark fantasy",
+            "tone": ["atmospheric"],
+            "themes": ["duty and doubt"],
+            "audience": "adult",
+            "scope": {"story_size": "short"},
+            "human_approved": True,
+        },
+    )
+
+    # BRAINSTORM — entities (2 characters + 2 locations, disposition retained)
+    for entity_id, cat, name in [
+        ("character::hero", "character", "Hero"),
+        ("character::foe", "character", "Foe"),
+        ("location::crossroads", "location", "Crossroads"),
+        ("location::field", "location", "Field"),
+    ]:
+        graph.create_node(
+            entity_id,
+            {
+                "type": "entity",
+                "raw_id": entity_id.split("::", 1)[-1],
+                "name": name,
+                "category": cat,
+                "concept": "x",
+                "disposition": "retained",
+            },
+        )
+
+    # BRAINSTORM — dilemma
     graph.create_node(
         "dilemma::courage_or_caution",
         {
             "type": "dilemma",
             "raw_id": "courage_or_caution",
             "question": "Fight or flee?",
+            "why_it_matters": "the hero's response decides whether the village stands",
             "dilemma_role": "hard",
+            "residue_weight": "light",
+            "ending_salience": "high",
             "status": "explored",
         },
     )
+    graph.add_edge("anchored_to", "dilemma::courage_or_caution", "character::hero")
 
-    # Create path (dilemma_id links path to its dilemma)
-    graph.create_node(
-        "path::brave",
-        {
-            "type": "path",
-            "raw_id": "brave",
-            "label": "The Brave Path",
-            "dilemma_id": "dilemma::courage_or_caution",
-        },
-    )
+    # BRAINSTORM — answers
+    for ans, is_canon, desc in [
+        ("brave", True, "Fight bravely"),
+        ("cautious", False, "Flee to regroup"),
+    ]:
+        ans_id = f"dilemma::courage_or_caution::alt::{ans}"
+        graph.create_node(
+            ans_id,
+            {
+                "type": "answer",
+                "raw_id": ans,
+                "description": desc,
+                "is_canonical": is_canon,
+                "explored": True,
+            },
+        )
+        graph.add_edge("has_answer", "dilemma::courage_or_caution", ans_id)
 
-    # Create consequence node (path outcome that state flags are derived from)
-    graph.create_node(
-        "consequence::brave_outcome",
-        {
-            "type": "consequence",
-            "raw_id": "brave_outcome",
-            "description": "The hero fights bravely",
-        },
-    )
-    graph.add_edge("has_consequence", "path::brave", "consequence::brave_outcome")
+    # SEED — paths + consequences
+    for ans, is_canon in [("brave", True), ("cautious", False)]:
+        path_id = f"path::{ans}"
+        graph.create_node(
+            path_id,
+            {
+                "type": "path",
+                "raw_id": ans,
+                "label": f"The {ans.title()} Path",
+                "dilemma_id": "dilemma::courage_or_caution",
+                "is_canonical": is_canon,
+            },
+        )
+        graph.add_edge("explores", path_id, f"dilemma::courage_or_caution::alt::{ans}")
+        conseq_id = f"consequence::{ans}_outcome"
+        graph.create_node(
+            conseq_id,
+            {
+                "type": "consequence",
+                "raw_id": f"{ans}_outcome",
+                "description": f"The hero acts {ans}ly",
+                "ripples": [f"village reacts to {ans} choice"],
+            },
+        )
+        graph.add_edge("has_consequence", path_id, conseq_id)
 
-    # Create beats with required fields
+    # SEED — Y-shape beats: shared pre-commit `intro`, per-path commit +
+    # 2 post-commit beats each.
     graph.create_node(
         "beat::intro",
         {
             "type": "beat",
             "raw_id": "intro",
             "summary": "The hero arrives at the crossroads",
-            "dilemma_impacts": [{"dilemma_id": "dilemma::courage_or_caution", "effect": "setup"}],
+            "entities": ["character::hero", "location::crossroads"],
+            "dilemma_impacts": [{"dilemma_id": "dilemma::courage_or_caution", "effect": "reveals"}],
         },
     )
-    graph.create_node(
-        "beat::fight",
-        {
-            "type": "beat",
-            "raw_id": "fight",
-            "summary": "The hero draws their sword",
-            "dilemma_impacts": [{"dilemma_id": "dilemma::courage_or_caution", "effect": "commit"}],
-        },
-    )
-
-    # belongs_to edges: add_edge(edge_type, from_id, to_id)
     graph.add_edge("belongs_to", "beat::intro", "path::brave")
-    graph.add_edge("belongs_to", "beat::fight", "path::brave")
+    graph.add_edge("belongs_to", "beat::intro", "path::cautious")
 
-    # predecessor edge (fight comes after intro)
-    graph.add_edge("predecessor", "beat::fight", "beat::intro")
+    # Commit beats — `fight` on the brave path, `flee` on the cautious path.
+    # Named this way because many existing tests mutate `beat::fight`.
+    for ans, commit_raw in [("brave", "fight"), ("cautious", "flee")]:
+        commit_id = f"beat::{commit_raw}"
+        graph.create_node(
+            commit_id,
+            {
+                "type": "beat",
+                "raw_id": commit_raw,
+                "summary": f"The hero {commit_raw}s at the crossroads",
+                "entities": ["character::hero", "character::foe"],
+                "dilemma_impacts": [
+                    {"dilemma_id": "dilemma::courage_or_caution", "effect": "commits"}
+                ],
+            },
+        )
+        graph.add_edge("belongs_to", commit_id, f"path::{ans}")
+        graph.add_edge("predecessor", commit_id, "beat::intro")
+        for i in range(1, 3):
+            post_id = f"beat::post_{ans}_{i:02d}"
+            graph.create_node(
+                post_id,
+                {
+                    "type": "beat",
+                    "raw_id": f"post_{ans}_{i:02d}",
+                    "summary": f"Post-commit {i} on {ans}",
+                    "entities": ["character::hero"],
+                    "dilemma_impacts": [],
+                },
+            )
+            graph.add_edge("belongs_to", post_id, f"path::{ans}")
+            prev = commit_id if i == 1 else f"beat::post_{ans}_{i - 1:02d}"
+            graph.add_edge("predecessor", post_id, prev)
 
-    # State flag derived from the consequence (spec-conformant: no dilemma_id field)
-    graph.create_node(
-        "state_flag::courage_active",
-        {
-            "type": "state_flag",
-            "raw_id": "courage_active",
-            "derived_from": "consequence::brave_outcome",
-            "flag_type": "granted",
-        },
-    )
-    graph.add_edge("derived_from", "state_flag::courage_active", "consequence::brave_outcome")
+    # SEED — Path Freeze approval
+    graph.create_node("seed_freeze", {"type": "seed_freeze", "human_approved": True})
+
+    # GROW — the canonical fight beat stays as an alias for test compatibility:
+    # older tests remove `beat::fight` or mutate it.  We keep commit_brave as the
+    # real commit beat; tests that explicitly reference `beat::fight` build it
+    # themselves via mutations (see existing fixtures).  Per-path state flags
+    # derived from each consequence.
+    for ans in ["brave", "cautious"]:
+        flag_id = f"state_flag::{ans}_committed"
+        graph.create_node(
+            flag_id,
+            {
+                "type": "state_flag",
+                "raw_id": f"{ans}_committed",
+                "derived_from": f"consequence::{ans}_outcome",
+                "flag_type": "granted",
+            },
+        )
+        graph.add_edge("derived_from", flag_id, f"consequence::{ans}_outcome")
 
     return graph
 
@@ -170,12 +266,7 @@ class TestValidateGrowOutput:
     def test_dilemma_missing_role(self) -> None:
         """Dilemma without dilemma_role fails validation."""
         graph = _make_valid_grow_graph()
-        # Recreate dilemma without dilemma_role
-        node = graph.get_node("dilemma::courage_or_caution")
-        assert node is not None
-        graph.delete_node("dilemma::courage_or_caution")
-        node.pop("dilemma_role", None)
-        graph.create_node("dilemma::courage_or_caution", node)
+        graph.update_node("dilemma::courage_or_caution", dilemma_role=None)
 
         errors = validate_grow_output(graph)
         assert any("dilemma_role" in e for e in errors)
@@ -183,8 +274,9 @@ class TestValidateGrowOutput:
     def test_explored_dilemma_missing_state_flags(self) -> None:
         """Explored dilemma without state flags fails validation."""
         graph = _make_valid_grow_graph()
-        # Remove the state flag node (cascade=True removes the derived_from edge too)
-        graph.delete_node("state_flag::courage_active", cascade=True)
+        # Remove both per-path state flag nodes (cascade strips derived_from edges).
+        graph.delete_node("state_flag::brave_committed", cascade=True)
+        graph.delete_node("state_flag::cautious_committed", cascade=True)
 
         errors = validate_grow_output(graph)
         assert any("state flag" in e.lower() for e in errors)
@@ -259,12 +351,14 @@ class TestValidateGrowOutput:
     def test_explored_dilemma_no_consequence_chain_reported_missing(self) -> None:
         """Explored dilemma with state_flag but no has_consequence edge is reported missing.
 
-        If the path→consequence→state_flag chain is broken (no has_consequence edge),
-        the dilemma should still be reported as having no state flags.
+        If every path→consequence→state_flag chain for a dilemma is broken,
+        the dilemma should be reported as having no state flags.  (A single
+        broken path is not enough; the sibling path still provides the flag.)
         """
         graph = _make_valid_grow_graph()
-        # Remove the has_consequence edge — breaks the traversal chain
+        # Remove the has_consequence edge on BOTH paths — breaks every chain.
         graph.remove_edge("has_consequence", "path::brave", "consequence::brave_outcome")
+        graph.remove_edge("has_consequence", "path::cautious", "consequence::cautious_outcome")
 
         errors = validate_grow_output(graph)
         assert any("courage_or_caution" in e and "state flag" in e.lower() for e in errors), (
@@ -292,32 +386,12 @@ class TestValidateGrowOutput:
             f"Unexplored dilemma should not trigger state-flag check: {flag_errors}"
         )
 
-    def test_intersection_group_different_paths_passes(self) -> None:
-        """Intersection group with beats from different paths passes."""
-        graph = _make_valid_grow_graph()
-
-        # Create second path and move fight there
-        graph.create_node(
-            "path::cautious",
-            {"type": "path", "raw_id": "cautious", "label": "Cautious Path"},
-        )
-        # Remove existing belongs_to for fight and add new one
-        graph.remove_edge("belongs_to", "beat::fight", "path::brave")
-        graph.add_edge("belongs_to", "beat::fight", "path::cautious")
-
-        graph.create_node(
-            "intersection_group::ig1",
-            {
-                "type": "intersection_group",
-                "raw_id": "ig1",
-                "beat_ids": ["beat::intro", "beat::fight"],
-            },
-        )
-
-        errors = validate_grow_output(graph)
-        # Should not have intersection-related errors
-        intersection_errors = [e for e in errors if "intersection" in e.lower()]
-        assert intersection_errors == []
+    # Note: the old `test_intersection_group_different_paths_passes` has
+    # moved to `tests/unit/test_grow_validation_contract.py` under R-2.3,
+    # which tests intersection-group validity more precisely (beats must
+    # come from different *dilemmas*, not just different paths of the
+    # same dilemma).  The baseline here is single-dilemma so it cannot
+    # legitimately exercise that case.
 
 
 class TestArcTraversalCompleteness:

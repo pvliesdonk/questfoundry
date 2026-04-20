@@ -7,9 +7,6 @@ GrowStage inherits this mixin so ``execute()`` can delegate to
 ``self._phase_3_intersections()``, etc.
 """
 
-# pyright: reportPossiblyUnboundVariable=false, reportInvalidTypeForm=false
-# TODO(#1296): cleanup during M-GROW-spec compliance work; tracked in epic #1296
-
 from __future__ import annotations
 
 from functools import partial
@@ -201,6 +198,11 @@ class _LLMPhaseMixin:
         max_structural_retries = 2
         total_llm_calls = 0
         total_tokens = 0
+        # Initialised before the retry loop so pyright sees them as always bound;
+        # each iteration overwrites them inside the loop body.
+        accepted: list[tuple[list[str], str | None, list[str], str]] = []
+        applied_count = 0
+        skipped_count = 0
 
         for structural_attempt in range(max_structural_retries):
             try:
@@ -223,18 +225,18 @@ class _LLMPhaseMixin:
             total_llm_calls += llm_calls
             total_tokens += tokens
 
-            # Validate and apply intersections
+            # Validate and apply intersections (reset per retry attempt)
             applied_count = 0
             skipped_count = 0
             pre_intersection_graph = Graph.from_dict(graph.to_dict())
-            accepted: list[tuple[list[str], str | None, list[str], str]] = []
+            accepted = []
             structural_errors: list[GrowValidationError] = []
 
             for proposal in result.intersections:
                 # Filter to valid beat IDs
                 valid_ids = [bid for bid in proposal.beat_ids if bid in valid_beat_ids]
                 if len(valid_ids) < 2:
-                    log.warning(
+                    log.info(
                         "phase3_insufficient_valid_beats",
                         proposed=proposal.beat_ids,
                         valid=valid_ids,
@@ -245,7 +247,7 @@ class _LLMPhaseMixin:
                 # Run compatibility check
                 errors = check_intersection_compatibility(pre_intersection_graph, valid_ids)
                 if errors:
-                    log.warning(
+                    log.info(
                         "phase3_incompatible_intersection",
                         beat_ids=valid_ids,
                         errors=[e.issue for e in errors],
@@ -291,7 +293,7 @@ class _LLMPhaseMixin:
                 and structural_attempt < max_structural_retries - 1
             ):
                 context["structural_feedback"] = _format_structural_feedback(structural_errors)
-                log.warning(
+                log.info(
                     "phase3_structural_retry",
                     attempt=structural_attempt + 1,
                     errors=len(structural_errors),
@@ -314,6 +316,30 @@ class _LLMPhaseMixin:
                     tokens_used=total_tokens,
                 )
 
+        # R-2.3 / R-2.8: if the graph had strong candidate signals but the LLM
+        # returned zero accepted groups, that is a Silent Degradation violation.
+        # Two failure modes both require ERROR + halt:
+        #   (a) LLM proposed intersections but ALL were rejected (caught above and
+        #       returned status="failed", which stage.py escalates to GrowMutationError).
+        #   (b) LLM proposed ZERO intersections despite candidates existing.
+        # Case (b) is caught here.
+        if not accepted and len(candidates) > 0:
+            from questfoundry.graph.grow_validation import (
+                GrowContractError,  # local to avoid circular import
+            )
+
+            log.error(
+                "all_intersections_rejected",
+                candidate_count=len(candidates),
+                proposed_count=len(result.intersections),  # pyright: ignore[reportPossiblyUnboundVariable]  # result bound: loop runs ≥1 and early-returns on error
+            )
+            raise GrowContractError(
+                f"R-2.3 / R-2.8: all intersection candidates rejected — "
+                f"{len(candidates)} candidate(s) generated from graph signals, "
+                f"{len(result.intersections)} proposed by LLM, 0 accepted. "  # pyright: ignore[reportPossiblyUnboundVariable]
+                f"Pipeline failure — halting."
+            )
+
         # Apply accepted intersections in a batch to avoid cascade effects.
         for beat_ids, location, shared_entities, rationale in accepted:
             apply_intersection_mark(
@@ -329,11 +355,11 @@ class _LLMPhaseMixin:
         # Defensive check: if proposals were made but none accepted after
         # exhausting the loop (shouldn't happen given the checks above,
         # but guards against future logic changes).
-        if len(result.intersections) > 0 and not accepted:
+        if len(result.intersections) > 0 and not accepted:  # pyright: ignore[reportPossiblyUnboundVariable]  # result bound: loop runs ≥1 and early-returns on error
             return GrowPhaseResult(
                 phase="intersections",
                 status="failed",
-                detail=(f"All {len(result.intersections)} proposed intersections were rejected."),
+                detail=(f"All {len(result.intersections)} proposed intersections were rejected."),  # pyright: ignore[reportPossiblyUnboundVariable]
                 llm_calls=total_llm_calls,
                 tokens_used=total_tokens,
             )
@@ -342,7 +368,7 @@ class _LLMPhaseMixin:
             phase="intersections",
             status="completed",
             detail=(
-                f"Proposed {len(result.intersections)} intersections: "
+                f"Proposed {len(result.intersections)} intersections: "  # pyright: ignore[reportPossiblyUnboundVariable]
                 f"{applied_count} applied, {skipped_count} skipped"
             ),
             llm_calls=total_llm_calls,
@@ -498,7 +524,7 @@ class _LLMPhaseMixin:
                 for resolution in llm_result.resolutions:
                     pair = valid_swap_beats.get(resolution.group_id)
                     if pair is None:
-                        log.warning(
+                        log.info(
                             "resolve_temporal_hints_invalid_group_id",
                             group_id=resolution.group_id,
                         )
@@ -507,7 +533,7 @@ class _LLMPhaseMixin:
                     if resolution.drop_beat_id in (beat_a_id, beat_b_id):
                         beats_to_drop.add(resolution.drop_beat_id)
                     else:
-                        log.warning(
+                        log.info(
                             "resolve_temporal_hints_invalid_drop_beat",
                             group_id=resolution.group_id,
                             drop_beat_id=resolution.drop_beat_id,
@@ -523,7 +549,7 @@ class _LLMPhaseMixin:
                 for idx, (beat_a_id, beat_b_id) in enumerate(result.swap_pairs, 1):
                     group_id = f"P{idx}"
                     if group_id not in resolved_groups:
-                        log.warning(
+                        log.info(
                             "resolve_temporal_hints_missing_resolution",
                             group_id=group_id,
                             using_default=True,
@@ -639,7 +665,7 @@ class _LLMPhaseMixin:
         applied = 0
         for tag in result.tags:
             if tag.beat_id not in beat_nodes:
-                log.warning("phase4a_invalid_beat_id", beat_id=tag.beat_id)
+                log.info("phase4a_invalid_beat_id", beat_id=tag.beat_id)
                 continue
             graph.update_node(
                 tag.beat_id,
@@ -888,7 +914,7 @@ class _LLMPhaseMixin:
             graph, result.gaps, path_nodes, valid_beat_ids, "phase4c"
         )
         if report.total_invalid > 0:
-            log.warning(
+            log.info(
                 "phase4c_invalid_gap_proposals",
                 invalid=report.total_invalid,
                 invalid_before=report.invalid_before_beat,
@@ -972,7 +998,7 @@ class _LLMPhaseMixin:
         applied_details = 0
         for detail in result.details:
             if detail.beat_id not in beat_nodes:
-                log.warning("phase4d_invalid_beat_id", beat_id=detail.beat_id)
+                log.info("phase4d_invalid_beat_id", beat_id=detail.beat_id)
                 continue
             graph.update_node(
                 detail.beat_id,
@@ -1034,11 +1060,11 @@ class _LLMPhaseMixin:
             try:
                 beat_ids = get_path_beat_sequence(graph, pid)
             except ValueError:
-                log.warning("phase4e_cycle_in_path", path_id=pid)
+                log.info("phase4e_cycle_in_path", path_id=pid)
                 continue
 
             if not beat_ids:
-                log.warning("phase4e_no_beats_for_path", path_id=pid)
+                log.info("phase4e_no_beats_for_path", path_id=pid)
                 continue
 
             # Collect entity IDs from all beats in this path
@@ -1192,11 +1218,11 @@ class _LLMPhaseMixin:
             try:
                 beat_ids = get_path_beat_sequence(graph, pid)
             except ValueError:
-                log.warning("phase4f_cycle_in_path", path_id=pid)
+                log.info("phase4f_cycle_in_path", path_id=pid)
                 continue
 
             if not beat_ids:
-                log.warning("phase4f_no_beats_for_path", path_id=pid)
+                log.info("phase4f_no_beats_for_path", path_id=pid)
                 continue
 
             eligible = select_entities_for_arc(graph, pid, beat_ids)
@@ -1427,7 +1453,7 @@ class _LLMPhaseMixin:
         for bridge in result.bridges:
             pair = transition_map.get(bridge.transition_id.strip())
             if pair is None:
-                log.warning(
+                log.info(
                     "phase4g_unknown_transition_id",
                     transition_id=bridge.transition_id,
                 )
@@ -1440,7 +1466,7 @@ class _LLMPhaseMixin:
 
             # Skip if already exists (e.g. from a retry)
             if graph.has_node(beat_id):
-                log.warning("phase4g_transition_beat_exists", beat_id=beat_id)
+                log.info("phase4g_transition_beat_exists", beat_id=beat_id)
                 continue
 
             graph.create_node(
@@ -1538,8 +1564,8 @@ class _LLMPhaseMixin:
         # Flags with no dilemma are placed in a sentinel group "".
         from collections import defaultdict
 
-        FlagEntry = tuple[str, str, str, list[str]]  # (sf_id, path_name, cons_desc, effects)
-        dilemma_groups: dict[str, list[FlagEntry]] = defaultdict(list)
+        # (sf_id, path_name, cons_desc, effects) — inlined to avoid local alias in type expression
+        dilemma_groups: dict[str, list[tuple[str, str, str, list[str]]]] = defaultdict(list)
         dilemma_questions: dict[str, str] = {}
         dilemma_central_entities: dict[str, list[str]] = {}
 
@@ -1659,7 +1685,7 @@ class _LLMPhaseMixin:
                         prefixed_eid = legacy
                         found = True
                 if not found:
-                    log.warning(
+                    log.info(
                         "phase8c_invalid_entity",
                         entity_id=overlay.entity_id,
                         tried_categories=list(ENTITY_CATEGORIES),
@@ -1667,7 +1693,7 @@ class _LLMPhaseMixin:
                     continue
             elif prefixed_eid not in valid_entity_set:
                 # Already prefixed but not found
-                log.warning(
+                log.info(
                     "phase8c_invalid_entity",
                     entity_id=overlay.entity_id,
                     prefixed=prefixed_eid,
@@ -1677,7 +1703,7 @@ class _LLMPhaseMixin:
             # Validate all state flag IDs in 'when' exist
             invalid_flags = [cw for cw in overlay.when if cw not in valid_state_flag_set]
             if invalid_flags:
-                log.warning(
+                log.info(
                     "phase8c_invalid_state_flags",
                     entity_id=overlay.entity_id,
                     invalid=invalid_flags,

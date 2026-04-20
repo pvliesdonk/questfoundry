@@ -16,9 +16,6 @@ LLM phases use direct structured output (not discuss→summarize→serialize):
 context from graph state → single LLM call → validate → retry (max 3).
 """
 
-# pyright: reportArgumentType=false
-# TODO(#1296): cleanup during M-GROW-spec compliance work; tracked in epic #1296
-
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
@@ -31,6 +28,10 @@ from questfoundry.graph.context_compact import (
     CompactContextConfig,
 )
 from questfoundry.graph.graph import Graph
+from questfoundry.graph.grow_validation import (
+    GrowContractError,
+    validate_grow_output,
+)
 from questfoundry.graph.invariants import assert_predecessor_dag_acyclic
 from questfoundry.graph.mutations import GrowMutationError, GrowValidationError
 from questfoundry.graph.snapshots import save_snapshot
@@ -188,6 +189,9 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
             else:
                 fn = registry.get_function(phase_name)
 
+            if fn is None:
+                raise GrowStageError(f"No function registered for phase {phase_name!r}")
+
             # Inject runtime size_profile for enumerate_arcs
             if phase_name == "enumerate_arcs":
                 fn = partial(fn, size_profile=self._size_profile)
@@ -307,6 +311,7 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
         phase_results: list[GrowPhaseResult] = []
         total_llm_calls = 0
         total_tokens = 0
+        gate_rejected = False
 
         for idx, (phase_fn, phase_name) in enumerate(phases):
             if idx < start_idx:
@@ -343,6 +348,7 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
                 graph.rollback_to(phase_name)
                 graph.release(phase_name)
                 graph.save(resolved_path / "graph.db")
+                gate_rejected = True
                 break
 
             graph.release(phase_name)
@@ -352,6 +358,26 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
             if on_phase_progress is not None:
                 on_phase_progress(phase_name, result.status, result.detail)
 
+        # Contract validation only applies to a fully-completed GROW run.
+        # Gate rejection (human review) means GROW was intentionally stopped
+        # mid-run; the partial graph has already been rolled back and saved.
+        if gate_rejected:
+            rejected_result = GrowResult(
+                arc_count=0,
+                state_flag_count=0,
+                overlay_count=0,
+                phases_completed=phase_results,
+                spine_arc_id=None,
+            )
+            return rejected_result.model_dump(), total_llm_calls, total_tokens
+
+        contract_errors = validate_grow_output(graph)
+        if contract_errors:
+            log.error("grow_contract_violated", errors=contract_errors)
+            raise GrowContractError(
+                "GROW stage output contract violated:\n  - " + "\n  - ".join(contract_errors)
+            )
+
         graph.set_last_stage("grow")
         graph.save(resolved_path / "graph.db")
 
@@ -359,9 +385,7 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
         from questfoundry.graph.grow_algorithms import enumerate_arcs
 
         arcs = enumerate_arcs(graph)
-        passage_nodes = graph.get_nodes_by_type("passage")
         state_flag_nodes = graph.get_nodes_by_type("state_flag")
-        choice_nodes = graph.get_nodes_by_type("choice")
         entity_nodes = graph.get_nodes_by_type("entity")
 
         spine_arc_id = None
@@ -374,9 +398,7 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
 
         grow_result = GrowResult(
             arc_count=len(arcs),
-            passage_count=len(passage_nodes),
             state_flag_count=len(state_flag_nodes),
-            choice_count=len(choice_nodes),
             overlay_count=overlay_count,
             phases_completed=phase_results,
             spine_arc_id=spine_arc_id,
@@ -386,7 +408,6 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
             "stage_complete",
             stage="grow",
             arcs=grow_result.arc_count,
-            passages=grow_result.passage_count,
             state_flags=grow_result.state_flag_count,
         )
 
