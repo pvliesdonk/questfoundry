@@ -197,17 +197,27 @@ def _check_state_flags(graph: Graph, errors: list[str]) -> None:
             )
 
     # R-6.2: state flag names express world state, not player actions.
+    # phase_state_flags populates `raw_id` (the stable name), not `name`.
+    # Check both so the rule enforces against real GROW output, not just
+    # fixtures that happen to set `name`.
     for flag_id, flag in sorted(state_flag_nodes.items()):
-        name = flag.get("name", "")
-        lowered = name.lower()
-        for pattern in _ACTION_PHRASE_PATTERNS:
-            if pattern in lowered:
-                errors.append(
-                    f"R-6.2: state_flag {flag_id!r} name {name!r} is "
-                    f"action-phrased (contains {pattern!r}); must express "
-                    "world state"
-                )
+        name_candidates = [flag.get("name", ""), flag.get("raw_id", "")]
+        matched: tuple[str, str] | None = None
+        for candidate in name_candidates:
+            lowered = candidate.lower()
+            for pattern in _ACTION_PHRASE_PATTERNS:
+                if pattern in lowered:
+                    matched = (candidate, pattern)
+                    break
+            if matched is not None:
                 break
+        if matched is not None:
+            offender, pattern = matched
+            errors.append(
+                f"R-6.2: state_flag {flag_id!r} name {offender!r} is "
+                f"action-phrased (contains {pattern!r}); must express "
+                "world state"
+            )
 
     # R-6.4: every Consequence produces at least one State Flag.
     derived_conseqs: set[str] = set()
@@ -407,11 +417,16 @@ def validate_grow_output(graph: Graph) -> list[str]:
     for beat_id in beat_nodes:
         paths = beats_with_path.get(beat_id, [])
         if len(paths) == 0:
-            # Zero-belongs_to beats (transition beats, gap beats) are DAG
-            # infrastructure — they don't belong to any dilemma's Y-shape.
-            # See Story Graph Ontology Part 8 "Zero-belongs_to beats".
+            # Zero-belongs_to beats are DAG infrastructure — they don't belong
+            # to any dilemma's Y-shape.  See Story Graph Ontology Part 8
+            # "Zero-belongs_to beats": setup / epilogue / transition / gap beats.
             beat_data = beat_nodes[beat_id]
-            if beat_data.get("role") in ("transition_beat", "gap_beat"):
+            if beat_data.get("role") in (
+                "setup",
+                "epilogue",
+                "transition_beat",
+                "gap_beat",
+            ):
                 continue
             errors.append(f"Beat {beat_id} has no belongs_to edge (no path assignment)")
 

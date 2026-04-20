@@ -332,8 +332,14 @@ def test_R_6_1_state_flag_without_derived_from(compliant_graph: Graph) -> None:
 
 
 def test_R_6_2_state_flag_name_action_phrased_forbidden(compliant_graph: Graph) -> None:
-    """R-6.2: state flag names express world state, not player actions."""
-    compliant_graph.update_node("state_flag::mentor_protector", name="player_chose_to_trust_mentor")
+    """R-6.2: state flag names express world state, not player actions.
+
+    `raw_id` is what `phase_state_flags` populates on real GROW output, so
+    the check must cover that field (not only `name`).
+    """
+    compliant_graph.update_node(
+        "state_flag::mentor_protector", raw_id="player_chose_to_trust_mentor"
+    )
     errors = validate_grow_output(compliant_graph)
     assert any("R-6.2" in e or "player" in e.lower() or "action" in e.lower() for e in errors), (
         f"expected action-phrased name error, got {errors}"

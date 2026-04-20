@@ -1920,14 +1920,15 @@ class TestPhase7Integration:
 
     @pytest.mark.asyncio
     async def test_phase_7_halts_on_soft_dilemma_without_convergence(self) -> None:
-        """R-7.4: a soft dilemma whose paths never rejoin must raise GrowContractError.
+        """R-7.4: a soft dilemma whose paths never rejoin must halt Phase 7.
 
         Build a minimal graph: one soft dilemma with two explored paths (P1, P2)
         that each terminate in separate commit beats with NO shared successor beat.
-        Phase 7 cannot find a convergence beat and must halt — silent null is
-        forbidden (Silent Degradation policy).
+        Phase 7 cannot find a convergence beat and must return a failed
+        PhaseResult — silent null is forbidden (Silent Degradation policy).
+        The stage loop translates the failed status into GrowMutationError so
+        savepoint cleanup (release/save) runs before the error propagates.
         """
-        from questfoundry.graph.grow_validation import GrowContractError
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = Graph.empty()
@@ -1992,8 +1993,9 @@ class TestPhase7Integration:
         GrowStage()
         mock_model = MagicMock()
 
-        with pytest.raises(GrowContractError, match=r"R-7\.4"):
-            await phase_convergence(graph, mock_model)
+        result = await phase_convergence(graph, mock_model)
+        assert result.status == "failed"
+        assert "R-7.4" in result.detail
 
 
 class TestPhase8bIntegration:
