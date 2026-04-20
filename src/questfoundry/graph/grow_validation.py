@@ -71,6 +71,36 @@ _ACTION_PHRASE_PATTERNS = (
 # ---------------------------------------------------------------------------
 
 
+def _check_convergence_and_ordering_exit(graph: Graph, errors: list[str]) -> None:
+    """Soft vs hard dilemma convergence metadata (R-7.3, R-7.4)."""
+    dilemma_nodes = graph.get_nodes_by_type("dilemma")
+
+    for dilemma_id, dilemma in sorted(dilemma_nodes.items()):
+        role = dilemma.get("dilemma_role")
+        converges_at = dilemma.get("converges_at")
+        payoff = dilemma.get("convergence_payoff")
+
+        if role == "hard":
+            if converges_at is not None:
+                errors.append(
+                    f"R-7.3: hard dilemma {dilemma_id!r} must have "
+                    f"converges_at null, got {converges_at!r}"
+                )
+            if payoff is not None:
+                errors.append(
+                    f"R-7.3: hard dilemma {dilemma_id!r} must have "
+                    f"convergence_payoff null, got {payoff!r}"
+                )
+        elif role == "soft":
+            if converges_at is None:
+                errors.append(
+                    f"R-7.4: soft dilemma {dilemma_id!r} missing "
+                    "converges_at (paths must structurally rejoin)"
+                )
+            if payoff is None:
+                errors.append(f"R-7.4: soft dilemma {dilemma_id!r} missing convergence_payoff")
+
+
 def _check_arc_enumeration(graph: Graph, errors: list[str]) -> None:
     """Arc materialization + forbidden node types (R-8.2, Output-12)."""
     # R-8.2: arcs stored as nodes must use materialized_ prefix.
@@ -342,6 +372,7 @@ def validate_grow_output(graph: Graph) -> list[str]:
     _check_entity_overlays(graph, errors)
     _check_transition_beats(graph, errors)
     _check_arc_enumeration(graph, errors)
+    _check_convergence_and_ordering_exit(graph, errors)
 
     # 1. Beat nodes exist with summaries and dilemma_impacts
     beat_nodes = graph.get_nodes_by_type("beat")
