@@ -3732,6 +3732,44 @@ class TestConditionalPrerequisiteInvariant:
         assert variant_data is not None
         assert variant_data.get("split_from") == "beat::mentor_meet"
 
+    def test_rejection_logged_at_info_with_violating_edge(self) -> None:
+        """R-2.8: conditional-prerequisite rejection is logged at INFO with candidate
+        beat IDs and the violating predecessor edge.
+
+        Uses mock.patch on the module-level ``log`` object because structlog
+        caches its bound logger at import time; caplog / capture_logs cannot
+        intercept calls once the logger is cached.
+        """
+        from unittest.mock import patch
+
+        import questfoundry.graph.grow_algorithms as ga
+        from questfoundry.graph.grow_algorithms import check_intersection_compatibility
+        from tests.fixtures.grow_fixtures import make_conditional_prerequisite_graph
+
+        graph = make_conditional_prerequisite_graph()
+
+        with patch.object(ga, "log") as mock_log:
+            errors = check_intersection_compatibility(
+                graph, ["beat::mentor_meet", "beat::artifact_discover"]
+            )
+            info_calls = mock_log.info.call_args_list
+
+        assert len(errors) > 0, "Expected rejection errors"
+
+        # R-2.8: log.info must be called with the rejection event name.
+        rejection_calls = [
+            c
+            for c in info_calls
+            if c.args and c.args[0] == "intersection_rejected_conditional_prerequisite"
+        ]
+        assert rejection_calls, (
+            "Expected log.info('intersection_rejected_conditional_prerequisite', ...) call"
+        )
+        kwargs = rejection_calls[0].kwargs
+        # R-2.8: must include candidate beat IDs and the violating edge.
+        assert "candidate_beats" in kwargs, "Log must include candidate beat IDs"
+        assert "violating_edge" in kwargs, "Log must include the violating predecessor edge"
+
 
 # ---------------------------------------------------------------------------
 # select_entities_for_arc

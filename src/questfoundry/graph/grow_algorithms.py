@@ -2119,6 +2119,15 @@ def check_intersection_compatibility(
                                 continue
 
                     missing = sorted(union_paths - prereq_paths)
+                    # R-2.8: log rejection at INFO with candidate IDs + violating edge.
+                    log.info(
+                        "intersection_rejected_conditional_prerequisite",
+                        candidate_beats=sorted(beat_ids),
+                        violating_edge=f"{from_id!r} → {to_id!r}",
+                        prereq_paths=sorted(prereq_paths),
+                        post_intersection_paths=sorted(union_paths),
+                        missing_paths=missing,
+                    )
                     errors.append(
                         GrowValidationError(
                             field_path="intersection.conditional_prerequisite",
