@@ -61,6 +61,78 @@ class GrowContractError(ValueError):
 # ---------------------------------------------------------------------------
 
 
+def _check_intersections(graph: Graph, errors: list[str]) -> None:
+    """Intersection Group invariants (R-2.3 ≥2 different dilemmas, R-2.4 no same-dilemma pre-commit).
+
+    Extends existing _check_intersection_group_paths.
+    Accepts both intersection-edge membership and legacy beat_ids field.
+    """
+    group_nodes = graph.get_nodes_by_type("intersection_group")
+    intersection_edges = graph.get_edges(edge_type="intersection")
+    beat_nodes = graph.get_nodes_by_type("beat")
+    path_nodes = graph.get_nodes_by_type("path")
+    belongs_to_edges = graph.get_edges(edge_type="belongs_to")
+
+    beat_to_paths: dict[str, list[str]] = {}
+    for edge in belongs_to_edges:
+        beat_to_paths.setdefault(edge["from"], []).append(edge["to"])
+    path_dilemma = {pid: path.get("dilemma_id", "") for pid, path in path_nodes.items()}
+
+    members_by_group: dict[str, list[str]] = {}
+    for edge in intersection_edges:
+        members_by_group.setdefault(edge["to"], []).append(edge["from"])
+    for group_id, group in group_nodes.items():
+        legacy_members = group.get("beat_ids", [])
+        if legacy_members:
+            members_by_group.setdefault(group_id, []).extend(legacy_members)
+
+    for group_id in sorted(group_nodes.keys()):
+        members = sorted(set(members_by_group.get(group_id, [])))
+        if len(members) < 2:
+            errors.append(
+                f"R-2.3: intersection_group {group_id!r} has {len(members)} member(s); must be ≥2"
+            )
+            continue
+
+        # R-2.3: ≥2 different dilemmas across members.
+        beat_dilemmas: dict[str, set[str]] = {}
+        for m in members:
+            dilemmas: set[str] = set()
+            for p in beat_to_paths.get(m, []):
+                d = path_dilemma.get(p, "")
+                if d:
+                    dilemmas.add(d)
+            beat_dilemmas[m] = dilemmas
+
+        all_dilemmas: set[str] = set()
+        for d_set in beat_dilemmas.values():
+            all_dilemmas |= d_set
+        if len(all_dilemmas) < 2:
+            errors.append(
+                f"R-2.3: intersection_group {group_id!r} contains beats from "
+                f"only {len(all_dilemmas)} dilemma(s); need ≥2 "
+                f"(members: {members})"
+            )
+
+        # R-2.4: no two pre-commit beats of the same dilemma.
+        pre_commit_by_dilemma: dict[str, list[str]] = {}
+        for m in members:
+            beat = beat_nodes.get(m, {})
+            paths = beat_to_paths.get(m, [])
+            impacts = beat.get("dilemma_impacts", [])
+            has_commits = any(i.get("effect") == "commits" for i in impacts)
+            if len(paths) >= 2 and not has_commits:
+                for d in beat_dilemmas.get(m, set()):
+                    pre_commit_by_dilemma.setdefault(d, []).append(m)
+        for d, beats in sorted(pre_commit_by_dilemma.items()):
+            if len(beats) >= 2:
+                errors.append(
+                    f"R-2.4: intersection_group {group_id!r} contains "
+                    f"{len(beats)} pre-commit beats of dilemma {d!r}: "
+                    f"{sorted(beats)}"
+                )
+
+
 def _check_beat_dag(graph: Graph, errors: list[str]) -> None:
     """Y-fork postcondition (R-1.4).
 
@@ -138,6 +210,7 @@ def validate_grow_output(graph: Graph) -> list[str]:
     errors: list[str] = []
     _check_upstream_contract(graph, errors)
     _check_beat_dag(graph, errors)
+    _check_intersections(graph, errors)
 
     # 1. Beat nodes exist with summaries and dilemma_impacts
     beat_nodes = graph.get_nodes_by_type("beat")
