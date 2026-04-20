@@ -71,6 +71,27 @@ _ACTION_PHRASE_PATTERNS = (
 # ---------------------------------------------------------------------------
 
 
+def _check_transition_beats(graph: Graph, errors: list[str]) -> None:
+    """Transition beat structure (R-5.1 zero belongs_to + zero dilemma_impacts)."""
+    beat_nodes = graph.get_nodes_by_type("beat")
+    belongs_to_edges = graph.get_edges(edge_type="belongs_to")
+    beat_to_paths: dict[str, list[str]] = {}
+    for edge in belongs_to_edges:
+        beat_to_paths.setdefault(edge["from"], []).append(edge["to"])
+
+    for beat_id, beat in sorted(beat_nodes.items()):
+        if beat.get("role") != "transition_beat":
+            continue
+        if beat_to_paths.get(beat_id):
+            errors.append(
+                f"R-5.1: transition beat {beat_id!r} must have zero "
+                f"belongs_to edges, found "
+                f"{len(beat_to_paths.get(beat_id, []))}"
+            )
+        if beat.get("dilemma_impacts"):
+            errors.append(f"R-5.1: transition beat {beat_id!r} must have zero dilemma_impacts")
+
+
 def _check_entity_overlays(graph: Graph, errors: list[str]) -> None:
     """Entity overlay composition (R-6.5, R-6.6)."""
     entity_nodes = graph.get_nodes_by_type("entity")
@@ -297,6 +318,7 @@ def validate_grow_output(graph: Graph) -> list[str]:
     _check_intersections(graph, errors)
     _check_state_flags(graph, errors)
     _check_entity_overlays(graph, errors)
+    _check_transition_beats(graph, errors)
 
     # 1. Beat nodes exist with summaries and dilemma_impacts
     beat_nodes = graph.get_nodes_by_type("beat")
