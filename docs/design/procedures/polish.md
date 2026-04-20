@@ -174,30 +174,29 @@ After Phase 3, the beat DAG's branching topology is frozen: no changes to existi
 
 #### 4a: Beat Grouping into Passages
 
-**What:** Group beats into `PassageSpec` objects using two mechanisms: collapse (sequential same-path beats with no choice between them) and singleton (a beat that does not collapse). Structural beats (zero `belongs_to`) follow sub-type-specific grouping rules. POLISH does NOT read intersection groups — those were consumed by GROW during DAG assembly. POLISH works from the finalized DAG alone, and may group adjacent beats from different paths into one passage if the DAG topology and prose feasibility support it. → ontology §Part 5: Passages.
+**What:** Group beats into `PassageSpec` objects using the maximal-linear-collapse rule. Walk the finalized beat DAG and partition beats into maximal linear runs — sequences of beats with no internal divergence or convergence. The rule applies uniformly to narrative and structural beats. Every passage ends at a choice point (divergence → choice edges) or a convergence/terminal; player agency points are exactly the passage boundaries. POLISH does NOT read intersection groups — those were consumed by GROW during DAG assembly, and POLISH works from the finalized DAG topology alone. → ontology §Part 5: Passages.
 
 **Rules:**
 
 R-4a.1. Every beat ends up in exactly one Passage (one `grouped_in` edge per beat).
 
-R-4a.2. Collapse groups sequential beats with identical path membership (same `belongs_to` set) and no intervening choice. Beats with different `belongs_to` sets do not collapse under this rule.
+R-4a.2. (Derived invariant, enforced by Phase 7.) All beats within a passage share identical `belongs_to` sets. In a well-formed Y-shape DAG, `belongs_to` changes coincide with divergences or convergences, so the maximal-linear-collapse rule (R-4a.3) implies this property. Phase 7 validates it as a postcondition.
 
-R-4a.3. Structural beats (zero `belongs_to`) follow sub-type-specific rules (→ ontology §Part 8 grouping rules):
-- Setup / epilogue / transition / micro-beat: may be singleton passages, or may collapse with adjacent structural beats (of any structural sub-type) into a multi-paragraph passage. These sub-types do not collapse with path-specific chains — the collapse rule requires exact path-set equality, and the empty set matches only itself.
-- Residue beat: forms flag-gated variant passages (→ Phase 5/6).
-- False-branch beat: may group with other false-branch beats on the same cosmetic arm (→ Phase 5/6).
+R-4a.3. All beats in the finalized DAG — narrative or structural — are grouped by the maximal-linear-collapse rule. A passage is a maximal run of beats with no internal divergence or convergence. A new passage starts at any beat whose in-degree ≠ 1 or whose predecessor has out-degree ≠ 1, and ends at any beat whose out-degree ≠ 1 or whose successor has in-degree ≠ 1.
 
-R-4a.4. POLISH does NOT consume Intersection Group nodes as a constraint on grouping. The DAG encodes what co-occurrence GROW planned; POLISH makes its own fresh grouping assessment.
+R-4a.4. POLISH does NOT consume Intersection Group nodes as a constraint on grouping. The DAG encodes what co-occurrence GROW planned; POLISH makes its own fresh grouping assessment from the finalized DAG alone.
 
-R-4a.5. Where GROW's intersection placement produced adjacent beats from different paths with compatible narrative context, POLISH MAY group them into one passage. It is not required to.
+R-4a.5. (Subsumed by R-4a.3.) The prior allowance for optional multi-path grouping is now automatic: multi-path chains that are linear in the DAG are collapsed by the topology rule; those separated by divergences or convergences are in different passages by topology.
+
+**Notes on structural beats.** Residue and false-branch beats are created by POLISH in Phase 6 *after* Phase 4a completes; their passage placement is governed by Phase 6 creation rules (R-6.x), not Phase 4a. Micro-beats (Phase 2, from POLISH) and transition beats (from GROW) are already in the DAG at Phase 4a and are grouped uniformly by R-4a.3. No sub-type-specific grouping rules are needed in Phase 4a.
 
 **Violations:**
 
 | Symptom | Root cause | Broken rule |
 |---------|-----------|-------------|
 | Beat appears in two `grouped_in` edges | Belongs to two passages | R-4a.1 |
-| Two beats with different `belongs_to` sets collapsed into one passage via collapse rule | Collapse requires identical path membership | R-4a.2 |
-| Transition beat grouped into a path-specific collapse chain | Zero-`belongs_to` cannot match any single-path set | R-4a.3 |
+| Passage contains beats with different `belongs_to` sets | DAG topology misread, or upstream DAG malformed | R-4a.2 (derived from R-4a.3) |
+| Passage spans a DAG divergence or convergence | Grouping did not close at the boundary | R-4a.3 |
 | POLISH reads intersection groups as hard constraints | Intersection groups are GROW-internal; POLISH operates on DAG | R-4a.4 |
 
 #### 4b: Prose Feasibility Audit
@@ -532,10 +531,10 @@ R-3.3: Arc metadata is entity annotation, not separate node.
 R-3.4: POLISH does not write prose from arc metadata.
 R-3.5: Arc-synthesis LLM receives full context.
 R-4a.1: Every beat in exactly one Passage.
-R-4a.2: Collapse requires identical path membership.
-R-4a.3: Structural beats follow sub-type-specific grouping rules.
+R-4a.2: All beats in a passage share identical `belongs_to` (derived invariant from R-4a.3; enforced in Phase 7).
+R-4a.3: Maximal-linear-collapse — a passage is a maximal run of beats with no internal divergence or convergence.
 R-4a.4: POLISH does NOT consume Intersection Groups.
-R-4a.5: POLISH may group adjacent multi-path beats if DAG supports it (not required).
+R-4a.5: (Subsumed by R-4a.3.)
 R-4b.1: Every passage has a feasibility annotation.
 R-4b.2: `clean` = 0 structurally relevant flags.
 R-4b.3: `annotated` = structurally relevant but narratively irrelevant flags.
@@ -670,7 +669,7 @@ User reviews. Approves.
 
 ### Phase 4
 
-**4a:** 12 passages planned via collapse. Pre-commit intersection beats from both dilemmas grouped into one passage (POLISH independently decides this from adjacent DAG placement).
+**4a:** 12 passages planned via maximal-linear-collapse. Pre-commit beats shared across dilemmas sit in a linear DAG run and collapse into one passage; the passage closes at the commit-fork divergence.
 
 **4b:** 9 `clean`, 2 `residue` (mentor demeanor), 1 `variant` (mentor overlay at climax).
 
