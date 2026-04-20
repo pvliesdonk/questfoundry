@@ -16,9 +16,6 @@ LLM phases use direct structured output (not discuss→summarize→serialize):
 context from graph state → single LLM call → validate → retry (max 3).
 """
 
-# pyright: reportArgumentType=false
-# TODO(#1296): cleanup during M-GROW-spec compliance work; tracked in epic #1296
-
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
@@ -191,6 +188,9 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
                 fn = getattr(_this_module, free_name)
             else:
                 fn = registry.get_function(phase_name)
+
+            if fn is None:
+                raise GrowStageError(f"No function registered for phase {phase_name!r}")
 
             # Inject runtime size_profile for enumerate_arcs
             if phase_name == "enumerate_arcs":
