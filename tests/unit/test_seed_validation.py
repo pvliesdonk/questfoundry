@@ -413,6 +413,24 @@ def test_R_3_14_setup_beat_must_not_belong_to_path(compliant_graph: Graph) -> No
     assert any("setup" in e.lower() and "belongs_to" in e for e in errors)
 
 
+def test_R_3_14_epilogue_beat_must_not_belong_to_path(compliant_graph: Graph) -> None:
+    """R-3.14: epilogue beats are structural — zero belongs_to edges."""
+    compliant_graph.create_node(
+        "beat::epilogue_closer",
+        {
+            "type": "beat",
+            "raw_id": "epilogue_closer",
+            "role": "epilogue",
+            "summary": "story wrap-up",
+            "entities": ["character::kay"],
+            "dilemma_impacts": [],
+        },
+    )
+    compliant_graph.add_edge("belongs_to", "beat::epilogue_closer", "path::mentor_trust__protector")
+    errors = validate_seed_output(compliant_graph)
+    assert any("epilogue" in e.lower() and "belongs_to" in e for e in errors)
+
+
 # --------------------------------------------------------------------------
 # Phase 3 — Consequence + Path
 # --------------------------------------------------------------------------
@@ -527,6 +545,21 @@ def test_R_7_1_dilemma_role_flavor_forbidden(compliant_graph: Graph) -> None:
 # --------------------------------------------------------------------------
 
 
+def test_R_8_1_invalid_ordering_relationship(compliant_graph: Graph) -> None:
+    """R-8.1: ordering relationship must be wraps/concurrent/serial."""
+    compliant_graph.create_node(
+        "ordering::invalid",
+        {
+            "type": "ordering",
+            "relationship": "dominates",  # not in the allowed set
+            "dilemma_a": "dilemma::mentor_trust",
+            "dilemma_b": "dilemma::other",
+        },
+    )
+    errors = validate_seed_output(compliant_graph)
+    assert any("R-8.1" in e or "relationship" in e.lower() for e in errors)
+
+
 def test_R_8_3_concurrent_non_lex_order_forbidden(compliant_graph: Graph) -> None:
     # Create a concurrent edge with non-lex order: dilemma_a > dilemma_b alphabetically.
     compliant_graph.create_node(
@@ -567,7 +600,10 @@ def test_R_8_4_shared_entity_edge_forbidden(compliant_graph: Graph) -> None:
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("forbidden", ["passage", "state_flag", "intersection_group"])
+@pytest.mark.parametrize(
+    "forbidden",
+    ["passage", "state_flag", "intersection_group", "transition_beat", "choice"],
+)
 def test_output16_forbidden_node_type_present(compliant_graph: Graph, forbidden: str) -> None:
     compliant_graph.create_node(
         f"{forbidden}::x",
