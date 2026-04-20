@@ -15,7 +15,14 @@ from questfoundry.pipeline.stages.grow import GrowStage, GrowStageError, create_
 
 @pytest.fixture
 def tmp_project(tmp_path: Path) -> Path:
-    """Create a temporary project directory with a SEED-completed graph."""
+    """Create a temporary project directory with a SEED-completed graph.
+
+    The graph contains only the stage marker (last_stage=seed) — no beats,
+    paths, or entities — so GROW's deterministic phases run without LLM
+    calls.  Tests that invoke the full GROW pipeline must patch
+    ``validate_grow_output`` to suppress the resulting upstream-contract
+    errors, or supply the full baseline themselves.
+    """
     from questfoundry.graph.graph import Graph
 
     graph = Graph.empty()
@@ -49,8 +56,22 @@ class TestGrowStageRegistration:
 
 
 class TestGrowStageExecute:
+    """Tests for GROW stage execution mechanics.
+
+    These tests use an empty SEED graph (no beats, paths, or entities) so
+    GROW's deterministic phases complete without LLM calls.  The
+    ``validate_grow_output`` exit validator is bypassed in each test because
+    an empty graph cannot satisfy the upstream-contract checks — these tests
+    exercise stage wiring, not output quality.
+    """
+
     @pytest.mark.asyncio
-    async def test_execute_runs_all_phases(self, tmp_project: Path, mock_model: MagicMock) -> None:
+    async def test_execute_runs_all_phases(
+        self, tmp_project: Path, mock_model: MagicMock, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import questfoundry.pipeline.stages.grow.stage as grow_stage_mod
+
+        monkeypatch.setattr(grow_stage_mod, "validate_grow_output", lambda _g: [])
         stage = GrowStage(project_path=tmp_project)
         result_dict, llm_calls, tokens = await stage.execute(model=mock_model, user_prompt="")
         assert llm_calls == 0
@@ -69,8 +90,11 @@ class TestGrowStageExecute:
 
     @pytest.mark.asyncio
     async def test_execute_with_project_path_kwarg(
-        self, tmp_project: Path, mock_model: MagicMock
+        self, tmp_project: Path, mock_model: MagicMock, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        import questfoundry.pipeline.stages.grow.stage as grow_stage_mod
+
+        monkeypatch.setattr(grow_stage_mod, "validate_grow_output", lambda _g: [])
         stage = GrowStage()
         result_dict, _, _ = await stage.execute(
             model=mock_model, user_prompt="", project_path=tmp_project
@@ -110,17 +134,20 @@ class TestGrowStageExecute:
 
     @pytest.mark.asyncio
     async def test_execute_rerun_from_fill_restores_pre_grow_checkpoint(
-        self, tmp_path: Path, mock_model: MagicMock
+        self, tmp_path: Path, mock_model: MagicMock, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """GROW can re-run from a later-stage graph by restoring the pre-GROW checkpoint."""
+        import questfoundry.pipeline.stages.grow.stage as grow_stage_mod
         from questfoundry.graph.graph import Graph
+
+        monkeypatch.setattr(grow_stage_mod, "validate_grow_output", lambda _g: [])
 
         # Current graph is at a later stage (e.g., after FILL)
         current = Graph.empty()
         current.set_last_stage("fill")
         current.save(tmp_path / "graph.db")
 
-        # Pre-GROW checkpoint contains SEED-completed graph state
+        # Pre-GROW checkpoint contains a minimal SEED-completed graph state.
         pre_grow = Graph.empty()
         pre_grow.set_last_stage("seed")
         checkpoints_dir = tmp_path / "snapshots"
@@ -136,10 +163,13 @@ class TestGrowStageExecute:
 
     @pytest.mark.asyncio
     async def test_execute_rerun_from_fill_uses_rewind(
-        self, tmp_path: Path, mock_model: MagicMock
+        self, tmp_path: Path, mock_model: MagicMock, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Re-run from later stage rewinds grow mutations without needing a snapshot."""
+        import questfoundry.pipeline.stages.grow.stage as grow_stage_mod
         from questfoundry.graph.graph import Graph
+
+        monkeypatch.setattr(grow_stage_mod, "validate_grow_output", lambda _g: [])
 
         graph = Graph.empty()
         graph.set_last_stage("fill")
@@ -153,7 +183,12 @@ class TestGrowStageExecute:
         assert loaded.get_last_stage() == "grow"
 
     @pytest.mark.asyncio
-    async def test_execute_saves_graph(self, tmp_project: Path, mock_model: MagicMock) -> None:
+    async def test_execute_saves_graph(
+        self, tmp_project: Path, mock_model: MagicMock, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import questfoundry.pipeline.stages.grow.stage as grow_stage_mod
+
+        monkeypatch.setattr(grow_stage_mod, "validate_grow_output", lambda _g: [])
         stage = GrowStage(project_path=tmp_project)
         await stage.execute(model=mock_model, user_prompt="")
         # Verify graph was saved
@@ -161,8 +196,11 @@ class TestGrowStageExecute:
 
     @pytest.mark.asyncio
     async def test_execute_returns_grow_result_structure(
-        self, tmp_project: Path, mock_model: MagicMock
+        self, tmp_project: Path, mock_model: MagicMock, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        import questfoundry.pipeline.stages.grow.stage as grow_stage_mod
+
+        monkeypatch.setattr(grow_stage_mod, "validate_grow_output", lambda _g: [])
         stage = GrowStage(project_path=tmp_project)
         result_dict, _, _ = await stage.execute(model=mock_model, user_prompt="")
         expected_keys = {
@@ -2421,6 +2459,8 @@ class TestGrowResume:
         """execute() skips phases before resume_from."""
         from unittest.mock import patch
 
+        import questfoundry.pipeline.stages.grow.stage as grow_stage_mod
+
         stage = GrowStage()
 
         # Track which phases are called
@@ -2438,7 +2478,12 @@ class TestGrowResume:
 
             mock_phases.append((phase_fn, name))
 
-        with patch.object(stage, "_phase_order", return_value=mock_phases):
+        # The mocked phases do not produce a valid GROW output graph; bypass
+        # the exit-contract validator so this test exercises phase-skip logic.
+        with (
+            patch.object(stage, "_phase_order", return_value=mock_phases),
+            patch.object(grow_stage_mod, "validate_grow_output", return_value=[]),
+        ):
             await stage.execute(
                 model=MagicMock(),
                 user_prompt="test",

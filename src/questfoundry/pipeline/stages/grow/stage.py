@@ -311,6 +311,7 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
         phase_results: list[GrowPhaseResult] = []
         total_llm_calls = 0
         total_tokens = 0
+        gate_rejected = False
 
         for idx, (phase_fn, phase_name) in enumerate(phases):
             if idx < start_idx:
@@ -347,6 +348,7 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
                 graph.rollback_to(phase_name)
                 graph.release(phase_name)
                 graph.save(resolved_path / "graph.db")
+                gate_rejected = True
                 break
 
             graph.release(phase_name)
@@ -355,6 +357,19 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
             # Notify progress callback if provided
             if on_phase_progress is not None:
                 on_phase_progress(phase_name, result.status, result.detail)
+
+        # Contract validation only applies to a fully-completed GROW run.
+        # Gate rejection (human review) means GROW was intentionally stopped
+        # mid-run; the partial graph has already been rolled back and saved.
+        if gate_rejected:
+            rejected_result = GrowResult(
+                arc_count=0,
+                state_flag_count=0,
+                overlay_count=0,
+                phases_completed=phase_results,
+                spine_arc_id=None,
+            )
+            return rejected_result.model_dump(), total_llm_calls, total_tokens
 
         contract_errors = validate_grow_output(graph)
         if contract_errors:

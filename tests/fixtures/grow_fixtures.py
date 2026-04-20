@@ -17,6 +17,179 @@ from __future__ import annotations
 
 from questfoundry.graph.graph import Graph
 
+# ---------------------------------------------------------------------------
+# DREAM + BRAINSTORM + SEED upstream baseline helpers
+#
+# These populate the mandatory upstream contract that validate_grow_output
+# checks via _check_upstream_contract → validate_seed_output.
+#
+# Usage: call seed_upstream_baseline(graph) on any graph that will be run
+# through the full GROW stage (not needed for unit tests that only exercise
+# individual algorithms).
+# ---------------------------------------------------------------------------
+
+
+def seed_dream_baseline(graph: Graph) -> None:
+    """Add a minimal DREAM vision node (R-1.7)."""
+    graph.create_node(
+        "vision",
+        {
+            "type": "vision",
+            "genre": "dark fantasy",
+            "tone": ["atmospheric"],
+            "themes": ["forbidden knowledge"],
+            "audience": "adult",
+            "scope": {"story_size": "short"},
+            "human_approved": True,
+        },
+    )
+
+
+def seed_brainstorm_baseline(graph: Graph) -> None:
+    """Add minimal BRAINSTORM entities + dilemma satisfying R-1.1/R-2.1/R-2.4.
+
+    Creates:
+      - 2 character entities + 2 location entities (satisfies R-2.4: ≥2 locations)
+      - 1 dilemma with 2 answers (1 canonical)
+    """
+    for eid, cat, name in [
+        ("character::kay", "character", "Kay"),
+        ("character::mentor", "character", "Mentor"),
+        ("location::archive", "location", "Archive"),
+        ("location::depths", "location", "Forbidden Depths"),
+    ]:
+        graph.create_node(
+            eid,
+            {
+                "type": "entity",
+                "raw_id": eid.split("::", 1)[-1],
+                "name": name,
+                "category": cat,
+                "concept": "x",
+                "disposition": "retained",
+            },
+        )
+    graph.create_node(
+        "dilemma::mentor_trust",
+        {
+            "type": "dilemma",
+            "raw_id": "mentor_trust",
+            "question": "Trust?",
+            "why_it_matters": "stakes",
+            "dilemma_role": "soft",
+            "residue_weight": "light",
+            "ending_salience": "low",
+        },
+    )
+    for ans, is_canon in [("protector", True), ("manipulator", False)]:
+        ans_id = f"dilemma::mentor_trust::alt::{ans}"
+        graph.create_node(
+            ans_id,
+            {
+                "type": "answer",
+                "raw_id": ans,
+                "description": f"d-{ans}",
+                "is_canonical": is_canon,
+                "explored": True,
+            },
+        )
+        graph.add_edge("has_answer", "dilemma::mentor_trust", ans_id)
+    graph.add_edge("anchored_to", "dilemma::mentor_trust", "character::mentor")
+
+
+def seed_seed_baseline(graph: Graph) -> None:
+    """Add minimal SEED paths, beats, consequences and Path Freeze node.
+
+    Creates a Y-shaped dilemma (mentor_trust) with:
+      - 1 shared pre-commit beat
+      - 2 commit beats (one per path)
+      - 2 post-commit beats per path
+      - seed_freeze approval node
+    """
+    for ans in ["protector", "manipulator"]:
+        path_id = f"path::mentor_trust__{ans}"
+        graph.create_node(
+            path_id,
+            {
+                "type": "path",
+                "raw_id": f"mentor_trust__{ans}",
+                "dilemma_id": "dilemma::mentor_trust",
+                "is_canonical": ans == "protector",
+            },
+        )
+        graph.add_edge("explores", path_id, f"dilemma::mentor_trust::alt::{ans}")
+        conseq_id = f"consequence::mentor_trust__{ans}"
+        graph.create_node(
+            conseq_id,
+            {
+                "type": "consequence",
+                "raw_id": f"mentor_trust__{ans}",
+                "description": "mentor becomes hostile",
+                "ripples": ["faction mistrust rises"],
+            },
+        )
+        graph.add_edge("has_consequence", path_id, conseq_id)
+
+    graph.create_node(
+        "beat::pre_mentor_01",
+        {
+            "type": "beat",
+            "raw_id": "pre_mentor_01",
+            "summary": "Mentor delivers warning",
+            "entities": ["character::mentor", "character::kay"],
+            "dilemma_impacts": [{"dilemma_id": "dilemma::mentor_trust", "effect": "advances"}],
+        },
+    )
+    graph.add_edge("belongs_to", "beat::pre_mentor_01", "path::mentor_trust__protector")
+    graph.add_edge("belongs_to", "beat::pre_mentor_01", "path::mentor_trust__manipulator")
+
+    for ans in ["protector", "manipulator"]:
+        path_id = f"path::mentor_trust__{ans}"
+        commit_id = f"beat::commit_{ans}"
+        graph.create_node(
+            commit_id,
+            {
+                "type": "beat",
+                "raw_id": f"commit_{ans}",
+                "summary": f"Mentor reveals {ans} motive",
+                "entities": ["character::mentor"],
+                "dilemma_impacts": [{"dilemma_id": "dilemma::mentor_trust", "effect": "commits"}],
+            },
+        )
+        graph.add_edge("belongs_to", commit_id, path_id)
+        for i in range(1, 3):  # 2 post-commit beats
+            post_id = f"beat::post_{ans}_{i:02d}"
+            graph.create_node(
+                post_id,
+                {
+                    "type": "beat",
+                    "raw_id": f"post_{ans}_{i:02d}",
+                    "summary": f"Post-commit {i} on {ans}",
+                    "entities": ["character::mentor"],
+                    "dilemma_impacts": [],
+                },
+            )
+            graph.add_edge("belongs_to", post_id, path_id)
+
+    graph.create_node("seed_freeze", {"type": "seed_freeze", "human_approved": True})
+
+
+def seed_upstream_baseline(graph: Graph) -> None:
+    """Populate DREAM + BRAINSTORM + SEED upstream baseline on *graph*.
+
+    Call this on any graph that will be run through the full GROW stage so
+    that validate_grow_output (which delegates to validate_seed_output) does
+    not raise upstream-contract errors.
+
+    Note: This creates a *new* dilemma / entity set (mentor_trust / kay /
+    mentor / archive / depths). If your test graph already has its own
+    dilemmas and entities, call the three helpers individually and supply
+    only the missing pieces, rather than calling this combined helper.
+    """
+    seed_dream_baseline(graph)
+    seed_brainstorm_baseline(graph)
+    seed_seed_baseline(graph)
+
 
 def make_single_dilemma_graph() -> Graph:
     """Create a minimal graph with 1 dilemma, 2 paths, 4 beats.
