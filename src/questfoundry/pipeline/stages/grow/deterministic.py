@@ -551,20 +551,35 @@ async def phase_convergence(graph: Graph, model: BaseChatModel) -> GrowPhaseResu
             dilemma_id,
             dilemma_paths=dilemma_paths_map.get(dilemma_id),
         )
-        if result is not None:
-            converges_at, payoff = result
-            graph.update_node(
-                dilemma_id,
-                converges_at=converges_at,
-                convergence_payoff=payoff,
-            )
-            persisted += 1
-            log.debug(
-                "convergence_persisted",
+        if result is None:
+            # R-7.4: a soft dilemma with no structural convergence beat is a
+            # classification error — the dilemma should be hard, or the paths
+            # need rework so they rejoin.  Silent null is forbidden.
+            from questfoundry.graph.grow_validation import GrowContractError
+
+            log.error(
+                "soft_dilemma_no_convergence",
                 dilemma_id=dilemma_id,
-                converges_at=converges_at,
-                convergence_payoff=payoff,
+                reason="classification error — soft dilemma paths never rejoin",
             )
+            raise GrowContractError(
+                f"R-7.4: soft dilemma {dilemma_id!r} has no structural convergence "
+                "beat — misclassified as soft (paths never rejoin; should be "
+                "hard, or paths need rework)."
+            )
+        converges_at, payoff = result
+        graph.update_node(
+            dilemma_id,
+            converges_at=converges_at,
+            convergence_payoff=payoff,
+        )
+        persisted += 1
+        log.debug(
+            "convergence_persisted",
+            dilemma_id=dilemma_id,
+            converges_at=converges_at,
+            convergence_payoff=payoff,
+        )
 
     # --- Arc-level convergence: diagnostic logging (existing behavior) ---
     arcs = enumerate_arcs(graph)

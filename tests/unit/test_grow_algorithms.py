@@ -1918,6 +1918,83 @@ class TestPhase7Integration:
         result = await phase_convergence(graph, mock_model)
         assert result.status == "completed"
 
+    @pytest.mark.asyncio
+    async def test_phase_7_halts_on_soft_dilemma_without_convergence(self) -> None:
+        """R-7.4: a soft dilemma whose paths never rejoin must raise GrowContractError.
+
+        Build a minimal graph: one soft dilemma with two explored paths (P1, P2)
+        that each terminate in separate commit beats with NO shared successor beat.
+        Phase 7 cannot find a convergence beat and must halt — silent null is
+        forbidden (Silent Degradation policy).
+        """
+        from questfoundry.graph.grow_validation import GrowContractError
+        from questfoundry.pipeline.stages.grow import GrowStage
+
+        graph = Graph.empty()
+
+        # Dilemma (soft)
+        graph.create_node(
+            "dilemma::d1",
+            {
+                "type": "dilemma",
+                "raw_id": "d1",
+                "question": "Will they cooperate?",
+                "dilemma_role": "soft",
+            },
+        )
+
+        # Two paths
+        graph.create_node(
+            "path::p1",
+            {
+                "type": "path",
+                "raw_id": "p1",
+                "dilemma_id": "dilemma::d1",
+                "is_canonical": True,
+            },
+        )
+        graph.create_node(
+            "path::p2",
+            {
+                "type": "path",
+                "raw_id": "p2",
+                "dilemma_id": "dilemma::d1",
+                "is_canonical": False,
+            },
+        )
+
+        # Shared pre-commit beat (belongs_to both paths — Y-shape)
+        graph.create_node(
+            "beat::pre",
+            {"type": "beat", "raw_id": "pre", "summary": "Shared setup beat."},
+        )
+        graph.add_edge("belongs_to", "beat::pre", "path::p1")
+        graph.add_edge("belongs_to", "beat::pre", "path::p2")
+
+        # Commit beat for P1 — belongs_to P1 only, no successors
+        graph.create_node(
+            "beat::commit_p1",
+            {"type": "beat", "raw_id": "commit_p1", "summary": "P1 commit."},
+        )
+        graph.add_edge("belongs_to", "beat::commit_p1", "path::p1")
+        graph.add_edge("predecessor", "beat::commit_p1", "beat::pre")
+
+        # Commit beat for P2 — belongs_to P2 only, no successors
+        graph.create_node(
+            "beat::commit_p2",
+            {"type": "beat", "raw_id": "commit_p2", "summary": "P2 commit."},
+        )
+        graph.add_edge("belongs_to", "beat::commit_p2", "path::p2")
+        graph.add_edge("predecessor", "beat::commit_p2", "beat::pre")
+
+        # No shared finale — paths diverge permanently.
+
+        GrowStage()
+        mock_model = MagicMock()
+
+        with pytest.raises(GrowContractError, match=r"R-7\.4"):
+            await phase_convergence(graph, mock_model)
+
 
 class TestPhase8bIntegration:
     @pytest.mark.asyncio
