@@ -2708,8 +2708,6 @@ class TestPhaseIntegrationEndToEnd:
         # Result is now GrowResult.model_dump() (not extract_grow_artifact)
         expected_keys = {
             "arc_count",
-            "passage_count",
-            "choice_count",
             "state_flag_count",
             "overlay_count",
             "spine_arc_id",
@@ -2720,10 +2718,6 @@ class TestPhaseIntegrationEndToEnd:
         # Should have counted arcs
         assert result_dict["arc_count"] == 4  # 2x2 = 4 arcs
         assert result_dict["spine_arc_id"] is not None
-
-        # GROW no longer creates passages or choices (moved to POLISH)
-        assert result_dict["passage_count"] == 0
-        assert result_dict["choice_count"] == 0
 
         # Should have counted state_flags
         assert result_dict["state_flag_count"] == 4  # 4 consequences
@@ -2745,8 +2739,6 @@ class TestPhaseIntegrationEndToEnd:
 
         expected_keys = {
             "arc_count",
-            "passage_count",
-            "choice_count",
             "state_flag_count",
             "overlay_count",
             "spine_arc_id",
@@ -2755,7 +2747,6 @@ class TestPhaseIntegrationEndToEnd:
         assert set(result_dict.keys()) == expected_keys
 
         assert result_dict["arc_count"] == 2  # 1 dilemma x 2 paths = 2 arcs
-        assert result_dict["passage_count"] == 0  # GROW no longer creates passages
         assert result_dict["state_flag_count"] == 2  # 2 consequences
 
     @pytest.mark.asyncio

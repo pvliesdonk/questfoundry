@@ -359,9 +359,7 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
         from questfoundry.graph.grow_algorithms import enumerate_arcs
 
         arcs = enumerate_arcs(graph)
-        passage_nodes = graph.get_nodes_by_type("passage")
         state_flag_nodes = graph.get_nodes_by_type("state_flag")
-        choice_nodes = graph.get_nodes_by_type("choice")
         entity_nodes = graph.get_nodes_by_type("entity")
 
         spine_arc_id = None
@@ -374,9 +372,7 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
 
         grow_result = GrowResult(
             arc_count=len(arcs),
-            passage_count=len(passage_nodes),
             state_flag_count=len(state_flag_nodes),
-            choice_count=len(choice_nodes),
             overlay_count=overlay_count,
             phases_completed=phase_results,
             spine_arc_id=spine_arc_id,
@@ -386,7 +382,6 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
             "stage_complete",
             stage="grow",
             arcs=grow_result.arc_count,
-            passages=grow_result.passage_count,
             state_flags=grow_result.state_flag_count,
         )
 

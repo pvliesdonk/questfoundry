@@ -58,8 +58,6 @@ class TestGrowStageExecute:
         # execute() returns GrowResult.model_dump() (not artifact data)
         expected_keys = {
             "arc_count",
-            "passage_count",
-            "choice_count",
             "state_flag_count",
             "overlay_count",
             "spine_arc_id",
@@ -67,8 +65,6 @@ class TestGrowStageExecute:
         }
         assert set(result_dict.keys()) == expected_keys
         assert result_dict["arc_count"] == 0
-        assert result_dict["passage_count"] == 0
-        assert result_dict["choice_count"] == 0
         assert result_dict["state_flag_count"] == 0
 
     @pytest.mark.asyncio
@@ -171,8 +167,6 @@ class TestGrowStageExecute:
         result_dict, _, _ = await stage.execute(model=mock_model, user_prompt="")
         expected_keys = {
             "arc_count",
-            "passage_count",
-            "choice_count",
             "state_flag_count",
             "overlay_count",
             "spine_arc_id",
