@@ -31,6 +31,10 @@ from questfoundry.graph.context_compact import (
     CompactContextConfig,
 )
 from questfoundry.graph.graph import Graph
+from questfoundry.graph.grow_validation import (
+    GrowContractError,
+    validate_grow_output,
+)
 from questfoundry.graph.invariants import assert_predecessor_dag_acyclic
 from questfoundry.graph.mutations import GrowMutationError, GrowValidationError
 from questfoundry.graph.snapshots import save_snapshot
@@ -351,6 +355,13 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
             # Notify progress callback if provided
             if on_phase_progress is not None:
                 on_phase_progress(phase_name, result.status, result.detail)
+
+        contract_errors = validate_grow_output(graph)
+        if contract_errors:
+            log.error("grow_contract_violated", errors=contract_errors)
+            raise GrowContractError(
+                "GROW stage output contract violated:\n  - " + "\n  - ".join(contract_errors)
+            )
 
         graph.set_last_stage("grow")
         graph.save(resolved_path / "graph.db")
