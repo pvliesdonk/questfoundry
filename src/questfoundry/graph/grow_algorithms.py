@@ -3736,8 +3736,8 @@ def interleave_cross_path_beats(graph: Graph) -> int:
       hints, commit beats of one dilemma are ordered before commit beats of the
       other to ensure pacing.
 
-    Hint-induced edges that would create a cycle raise RuntimeError (resolve_temporal_hints
-    must prevent this).  Heuristic-induced cycles are soft-skipped (benign tiebreak conflicts).
+    Any edge that would create a cycle raises GrowContractError (R-3.7 / R-4.5).
+    resolve_temporal_hints must prevent hint-induced cycles before this phase runs.
 
     Args:
         graph: Graph containing beat, path, and dilemma nodes with relationship edges.
@@ -3830,14 +3830,16 @@ def interleave_cross_path_beats(graph: Graph) -> int:
             from_beat: Beat that requires to_beat.
             to_beat: Beat that becomes a prerequisite.
             from_hint: True when the edge is requested by a temporal hint (LLM
-                output validated by resolve_temporal_hints).  Hint-induced cycles
-                are hard errors — resolve_temporal_hints should have cleared them.
-                Heuristic-induced cycles are soft-skipped (the heuristic is an
-                arbitrary tiebreak, so a conflict with an existing hint edge is
-                expected and benign).
+                output validated by resolve_temporal_hints).
 
         Returns:
             True if edge was added.
+
+        Raises:
+            GrowContractError: If the edge would create a cycle.  Per R-3.7 /
+                R-4.5, any cycle at interleave time is a hard pipeline failure —
+                Phase 3 was supposed to guarantee acyclicity.  Silent skip
+                (``interleave_cycle_skipped``) is forbidden.
         """
         nonlocal created
         if from_beat == to_beat:
@@ -3860,22 +3862,27 @@ def interleave_cross_path_beats(graph: Graph) -> int:
             )
             return False
         if _would_create_cycle(from_beat, to_beat, successors, beat_set):
-            if from_hint:
-                # Hint-induced cycles must have been cleared by resolve_temporal_hints.
-                # Reaching here means that phase failed its invariant.
-                raise RuntimeError(
-                    f"interleave_cross_path_beats: temporal hint on {from_beat!r} "
-                    f"requests edge {from_beat!r} → {to_beat!r} which would create "
-                    f"a cycle. resolve_temporal_hints should have prevented this."
-                )
-            # Heuristic-induced cycles are benign: the heuristic is an arbitrary
-            # tiebreak and may conflict with existing hint-established ordering.
-            log.debug(
-                "interleave_heuristic_cycle_skipped",
+            # Per R-3.7 / R-4.5: any cycle detected at interleave time is a
+            # hard pipeline failure — Silent Degradation policy forbids silent
+            # skip.  Hint-induced cycles should have been cleared by
+            # resolve_temporal_hints; heuristic-induced cycles indicate that
+            # Phase 3's acyclicity guarantee was not upheld.
+            from questfoundry.graph.grow_validation import (
+                GrowContractError,  # local to avoid circular import
+            )
+
+            source = "temporal hint" if from_hint else "heuristic"
+            log.error(
+                "interleave_cycle_skipped",
                 from_beat=from_beat,
                 to_beat=to_beat,
+                source=source,
             )
-            return False
+            raise GrowContractError(
+                f"R-3.7 / R-4.5: interleave would close a cycle "
+                f"({from_beat!r} → {to_beat!r}, source={source!r}). "
+                f"Phase 3's acyclicity guarantee was violated. Halting."
+            )
         graph.add_edge("predecessor", from_beat, to_beat)
         existing_predecessors.add((from_beat, to_beat))
         successors[to_beat].add(from_beat)

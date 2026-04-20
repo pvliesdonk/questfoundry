@@ -4475,8 +4475,10 @@ class TestInterleavecrossPathBeats:
         assert count1 > 0
         assert count2 == 0  # No new edges on second run
 
-    def test_cycle_inducing_edge_skipped(self) -> None:
-        """Edges that would create a cycle are skipped and DAG stays valid.
+    def test_cycle_inducing_heuristic_edge_raises(self) -> None:
+        """R-3.7 / R-4.5: heuristic interleave edge that would create a cycle
+        raises GrowContractError — silent skip (interleave_cycle_skipped) is
+        forbidden per the Silent Degradation policy.
 
         Alphabetically "dilemma::artifact_quest" < "dilemma::mentor_trust" ('a' < 'm'),
         so dilemma_a=mentor_trust, dilemma_b=artifact_quest. The heuristic 'else' branch
@@ -4487,22 +4489,23 @@ class TestInterleavecrossPathBeats:
         aq_intro in topo. Via the within-path edge aq_intro → aq_commit, the topo chain
         becomes: mt_commit → aq_intro → aq_commit.
         Now aq_commit IS reachable from mt_commit in the successor graph.
-        _would_create_cycle(mt_commit, aq_commit) correctly detects the cycle and skips
-        the edge, leaving the DAG valid.
+        _would_create_cycle(mt_commit, aq_commit) detects the cycle — must raise,
+        not silently skip.
         """
-        from questfoundry.graph.grow_algorithms import validate_beat_dag
+        import pytest
+
+        from questfoundry.graph.grow_validation import GrowContractError
 
         graph = _make_two_dilemma_graph_with_relationship("concurrent")
 
         # Pre-add: aq_intro requires mt_commit (mt_commit before aq_intro in topo).
         # Creates topo chain: mt_commit → aq_intro → aq_commit (via within-path edge).
         # Heuristic tries _add_predecessor(mt_commit, aq_commit) = aq_commit before mt_commit.
-        # _would_create_cycle: BFS from mt_commit reaches aq_commit → CYCLE → skipped.
+        # _would_create_cycle: BFS from mt_commit reaches aq_commit → CYCLE → raise.
         graph.add_edge("predecessor", "beat::aq_intro", "beat::mt_commit")
 
-        interleave_cross_path_beats(graph)
-        errors = validate_beat_dag(graph)
-        assert errors == []
+        with pytest.raises(GrowContractError, match=r"R-3\.7 / R-4\.5"):
+            interleave_cross_path_beats(graph)
 
     def test_phase_interleave_beats_completes(self) -> None:
         """phase_interleave_beats returns completed status."""
@@ -4714,13 +4717,17 @@ class TestInterleavecrossPathBeats:
             f"got {same_intersection_edges}"
         )
 
-    def test_cycle_raises_runtime_error(self) -> None:
-        """A temporal hint that creates a cycle raises RuntimeError (#1129).
+    def test_cycle_raises_contract_error(self) -> None:
+        """A temporal hint that creates a cycle raises GrowContractError (R-3.7 / R-4.5).
 
         resolve_temporal_hints must clear conflicting hints before interleave
         runs.  If a cycle slips through, interleave_cross_path_beats must raise
         rather than silently skip so the pipeline fails loudly.
         """
+        import pytest
+
+        from questfoundry.graph.grow_validation import GrowContractError
+
         graph = _make_two_dilemma_graph_with_relationship("concurrent")
         # Force an existing cross-path edge that will conflict with the hint:
         # aq_commit → mt_intro already in graph (mt_intro after aq_commit).
@@ -4735,9 +4742,7 @@ class TestInterleavecrossPathBeats:
             },
         )
 
-        import pytest
-
-        with pytest.raises(RuntimeError, match="would create a cycle"):
+        with pytest.raises(GrowContractError, match=r"R-3\.7 / R-4\.5"):
             interleave_cross_path_beats(graph)
 
     def test_hint_accepted_by_detection_does_not_raise_at_apply_time(self) -> None:
