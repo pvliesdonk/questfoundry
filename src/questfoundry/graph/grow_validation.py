@@ -61,6 +61,15 @@ class GrowContractError(ValueError):
 # ---------------------------------------------------------------------------
 
 
+def _check_upstream_contract(graph: Graph, errors: list[str]) -> None:
+    """Delegate to SEED validator with skip_forbidden_types=True."""
+    from questfoundry.graph.seed_validation import validate_seed_output
+
+    upstream = validate_seed_output(graph, skip_forbidden_types=True)
+    for e in upstream:
+        errors.append(f"Output-0: SEED contract violated post-GROW — {e}")
+
+
 def validate_grow_output(graph: Graph) -> list[str]:
     """Verify GROW's output meets POLISH's input contract.
 
@@ -71,6 +80,7 @@ def validate_grow_output(graph: Graph) -> list[str]:
         List of error strings. Empty means valid.
     """
     errors: list[str] = []
+    _check_upstream_contract(graph, errors)
 
     # 1. Beat nodes exist with summaries and dilemma_impacts
     beat_nodes = graph.get_nodes_by_type("beat")
