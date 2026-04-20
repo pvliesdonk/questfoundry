@@ -56,9 +56,59 @@ class GrowContractError(ValueError):
     """Raised when GROW's Stage Output Contract is violated."""
 
 
+_FORBIDDEN_NODE_TYPES_GROW_EXIT = frozenset({"passage", "choice"})
+_ACTION_PHRASE_PATTERNS = (
+    "player_",
+    "user_chose",
+    "_chose_",
+    "_chooses_",
+    "chose_to_",
+)
+
+
 # ---------------------------------------------------------------------------
 # GROW Stage Output Contract validator
 # ---------------------------------------------------------------------------
+
+
+def _check_state_flags(graph: Graph, errors: list[str]) -> None:
+    """State flag derivation + naming (R-6.1, R-6.2, R-6.4)."""
+    state_flag_nodes = graph.get_nodes_by_type("state_flag")
+    consequence_nodes = graph.get_nodes_by_type("consequence")
+    derived_from_edges = graph.get_edges(edge_type="derived_from")
+
+    # R-6.1: every state_flag has ≥1 derived_from edge.
+    flag_to_conseqs: dict[str, list[str]] = {}
+    for edge in derived_from_edges:
+        flag_to_conseqs.setdefault(edge["from"], []).append(edge["to"])
+
+    for flag_id in sorted(state_flag_nodes.keys()):
+        if not flag_to_conseqs.get(flag_id):
+            errors.append(
+                f"R-6.1: state_flag {flag_id!r} has no derived_from edge "
+                "(ad-hoc creation forbidden)"
+            )
+
+    # R-6.2: state flag names express world state, not player actions.
+    for flag_id, flag in sorted(state_flag_nodes.items()):
+        name = flag.get("name", "")
+        lowered = name.lower()
+        for pattern in _ACTION_PHRASE_PATTERNS:
+            if pattern in lowered:
+                errors.append(
+                    f"R-6.2: state_flag {flag_id!r} name {name!r} is "
+                    f"action-phrased (contains {pattern!r}); must express "
+                    "world state"
+                )
+                break
+
+    # R-6.4: every Consequence produces at least one State Flag.
+    derived_conseqs: set[str] = set()
+    for edge in derived_from_edges:
+        derived_conseqs.add(edge["to"])
+    for conseq_id in sorted(consequence_nodes.keys()):
+        if conseq_id not in derived_conseqs:
+            errors.append(f"R-6.4: consequence {conseq_id!r} has no derived state_flag")
 
 
 def _check_intersections(graph: Graph, errors: list[str]) -> None:
@@ -211,6 +261,7 @@ def validate_grow_output(graph: Graph) -> list[str]:
     _check_upstream_contract(graph, errors)
     _check_beat_dag(graph, errors)
     _check_intersections(graph, errors)
+    _check_state_flags(graph, errors)
 
     # 1. Beat nodes exist with summaries and dilemma_impacts
     beat_nodes = graph.get_nodes_by_type("beat")
