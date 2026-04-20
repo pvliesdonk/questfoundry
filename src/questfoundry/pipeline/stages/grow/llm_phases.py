@@ -234,7 +234,7 @@ class _LLMPhaseMixin:
                 # Filter to valid beat IDs
                 valid_ids = [bid for bid in proposal.beat_ids if bid in valid_beat_ids]
                 if len(valid_ids) < 2:
-                    log.warning(
+                    log.info(
                         "phase3_insufficient_valid_beats",
                         proposed=proposal.beat_ids,
                         valid=valid_ids,
@@ -245,7 +245,7 @@ class _LLMPhaseMixin:
                 # Run compatibility check
                 errors = check_intersection_compatibility(pre_intersection_graph, valid_ids)
                 if errors:
-                    log.warning(
+                    log.info(
                         "phase3_incompatible_intersection",
                         beat_ids=valid_ids,
                         errors=[e.issue for e in errors],
@@ -291,7 +291,7 @@ class _LLMPhaseMixin:
                 and structural_attempt < max_structural_retries - 1
             ):
                 context["structural_feedback"] = _format_structural_feedback(structural_errors)
-                log.warning(
+                log.info(
                     "phase3_structural_retry",
                     attempt=structural_attempt + 1,
                     errors=len(structural_errors),
@@ -522,7 +522,7 @@ class _LLMPhaseMixin:
                 for resolution in llm_result.resolutions:
                     pair = valid_swap_beats.get(resolution.group_id)
                     if pair is None:
-                        log.warning(
+                        log.info(
                             "resolve_temporal_hints_invalid_group_id",
                             group_id=resolution.group_id,
                         )
@@ -531,7 +531,7 @@ class _LLMPhaseMixin:
                     if resolution.drop_beat_id in (beat_a_id, beat_b_id):
                         beats_to_drop.add(resolution.drop_beat_id)
                     else:
-                        log.warning(
+                        log.info(
                             "resolve_temporal_hints_invalid_drop_beat",
                             group_id=resolution.group_id,
                             drop_beat_id=resolution.drop_beat_id,
@@ -547,7 +547,7 @@ class _LLMPhaseMixin:
                 for idx, (beat_a_id, beat_b_id) in enumerate(result.swap_pairs, 1):
                     group_id = f"P{idx}"
                     if group_id not in resolved_groups:
-                        log.warning(
+                        log.info(
                             "resolve_temporal_hints_missing_resolution",
                             group_id=group_id,
                             using_default=True,
@@ -663,7 +663,7 @@ class _LLMPhaseMixin:
         applied = 0
         for tag in result.tags:
             if tag.beat_id not in beat_nodes:
-                log.warning("phase4a_invalid_beat_id", beat_id=tag.beat_id)
+                log.info("phase4a_invalid_beat_id", beat_id=tag.beat_id)
                 continue
             graph.update_node(
                 tag.beat_id,
@@ -912,7 +912,7 @@ class _LLMPhaseMixin:
             graph, result.gaps, path_nodes, valid_beat_ids, "phase4c"
         )
         if report.total_invalid > 0:
-            log.warning(
+            log.info(
                 "phase4c_invalid_gap_proposals",
                 invalid=report.total_invalid,
                 invalid_before=report.invalid_before_beat,
@@ -996,7 +996,7 @@ class _LLMPhaseMixin:
         applied_details = 0
         for detail in result.details:
             if detail.beat_id not in beat_nodes:
-                log.warning("phase4d_invalid_beat_id", beat_id=detail.beat_id)
+                log.info("phase4d_invalid_beat_id", beat_id=detail.beat_id)
                 continue
             graph.update_node(
                 detail.beat_id,
@@ -1058,11 +1058,11 @@ class _LLMPhaseMixin:
             try:
                 beat_ids = get_path_beat_sequence(graph, pid)
             except ValueError:
-                log.warning("phase4e_cycle_in_path", path_id=pid)
+                log.info("phase4e_cycle_in_path", path_id=pid)
                 continue
 
             if not beat_ids:
-                log.warning("phase4e_no_beats_for_path", path_id=pid)
+                log.info("phase4e_no_beats_for_path", path_id=pid)
                 continue
 
             # Collect entity IDs from all beats in this path
@@ -1216,11 +1216,11 @@ class _LLMPhaseMixin:
             try:
                 beat_ids = get_path_beat_sequence(graph, pid)
             except ValueError:
-                log.warning("phase4f_cycle_in_path", path_id=pid)
+                log.info("phase4f_cycle_in_path", path_id=pid)
                 continue
 
             if not beat_ids:
-                log.warning("phase4f_no_beats_for_path", path_id=pid)
+                log.info("phase4f_no_beats_for_path", path_id=pid)
                 continue
 
             eligible = select_entities_for_arc(graph, pid, beat_ids)
@@ -1451,7 +1451,7 @@ class _LLMPhaseMixin:
         for bridge in result.bridges:
             pair = transition_map.get(bridge.transition_id.strip())
             if pair is None:
-                log.warning(
+                log.info(
                     "phase4g_unknown_transition_id",
                     transition_id=bridge.transition_id,
                 )
@@ -1464,7 +1464,7 @@ class _LLMPhaseMixin:
 
             # Skip if already exists (e.g. from a retry)
             if graph.has_node(beat_id):
-                log.warning("phase4g_transition_beat_exists", beat_id=beat_id)
+                log.info("phase4g_transition_beat_exists", beat_id=beat_id)
                 continue
 
             graph.create_node(
@@ -1683,7 +1683,7 @@ class _LLMPhaseMixin:
                         prefixed_eid = legacy
                         found = True
                 if not found:
-                    log.warning(
+                    log.info(
                         "phase8c_invalid_entity",
                         entity_id=overlay.entity_id,
                         tried_categories=list(ENTITY_CATEGORIES),
@@ -1691,7 +1691,7 @@ class _LLMPhaseMixin:
                     continue
             elif prefixed_eid not in valid_entity_set:
                 # Already prefixed but not found
-                log.warning(
+                log.info(
                     "phase8c_invalid_entity",
                     entity_id=overlay.entity_id,
                     prefixed=prefixed_eid,
@@ -1701,7 +1701,7 @@ class _LLMPhaseMixin:
             # Validate all state flag IDs in 'when' exist
             invalid_flags = [cw for cw in overlay.when if cw not in valid_state_flag_set]
             if invalid_flags:
-                log.warning(
+                log.info(
                     "phase8c_invalid_state_flags",
                     entity_id=overlay.entity_id,
                     invalid=invalid_flags,
