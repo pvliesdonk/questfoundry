@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from questfoundry.graph.graph import Graph
-from questfoundry.graph.polish_validation import validate_grow_output
+from questfoundry.graph.grow_validation import validate_grow_output
 
 
 def _make_valid_grow_graph() -> Graph:

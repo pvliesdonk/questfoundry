@@ -14,8 +14,9 @@ Validation categories retained here:
 from __future__ import annotations
 
 from collections import deque
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
+from questfoundry.graph.algorithms import compute_arc_traversals
 from questfoundry.graph.context import get_primary_beat, normalize_scoped_id
 from questfoundry.graph.fill_context import is_merged_passage
 from questfoundry.graph.validation_types import ValidationCheck, ValidationReport
@@ -25,6 +26,7 @@ if TYPE_CHECKING:
 
 # Re-export types for backward compatibility — many modules import from here.
 __all__ = [
+    "GrowContractError",
     "ValidationCheck",
     "ValidationReport",
     "build_exempt_passages",
@@ -45,8 +47,237 @@ __all__ = [
     "passages_with_forward_incoming",
     "run_all_checks",
     "run_grow_checks",
+    "validate_grow_output",
     "walk_linear_stretches",
 ]
+
+
+class GrowContractError(ValueError):
+    """Raised when GROW's Stage Output Contract is violated."""
+
+
+# ---------------------------------------------------------------------------
+# GROW Stage Output Contract validator
+# ---------------------------------------------------------------------------
+
+
+def validate_grow_output(graph: Graph) -> list[str]:
+    """Verify GROW's output meets POLISH's input contract.
+
+    Args:
+        graph: Graph containing GROW stage output.
+
+    Returns:
+        List of error strings. Empty means valid.
+    """
+    errors: list[str] = []
+
+    # 1. Beat nodes exist with summaries and dilemma_impacts
+    beat_nodes = graph.get_nodes_by_type("beat")
+    if not beat_nodes:
+        errors.append("No beat nodes found in graph")
+    else:
+        for beat_id, beat_data in beat_nodes.items():
+            if not beat_data.get("summary"):
+                errors.append(f"Beat {beat_id} missing summary")
+            # Accept both plural "dilemma_impacts" and legacy singular "dilemma_impact"
+            # from older GROW outputs that used the singular key.
+            if "dilemma_impacts" not in beat_data and "dilemma_impact" not in beat_data:
+                errors.append(f"Beat {beat_id} missing dilemma_impacts")
+
+    # 2. No cycles in predecessor DAG
+    if beat_nodes:
+        _check_predecessor_cycles(graph, beat_nodes, errors)
+
+    # 3. Every beat has at least one belongs_to edge.
+    # Pre-commit beats may have multiple belongs_to edges (Y-shape: one edge per path
+    # of their dilemma). Guard rails for dual-belongs_to correctness are enforced by
+    # check_no_cross_dilemma_belongs_to and check_no_dual_on_commit_beat in
+    # grow_validation.py.
+    belongs_to_edges = graph.get_edges(edge_type="belongs_to")
+    beats_with_path: dict[str, list[str]] = {}
+    for edge in belongs_to_edges:
+        from_id = edge["from"]
+        to_id = edge["to"]
+        if from_id in beat_nodes:
+            beats_with_path.setdefault(from_id, []).append(to_id)
+
+    for beat_id in beat_nodes:
+        paths = beats_with_path.get(beat_id, [])
+        if len(paths) == 0:
+            # Zero-belongs_to beats (transition beats, gap beats) are DAG
+            # infrastructure — they don't belong to any dilemma's Y-shape.
+            # See Story Graph Ontology Part 8 "Zero-belongs_to beats".
+            beat_data = beat_nodes[beat_id]
+            if beat_data.get("role") in ("transition_beat", "gap_beat"):
+                continue
+            errors.append(f"Beat {beat_id} has no belongs_to edge (no path assignment)")
+
+    # 4. State flag nodes exist for explored dilemmas
+    dilemma_nodes = graph.get_nodes_by_type("dilemma")
+    explored_dilemmas = {
+        did
+        for did, ddata in dilemma_nodes.items()
+        # GROW may omit status for dilemmas it fully explored; treat None as "explored".
+        if ddata.get("status") in ("explored", None)
+    }
+    # Build consequence → state_flag map via derived_from edges (Story Graph Ontology, Part 9).
+    # state_flag nodes have no dilemma_id field; the association is:
+    #   state_flag --derived_from--> consequence <--has_consequence-- path.dilemma_id
+    _flagged_consequences: set[str] = {
+        edge["to"] for edge in graph.get_edges(edge_type="derived_from")
+    }
+    # Build consequence → dilemma lookup via has_consequence edges + path.dilemma_id
+    _path_nodes = graph.get_nodes_by_type("path")
+    _cons_to_dilemma: dict[str, str] = {}
+    for edge in graph.get_edges(edge_type="has_consequence"):
+        path_data = _path_nodes.get(edge["from"], {})
+        raw_did = path_data.get("dilemma_id", "")
+        if raw_did:
+            linked_did = normalize_scoped_id(raw_did, "dilemma")
+            _cons_to_dilemma[edge["to"]] = linked_did
+
+    dilemmas_with_flags: set[str] = set()
+    for cons_id in _flagged_consequences:
+        linked_dilemma = _cons_to_dilemma.get(cons_id)
+        if linked_dilemma:
+            dilemmas_with_flags.add(linked_dilemma)
+
+    for dilemma_id in explored_dilemmas:
+        if dilemma_id not in dilemmas_with_flags:
+            errors.append(f"Explored dilemma {dilemma_id} has no state flag nodes")
+
+    # 5. Dilemma nodes have dilemma_role set
+    for dilemma_id, dilemma_data in dilemma_nodes.items():
+        if not dilemma_data.get("dilemma_role"):
+            errors.append(f"Dilemma {dilemma_id} missing dilemma_role (hard/soft)")
+
+    # 6. Every computed arc traversal is complete (no dead ends)
+    _check_arc_traversal_completeness(graph, beat_nodes, errors)
+
+    # 7. Intersection groups reference beats from different paths only
+    intersection_groups = graph.get_nodes_by_type("intersection_group")
+    for group_id, group_data in intersection_groups.items():
+        _check_intersection_group_paths(
+            graph, group_id, group_data, beat_nodes, beats_with_path, errors
+        )
+
+    return errors
+
+
+def _check_arc_traversal_completeness(
+    graph: Graph,
+    beat_nodes: dict[str, dict[str, Any]],
+    errors: list[str],
+) -> None:
+    """Verify every arc traversal terminates at a beat with no arc-internal successors.
+
+    A "dead end" is a beat in the middle of an arc that has successors in the
+    full beat DAG but none within the arc's own beat set. This indicates GROW
+    produced an incomplete arc where beats belonging to the arc's paths were
+    not connected forward.
+
+    Args:
+        graph: Graph containing the beat DAG.
+        beat_nodes: Dict of beat node ID → data (pre-fetched).
+        errors: Mutable list to append error strings to.
+    """
+    arc_traversals = compute_arc_traversals(graph)
+    if not arc_traversals:
+        return  # No dilemmas/paths — skip
+
+    # Build full children adjacency from predecessor edges
+    # predecessor edge: from=child, to=parent  →  children[parent].append(child)
+    predecessor_edges = graph.get_edges(edge_type="predecessor")
+    children_all: dict[str, list[str]] = {bid: [] for bid in beat_nodes}
+    for edge in predecessor_edges:
+        from_id = edge["from"]
+        to_id = edge["to"]
+        if from_id in beat_nodes and to_id in beat_nodes:
+            children_all[to_id].append(from_id)
+
+    for arc_key, beat_sequence in arc_traversals.items():
+        arc_beat_set = set(beat_sequence)
+
+        for beat_id in beat_sequence:
+            beat_children = children_all.get(beat_id, [])
+            children_in_arc = [c for c in beat_children if c in arc_beat_set]
+
+            # A dead end: beat has successors globally but none within this arc
+            if not children_in_arc and beat_children:
+                errors.append(
+                    f"Arc '{arc_key}' has dead-end beat {beat_id!r}: "
+                    f"beat has successors {beat_children} outside the arc "
+                    f"but no successors within the arc's beat set"
+                )
+
+
+def _check_predecessor_cycles(
+    graph: Graph,
+    beat_nodes: dict[str, dict[str, Any]],
+    errors: list[str],
+) -> None:
+    """Check for cycles in predecessor edges using Kahn's algorithm."""
+    predecessor_edges = graph.get_edges(edge_type="predecessor")
+
+    # Build adjacency: predecessor edges mean "from depends on to"
+    # i.e., edge from A to B means "A's predecessor is B" (B comes before A)
+    in_degree: dict[str, int] = dict.fromkeys(beat_nodes, 0)
+    adj: dict[str, list[str]] = {bid: [] for bid in beat_nodes}
+
+    for edge in predecessor_edges:
+        from_id = edge["from"]
+        to_id = edge["to"]
+        if from_id in beat_nodes and to_id in beat_nodes:
+            in_degree[from_id] += 1
+            adj[to_id].append(from_id)
+
+    queue = [bid for bid, deg in in_degree.items() if deg == 0]
+    visited = 0
+
+    while queue:
+        node = queue.pop()
+        visited += 1
+        for neighbor in adj[node]:
+            in_degree[neighbor] -= 1
+            if in_degree[neighbor] == 0:
+                queue.append(neighbor)
+
+    if visited != len(beat_nodes):
+        cycle_members = [bid for bid, deg in in_degree.items() if deg > 0]
+        errors.append(
+            f"Cycle detected in predecessor DAG among {len(cycle_members)} beats: "
+            f"{', '.join(sorted(cycle_members)[:5])}" + ("..." if len(cycle_members) > 5 else "")
+        )
+
+
+def _check_intersection_group_paths(
+    graph: Graph,  # noqa: ARG001
+    group_id: str,
+    group_data: dict[str, Any],
+    beat_nodes: dict[str, dict[str, Any]],
+    beats_with_path: dict[str, list[str]],
+    errors: list[str],
+) -> None:
+    """Check that an intersection group's beats come from different paths."""
+    # Intersection group nodes store beat IDs in beat_ids field
+    beat_ids = group_data.get("beat_ids", [])
+    if not beat_ids:
+        errors.append(f"Intersection group {group_id} has empty beat_ids")
+        return
+
+    paths_seen: set[str] = set()
+    for beat_id in beat_ids:
+        if beat_id not in beat_nodes:
+            continue
+        beat_paths = beats_with_path.get(beat_id, [])
+        for path_id in beat_paths:
+            if path_id in paths_seen:
+                errors.append(
+                    f"Intersection group {group_id} has multiple beats from the same path {path_id}"
+                )
+                return
+            paths_seen.add(path_id)
 
 
 # ---------------------------------------------------------------------------
