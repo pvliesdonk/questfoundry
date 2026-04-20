@@ -14,6 +14,7 @@ Requires BRAINSTORM stage to have completed (reads brainstorm from graph).
 
 from __future__ import annotations
 
+import inspect
 from pathlib import Path  # noqa: TC003 - used at runtime for Graph.load()
 from typing import TYPE_CHECKING, Any
 
@@ -531,7 +532,9 @@ class SeedStage:
             # See follow-up issue for per-phase loop-back UI.
             approval_prompt = "SEED Path Freeze: approve and continue to GROW? (y/n): "
             if on_assistant_message is not None:
-                on_assistant_message(approval_prompt)
+                _ret = on_assistant_message(approval_prompt)
+                if inspect.iscoroutine(_ret):
+                    await _ret  # pyright: ignore[reportGeneralTypeIssues]
             if user_input_fn is not None:
                 response = (await user_input_fn()) or ""
                 if response.strip().lower().startswith("y"):

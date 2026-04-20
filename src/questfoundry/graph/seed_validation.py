@@ -254,11 +254,15 @@ def _check_belongs_to_yshape(graph: Graph, errors: list[str]) -> None:
 
     # R-3.10: every dilemma with 2 explored answers has ≥1 pre-commit beat.
     has_answer_edges = graph.get_edges(edge_type="has_answer")
+    answers_by_dilemma: dict[str, list[str]] = {}
+    for edge in has_answer_edges:
+        answers_by_dilemma.setdefault(edge["from"], []).append(edge["to"])
+
     for dilemma_id in sorted(dilemma_nodes.keys()):
         explored_answers = [
-            edge["to"]
-            for edge in has_answer_edges
-            if edge["from"] == dilemma_id and answer_nodes.get(edge["to"], {}).get("explored")
+            ans_id
+            for ans_id in answers_by_dilemma.get(dilemma_id, [])
+            if answer_nodes.get(ans_id, {}).get("explored")
         ]
         if len(explored_answers) >= 2 and not pre_commit_by_dilemma.get(dilemma_id):
             errors.append(
