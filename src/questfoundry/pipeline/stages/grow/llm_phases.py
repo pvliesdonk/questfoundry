@@ -7,9 +7,6 @@ GrowStage inherits this mixin so ``execute()`` can delegate to
 ``self._phase_3_intersections()``, etc.
 """
 
-# pyright: reportPossiblyUnboundVariable=false, reportInvalidTypeForm=false
-# TODO(#1296): cleanup during M-GROW-spec compliance work; tracked in epic #1296
-
 from __future__ import annotations
 
 from functools import partial
@@ -201,6 +198,11 @@ class _LLMPhaseMixin:
         max_structural_retries = 2
         total_llm_calls = 0
         total_tokens = 0
+        # Initialised before the retry loop so pyright sees them as always bound;
+        # each iteration overwrites them inside the loop body.
+        accepted: list[tuple[list[str], str | None, list[str], str]] = []
+        applied_count = 0
+        skipped_count = 0
 
         for structural_attempt in range(max_structural_retries):
             try:
@@ -223,11 +225,11 @@ class _LLMPhaseMixin:
             total_llm_calls += llm_calls
             total_tokens += tokens
 
-            # Validate and apply intersections
+            # Validate and apply intersections (reset per retry attempt)
             applied_count = 0
             skipped_count = 0
             pre_intersection_graph = Graph.from_dict(graph.to_dict())
-            accepted: list[tuple[list[str], str | None, list[str], str]] = []
+            accepted = []
             structural_errors: list[GrowValidationError] = []
 
             for proposal in result.intersections:
@@ -329,12 +331,12 @@ class _LLMPhaseMixin:
             log.error(
                 "all_intersections_rejected",
                 candidate_count=len(candidates),
-                proposed_count=len(result.intersections),
+                proposed_count=len(result.intersections),  # pyright: ignore[reportPossiblyUnboundVariable]  # result bound: loop runs ≥1 and early-returns on error
             )
             raise GrowContractError(
                 f"R-2.3 / R-2.8: all intersection candidates rejected — "
                 f"{len(candidates)} candidate(s) generated from graph signals, "
-                f"{len(result.intersections)} proposed by LLM, 0 accepted. "
+                f"{len(result.intersections)} proposed by LLM, 0 accepted. "  # pyright: ignore[reportPossiblyUnboundVariable]
                 f"Pipeline failure — halting."
             )
 
@@ -353,11 +355,11 @@ class _LLMPhaseMixin:
         # Defensive check: if proposals were made but none accepted after
         # exhausting the loop (shouldn't happen given the checks above,
         # but guards against future logic changes).
-        if len(result.intersections) > 0 and not accepted:
+        if len(result.intersections) > 0 and not accepted:  # pyright: ignore[reportPossiblyUnboundVariable]  # result bound: loop runs ≥1 and early-returns on error
             return GrowPhaseResult(
                 phase="intersections",
                 status="failed",
-                detail=(f"All {len(result.intersections)} proposed intersections were rejected."),
+                detail=(f"All {len(result.intersections)} proposed intersections were rejected."),  # pyright: ignore[reportPossiblyUnboundVariable]
                 llm_calls=total_llm_calls,
                 tokens_used=total_tokens,
             )
@@ -366,7 +368,7 @@ class _LLMPhaseMixin:
             phase="intersections",
             status="completed",
             detail=(
-                f"Proposed {len(result.intersections)} intersections: "
+                f"Proposed {len(result.intersections)} intersections: "  # pyright: ignore[reportPossiblyUnboundVariable]
                 f"{applied_count} applied, {skipped_count} skipped"
             ),
             llm_calls=total_llm_calls,
@@ -1562,8 +1564,8 @@ class _LLMPhaseMixin:
         # Flags with no dilemma are placed in a sentinel group "".
         from collections import defaultdict
 
-        FlagEntry = tuple[str, str, str, list[str]]  # (sf_id, path_name, cons_desc, effects)
-        dilemma_groups: dict[str, list[FlagEntry]] = defaultdict(list)
+        # (sf_id, path_name, cons_desc, effects) — inlined to avoid local alias in type expression
+        dilemma_groups: dict[str, list[tuple[str, str, str, list[str]]]] = defaultdict(list)
         dilemma_questions: dict[str, str] = {}
         dilemma_central_entities: dict[str, list[str]] = {}
 
