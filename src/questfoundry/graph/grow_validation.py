@@ -71,6 +71,40 @@ _ACTION_PHRASE_PATTERNS = (
 # ---------------------------------------------------------------------------
 
 
+def _check_entity_overlays(graph: Graph, errors: list[str]) -> None:
+    """Entity overlay composition (R-6.5, R-6.6)."""
+    entity_nodes = graph.get_nodes_by_type("entity")
+
+    for entity_id, entity in sorted(entity_nodes.items()):
+        overlays = entity.get("overlays", [])
+        if not overlays:
+            continue
+
+        for idx, overlay in enumerate(overlays):
+            if not isinstance(overlay, dict):
+                errors.append(f"R-6.5: entity {entity_id!r} overlay[{idx}] is not a dict")
+                continue
+            when = overlay.get("when", [])
+            details = overlay.get("details")
+            if not when:
+                errors.append(
+                    f"R-6.5: entity {entity_id!r} overlay[{idx}] has empty "
+                    "'when' (activation condition missing)"
+                )
+            if not details:
+                errors.append(f"R-6.5: entity {entity_id!r} overlay[{idx}] has empty 'details'")
+
+    # R-6.6: detect per-state entity duplicates (entity_id__state pattern).
+    for entity_id in sorted(entity_nodes):
+        if "__" in entity_id:
+            base = entity_id.rsplit("__", 1)[0]
+            if base in entity_nodes:
+                errors.append(
+                    f"R-6.6: entity {entity_id!r} appears to be a state-variant "
+                    f"of {base!r}; overlays must be embedded, not separate nodes"
+                )
+
+
 def _check_state_flags(graph: Graph, errors: list[str]) -> None:
     """State flag derivation + naming (R-6.1, R-6.2, R-6.4)."""
     state_flag_nodes = graph.get_nodes_by_type("state_flag")
@@ -262,6 +296,7 @@ def validate_grow_output(graph: Graph) -> list[str]:
     _check_beat_dag(graph, errors)
     _check_intersections(graph, errors)
     _check_state_flags(graph, errors)
+    _check_entity_overlays(graph, errors)
 
     # 1. Beat nodes exist with summaries and dilemma_impacts
     beat_nodes = graph.get_nodes_by_type("beat")
