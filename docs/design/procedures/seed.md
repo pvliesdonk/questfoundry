@@ -126,6 +126,8 @@ R-3.1. Every explored Answer has exactly one Path node, connected by an `explore
 
 R-3.2. Path IDs follow the pattern `path::<dilemma_suffix>__<answer_suffix>` (e.g., `path::mentor_trust__protector` for `dilemma::mentor_trust` + answer `mentor_protector`).
 
+R-3.2b. Every Path MAY carry a `path_importance` field with value `"major"` or `"minor"`, indicating its relative narrative weight. This field is advisory — GROW uses it to prioritise beat expansion and LLM context scoring, but is not bound by it. Absence is treated as `"major"`.
+
 **Violations:**
 
 | Symptom | Root cause | Broken rule |
@@ -133,6 +135,7 @@ R-3.2. Path IDs follow the pattern `path::<dilemma_suffix>__<answer_suffix>` (e.
 | Explored Answer has no Path | Path creation skipped | R-3.1 |
 | Two Paths both have `explores` edge to the same Answer | Duplicate path creation | R-3.1 |
 | Path ID is `mentor_protector` (no prefix) | ID convention not followed | R-3.2 |
+| `path_importance` set to a value other than `"major"` or `"minor"` | Invalid tier value | R-3.2b |
 
 #### Consequence Generation
 
@@ -531,6 +534,7 @@ R-2.3: `explored` field is immutable after Phase 2.
 R-2.4: Every Dilemma has exploration decisions for all Answers.
 R-3.1: Every explored Answer has exactly one Path via `explores` edge.
 R-3.2: Path IDs follow `path::<dilemma>__<answer>` pattern.
+R-3.2b: Every Path MAY carry `path_importance` ∈ {"major", "minor"} (advisory hint for GROW; absence treated as "major").
 R-3.3: Every Path has ≥1 Consequence.
 R-3.4: Every Consequence has ≥1 ripple with non-empty description.
 R-3.5: Consequences describe world state, not player actions.

@@ -161,11 +161,14 @@ def _check_forbidden_types(graph: Graph, errors: list[str]) -> None:
             )
 
 
-def validate_brainstorm_output(graph: Graph) -> list[str]:
+def validate_brainstorm_output(graph: Graph, *, skip_forbidden_types: bool = False) -> list[str]:
     """Verify the graph satisfies BRAINSTORM's Stage Output Contract.
 
     Args:
         graph: Graph expected to contain entities and dilemmas after BRAINSTORM.
+        skip_forbidden_types: If True, skip R-3.8 forbidden-node-types check.
+            Set by downstream stages (SEED onward) whose legitimate output
+            includes node types BRAINSTORM forbids (beat, path, consequence).
 
     Returns:
         List of human-readable error strings. Empty means compliant.
@@ -199,6 +202,8 @@ def validate_brainstorm_output(graph: Graph) -> list[str]:
     anchored_to_edges = graph.get_edges(edge_type="anchored_to")
 
     _check_dilemmas(dilemma_nodes, has_answer_edges, anchored_to_edges, graph, errors)
-    _check_forbidden_types(graph, errors)
+
+    if not skip_forbidden_types:
+        _check_forbidden_types(graph, errors)
 
     return errors

@@ -1623,7 +1623,9 @@ class TestPhase8cOverlays:
                 "raw_id": "mentor_trusted",
                 "description": "Mentor becomes your ally",
                 "path_id": "path::trust_or_betray__trust",
-                "narrative_effects": [
+                # Graph stores narrative_effects under the "ripples" key (translated by
+                # mutations.py; fixtures that bypass mutations must use "ripples" directly).
+                "ripples": [
                     "Trust grows between you",
                     "Mentor reveals hidden knowledge",
                 ],

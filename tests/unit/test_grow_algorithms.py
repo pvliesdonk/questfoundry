@@ -7507,6 +7507,7 @@ class TestApplyIntersectionMarkGuardRail3:
                     "summary": "Both players see this setup.",
                     "path_id": "trust_protector_or_manipulator__protector",
                     "also_belongs_to": "trust_protector_or_manipulator__manipulator",
+                    "entities": ["character::mentor"],
                     "dilemma_impacts": [
                         {
                             "dilemma_id": "trust_protector_or_manipulator",
@@ -7520,6 +7521,7 @@ class TestApplyIntersectionMarkGuardRail3:
                     "summary": "Both players see this reveal.",
                     "path_id": "trust_protector_or_manipulator__protector",
                     "also_belongs_to": "trust_protector_or_manipulator__manipulator",
+                    "entities": ["character::mentor"],
                     "dilemma_impacts": [
                         {
                             "dilemma_id": "trust_protector_or_manipulator",
@@ -7532,6 +7534,7 @@ class TestApplyIntersectionMarkGuardRail3:
                     "beat_id": "commit_protector",
                     "summary": "Protector commits.",
                     "path_id": "trust_protector_or_manipulator__protector",
+                    "entities": ["character::mentor"],
                     "dilemma_impacts": [
                         {
                             "dilemma_id": "trust_protector_or_manipulator",
@@ -7544,6 +7547,7 @@ class TestApplyIntersectionMarkGuardRail3:
                     "beat_id": "post_protector",
                     "summary": "Protector aftermath.",
                     "path_id": "trust_protector_or_manipulator__protector",
+                    "entities": ["character::mentor"],
                     "dilemma_impacts": [
                         {
                             "dilemma_id": "trust_protector_or_manipulator",
@@ -7553,9 +7557,23 @@ class TestApplyIntersectionMarkGuardRail3:
                     ],
                 },
                 {
+                    "beat_id": "post_protector_2",
+                    "summary": "Protector resolution.",
+                    "path_id": "trust_protector_or_manipulator__protector",
+                    "entities": ["character::mentor"],
+                    "dilemma_impacts": [
+                        {
+                            "dilemma_id": "trust_protector_or_manipulator",
+                            "effect": "advances",
+                            "note": "resolution",
+                        }
+                    ],
+                },
+                {
                     "beat_id": "commit_manipulator",
                     "summary": "Manipulator commits.",
                     "path_id": "trust_protector_or_manipulator__manipulator",
+                    "entities": ["character::mentor"],
                     "dilemma_impacts": [
                         {
                             "dilemma_id": "trust_protector_or_manipulator",
@@ -7568,11 +7586,25 @@ class TestApplyIntersectionMarkGuardRail3:
                     "beat_id": "post_manipulator",
                     "summary": "Manipulator aftermath.",
                     "path_id": "trust_protector_or_manipulator__manipulator",
+                    "entities": ["character::mentor"],
                     "dilemma_impacts": [
                         {
                             "dilemma_id": "trust_protector_or_manipulator",
                             "effect": "advances",
                             "note": "fallout",
+                        }
+                    ],
+                },
+                {
+                    "beat_id": "post_manipulator_2",
+                    "summary": "Manipulator resolution.",
+                    "path_id": "trust_protector_or_manipulator__manipulator",
+                    "entities": ["character::mentor"],
+                    "dilemma_impacts": [
+                        {
+                            "dilemma_id": "trust_protector_or_manipulator",
+                            "effect": "advances",
+                            "note": "resolution",
                         }
                     ],
                 },

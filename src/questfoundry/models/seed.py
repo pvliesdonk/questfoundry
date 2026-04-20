@@ -14,9 +14,6 @@ Terminology (v5):
 - answer: Possible resolutions to dilemmas
 """
 
-# pyright: reportInvalidTypeForm=false
-# TODO(#1281): cleanup during M-SEED-spec compliance work; tracked in epic #1281
-
 from __future__ import annotations
 
 import warnings
@@ -102,7 +99,11 @@ class DilemmaDecision(BaseModel):
     dilemma_id: str = Field(min_length=1, description="Dilemma ID from BRAINSTORM")
     explored: list[str] = Field(
         min_length=1,
-        description="Answer IDs the LLM intended to explore as paths",
+        frozen=True,
+        description=(
+            "Answer IDs the LLM intended to explore as paths. "
+            "Immutable after construction (R-2.3, R-5.2): pruning must not mutate this field."
+        ),
     )
     unexplored: list[str] = Field(
         default_factory=list,
@@ -140,8 +141,8 @@ class Consequence(BaseModel):
     path_id: str = Field(min_length=1, description="Path this belongs to (references path_id)")
     description: str = Field(min_length=1, description="Narrative meaning of this path")
     narrative_effects: list[str] = Field(
-        default_factory=list,
-        description="Story effects this consequence implies (cascading impacts)",
+        min_length=1,
+        description="Concrete downstream story effects (≥1 required per R-3.4).",
     )
 
 
@@ -329,13 +330,22 @@ class InitialBeat(BaseModel):
             raise ValueError(msg)
         return self
 
+    role: Literal["setup", "epilogue"] | None = Field(
+        default=None,
+        description=(
+            "Structural role: 'setup' (story opener before any dilemma is introduced), "
+            "'epilogue' (story closer after all dilemmas resolve), or None for "
+            "dilemma-owned beats. Structural beats have zero belongs_to edges and "
+            "zero dilemma_impacts (R-3.14)."
+        ),
+    )
     dilemma_impacts: list[DilemmaImpact] = Field(
         default_factory=list,
         description="How this beat affects dilemmas",
     )
     entities: list[str] = Field(
-        default_factory=list,
-        description="Entity IDs present in this beat",
+        min_length=1,
+        description="Entity IDs present in this beat (non-empty per R-3.13)",
     )
     location: str | None = Field(
         default=None,
@@ -380,29 +390,19 @@ class DilemmaAnalysis(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _migrate_legacy_fields(cls, data: Any) -> Any:
-        """Migrate deprecated field names and values.
+        """Migrate deprecated field names.
 
         - ``convergence_policy`` → ``dilemma_role`` (field rename)
-        - ``dilemma_role='flavor'`` → ``'soft'`` with ``residue_weight='cosmetic'``
+
+        Note: ``dilemma_role='flavor'`` was previously migrated to ``'soft'``
+        but is now rejected outright (R-7.1). Flavor-level choices are POLISH
+        false-branch concerns, not dilemma roles.
         """
         if not isinstance(data, dict):
             return data
         # Field-name migration: convergence_policy → dilemma_role
         if "convergence_policy" in data and "dilemma_role" not in data:
             data["dilemma_role"] = data.pop("convergence_policy")
-        # Value migration: flavor → soft
-        if data.get("dilemma_role") == "flavor":
-            import warnings
-
-            warnings.warn(
-                "dilemma_role='flavor' is deprecated — use 'soft' with "
-                "residue_weight='cosmetic' instead (see ADR-013/019)",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            data["dilemma_role"] = "soft"
-            if data.get("residue_weight") is None:
-                data["residue_weight"] = "cosmetic"
         return data
 
     ending_salience: EndingSalience = Field(
@@ -554,6 +554,13 @@ class SeedOutput(BaseModel):
     dilemma_relationships: list[DilemmaRelationship] = Field(
         default_factory=list,
         description="Pairwise dilemma ordering relationships (Section 8, post-prune)",
+    )
+    human_approved_paths: bool = Field(
+        default=False,
+        description=(
+            "True when the human has explicitly approved the Path Freeze "
+            "(--no-interactive implies pre-approval at invocation time)."
+        ),
     )
 
 
@@ -845,7 +852,7 @@ def make_constrained_dilemmas_section(
     class ConstrainedDilemmaDecision(DilemmaDecision):
         """DilemmaDecision with enum-constrained IDs."""
 
-        dilemma_id: DilemmaIdEnum = Field(
+        dilemma_id: DilemmaIdEnum = Field(  # pyright: ignore[reportInvalidTypeForm]
             description="Dilemma ID from BRAINSTORM",
         )
         explored: list[AnswerIdEnum] = Field(  # type: ignore[assignment]

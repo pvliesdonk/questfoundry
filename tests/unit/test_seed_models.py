@@ -9,6 +9,7 @@ import pytest
 from pydantic import ValidationError
 
 from questfoundry.models.seed import (
+    Consequence,
     ConsequencesSection,
     DilemmaAnalysis,
     DilemmaAnalysisSection,
@@ -167,10 +168,11 @@ class TestPathsSectionDedup:
 class TestConsequencesSectionDedup:
     """ConsequencesSection should deduplicate identical, reject conflicting."""
 
-    _CONSEQUENCE: ClassVar[dict[str, str]] = {
+    _CONSEQUENCE: ClassVar[dict[str, object]] = {
         "consequence_id": "trust_rewarded",
         "path_id": "path::trust_or_betray__trust",
         "description": "Trust pays off",
+        "narrative_effects": ["ally loyalty increases"],
     }
 
     def test_unique_consequences_accepted(self) -> None:
@@ -181,6 +183,7 @@ class TestConsequencesSectionDedup:
                     "consequence_id": "betrayal_revealed",
                     "path_id": "path::trust_or_betray__betray",
                     "description": "Betrayal is exposed",
+                    "narrative_effects": ["reputation collapses"],
                 },
             ]
         )
@@ -207,15 +210,17 @@ class TestConsequencesSectionDedup:
 class TestPathBeatsSectionDedup:
     """PathBeatsSection should deduplicate identical beats."""
 
-    _BEAT_A: ClassVar[dict[str, str]] = {
+    _BEAT_A: ClassVar[dict] = {
         "beat_id": "beat_a",
         "summary": "Something happens",
         "path_id": "path::trust_or_betray__trust",
+        "entities": ["character::protagonist"],
     }
-    _BEAT_B: ClassVar[dict[str, str]] = {
+    _BEAT_B: ClassVar[dict] = {
         "beat_id": "beat_b",
         "summary": "Something else happens",
         "path_id": "path::trust_or_betray__trust",
+        "entities": ["character::protagonist"],
     }
 
     def test_unique_beats_accepted(self) -> None:
@@ -246,6 +251,7 @@ class TestPathBeatsSectionDedup:
                 "beat_id": f"beat_{i}",
                 "summary": f"Beat {i}",
                 "path_id": "path::trust_or_betray__trust",
+                "entities": ["character::protagonist"],
             }
             for i in range(5)
         ]
@@ -259,6 +265,7 @@ class TestPathBeatsSectionDedup:
                 "beat_id": f"beat_{i}",
                 "summary": f"Beat {i}",
                 "path_id": "path::trust_or_betray__trust",
+                "entities": ["character::protagonist"],
             }
             for i in range(7)
         ]
@@ -343,29 +350,10 @@ class TestDilemmaAnalysis:
         da = DilemmaAnalysis(**{**_ANALYSIS_KWARGS, "dilemma_role": policy})
         assert da.dilemma_role == policy
 
-    def test_flavor_migrated_to_soft(self) -> None:
-        """Deprecated 'flavor' value is migrated to 'soft' with cosmetic residue."""
-        import warnings
-
-        kwargs = {**_ANALYSIS_KWARGS, "dilemma_role": "flavor"}
-        del kwargs["residue_weight"]  # Let migration set default
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", DeprecationWarning)
-            da = DilemmaAnalysis(**kwargs)
-        assert da.dilemma_role == "soft"
-        assert da.residue_weight == "cosmetic"
-
-    def test_flavor_preserves_explicit_residue_weight(self) -> None:
-        """Flavor migration does not override explicit residue_weight."""
-        import warnings
-
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", DeprecationWarning)
-            da = DilemmaAnalysis(
-                **{**_ANALYSIS_KWARGS, "dilemma_role": "flavor", "residue_weight": "heavy"}
-            )
-        assert da.dilemma_role == "soft"
-        assert da.residue_weight == "heavy"
+    def test_flavor_role_rejected(self) -> None:
+        """R-7.1: 'flavor' is not a valid dilemma_role — it raises ValidationError."""
+        with pytest.raises(ValidationError, match="dilemma_role"):
+            DilemmaAnalysis(**{**_ANALYSIS_KWARGS, "dilemma_role": "flavor"})
 
     def test_convergence_policy_field_name_migrated(self) -> None:
         """Old 'convergence_policy' field name is migrated to 'dilemma_role'."""
@@ -375,19 +363,13 @@ class TestDilemmaAnalysis:
         da = DilemmaAnalysis.model_validate(data)
         assert da.dilemma_role == "hard"
 
-    def test_convergence_policy_flavor_migrated(self) -> None:
-        """Old 'convergence_policy: flavor' is fully migrated (field + value)."""
-        import warnings
-
+    def test_convergence_policy_flavor_rejected(self) -> None:
+        """R-7.1: 'convergence_policy: flavor' is field-name-migrated then rejected as invalid role."""
         data = {**_ANALYSIS_KWARGS}
         del data["dilemma_role"]
-        del data["residue_weight"]
         data["convergence_policy"] = "flavor"
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", DeprecationWarning)
-            da = DilemmaAnalysis.model_validate(data)
-        assert da.dilemma_role == "soft"
-        assert da.residue_weight == "cosmetic"
+        with pytest.raises(ValidationError, match="dilemma_role"):
+            DilemmaAnalysis.model_validate(data)
 
     def test_convergence_point_accepted(self) -> None:
         da = DilemmaAnalysis(**{**_ANALYSIS_KWARGS, "convergence_point": "The river crossing camp"})
@@ -700,6 +682,7 @@ def _make_shared_beat_dict(
         "summary": summary,
         "path_id": path_id,
         "also_belongs_to": also_belongs_to,
+        "entities": ["character::protagonist"],
         "dilemma_impacts": [
             {
                 "dilemma_id": "dilemma::trust_or_betray",
@@ -983,10 +966,11 @@ class TestMakeConstrainedDilemmasSection:
 # TemporalHint and InitialBeat.temporal_hint (#1001)
 # ---------------------------------------------------------------------------
 
-_BEAT_KWARGS: dict[str, str] = {
+_BEAT_KWARGS: dict[str, str | list] = {
     "beat_id": "trust_beat_01",
     "summary": "The protagonist confronts the mentor about the hidden letter.",
     "path_id": "path::trust_or_betray__trust",
+    "entities": ["character::protagonist"],
 }
 
 
@@ -1074,6 +1058,7 @@ class TestInitialBeatPathId:
             beat_id="b1",
             summary="Test",
             path_id="path::trust__yes",
+            entities=["character::protagonist"],
         )
         assert beat.path_id == "path::trust__yes"
 
@@ -1083,6 +1068,7 @@ class TestInitialBeatPathId:
             beat_id="b1",
             summary="Test",
             paths=["path::trust__yes"],
+            entities=["character::protagonist"],
         )
         assert beat.path_id == "path::trust__yes"
 
@@ -1093,18 +1079,29 @@ class TestInitialBeatPathId:
                 beat_id="b1",
                 summary="Test",
                 paths=["path::a__x", "path::b__y"],
+                entities=["character::protagonist"],
             )
         assert beat.path_id == "path::a__x"
         assert beat.also_belongs_to == "path::b__y"
 
     def test_empty_path_id_rejected(self) -> None:
         with pytest.raises(ValidationError, match="path_id"):
-            InitialBeat(beat_id="b1", summary="Test", path_id="")
+            InitialBeat(
+                beat_id="b1",
+                summary="Test",
+                path_id="",
+                entities=["character::protagonist"],
+            )
 
     def test_legacy_empty_paths_rejected(self) -> None:
         """Empty paths list raises ValueError — beats must belong to a path."""
         with pytest.raises(ValidationError, match="must belong to at least one path"):
-            InitialBeat(beat_id="b1", summary="Test", paths=[])
+            InitialBeat(
+                beat_id="b1",
+                summary="Test",
+                paths=[],
+                entities=["character::protagonist"],
+            )
 
 
 def test_initial_beat_pre_commit_dual_belongs_to() -> None:
@@ -1114,6 +1111,7 @@ def test_initial_beat_pre_commit_dual_belongs_to() -> None:
         summary="Shared setup before the fork.",
         path_id="path::trust__protector",
         also_belongs_to="path::trust__manipulator",
+        entities=["character::protagonist"],
     )
     assert beat.path_id == "path::trust__protector"
     assert beat.also_belongs_to == "path::trust__manipulator"
@@ -1125,6 +1123,7 @@ def test_initial_beat_post_commit_single_belongs_to_default() -> None:
         beat_id="b1",
         summary="Payoff beat.",
         path_id="path::trust__protector",
+        entities=["character::protagonist"],
     )
     assert beat.also_belongs_to is None
 
@@ -1137,6 +1136,7 @@ def test_initial_beat_also_belongs_to_equal_path_id_is_rejected() -> None:
             summary="Broken dual.",
             path_id="path::trust__protector",
             also_belongs_to="path::trust__protector",
+            entities=["character::protagonist"],
         )
 
 
@@ -1148,6 +1148,7 @@ def test_initial_beat_legacy_paths_two_elements_becomes_dual() -> None:
             beat_id="b1",
             summary="Legacy dual.",
             paths=["path::trust__protector", "path::trust__manipulator"],
+            entities=["character::protagonist"],
         )
 
     assert beat.path_id == "path::trust__protector"
@@ -1162,6 +1163,7 @@ def test_initial_beat_legacy_paths_three_elements_is_rejected() -> None:
             beat_id="b1",
             summary="Bad.",
             paths=["p_a", "p_b", "p_c"],
+            entities=["character::protagonist"],
         )
 
 
@@ -1172,4 +1174,158 @@ def test_initial_beat_also_belongs_to_empty_string_is_rejected() -> None:
             summary="Test.",
             path_id="path::trust__protector",
             also_belongs_to="",
+            entities=["character::protagonist"],
         )
+
+
+# ---------------------------------------------------------------------------
+# Task 16 — InitialBeat.role field (R-3.14, R-3.15)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "role",
+    [
+        pytest.param("setup", id="setup"),
+        pytest.param("epilogue", id="epilogue"),
+        pytest.param(None, id="none"),
+    ],
+)
+def test_initial_beat_role_accepts_setup_and_epilogue(role: str | None) -> None:
+    """R-3.14/R-3.15: role may be 'setup', 'epilogue', or absent (None)."""
+    beat = InitialBeat(
+        beat_id="b1",
+        summary="The story begins.",
+        path_id="path::trust_or_betray__trust",
+        entities=["character::protagonist"],
+        role=role,
+    )
+    assert beat.role == role
+
+
+def test_initial_beat_role_defaults_to_none() -> None:
+    """R-3.14: role is optional; defaults to None for dilemma-owned beats."""
+    beat = InitialBeat(
+        beat_id="b1",
+        summary="A dilemma beat.",
+        path_id="path::trust_or_betray__trust",
+        entities=["character::protagonist"],
+    )
+    assert beat.role is None
+
+
+def test_initial_beat_role_rejects_invalid_values() -> None:
+    """R-3.14: only 'setup' and 'epilogue' are valid structural roles."""
+    with pytest.raises(ValidationError):
+        InitialBeat(
+            beat_id="b1",
+            summary="Invalid role.",
+            path_id="path::trust_or_betray__trust",
+            entities=["character::protagonist"],
+            role="something_else",  # type: ignore[arg-type]
+        )
+
+
+# ---------------------------------------------------------------------------
+# Task 17 — DilemmaDecision.explored immutability (R-2.3, R-5.2)
+# ---------------------------------------------------------------------------
+
+
+def test_explored_field_is_frozen() -> None:
+    """R-2.3/R-5.2: explored is immutable post-construction; reassignment raises."""
+    from questfoundry.models.seed import DilemmaDecision
+
+    decision = DilemmaDecision(
+        dilemma_id="dilemma::trust_or_betray",
+        explored=["trust"],
+        unexplored=["betray"],
+    )
+    with pytest.raises(ValidationError, match="frozen"):
+        decision.explored = ["betray"]  # type: ignore[misc]
+
+
+def test_explored_value_survives_construction() -> None:
+    """explored value is correctly stored and accessible post-construction."""
+    from questfoundry.models.seed import DilemmaDecision
+
+    decision = DilemmaDecision(
+        dilemma_id="dilemma::fight_or_flee",
+        explored=["fight", "flee"],
+    )
+    assert decision.explored == ["fight", "flee"]
+
+
+# ---------------------------------------------------------------------------
+# Task 22 — InitialBeat.entities non-empty at model level (R-3.13)
+# ---------------------------------------------------------------------------
+
+
+def test_initial_beat_entities_must_be_non_empty() -> None:
+    """R-3.13: entities must contain at least one entity ID."""
+    with pytest.raises(ValidationError):
+        InitialBeat(
+            beat_id="b1",
+            summary="A beat with no entities.",
+            path_id="path::trust_or_betray__trust",
+            entities=[],  # R-3.13 violation
+        )
+
+
+def test_initial_beat_entities_with_one_entity_accepted() -> None:
+    """R-3.13: a single entity satisfies the non-empty requirement."""
+    beat = InitialBeat(
+        beat_id="b1",
+        summary="A beat.",
+        path_id="path::trust_or_betray__trust",
+        entities=["character::protagonist"],
+    )
+    assert beat.entities == ["character::protagonist"]
+
+
+def test_initial_beat_entities_with_multiple_accepted() -> None:
+    """R-3.13: multiple entities are accepted."""
+    beat = InitialBeat(
+        beat_id="b1",
+        summary="A beat.",
+        path_id="path::trust_or_betray__trust",
+        entities=["character::protagonist", "location::manor"],
+    )
+    assert len(beat.entities) == 2
+
+
+# ---------------------------------------------------------------------------
+# R-3.4: Every Consequence has ≥1 ripple (narrative_effects)
+# ---------------------------------------------------------------------------
+
+
+def test_consequence_requires_at_least_one_ripple() -> None:
+    """R-3.4: empty narrative_effects must be rejected at model construction."""
+    with pytest.raises(ValidationError):
+        Consequence(
+            consequence_id="c1",
+            path_id="path::trust_or_betray__trust",
+            description="the mentor becomes hostile",
+            narrative_effects=[],  # R-3.4 violation
+        )
+
+
+def test_consequence_missing_narrative_effects_rejected() -> None:
+    """R-3.4: absent narrative_effects (no default) must be rejected."""
+    with pytest.raises(ValidationError):
+        Consequence(
+            consequence_id="c1",
+            path_id="path::trust_or_betray__trust",
+            description="the mentor becomes hostile",
+            # narrative_effects omitted — no default, must fail
+        )
+
+
+def test_consequence_with_ripples_valid() -> None:
+    """R-3.4: at least one ripple is accepted."""
+    c = Consequence(
+        consequence_id="c1",
+        path_id="path::trust_or_betray__trust",
+        description="the mentor becomes hostile",
+        narrative_effects=["trust collapses", "faction mistrust rises"],
+    )
+    assert len(c.narrative_effects) == 2

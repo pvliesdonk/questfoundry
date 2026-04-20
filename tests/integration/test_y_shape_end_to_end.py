@@ -40,20 +40,83 @@ def _make_brainstorm_graph() -> Graph:
 
     Mirrors the fixture used in the unit-test suite (test_mutations.py:_trust_graph)
     so the two fixture sets stay in sync with the same dilemma/answer IDs.
+
+    Includes all fields required by the SEED output contract:
+    - vision node (DREAM pre-condition)
+    - category-prefixed entity IDs with name/category/concept
+    - ≥2 location entities (R-1.4 / R-2.4)
+    - dilemma with question + why_it_matters
+    - answers with description + explored flag
     """
     g = Graph.empty()
 
-    # Entity referenced by beats
-    g.create_node("entity::mentor", {"type": "entity", "raw_id": "mentor"})
+    # DREAM pre-condition: vision node
+    g.create_node(
+        "vision",
+        {
+            "type": "vision",
+            "genre": "dark fantasy",
+            "tone": ["atmospheric"],
+            "themes": ["trust"],
+            "audience": "adult",
+            "scope": {"story_size": "short"},
+            "human_approved": True,
+        },
+    )
 
-    # Dilemma + two answers
+    # Character entity referenced by beats
+    g.create_node(
+        "character::mentor",
+        {
+            "type": "entity",
+            "raw_id": "mentor",
+            "category": "character",
+            "name": "Mentor",
+            "concept": "Senior archivist with hidden motives",
+        },
+    )
+
+    # ≥2 location entities required by R-1.4 / R-2.4
+    g.create_node(
+        "location::archive",
+        {
+            "type": "entity",
+            "raw_id": "archive",
+            "category": "location",
+            "name": "The Archive",
+            "concept": "Ancient repository of forbidden texts",
+        },
+    )
+    g.create_node(
+        "location::tower",
+        {
+            "type": "entity",
+            "raw_id": "tower",
+            "category": "location",
+            "name": "The Tower",
+            "concept": "Tall observatory on the hill",
+        },
+    )
+
+    # Dilemma + two answers with all required fields
     g.create_node(
         "dilemma::trust_protector_or_manipulator",
-        {"type": "dilemma", "raw_id": "trust_protector_or_manipulator"},
+        {
+            "type": "dilemma",
+            "raw_id": "trust_protector_or_manipulator",
+            "question": "Should the protagonist trust the mentor as protector or see through manipulation?",
+            "why_it_matters": "Trust defines whether the protagonist gains an ally or faces a foe.",
+        },
     )
     g.create_node(
         "dilemma::trust_protector_or_manipulator::alt::protector",
-        {"type": "answer", "raw_id": "protector", "is_canonical": True},
+        {
+            "type": "answer",
+            "raw_id": "protector",
+            "description": "The mentor genuinely protects the protagonist.",
+            "is_canonical": True,
+            "explored": True,
+        },
     )
     g.add_edge(
         "has_answer",
@@ -62,14 +125,20 @@ def _make_brainstorm_graph() -> Graph:
     )
     g.create_node(
         "dilemma::trust_protector_or_manipulator::alt::manipulator",
-        {"type": "answer", "raw_id": "manipulator", "is_canonical": False},
+        {
+            "type": "answer",
+            "raw_id": "manipulator",
+            "description": "The mentor is secretly manipulating for personal gain.",
+            "is_canonical": False,
+            "explored": True,
+        },
     )
     g.add_edge(
         "has_answer",
         "dilemma::trust_protector_or_manipulator",
         "dilemma::trust_protector_or_manipulator::alt::manipulator",
     )
-    g.add_edge("anchored_to", "dilemma::trust_protector_or_manipulator", "entity::mentor")
+    g.add_edge("anchored_to", "dilemma::trust_protector_or_manipulator", "character::mentor")
 
     return g
 
@@ -96,6 +165,8 @@ def _make_seed_output() -> dict[str, Any]:
     return {
         "entities": [
             {"entity_id": "mentor", "disposition": "retained"},
+            {"entity_id": "archive", "disposition": "retained"},
+            {"entity_id": "tower", "disposition": "retained"},
         ],
         "dilemmas": [
             {
@@ -134,6 +205,15 @@ def _make_seed_output() -> dict[str, Any]:
                 "narrative_effects": ["manipulation_exposed"],
             },
         ],
+        "dilemma_analyses": [
+            {
+                "dilemma_id": "trust_protector_or_manipulator",
+                "dilemma_role": "soft",
+                "payoff_budget": 2,
+                "ending_salience": "none",
+                "residue_weight": "cosmetic",
+            }
+        ],
         "initial_beats": [
             # --- shared pre-commit beat (dual belongs_to) ---
             {
@@ -148,7 +228,7 @@ def _make_seed_output() -> dict[str, Any]:
                         "note": "Both interpretations remain open.",
                     }
                 ],
-                "entities": ["mentor"],
+                "entities": ["character::mentor"],
             },
             # --- path A commit beat ---
             {
@@ -162,9 +242,9 @@ def _make_seed_output() -> dict[str, Any]:
                         "note": "The trust fork.",
                     }
                 ],
-                "entities": ["mentor"],
+                "entities": ["character::mentor"],
             },
-            # --- path A post-commit beat ---
+            # --- path A post-commit beats (R-3.12 requires ≥2) ---
             {
                 "beat_id": "post_protector",
                 "summary": "The mentor shields Kay from danger.",
@@ -176,7 +256,20 @@ def _make_seed_output() -> dict[str, Any]:
                         "note": "Protector arc plays out.",
                     }
                 ],
-                "entities": ["mentor"],
+                "entities": ["character::mentor"],
+            },
+            {
+                "beat_id": "post_protector_2",
+                "summary": "Kay gains the mentor's full support.",
+                "path_id": "trust_protector_or_manipulator__protector",
+                "dilemma_impacts": [
+                    {
+                        "dilemma_id": "trust_protector_or_manipulator",
+                        "effect": "advances",
+                        "note": "Protector resolution.",
+                    }
+                ],
+                "entities": ["character::mentor"],
             },
             # --- path B commit beat ---
             {
@@ -190,9 +283,9 @@ def _make_seed_output() -> dict[str, Any]:
                         "note": "The distrust fork.",
                     }
                 ],
-                "entities": ["mentor"],
+                "entities": ["character::mentor"],
             },
-            # --- path B post-commit beat ---
+            # --- path B post-commit beats (R-3.12 requires ≥2) ---
             {
                 "beat_id": "post_manipulator",
                 "summary": "The mentor manipulates Kay's choices.",
@@ -204,9 +297,23 @@ def _make_seed_output() -> dict[str, Any]:
                         "note": "Manipulator arc plays out.",
                     }
                 ],
-                "entities": ["mentor"],
+                "entities": ["character::mentor"],
+            },
+            {
+                "beat_id": "post_manipulator_2",
+                "summary": "Kay confronts the mentor's betrayal.",
+                "path_id": "trust_protector_or_manipulator__manipulator",
+                "dilemma_impacts": [
+                    {
+                        "dilemma_id": "trust_protector_or_manipulator",
+                        "effect": "advances",
+                        "note": "Manipulator resolution.",
+                    }
+                ],
+                "entities": ["character::mentor"],
             },
         ],
+        "human_approved_paths": True,
     }
 
 
@@ -219,7 +326,9 @@ def _add_predecessor_edges(graph: Graph) -> None:
     graph.add_edge("predecessor", "beat::commit_protector", "beat::shared_setup")
     graph.add_edge("predecessor", "beat::commit_manipulator", "beat::shared_setup")
     graph.add_edge("predecessor", "beat::post_protector", "beat::commit_protector")
+    graph.add_edge("predecessor", "beat::post_protector_2", "beat::post_protector")
     graph.add_edge("predecessor", "beat::post_manipulator", "beat::commit_manipulator")
+    graph.add_edge("predecessor", "beat::post_manipulator_2", "beat::post_manipulator")
 
 
 # ---------------------------------------------------------------------------

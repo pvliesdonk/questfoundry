@@ -1369,11 +1369,14 @@ def _consequence(
     description: str,
     narrative_effects: list[str] | None = None,
 ) -> Consequence:
+    # R-3.4: Consequence must have ≥1 ripple; provide a default placeholder when
+    # the caller does not supply effects (for test-fixture convenience only).
+    effects = narrative_effects if narrative_effects is not None else ["placeholder ripple"]
     return Consequence(
         consequence_id=consequence_id,
         path_id=path_id,
         description=description,
-        narrative_effects=narrative_effects or [],
+        narrative_effects=effects,
     )
 
 
@@ -1521,8 +1524,8 @@ class TestFormatDilemmaAnalysisContext:
         assert "Knowledge lost" in result
         assert "Dark knowledge accessed" in result
 
-    def test_consequence_with_empty_effects(self) -> None:
-        """Consequence with empty narrative_effects produces no Effects line."""
+    def test_consequence_with_single_effect(self) -> None:
+        """Consequence with exactly one narrative_effect shows an Effects line (R-3.4)."""
         seed = _seed_output(
             dilemmas=[_dilemma("d1", explored=["a"])],
             paths=[
@@ -1534,16 +1537,16 @@ class TestFormatDilemmaAnalysisContext:
             ],
             consequences=[
                 _consequence(
-                    "cons::empty_fx",
+                    "cons::single_fx",
                     "path::d1__a",
                     "Something happens",
-                    narrative_effects=[],
+                    narrative_effects=["trust collapses"],
                 ),
             ],
         )
         result = format_dilemma_analysis_context(seed)
         assert "Explores a" in result  # path description present
-        assert "Effects:" not in result  # no effects → no Effects line
+        assert "trust collapses" in result  # effect appears in context
 
     def test_missing_graph_node_falls_back(self) -> None:
         """Missing graph node falls back to paths-only listing."""

@@ -31,6 +31,10 @@ from questfoundry.graph.dream_validation import (
     DreamContractError,
     validate_dream_output,
 )
+from questfoundry.graph.seed_validation import (
+    SeedContractError,
+    validate_seed_output,
+)
 from questfoundry.observability.logging import get_logger
 
 if TYPE_CHECKING:
@@ -1870,7 +1874,9 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
             "raw_id": raw_id,
             "path_id": prefixed_path_id,
             "description": consequence.get("description"),
-            "narrative_effects": consequence.get("narrative_effects", []),
+            # The spec (R-3.4) and validator use "ripples" as the graph field name.
+            # The Pydantic model calls this "narrative_effects"; translate here.
+            "ripples": consequence.get("narrative_effects", []),
         }
         consequence_data = _clean_dict(consequence_data)
         graph.create_node(consequence_id, consequence_data)
@@ -2022,16 +2028,19 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
                     fallback="soft/2",
                 )
             data = analysis or {}
+            # R-7.1/7.2/7.3: all three analysis fields are required on the graph node.
+            # When an analysis entry is absent, fall back to the most conservative defaults
+            # so the SEED contract validator does not reject a partially-analyzed output.
             update_fields: dict[str, Any] = {
                 "dilemma_role": data.get("dilemma_role", "soft"),
                 "payoff_budget": data.get("payoff_budget", 2),
+                "ending_salience": data.get("ending_salience", "none"),
+                "residue_weight": data.get("residue_weight", "cosmetic"),
             }
             for key in (
                 "convergence_point",
                 "residue_note",
                 "ending_tone",
-                "ending_salience",
-                "residue_weight",
             ):
                 if key in data:
                     update_fields[key] = data[key]
@@ -2041,6 +2050,24 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
     for relationship in output.get("dilemma_relationships", []):
         a_raw = relationship.get("dilemma_a", "")
         b_raw = relationship.get("dilemma_b", "")
+        edge_type = relationship.get("ordering", "concurrent")
+
+        # R-8.4: shared_entity is derived from anchored_to edges, never declared.
+        if edge_type == "shared_entity":
+            raise MutationError(
+                f"Dilemma relationship 'shared_entity' is forbidden (R-8.4): "
+                "shared_entity is derived from anchored_to edges, not declared. "
+                f"Relationship: dilemma_a={a_raw!r}, dilemma_b={b_raw!r}."
+            )
+
+        # R-8.3: normalize concurrent (symmetric) pairs to lex-smaller dilemma_a.
+        # Directional orderings (wraps, serial) preserve the supplied order.
+        if edge_type == "concurrent":
+            a_node_candidate = _prefix_id("dilemma", a_raw)
+            b_node_candidate = _prefix_id("dilemma", b_raw)
+            if a_node_candidate > b_node_candidate:
+                a_raw, b_raw = b_raw, a_raw
+
         a_node = _prefix_id("dilemma", a_raw)
         b_node = _prefix_id("dilemma", b_raw)
         if not graph.has_node(a_node) or not graph.has_node(b_node):
@@ -2051,12 +2078,26 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
                 reason="node_missing",
             )
             continue
-        edge_type = relationship.get("ordering", "concurrent")
         graph.add_edge(
             edge_type,
             a_node,
             b_node,
             description=relationship.get("description", ""),
+        )
+
+    graph.upsert_node(
+        "seed_freeze",
+        {
+            "type": "seed_freeze",
+            "human_approved": bool(output.get("human_approved_paths", False)),
+        },
+    )
+
+    contract_errors = validate_seed_output(graph)
+    if contract_errors:
+        log.error("seed_contract_violated", errors=contract_errors)
+        raise SeedContractError(
+            "SEED stage output contract violated:\n  - " + "\n  - ".join(contract_errors)
         )
 
 

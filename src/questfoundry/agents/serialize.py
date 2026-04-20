@@ -2647,6 +2647,7 @@ async def serialize_convergence_analysis(
             "seed_analysis_defaulted",
             section="dilemma_analyses",
             reason="serialization_failed",
+            dilemma_ids=[d.dilemma_id for d in seed_artifact.dilemmas],
             error=str(e),
             error_type=type(e).__name__,
         )
@@ -2667,7 +2668,9 @@ async def serialize_dilemma_relationships(
     Identifies pairwise dilemma ordering (wraps, concurrent, serial).
     Runs AFTER pruning so only surviving dilemmas are analyzed.
 
-    Soft failure: if the LLM call fails, logs a WARNING and returns empty.
+    Soft failure: if the LLM call fails, logs a WARNING at WARNING level with
+    the affected dilemma IDs and returns empty (R-8.5). Silent empty-list
+    return is forbidden.
 
     Args:
         model: LLM model for structured output.
@@ -2747,6 +2750,7 @@ async def serialize_dilemma_relationships(
             "seed_analysis_defaulted",
             section="dilemma_relationships",
             reason="serialization_failed",
+            dilemma_ids=[d.dilemma_id for d in pruned_artifact.dilemmas],
             error=str(e),
             error_type=type(e).__name__,
         )
