@@ -8153,3 +8153,66 @@ class TestDetectCrossDilemmaHardTransitions:
 
         result = detect_cross_dilemma_hard_transitions(graph)
         assert result == []
+
+    def test_r52_transition_not_detected_for_partial_entity_overlap(self) -> None:
+        """R-5.2: transition beats are only inserted at ZERO-overlap seams.
+
+        A cross-dilemma predecessor edge where the two beats share at least one
+        entity must NOT be classified as a hard transition — it has entity overlap
+        and therefore does not qualify for a bridging beat.
+
+        This test uses detect_cross_dilemma_hard_transitions directly because
+        _phase_transition_gaps (Phase 4g) delegates its seam gate entirely to
+        this function: it only sends seams returned by detect_cross_dilemma_hard_transitions
+        to the LLM, so seams absent from that result never receive a transition beat.
+
+        Beat d1 and beat d2 share 'character::alice' (entity overlap) but differ
+        in location.  Only the entity overlap is sufficient to skip the seam.
+        """
+        from questfoundry.graph.grow_algorithms import detect_cross_dilemma_hard_transitions
+
+        graph = Graph.empty()
+
+        graph.create_node("dilemma::d1", {"type": "dilemma", "raw_id": "d1"})
+        graph.create_node(
+            "path::d1_a",
+            {"type": "path", "raw_id": "d1_a", "dilemma_id": "dilemma::d1"},
+        )
+        graph.create_node(
+            "beat::beat_d1",
+            {
+                "type": "beat",
+                "raw_id": "beat_d1",
+                "entities": ["character::alice", "character::bob"],
+                "location": "castle",
+                "dilemma_impacts": [],
+            },
+        )
+        graph.add_edge("belongs_to", "beat::beat_d1", "path::d1_a")
+
+        graph.create_node("dilemma::d2", {"type": "dilemma", "raw_id": "d2"})
+        graph.create_node(
+            "path::d2_a",
+            {"type": "path", "raw_id": "d2_a", "dilemma_id": "dilemma::d2"},
+        )
+        graph.create_node(
+            "beat::beat_d2",
+            {
+                "type": "beat",
+                "raw_id": "beat_d2",
+                # Shares character::alice with beat_d1; different location.
+                "entities": ["character::alice", "character::carol"],
+                "location": "market",
+                "dilemma_impacts": [],
+            },
+        )
+        graph.add_edge("belongs_to", "beat::beat_d2", "path::d2_a")
+
+        graph.add_edge("predecessor", "beat::beat_d2", "beat::beat_d1")
+
+        # Entity overlap → not a hard transition → no transition beat should be inserted.
+        result = detect_cross_dilemma_hard_transitions(graph)
+        assert result == [], (
+            "R-5.2 violated: seam with entity overlap should not be classified as "
+            f"a hard transition, but got: {result}"
+        )
