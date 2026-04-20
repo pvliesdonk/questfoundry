@@ -71,6 +71,28 @@ _ACTION_PHRASE_PATTERNS = (
 # ---------------------------------------------------------------------------
 
 
+def _check_arc_enumeration(graph: Graph, errors: list[str]) -> None:
+    """Arc materialization + forbidden node types (R-8.2, Output-12)."""
+    # R-8.2: arcs stored as nodes must use materialized_ prefix.
+    arc_nodes = graph.get_nodes_by_type("arc")
+    for arc_id in sorted(arc_nodes.keys()):
+        stripped = arc_id.split("::", 1)[-1] if "::" in arc_id else arc_id
+        if not stripped.startswith("materialized_"):
+            errors.append(
+                f"R-8.2: arc node {arc_id!r} must use 'materialized_' prefix "
+                "if stored (arcs are computed, not persisted)"
+            )
+
+    # Output-12: no passage / choice nodes at GROW exit.
+    for node_type in sorted(_FORBIDDEN_NODE_TYPES_GROW_EXIT):
+        forbidden = graph.get_nodes_by_type(node_type)
+        if forbidden:
+            errors.append(
+                f"Output-12: GROW must not create {node_type!r} nodes; "
+                f"found {len(forbidden)}: {sorted(forbidden.keys())[:3]}"
+            )
+
+
 def _check_transition_beats(graph: Graph, errors: list[str]) -> None:
     """Transition beat structure (R-5.1 zero belongs_to + zero dilemma_impacts)."""
     beat_nodes = graph.get_nodes_by_type("beat")
@@ -319,6 +341,7 @@ def validate_grow_output(graph: Graph) -> list[str]:
     _check_state_flags(graph, errors)
     _check_entity_overlays(graph, errors)
     _check_transition_beats(graph, errors)
+    _check_arc_enumeration(graph, errors)
 
     # 1. Beat nodes exist with summaries and dilemma_impacts
     beat_nodes = graph.get_nodes_by_type("beat")
