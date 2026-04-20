@@ -61,6 +61,62 @@ class GrowContractError(ValueError):
 # ---------------------------------------------------------------------------
 
 
+def _check_beat_dag(graph: Graph, errors: list[str]) -> None:
+    """Y-fork postcondition (R-1.4).
+
+    The last shared pre-commit beat of each dilemma must have one
+    commit-beat successor per explored path of that dilemma.
+    """
+    beat_nodes = graph.get_nodes_by_type("beat")
+    belongs_to_edges = graph.get_edges(edge_type="belongs_to")
+    predecessor_edges = graph.get_edges(edge_type="predecessor")
+
+    # Build beat → belongs_to paths lookup.
+    beat_to_paths: dict[str, list[str]] = {}
+    for edge in belongs_to_edges:
+        beat_to_paths.setdefault(edge["from"], []).append(edge["to"])
+
+    # Build beat → successors lookup.
+    # predecessor edge: from=B to=A means A is predecessor of B;
+    # so successors-of-A are B (=edge["from"]).
+    successors_by_beat: dict[str, list[str]] = {}
+    for edge in predecessor_edges:
+        successors_by_beat.setdefault(edge["to"], []).append(edge["from"])
+
+    # Identify pre-commit beats: multi-belongs_to + no commits impact.
+    pre_commit_beats: dict[str, list[str]] = {}
+    for beat_id, beat in beat_nodes.items():
+        paths = beat_to_paths.get(beat_id, [])
+        impacts = beat.get("dilemma_impacts", [])
+        has_commits = any(i.get("effect") == "commits" for i in impacts)
+        if len(paths) >= 2 and not has_commits:
+            pre_commit_beats[beat_id] = sorted(paths)
+
+    # For each pre-commit beat that is a Y-fork tip (has at least one
+    # commit-beat successor), verify its commit successors cover all paths.
+    for beat_id, paths in sorted(pre_commit_beats.items()):
+        successors = successors_by_beat.get(beat_id, [])
+        commit_successor_paths: set[str] = set()
+        for s in successors:
+            s_beat = beat_nodes.get(s, {})
+            s_paths = beat_to_paths.get(s, [])
+            s_impacts = s_beat.get("dilemma_impacts", [])
+            s_has_commits = any(i.get("effect") == "commits" for i in s_impacts)
+            if s_has_commits and len(s_paths) == 1:
+                commit_successor_paths.update(s_paths)
+
+        # Only check if this beat is a Y-fork tip.
+        if commit_successor_paths:
+            missing = set(paths) - commit_successor_paths
+            if missing:
+                errors.append(
+                    f"R-1.4: Y-fork postcondition — pre-commit beat "
+                    f"{beat_id!r} has commit successors for paths "
+                    f"{sorted(commit_successor_paths)} but is missing "
+                    f"commit beats for path(s) {sorted(missing)}"
+                )
+
+
 def _check_upstream_contract(graph: Graph, errors: list[str]) -> None:
     """Delegate to SEED validator with skip_forbidden_types=True."""
     from questfoundry.graph.seed_validation import validate_seed_output
@@ -81,6 +137,7 @@ def validate_grow_output(graph: Graph) -> list[str]:
     """
     errors: list[str] = []
     _check_upstream_contract(graph, errors)
+    _check_beat_dag(graph, errors)
 
     # 1. Beat nodes exist with summaries and dilemma_impacts
     beat_nodes = graph.get_nodes_by_type("beat")
