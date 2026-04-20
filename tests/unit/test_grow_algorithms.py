@@ -8336,3 +8336,75 @@ class TestDetectCrossDilemmaHardTransitions:
             "R-5.2 violated: seam with entity overlap should not be classified as "
             f"a hard transition, but got: {result}"
         )
+
+
+class TestIntersectionCandidateDeterminism:
+    """R-2.1: intersection candidate generation must be deterministic."""
+
+    @staticmethod
+    def _build_two_dilemma_graph() -> Graph:
+        """Build a minimal graph with two dilemmas sharing beats."""
+        from questfoundry.graph.graph import Graph
+
+        graph = Graph()
+
+        # Dilemma 1
+        graph.create_node("dilemma::d1", {"type": "dilemma", "raw_id": "d1"})
+        graph.create_node(
+            "path::d1_a",
+            {"type": "path", "raw_id": "d1_a", "dilemma_id": "dilemma::d1"},
+        )
+        graph.create_node(
+            "beat::beat_d1",
+            {
+                "type": "beat",
+                "raw_id": "beat_d1",
+                "location": "castle",
+                "entities": ["character::alice", "character::bob"],
+                "dilemma_impacts": [],
+            },
+        )
+        graph.add_edge("belongs_to", "beat::beat_d1", "path::d1_a")
+
+        # Dilemma 2
+        graph.create_node("dilemma::d2", {"type": "dilemma", "raw_id": "d2"})
+        graph.create_node(
+            "path::d2_a",
+            {"type": "path", "raw_id": "d2_a", "dilemma_id": "dilemma::d2"},
+        )
+        graph.create_node(
+            "beat::beat_d2",
+            {
+                "type": "beat",
+                "raw_id": "beat_d2",
+                "location": "castle",  # Same location → candidate signal
+                "entities": ["character::alice"],  # Shared entity → candidate signal
+                "dilemma_impacts": [],
+            },
+        )
+        graph.add_edge("belongs_to", "beat::beat_d2", "path::d2_a")
+
+        return graph
+
+    def test_build_intersection_candidates_is_deterministic(self) -> None:
+        """R-2.1: calling build_intersection_candidates twice returns identical results."""
+        from questfoundry.graph.grow_algorithms import build_intersection_candidates
+
+        graph = self._build_two_dilemma_graph()
+
+        result_a = build_intersection_candidates(graph)
+        result_b = build_intersection_candidates(graph)
+
+        assert len(result_a) == len(result_b), (
+            "R-2.1: candidate count differs across runs "
+            f"(first={len(result_a)}, second={len(result_b)})"
+        )
+        for i, (ca, cb) in enumerate(zip(result_a, result_b, strict=False)):
+            assert ca.beat_ids == cb.beat_ids, (
+                f"R-2.1: candidate[{i}].beat_ids differ across runs "
+                f"(first={ca.beat_ids!r}, second={cb.beat_ids!r})"
+            )
+            assert ca.signal_type == cb.signal_type, (
+                f"R-2.1: candidate[{i}].signal_type differs across runs "
+                f"(first={ca.signal_type!r}, second={cb.signal_type!r})"
+            )
