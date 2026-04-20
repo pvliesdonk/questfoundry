@@ -314,6 +314,30 @@ class _LLMPhaseMixin:
                     tokens_used=total_tokens,
                 )
 
+        # R-2.3 / R-2.8: if the graph had strong candidate signals but the LLM
+        # returned zero accepted groups, that is a Silent Degradation violation.
+        # Two failure modes both require ERROR + halt:
+        #   (a) LLM proposed intersections but ALL were rejected (caught above and
+        #       returned status="failed", which stage.py escalates to GrowMutationError).
+        #   (b) LLM proposed ZERO intersections despite candidates existing.
+        # Case (b) is caught here.
+        if not accepted and len(candidates) > 0:
+            from questfoundry.graph.grow_validation import (
+                GrowContractError,  # local to avoid circular import
+            )
+
+            log.error(
+                "all_intersections_rejected",
+                candidate_count=len(candidates),
+                proposed_count=len(result.intersections),
+            )
+            raise GrowContractError(
+                f"R-2.3 / R-2.8: all intersection candidates rejected — "
+                f"{len(candidates)} candidate(s) generated from graph signals, "
+                f"{len(result.intersections)} proposed by LLM, 0 accepted. "
+                f"Pipeline failure — halting."
+            )
+
         # Apply accepted intersections in a batch to avoid cascade effects.
         for beat_ids, location, shared_entities, rationale in accepted:
             apply_intersection_mark(

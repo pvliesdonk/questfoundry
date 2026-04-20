@@ -774,6 +774,35 @@ class TestPhase3Knots:
         assert result.status == "failed"
         assert "rejected" in result.detail
 
+    @pytest.mark.asyncio
+    async def test_phase_3_raises_when_llm_proposes_zero_despite_candidates(self) -> None:
+        """R-2.3 / R-2.8: GrowContractError when LLM proposes 0 intersections despite
+        graph having strong candidate signals (Silent Degradation policy).
+
+        Zero proposals with candidates is not a quiet success — the LLM was
+        supposed to evaluate signals and propose groupings.  Silently returning
+        'completed' with 0 applied is a pipeline failure.
+        """
+        import pytest
+
+        from questfoundry.graph.grow_validation import GrowContractError
+        from questfoundry.models.grow import Phase3Output
+        from tests.fixtures.grow_fixtures import make_intersection_candidate_graph
+
+        graph = make_intersection_candidate_graph()
+        stage = GrowStage()
+
+        # LLM returns zero proposals despite graph having candidates
+        phase3_output = Phase3Output(intersections=[])
+
+        mock_structured = AsyncMock()
+        mock_structured.ainvoke = AsyncMock(return_value=phase3_output)
+        mock_model = MagicMock()
+        mock_model.with_structured_output = MagicMock(return_value=mock_structured)
+
+        with pytest.raises(GrowContractError, match=r"R-2\.3 / R-2\.8"):
+            await stage._phase_3_intersections(graph, mock_model)
+
 
 class TestPhase4aSceneTypes:
     @pytest.mark.asyncio
