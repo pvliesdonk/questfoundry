@@ -180,7 +180,7 @@ After Phase 3, the beat DAG's branching topology is frozen: no changes to existi
 
 R-4a.1. Every beat ends up in exactly one Passage (one `grouped_in` edge per beat).
 
-R-4a.2. (Derived invariant, enforced by Phase 7.) All beats within a passage share identical `belongs_to` sets. In a well-formed Y-shape DAG, `belongs_to` changes coincide with divergences or convergences, so the maximal-linear-collapse rule (R-4a.3) implies this property. Phase 7 validates it as a postcondition.
+R-4a.2. (Removed.) Path-membership uniformity within a passage is NOT required. A linear run that spans different `belongs_to` sets — for example, a post-commit beat of dilemma A linearly connecting through a transition beat (zero `belongs_to`) to a pre-commit beat of dilemma B — collapses into one prose passage under R-4a.3. The `belongs_to` edges remain on the individual beats for upstream bookkeeping; they do not constrain passage grouping.
 
 R-4a.3. All beats in the finalized DAG — narrative or structural — are grouped by the maximal-linear-collapse rule. A passage is a maximal run of beats with no internal divergence or convergence. A new passage starts at any beat whose in-degree ≠ 1 or whose predecessor has out-degree ≠ 1, and ends at any beat whose out-degree ≠ 1 or whose successor has in-degree ≠ 1.
 
@@ -195,7 +195,6 @@ R-4a.5. (Subsumed by R-4a.3.) The prior allowance for optional multi-path groupi
 | Symptom | Root cause | Broken rule |
 |---------|-----------|-------------|
 | Beat appears in two `grouped_in` edges | Belongs to two passages | R-4a.1 |
-| Passage contains beats with different `belongs_to` sets | DAG topology misread, or upstream DAG malformed | R-4a.2 (derived from R-4a.3) |
 | Passage spans a DAG divergence or convergence | Grouping did not close at the boundary | R-4a.3 |
 | POLISH reads intersection groups as hard constraints | Intersection groups are GROW-internal; POLISH operates on DAG | R-4a.4 |
 
@@ -531,7 +530,7 @@ R-3.3: Arc metadata is entity annotation, not separate node.
 R-3.4: POLISH does not write prose from arc metadata.
 R-3.5: Arc-synthesis LLM receives full context.
 R-4a.1: Every beat in exactly one Passage.
-R-4a.2: All beats in a passage share identical `belongs_to` (derived invariant from R-4a.3; enforced in Phase 7).
+R-4a.2: (Removed — linear runs may span different `belongs_to` sets; path-membership uniformity within a passage is not required.)
 R-4a.3: Maximal-linear-collapse — a passage is a maximal run of beats with no internal divergence or convergence.
 R-4a.4: POLISH does NOT consume Intersection Groups.
 R-4a.5: (Subsumed by R-4a.3.)
