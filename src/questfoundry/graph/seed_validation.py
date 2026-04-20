@@ -29,11 +29,15 @@ _FORBIDDEN_NODE_TYPES = frozenset(
 _MAX_ARC_COUNT = 16
 
 
-def validate_seed_output(graph: Graph) -> list[str]:
+def validate_seed_output(graph: Graph, *, skip_forbidden_types: bool = False) -> list[str]:
     """Verify the graph satisfies SEED's Stage Output Contract.
 
     Args:
         graph: Graph expected to contain SEED output.
+        skip_forbidden_types: If True, skip R-Output-16 forbidden-node-types
+            check. Set by downstream stages (GROW onward) whose legitimate
+            output includes node types SEED forbids (state_flag,
+            intersection_group, transition_beat).
 
     Returns:
         List of human-readable error strings. Empty means compliant.
@@ -46,7 +50,7 @@ def validate_seed_output(graph: Graph) -> list[str]:
     _check_beats(graph, errors)
     _check_belongs_to_yshape(graph, errors)
     _check_convergence_and_ordering(graph, errors)
-    _check_arc_count_and_approval(graph, errors)
+    _check_arc_count_and_approval(graph, errors, skip_forbidden_types=skip_forbidden_types)
     return errors
 
 
@@ -322,7 +326,9 @@ def _check_convergence_and_ordering(graph: Graph, errors: list[str]) -> None:
         )
 
 
-def _check_arc_count_and_approval(graph: Graph, errors: list[str]) -> None:
+def _check_arc_count_and_approval(
+    graph: Graph, errors: list[str], *, skip_forbidden_types: bool = False
+) -> None:
     """Phase 5 arc-count guardrail (R-5.1), Phase 6 approval (R-6.4),
     and Stage Output Contract item 16 (forbidden node types)."""
     dilemma_nodes = graph.get_nodes_by_type("dilemma")
@@ -359,13 +365,14 @@ def _check_arc_count_and_approval(graph: Graph, errors: list[str]) -> None:
         )
 
     # Output-16: no forbidden node types.
-    for node_type in sorted(_FORBIDDEN_NODE_TYPES):
-        forbidden = graph.get_nodes_by_type(node_type)
-        if forbidden:
-            errors.append(
-                f"Output-16: SEED must not create {node_type!r} nodes; "
-                f"found {len(forbidden)}: {sorted(forbidden.keys())[:3]}"
-            )
+    if not skip_forbidden_types:
+        for node_type in sorted(_FORBIDDEN_NODE_TYPES):
+            forbidden = graph.get_nodes_by_type(node_type)
+            if forbidden:
+                errors.append(
+                    f"Output-16: SEED must not create {node_type!r} nodes; "
+                    f"found {len(forbidden)}: {sorted(forbidden.keys())[:3]}"
+                )
 
 
 def _check_upstream_contract(graph: Graph, errors: list[str]) -> None:
