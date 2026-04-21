@@ -1248,7 +1248,7 @@ def find_dag_convergence_beat(
 
     dilemma_role = dilemma_node.get("dilemma_role")
     if dilemma_role is None:
-        log.warning("convergence_dilemma_role_missing", dilemma_id=dilemma_id)
+        log.error("convergence_dilemma_role_missing", dilemma_id=dilemma_id)
         return None
     if dilemma_role == "hard":
         return None
@@ -2578,7 +2578,7 @@ def select_entities_for_arc(
             continue
         entity_type = entity_node.get("entity_type", "")
         if not entity_type:
-            log.warning("entity_missing_type", entity_id=eid)
+            log.error("entity_missing_type", entity_id=eid)
             continue
         if entity_type in ("object", "location"):
             # Objects/locations always eligible with 1+ appearance

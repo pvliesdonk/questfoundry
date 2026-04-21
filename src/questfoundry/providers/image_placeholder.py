@@ -115,7 +115,7 @@ class PlaceholderImageProvider:
             in provider_metadata.
         """
         if aspect_ratio not in _ASPECT_RATIO_TO_SIZE:
-            log.warning("unknown_aspect_ratio", aspect_ratio=aspect_ratio, fallback="1:1")
+            log.info("unknown_aspect_ratio", aspect_ratio=aspect_ratio, fallback="1:1")
         width, height = _ASPECT_RATIO_TO_SIZE.get(aspect_ratio, _ASPECT_RATIO_TO_SIZE["1:1"])
 
         # Deterministic color from prompt hash

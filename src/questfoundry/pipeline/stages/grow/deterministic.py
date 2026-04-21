@@ -541,7 +541,7 @@ async def phase_convergence(graph: Graph, model: BaseChatModel) -> GrowPhaseResu
     for dilemma_id, ddata in dilemma_nodes.items():
         role = ddata.get("dilemma_role")
         if role is None:
-            log.warning("convergence_dilemma_role_missing", dilemma_id=dilemma_id)
+            log.error("convergence_dilemma_role_missing", dilemma_id=dilemma_id)
             continue
         if role == "hard":
             continue

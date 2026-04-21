@@ -126,7 +126,7 @@ class _PolishLLMPhaseMixin:
                     f"beat set mismatch (expected {len(beat_ids)}, got {len(matched.beat_ids)})"
                 )
                 warnings.append(msg)
-                log.warning(
+                log.info(
                     "phase1_set_mismatch",
                     section=section_id,
                     expected=len(beat_ids),
@@ -141,7 +141,7 @@ class _PolishLLMPhaseMixin:
                     f"hard constraint violation (commit before advance/reveal)"
                 )
                 warnings.append(msg)
-                log.warning("phase1_constraint_violation", section=section_id)
+                log.info("phase1_constraint_violation", section=section_id)
                 continue
 
             # Apply: update predecessor edges within the section
@@ -209,7 +209,7 @@ class _PolishLLMPhaseMixin:
         inserted = 0
         for mb in result.micro_beats:
             if mb.after_beat_id not in beat_nodes:
-                log.warning(
+                log.info(
                     "phase2_invalid_after_beat",
                     after_beat_id=mb.after_beat_id,
                 )
@@ -278,7 +278,7 @@ class _PolishLLMPhaseMixin:
             # has_arc_metadata edges) violated R-3.3 and ontology Part 1.
             for arc in result.character_arcs:
                 if arc.entity_id != entity_id:
-                    log.warning(
+                    log.info(
                         "phase3_entity_mismatch",
                         expected=entity_id,
                         got=arc.entity_id,
@@ -356,7 +356,7 @@ class _PolishLLMPhaseMixin:
             for item in result.choice_labels:
                 key = (item.from_passage, item.to_passage)
                 if key in label_lookup:
-                    log.warning(
+                    log.info(
                         "phase5a_duplicate_choice_label",
                         from_passage=item.from_passage,
                         to_passage=item.to_passage,
@@ -424,7 +424,7 @@ class _PolishLLMPhaseMixin:
             for decision in result_c.decisions:
                 idx = decision.candidate_index
                 if idx < 0 or idx >= len(false_branch_candidates):
-                    log.warning("phase5c_invalid_index", index=idx)
+                    log.info("phase5c_invalid_index", index=idx)
                     continue
 
                 candidate = false_branch_candidates[idx]
@@ -491,10 +491,10 @@ class _PolishLLMPhaseMixin:
                 flag_index = decision.flag_index
                 case = case_lookup.get(passage_id)
                 if case is None:
-                    log.warning("phase5e_unknown_passage", passage_id=passage_id)
+                    log.info("phase5e_unknown_passage", passage_id=passage_id)
                     continue
                 if flag_index < 0 or flag_index >= len(case.flags):
-                    log.warning(
+                    log.info(
                         "phase5e_invalid_flag_index",
                         passage_id=passage_id,
                         flag_index=flag_index,
@@ -532,7 +532,7 @@ class _PolishLLMPhaseMixin:
                     existing = plan_data.get("feasibility_annotations", {})
                     existing.setdefault(ann_key, []).append(flag)
                 else:
-                    log.warning("phase5e_unknown_decision", decision=d, passage_id=passage_id)
+                    log.info("phase5e_unknown_decision", decision=d, passage_id=passage_id)
                     continue
 
                 resolved_count += 1
@@ -565,14 +565,14 @@ class _PolishLLMPhaseMixin:
             for item in result_f.transition_guidance:
                 spec = passage_lookup.get(item.passage_id)
                 if spec is None:
-                    log.warning(
+                    log.info(
                         "phase5f_unknown_passage",
                         passage_id=item.passage_id,
                     )
                     continue
                 expected = len(spec.get("beat_ids", [])) - 1
                 if len(item.transitions) != expected:
-                    log.warning(
+                    log.info(
                         "phase5f_transition_count_mismatch",
                         passage_id=item.passage_id,
                         expected=expected,

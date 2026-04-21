@@ -113,7 +113,7 @@ def _parse_aspect_ratio(raw: str) -> str:
     for match in re.finditer(r"\b(\d+:\d+)\b", raw):
         if match.group(1) in _VALID_ASPECT_RATIOS:
             return match.group(1)
-    log.warning("invalid_aspect_ratio", raw=raw, fallback="16:9")
+    log.info("invalid_aspect_ratio", raw=raw, fallback="16:9")
     return "16:9"
 
 

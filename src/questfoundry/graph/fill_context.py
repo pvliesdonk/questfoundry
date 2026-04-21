@@ -1490,7 +1490,7 @@ def format_narrative_context(graph: Graph, passage_id: str) -> str:
     scene_type = beat.get("scene_type", "")
     if not scene_type:
         log = get_logger(__name__)
-        log.warning("missing_scene_type", beat_id=beat_id)
+        log.error("missing_scene_type", beat_id=beat_id)
         scene_type = "scene"
 
     if not narrative_function:

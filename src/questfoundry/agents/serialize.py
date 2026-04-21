@@ -350,9 +350,9 @@ async def serialize_to_artifact(
                     )
                     return artifact, total_tokens
 
-                # Unexpected result type
+                # Unexpected result type — retry will follow
                 last_errors = [f"Unexpected result type: {type(result).__name__}"]
-                log.warning(
+                log.info(
                     "serialize_unexpected_type",
                     attempt=attempt,
                     result_type=type(result).__name__,
@@ -386,7 +386,7 @@ async def serialize_to_artifact(
 
             except Exception as e:
                 last_errors = [str(e)]
-                log.warning(
+                log.info(
                     "serialize_error",
                     attempt=attempt,
                     error=str(e),
@@ -1479,7 +1479,7 @@ async def serialize_seed_iteratively(
             if not errors:
                 break
 
-            log.warning(
+            log.info(
                 "semantic_validation_failed",
                 attempt=semantic_attempt,
                 max_attempts=max_semantic_retries,
@@ -1834,7 +1834,7 @@ async def _early_validate_dilemma_answers(
         if not invalid:
             return dilemma_decisions, total_tokens
 
-        log.warning(
+        log.info(
             "early_dilemma_validation_failed",
             attempt=attempt + 1,
             invalid_count=len(invalid),
@@ -1962,7 +1962,7 @@ def _filter_consequences_by_valid_paths(
         else:
             dropped_ids.append(path_id if path_id is not None else "?")
     if dropped_ids:
-        log.warning(
+        log.info(
             "consequences_filtered_invalid_paths",
             dropped=len(dropped_ids),
             total=len(consequences),
@@ -2357,7 +2357,7 @@ async def serialize_seed_as_function(
             if not blocking_errors:
                 break
 
-            log.warning(
+            log.info(
                 "serialize_seed_semantic_errors",
                 attempt=semantic_attempt,
                 max_attempts=max_semantic_retries,
@@ -2732,7 +2732,7 @@ async def serialize_dilemma_relationships(
             if a_raw in surviving_ids and b_raw in surviving_ids:
                 valid_relationships.append(r)
             else:
-                log.warning(
+                log.info(
                     "dilemma_relationship_rejected",
                     dilemma_a=r.dilemma_a,
                     dilemma_b=r.dilemma_b,
