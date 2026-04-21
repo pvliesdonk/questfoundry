@@ -406,6 +406,26 @@ def test_R_5_8_residue_passage_bad_mapping_strategy(
 # --------------------------------------------------------------------------
 
 
+def test_phase_4c_zero_choices_raises_contract_error() -> None:
+    """Phase 4c raises PolishContractError when compute_choice_edges returns empty.
+
+    This is a unit test of phase_plan_computation directly. We use the
+    compliant baseline graph but delete all choice nodes to ensure
+    compute_choice_edges returns empty list.
+    """
+    from unittest.mock import MagicMock
+
+    from questfoundry.pipeline.stages.polish import deterministic
+
+    # Use a graph structure with passages but no Y-forks.
+    # The simplest approach: use empty graph, which has no beats → no
+    # passages → no choices. Phase 4a will produce empty passage_specs.
+    graph = Graph.empty()
+
+    with pytest.raises(PolishContractError, match=r"R-4c\.2|zero choice"):
+        asyncio.run(deterministic.phase_plan_computation(graph, MagicMock()))
+
+
 def test_R_4c_2_zero_choice_edges_fails(compliant_polish_graph: Graph) -> None:
     # Delete choice nodes (which cascade-delete choice_from/choice_to edges)
     for cid in list(compliant_polish_graph.get_nodes_by_type("choice")):

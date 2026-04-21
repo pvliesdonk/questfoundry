@@ -144,6 +144,19 @@ async def phase_plan_computation(
 
     # 4c: Choice edge derivation
     plan.choice_specs = compute_choice_edges(graph, plan.passage_specs)
+    if not plan.choice_specs:
+        from questfoundry.graph.polish_validation import PolishContractError
+
+        log.error(
+            "polish_zero_choice_halt",
+            upstream="SEED/GROW",
+            passage_count=len(plan.passage_specs),
+            detail="Phase 4c produced zero choice edges — upstream DAG has no Y-forks",
+        )
+        raise PolishContractError(
+            "R-4c.2: Phase 4c produced zero choice edges — SEED/GROW DAG has "
+            "no Y-forks.  Upstream bug — halting POLISH."
+        )
     log.debug("phase4c_complete", choices=len(plan.choice_specs))
 
     # 4d: False branch candidate identification
