@@ -31,7 +31,23 @@ from questfoundry.graph.validation_types import ValidationCheck, ValidationRepor
 if TYPE_CHECKING:
     from questfoundry.graph.graph import Graph
 
+__all__ = [
+    "PolishContractError",
+    "validate_polish_output",
+]
+
 _ROUTING_APPLIED_NODE_ID = "meta::routing_applied"
+
+
+class PolishContractError(ValueError):
+    """Raised when POLISH Phase 7 validation reports contract errors.
+
+    Mirrors ``GrowContractError`` — a dedicated exception type for
+    stage-exit contract failures so callers can distinguish them from
+    generic ``ValueError`` noise.  Callers receive the formatted error
+    list in the exception message.
+    """
+
 
 # ---------------------------------------------------------------------------
 # Phase 7: Passage graph validation (exit contract)
