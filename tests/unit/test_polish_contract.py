@@ -321,23 +321,35 @@ def test_R_3_3_arc_worthy_entity_missing_annotation(compliant_polish_graph: Grap
 
 
 # --------------------------------------------------------------------------
-# R-4a.4: maximal-linear-collapse (Cluster #1311)
+# R-4a.3: maximal-linear-collapse (Cluster #1311)
+#
+# Per docs/design/procedures/polish.md:
+#   R-4a.3 = maximal-linear-collapse algorithm (passage is a maximal linear
+#   run ending at divergences/convergences).
+#   R-4a.4 = POLISH does NOT consume Intersection Group nodes (the rule that
+#   forbids the old pre-audit grouping pattern).
+# The validator helper `_check_passage_maximal_linear_collapse` enforces
+# R-4a.3 and emits errors with that tag; tests below check for it.
 # --------------------------------------------------------------------------
 
 
-def test_R_4a_4_passage_spans_divergence_forbidden(compliant_polish_graph: Graph) -> None:
-    """A passage whose member beats straddle a Y-fork divergence is a grouping error."""
-    # Move commit_protector into passage::pre — now the passage spans the Y-fork.
+def test_R_4a_3_passage_spans_divergence_forbidden(compliant_polish_graph: Graph) -> None:
+    """R-4a.3: a passage containing a DAG divergence (a beat with multiple
+    in-passage successors) is a grouping error."""
+    # Pull both commit beats into passage::pre so pre_mentor_01 now has two
+    # in-passage successors — a real divergence inside one passage.
     compliant_polish_graph.remove_edge("grouped_in", "beat::commit_protector", "passage::prot")
+    compliant_polish_graph.remove_edge("grouped_in", "beat::commit_manipulator", "passage::mani")
     compliant_polish_graph.add_edge("grouped_in", "beat::commit_protector", "passage::pre")
+    compliant_polish_graph.add_edge("grouped_in", "beat::commit_manipulator", "passage::pre")
     errors = validate_polish_output(compliant_polish_graph)
-    assert any(
-        "R-4a.4" in e or "divergence" in e.lower() or "linear" in e.lower() for e in errors
-    ), f"expected R-4a.4 error, got {errors}"
+    assert any("R-4a.3" in e and "in-passage successors" in e for e in errors), (
+        f"expected R-4a.3 interior-divergence error, got {errors}"
+    )
 
 
-def test_R_4a_4_passage_stops_mid_linear_run(compliant_polish_graph: Graph) -> None:
-    """Splitting a linear run into two passages is a grouping error."""
+def test_R_4a_3_passage_stops_mid_linear_run(compliant_polish_graph: Graph) -> None:
+    """R-4a.3: splitting a linear run into two passages is a grouping error."""
     # Move post_protector_02 out of passage::prot into a new singleton.
     compliant_polish_graph.remove_edge("grouped_in", "beat::post_protector_02", "passage::prot")
     compliant_polish_graph.create_node(
@@ -351,8 +363,8 @@ def test_R_4a_4_passage_stops_mid_linear_run(compliant_polish_graph: Graph) -> N
     )
     compliant_polish_graph.add_edge("grouped_in", "beat::post_protector_02", "passage::prot_tail")
     errors = validate_polish_output(compliant_polish_graph)
-    assert any("R-4a.4" in e or "linear" in e.lower() for e in errors), (
-        f"expected R-4a.4 mid-run split error, got {errors}"
+    assert any("R-4a.3" in e and "mid-linear-run" in e for e in errors), (
+        f"expected R-4a.3 mid-run split error, got {errors}"
     )
 
 

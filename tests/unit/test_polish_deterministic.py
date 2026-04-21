@@ -62,7 +62,7 @@ class TestComputeBeatGrouping:
     def test_collapse_grouping(self) -> None:
         """Sequential same-path beats collapse into one passage (maximal-linear-collapse).
 
-        Under R-4a.4 all grouping_type values are 'singleton'; the collapse is
+        Under R-4a.3 all grouping_type values are 'singleton'; the collapse is
         expressed by the passage containing all three beats in a single PassageSpec.
         """
         graph = Graph.empty()
@@ -83,7 +83,7 @@ class TestComputeBeatGrouping:
         assert specs[0].grouping_type == "singleton"
 
     # DELETED: test_intersection_grouping
-    # Removed as part of cluster #1311 (maximal-linear-collapse, R-4a.4).
+    # Removed as part of cluster #1311 (maximal-linear-collapse, R-4a.3).
     # Intersection-driven grouping is gone — compute_beat_grouping no longer
     # consumes intersection_group nodes.  Under the new rule, beats from
     # different paths with no predecessor relationship each become their own
@@ -154,14 +154,27 @@ class TestComputeBeatGrouping:
         expected = {f"beat::b{i}" for i in range(5)}
         assert all_beats == expected
 
-    # DELETED: test_entities_merged
-    # Removed as part of cluster #1311 (maximal-linear-collapse, R-4a.4).
-    # The _merge_entities helper was deleted in Task 11.  Under the new rule,
-    # compute_beat_grouping no longer merges entity lists across beats in a run;
-    # PassageSpec.entities is populated from the first beat in the run only.
-    # The old assertion (union of all beat entities) no longer holds.
-    # If cross-beat entity merging is needed in future, open a follow-on issue
-    # (see cluster #1311 tracking).
+    def test_entities_merged(self) -> None:
+        """Passage carries the order-preserving union of its member beats' entities.
+
+        Phase 4b's prose-feasibility audit reads ``spec.entities`` to compute
+        entity overlap between a passage and the structural flags active there
+        (see ``compute_prose_feasibility``).  If this isn't merged across the
+        whole run, flags get classified as irrelevant and no variant/residue
+        specs are generated.
+        """
+        graph = Graph.empty()
+        graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
+        _make_beat(graph, "beat::a", "A", entities=["entity::hero"])
+        _make_beat(graph, "beat::b", "B", entities=["entity::hero", "entity::mentor"])
+        _add_belongs_to(graph, "beat::a", "path::p1")
+        _add_belongs_to(graph, "beat::b", "path::p1")
+        _add_predecessor(graph, "beat::b", "beat::a")
+
+        specs = compute_beat_grouping(graph)
+        # Maximal-linear-collapse groups both beats into one passage.
+        assert len(specs) == 1
+        assert set(specs[0].entities) == {"entity::hero", "entity::mentor"}
 
     def test_empty_graph(self) -> None:
         """Empty graph produces no specs."""
@@ -170,7 +183,7 @@ class TestComputeBeatGrouping:
         assert specs == []
 
     # DELETED: test_zero_belongs_to_beats_do_not_collapse
-    # Removed as part of cluster #1311 (maximal-linear-collapse, R-4a.4).
+    # Removed as part of cluster #1311 (maximal-linear-collapse, R-4a.3).
     # The new R-4a.3 rule collapses beats purely by DAG topology — the
     # belongs_to set is NOT consulted for collapse eligibility.  Two adjacent
     # zero-belongs_to beats in a linear DAG WILL collapse into one passage
@@ -1509,7 +1522,7 @@ class TestChoiceSpecRequires:
                 assert c.requires == [], f"Expected empty requires for {c.from_passage}"
 
     # DELETED: test_convergence_choice_has_requires
-    # Removed as part of cluster #1311 (maximal-linear-collapse, R-4a.4).
+    # Removed as part of cluster #1311 (maximal-linear-collapse, R-4a.3).
     # The test filtered choices by `grouping_type == "intersection"` — a field
     # that is now always "singleton" under the new rule.  The requires-population
     # logic in compute_choice_edges is guarded by `from_spec.grouping_type ==
@@ -2472,7 +2485,7 @@ class TestAuditOverlayComposition:
 
 
 # DELETED: test_collapse_chain_does_not_join_shared_with_post_commit
-# Removed as part of cluster #1311 (maximal-linear-collapse, R-4a.4).
+# Removed as part of cluster #1311 (maximal-linear-collapse, R-4a.3).
 # The test asserted Y-shape guard rail 2: a shared pre-commit beat (dual
 # belongs_to) must not collapse into the same passage as its single-belongs_to
 # commit successor.
