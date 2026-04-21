@@ -370,6 +370,32 @@ class _PolishLLMPhaseMixin:
                 if key in label_lookup:
                     spec["label"] = label_lookup[key]
 
+            # R-5.2: labels are distinct within a source passage.  Case-insensitive
+            # uniqueness — detect collisions, log a WARNING so humans can review.
+            from collections import defaultdict
+
+            labels_by_passage: dict[str, list[tuple[str, str]]] = defaultdict(list)
+            for spec in choice_specs:
+                label = spec.get("label") or ""
+                if label:
+                    labels_by_passage[spec["from_passage"]].append(
+                        (label.lower(), spec["to_passage"])
+                    )
+
+            for from_passage, labeled in labels_by_passage.items():
+                seen: dict[str, list[str]] = defaultdict(list)
+                for lower_label, to_passage in labeled:
+                    seen[lower_label].append(to_passage)
+                for lower_label, to_passages in seen.items():
+                    if len(to_passages) > 1:
+                        log.warning(
+                            "phase5a_duplicate_labels_in_passage",
+                            from_passage=from_passage,
+                            duplicate_label=lower_label,
+                            conflicting_targets=sorted(to_passages),
+                            hint="Human review recommended; R-5.2 requires distinct labels within a passage.",
+                        )
+
             enrichment_parts.append(f"{len(result.choice_labels)} choice labels")
             log.debug("phase5a_complete", labels=len(result.choice_labels))
 

@@ -106,6 +106,7 @@ def validate_polish_output(graph: Graph) -> list[str]:
     _check_no_unresolved_splits(graph, errors)
     _check_polish_beat_attribution(graph, errors)
     _check_false_branch_role_name(graph, errors)
+    _check_choice_label_distinctness(graph, errors)
 
     # TODO: check_all_endings_reachable and check_gate_satisfiability use the old
     # choice_from/choice_to edge model and are DEAD — see issue #1165 for migration.
@@ -175,6 +176,34 @@ def _check_false_branch_role_name(graph: Graph, errors: list[str]) -> None:
                 f"R-5.10: beat {bid!r} uses legacy role 'sidetrack_beat'; "
                 "spec requires 'false_branch_beat'"
             )
+
+
+def _check_choice_label_distinctness(graph: Graph, errors: list[str]) -> None:
+    """R-5.2: labels are distinct within a source passage (case-insensitive).
+
+    Validates the passage graph's choice edges — each source passage's
+    outgoing choice labels must not collide case-insensitively.  Phase 5a's
+    LLM prompt + the Phase 5a label-collision WARNING are the primary
+    enforcement; this validator is the postcondition.
+    """
+    choice_edges = graph.get_edges(edge_type="choice")
+    labels_by_source: dict[str, dict[str, list[str]]] = {}
+    for edge in choice_edges:
+        from_p = edge["from"]
+        label = edge.get("label") or ""
+        if not label:
+            continue
+        bucket = labels_by_source.setdefault(from_p, {})
+        bucket.setdefault(label.lower(), []).append(edge["to"])
+
+    for from_p, label_map in sorted(labels_by_source.items()):
+        for lower_label, targets in sorted(label_map.items()):
+            if len(targets) > 1:
+                errors.append(
+                    f"R-5.2: passage {from_p!r} has {len(targets)} choices with "
+                    f"label {lower_label!r} (case-insensitive collision): "
+                    f"targets={sorted(targets)}"
+                )
 
 
 def _check_start_passage(
