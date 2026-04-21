@@ -60,7 +60,11 @@ class TestComputeBeatGrouping:
         assert all(s.grouping_type == "singleton" for s in specs)
 
     def test_collapse_grouping(self) -> None:
-        """Sequential same-path beats collapse into one passage."""
+        """Sequential same-path beats collapse into one passage (maximal-linear-collapse).
+
+        Under R-4a.4 all grouping_type values are 'singleton'; the collapse is
+        expressed by the passage containing all three beats in a single PassageSpec.
+        """
         graph = Graph.empty()
         graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
         _make_beat(graph, "beat::a", "Search the study")
@@ -73,34 +77,20 @@ class TestComputeBeatGrouping:
         _add_predecessor(graph, "beat::c", "beat::b")
 
         specs = compute_beat_grouping(graph)
-        collapse_specs = [s for s in specs if s.grouping_type == "collapse"]
-        assert len(collapse_specs) == 1
-        assert len(collapse_specs[0].beat_ids) == 3
+        # All three beats form a maximal linear run → exactly one passage.
+        assert len(specs) == 1
+        assert set(specs[0].beat_ids) == {"beat::a", "beat::b", "beat::c"}
+        assert specs[0].grouping_type == "singleton"
 
-    def test_intersection_grouping(self) -> None:
-        """Beats in intersection groups form intersection passages."""
-        graph = Graph.empty()
-        graph.create_node("path::pa", {"type": "path", "raw_id": "pa"})
-        graph.create_node("path::pb", {"type": "path", "raw_id": "pb"})
-        _make_beat(graph, "beat::a", "Path A beat")
-        _make_beat(graph, "beat::b", "Path B beat")
-        _add_belongs_to(graph, "beat::a", "path::pa")
-        _add_belongs_to(graph, "beat::b", "path::pb")
-
-        # Create intersection group
-        graph.create_node(
-            "intersection_group::ig1",
-            {
-                "type": "intersection_group",
-                "raw_id": "ig1",
-                "beat_ids": ["beat::a", "beat::b"],
-            },
-        )
-
-        specs = compute_beat_grouping(graph)
-        intersection_specs = [s for s in specs if s.grouping_type == "intersection"]
-        assert len(intersection_specs) == 1
-        assert set(intersection_specs[0].beat_ids) == {"beat::a", "beat::b"}
+    # DELETED: test_intersection_grouping
+    # Removed as part of cluster #1311 (maximal-linear-collapse, R-4a.4).
+    # Intersection-driven grouping is gone — compute_beat_grouping no longer
+    # consumes intersection_group nodes.  Under the new rule, beats from
+    # different paths with no predecessor relationship each become their own
+    # singleton passage; intersection_group nodes are GROW-internal and are
+    # ignored by POLISH.  The two beats in the old fixture (no predecessor edge
+    # linking them) now correctly produce two separate singleton passages.
+    # See docs/design/procedures/polish.md §R-4a.3, R-4a.4.
 
     def test_intersection_grouping_beat_ids_not_node_ids(self) -> None:
         """Intersection group uses beat_ids field, not node_ids (regression for #1172)."""
@@ -159,20 +149,14 @@ class TestComputeBeatGrouping:
         expected = {f"beat::b{i}" for i in range(5)}
         assert all_beats == expected
 
-    def test_entities_merged(self) -> None:
-        """Collapsed passage contains union of all beat entities."""
-        graph = Graph.empty()
-        graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
-        _make_beat(graph, "beat::a", "A", entities=["entity::hero"])
-        _make_beat(graph, "beat::b", "B", entities=["entity::hero", "entity::mentor"])
-        _add_belongs_to(graph, "beat::a", "path::p1")
-        _add_belongs_to(graph, "beat::b", "path::p1")
-        _add_predecessor(graph, "beat::b", "beat::a")
-
-        specs = compute_beat_grouping(graph)
-        collapse_specs = [s for s in specs if s.grouping_type == "collapse"]
-        assert len(collapse_specs) == 1
-        assert set(collapse_specs[0].entities) == {"entity::hero", "entity::mentor"}
+    # DELETED: test_entities_merged
+    # Removed as part of cluster #1311 (maximal-linear-collapse, R-4a.4).
+    # The _merge_entities helper was deleted in Task 11.  Under the new rule,
+    # compute_beat_grouping no longer merges entity lists across beats in a run;
+    # PassageSpec.entities is populated from the first beat in the run only.
+    # The old assertion (union of all beat entities) no longer holds.
+    # If cross-beat entity merging is needed in future, open a follow-on issue
+    # (see cluster #1311 tracking).
 
     def test_empty_graph(self) -> None:
         """Empty graph produces no specs."""
@@ -180,30 +164,15 @@ class TestComputeBeatGrouping:
         specs = compute_beat_grouping(graph)
         assert specs == []
 
-    def test_zero_belongs_to_beats_do_not_collapse(self) -> None:
-        """Two zero-belongs_to setup beats in sequence become two singleton passages.
-
-        Per ontology Part 8 "Determining a beat's `belongs_to`", a beat with zero
-        `belongs_to` edges cannot collapse with any path-specific chain, and the
-        empty path set does not match any non-empty set. Two adjacent zero-path
-        beats must therefore each become their own singleton passage, not a
-        two-beat collapse chain.
-
-        This locks in the B2 ruling from issue #1237 and prevents a silent
-        regression if the collapse rule is ever refactored.
-        """
-        graph = Graph.empty()
-        # Two setup beats — no belongs_to edges, linked by predecessor edge
-        _make_beat(graph, "beat::setup_1", "A")
-        _make_beat(graph, "beat::setup_2", "B")
-        _add_predecessor(graph, "beat::setup_2", "beat::setup_1")
-
-        specs = compute_beat_grouping(graph)
-
-        beat_to_spec = {bid: s for s in specs for bid in s.beat_ids}
-        assert beat_to_spec["beat::setup_1"].passage_id != beat_to_spec["beat::setup_2"].passage_id
-        assert beat_to_spec["beat::setup_1"].grouping_type == "singleton"
-        assert beat_to_spec["beat::setup_2"].grouping_type == "singleton"
+    # DELETED: test_zero_belongs_to_beats_do_not_collapse
+    # Removed as part of cluster #1311 (maximal-linear-collapse, R-4a.4).
+    # The new R-4a.3 rule collapses beats purely by DAG topology — the
+    # belongs_to set is NOT consulted for collapse eligibility.  Two adjacent
+    # zero-belongs_to beats in a linear DAG WILL collapse into one passage
+    # under the new rule.  The old assertion (they must remain separate) is
+    # directly contradicted by the new spec.
+    # The B2 ruling from issue #1237 that this test locked in is superseded
+    # by the cluster #1311 spec update.
 
 
 class TestComputeProseFeasibility:
@@ -1315,7 +1284,15 @@ class TestArcTraversalsAfterPlanApplication:
     """Phase 6 must populate arc_traversals on the polish_plan node."""
 
     def test_arc_traversals_non_empty_after_phase6(self) -> None:
-        """Minimal two-path graph: phase 4 + phase 6 produce non-empty arc_traversals."""
+        """Minimal Y-fork graph: phase 4 + phase 6 produce non-empty arc_traversals.
+
+        The fixture was updated (cluster #1311 / Task 14) to include a Y-fork so
+        that Phase 4c produces at least one choice edge and does not trigger the
+        zero-choice PolishContractError halt (R-4c.2, Task 10).
+
+        Graph: shared (pa+pb dual belongs_to) → commit_a (pa, commits d1)
+                                               → commit_b (pb, commits d1)
+        """
         import asyncio
 
         from questfoundry.pipeline.stages.polish.deterministic import (
@@ -1325,7 +1302,7 @@ class TestArcTraversalsAfterPlanApplication:
 
         graph = Graph.empty()
 
-        # Two dilemmas, each with two paths
+        # One dilemma with two paths
         graph.create_node("dilemma::d1", {"type": "dilemma", "raw_id": "d1", "status": "explored"})
         graph.create_node("path::pa", {"type": "path", "raw_id": "pa", "dilemma_id": "dilemma::d1"})
         graph.create_node("path::pb", {"type": "path", "raw_id": "pb", "dilemma_id": "dilemma::d1"})
@@ -1350,22 +1327,42 @@ class TestArcTraversalsAfterPlanApplication:
             },
         )
 
-        # Beats on each path
-        for bid, pid in [("beat::a", "path::pa"), ("beat::b", "path::pb")]:
+        # Shared pre-commit beat (dual belongs_to — Y-shape §MEMORY)
+        graph.create_node(
+            "beat::shared",
+            {
+                "type": "beat",
+                "raw_id": "shared",
+                "summary": "Shared beat",
+                "dilemma_impacts": [{"dilemma_id": "dilemma::d1", "effect": "reveals"}],
+                "entities": [],
+                "scene_type": "scene",
+            },
+        )
+        graph.add_edge("belongs_to", "beat::shared", "path::pa")
+        graph.add_edge("belongs_to", "beat::shared", "path::pb")
+
+        # Commit beats — one per path (creates the Y-fork)
+        for bid, pid, sfid in [
+            ("beat::commit_a", "path::pa", "state_flag::d1_pa"),
+            ("beat::commit_b", "path::pb", "state_flag::d1_pb"),
+        ]:
             graph.create_node(
                 bid,
                 {
                     "type": "beat",
                     "raw_id": bid.split("::")[-1],
-                    "summary": f"Beat on {pid}",
-                    "dilemma_impacts": [],
+                    "summary": f"Commit on {pid}",
+                    "dilemma_impacts": [{"dilemma_id": "dilemma::d1", "effect": "commits"}],
                     "entities": [],
                     "scene_type": "scene",
                 },
             )
             graph.add_edge("belongs_to", bid, pid)
+            graph.add_edge("grants", bid, sfid)
+            graph.add_edge("predecessor", bid, "beat::shared")
 
-        # Run Phase 4 (plan computation)
+        # Run Phase 4 (plan computation) — should succeed now that Y-fork exists
         r4 = asyncio.run(phase_plan_computation(graph, None))  # type: ignore[arg-type]
         assert r4.status == "completed"
 
@@ -1506,26 +1503,19 @@ class TestChoiceSpecRequires:
             if from_spec and from_spec.grouping_type != "intersection":
                 assert c.requires == [], f"Expected empty requires for {c.from_passage}"
 
-    def test_convergence_choice_has_requires(self) -> None:
-        """Choices from intersection passages have a non-empty requires list."""
-        graph = Graph.empty()
-        self._build_convergence_graph(graph)
-
-        specs = compute_beat_grouping(graph)
-        choices = compute_choice_edges(graph, specs)
-
-        passage_id_to_spec = {s.passage_id: s for s in specs}
-        intersection_choices = [
-            c
-            for c in choices
-            if c.from_passage in passage_id_to_spec
-            and passage_id_to_spec[c.from_passage].grouping_type == "intersection"
-        ]
-
-        assert intersection_choices, "Expected at least one choice from an intersection passage"
-        assert any(len(c.requires) > 0 for c in intersection_choices), (
-            "Expected at least one intersection choice to have a non-empty requires list"
-        )
+    # DELETED: test_convergence_choice_has_requires
+    # Removed as part of cluster #1311 (maximal-linear-collapse, R-4a.4).
+    # The test filtered choices by `grouping_type == "intersection"` — a field
+    # that is now always "singleton" under the new rule.  The requires-population
+    # logic in compute_choice_edges is guarded by `from_spec.grouping_type ==
+    # "intersection"` (deterministic.py ~line 759), so requires is always empty
+    # under the new rule — the assertion would never be satisfiable.
+    #
+    # This exposes dead code: the `requires` population branch in
+    # compute_choice_edges is now unreachable.  A follow-on issue should either
+    # repurpose `requires` for convergence detection via DAG topology (without
+    # relying on grouping_type) or remove the dead branch.
+    # See cluster #1311 for tracking.
 
 
 # ---------------------------------------------------------------------------
@@ -2476,35 +2466,22 @@ class TestAuditOverlayComposition:
 # ---------------------------------------------------------------------------
 
 
-def _build_y_shape_for_collapse() -> Graph:
-    """Build a Y-shape: shared_setup (dual) → commit_a (single), linear chain."""
-    g = Graph.empty()
-    g.create_node("path::trust__a", {"type": "path", "raw_id": "trust__a"})
-    g.create_node("path::trust__b", {"type": "path", "raw_id": "trust__b"})
-
-    # shared_setup: pre-commit beat with dual belongs_to
-    _make_beat(g, "beat::shared_setup", "Shared setup beat.")
-    g.add_edge("belongs_to", "beat::shared_setup", "path::trust__a")
-    g.add_edge("belongs_to", "beat::shared_setup", "path::trust__b")
-
-    # commit_a: single belongs_to (path_a only)
-    _make_beat(g, "beat::commit_a", "Commit A beat.")
-    g.add_edge("belongs_to", "beat::commit_a", "path::trust__a")
-
-    # Linear chain: commit_a follows shared_setup
-    _add_predecessor(g, "beat::commit_a", "beat::shared_setup")
-
-    return g
-
-
-def test_collapse_chain_does_not_join_shared_with_post_commit() -> None:
-    """A shared pre-commit beat cannot collapse into a post-commit passage."""
-    graph = _build_y_shape_for_collapse()
-    specs = compute_beat_grouping(graph)
-
-    # Find the spec containing shared_setup and the spec containing commit_a.
-    shared_spec = next(s for s in specs if "beat::shared_setup" in s.beat_ids)
-    commit_a_spec = next(s for s in specs if "beat::commit_a" in s.beat_ids)
-    assert shared_spec.passage_id != commit_a_spec.passage_id, (
-        "shared pre-commit beat must not collapse into a post-commit passage (Y-shape guard rail 2)"
-    )
+# DELETED: test_collapse_chain_does_not_join_shared_with_post_commit
+# Removed as part of cluster #1311 (maximal-linear-collapse, R-4a.4).
+# The test asserted Y-shape guard rail 2: a shared pre-commit beat (dual
+# belongs_to) must not collapse into the same passage as its single-belongs_to
+# commit successor.
+#
+# Under the new maximal-linear-collapse rule (R-4a.3), collapse decisions are
+# made purely by DAG topology — the belongs_to set is NOT consulted.  In the
+# `_build_y_shape_for_collapse` fixture, shared_setup → commit_a is a linear
+# chain (commit_a has exactly one predecessor and shared_setup has exactly one
+# successor).  The new algorithm correctly collapses them into one passage.
+#
+# The old guard rail (belongs_to-set mismatch prevents collapse) is superseded.
+# The Y-shape fixture helper (`_build_y_shape_for_collapse`) and the test that
+# used it have both been removed — no active test exercises this shape under
+# the new rule.  If a new structural constraint is needed to keep shared/commit
+# beats separate, it must be specified in docs/design/procedures/polish.md
+# first, then
+# implemented and tested here.
