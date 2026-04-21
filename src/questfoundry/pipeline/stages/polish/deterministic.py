@@ -1281,18 +1281,87 @@ def _apply_residue_with_variants(graph: Graph, rspec: ResidueSpec) -> None:
 
 
 def _apply_residue_parallel_passages(graph: Graph, rspec: ResidueSpec) -> None:
-    """Alternative residue mapping: parallel passages that branch and rejoin.
+    """Alternative residue mapping per R-5.7/R-5.8: a parallel passage gated
+    by ``rspec.flag`` that branches from the target's predecessor and
+    rejoins at the target.
 
-    For a residue spec, create N sibling passages — each with flag-gated
-    prose — branching from the target's predecessor and rejoining at the
-    target.  Currently stubbed; end-to-end test coverage + full
-    implementation tracked in the polish-compliance follow-on (task 18).
+    Creates:
+      - One residue beat (``beat::residue_<id>``) with ``role: residue_beat``,
+        ``created_by: POLISH``.
+      - One parallel passage (``passage::residue_<id>``) containing the beat,
+        with ``residue_for: <target>``, ``is_residue: True``, and
+        ``mapping_strategy: "parallel_passages"``.
+      - A ``precedes`` edge from the parallel passage to the target (the
+        branch rejoins here).  The predecessor passage's existing
+        ``precedes`` edge to the target remains (the non-residue path).
+      - Beat-layer insertion: predecessor beat(s) of the target gain a
+        ``predecessor`` edge from the residue beat; the residue beat
+        precedes the target's first regular (non-transition) beat.
+
+    The flag gating (``requires: [rspec.flag]`` on the residue passage)
+    ensures the parallel path is only taken when the flag is present.
     """
-    raise NotImplementedError(
-        f"R-5.8: 'parallel_passages' mapping_strategy is not yet implemented; "
-        f"residue {rspec.residue_id!r} requires handwritten applier. "
-        f"Tracked as follow-on to epic #1310."
+    residue_suffix = rspec.residue_id.split("::")[-1]
+    beat_id = f"beat::residue_{residue_suffix}"
+    residue_passage_id = f"passage::residue_{residue_suffix}"
+
+    # Create residue beat — same shape as the variants strategy.
+    graph.create_node(
+        beat_id,
+        {
+            "type": "beat",
+            "raw_id": f"residue_{residue_suffix}",
+            "summary": rspec.content_hint or f"Residue moment for {rspec.flag}",
+            "role": "residue_beat",
+            "scene_type": "sequel",
+            "dilemma_impacts": [],
+            "entities": [],
+            "created_by": "POLISH",
+        },
     )
+
+    if rspec.path_id:
+        graph.add_edge("belongs_to", beat_id, rspec.path_id)
+
+    # Create parallel residue passage — residue_for + mapping_strategy set
+    # so Phase 7's _check_residue_mapping_strategy validates successfully.
+    graph.create_node(
+        residue_passage_id,
+        {
+            "type": "passage",
+            "raw_id": f"residue_{residue_suffix}",
+            "summary": rspec.content_hint or f"Residue (parallel) for {rspec.flag}",
+            "requires": [rspec.flag],
+            "is_residue": True,
+            "residue_for": rspec.target_passage_id,
+            "mapping_strategy": rspec.mapping_strategy,
+        },
+    )
+
+    graph.add_edge("grouped_in", beat_id, residue_passage_id)
+    # Parallel branch: residue passage also precedes the target.  The
+    # predecessor passage's existing precedes edge to the target remains
+    # untouched — players without the flag take the direct path.
+    graph.add_edge("precedes", residue_passage_id, rspec.target_passage_id)
+
+    # Beat DAG insertion — mirror the variants strategy's splice logic.
+    # The residue beat sits parallel to the target's first regular beat:
+    # it inherits the target's predecessors and precedes the target.
+    target_beats = [
+        e["from"]
+        for e in graph.get_edges(edge_type="grouped_in")
+        if e["to"] == rspec.target_passage_id
+    ]
+    if target_beats:
+        beat_data = graph.get_nodes_by_type("beat")
+        regular_targets = [
+            tb for tb in target_beats if beat_data.get(tb, {}).get("role") != "transition_beat"
+        ]
+        target_beat = sorted(regular_targets or target_beats)[0]
+        for pred_edge in graph.get_edges(edge_type="predecessor"):
+            if pred_edge["from"] == target_beat:
+                graph.add_edge("predecessor", beat_id, pred_edge["to"])
+        graph.add_edge("predecessor", target_beat, beat_id)
 
 
 def _create_choice_edge(graph: Graph, cspec: ChoiceSpec) -> None:
