@@ -1015,6 +1015,7 @@ def _insert_micro_beat(
             "scene_type": "micro_beat",
             "dilemma_impacts": [],
             "entities": entity_ids,
+            "created_by": "POLISH",
         },
     )
 

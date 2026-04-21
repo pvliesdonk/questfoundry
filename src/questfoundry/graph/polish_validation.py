@@ -103,6 +103,7 @@ def validate_polish_output(graph: Graph) -> list[str]:
     _check_no_overlapping_requires(graph, errors)
     _check_variant_requires_non_empty(passage_nodes, graph, errors)
     _check_no_unresolved_splits(graph, errors)
+    _check_polish_beat_attribution(graph, errors)
 
     # TODO: check_all_endings_reachable and check_gate_satisfiability use the old
     # choice_from/choice_to edge model and are DEAD — see issue #1165 for migration.
@@ -140,6 +141,26 @@ def _check_passage_beats(
         beats = passage_beats.get(passage_id, [])
         if not beats:
             errors.append(f"Passage {passage_id} has no beats (no grouped_in edges)")
+
+
+def _check_polish_beat_attribution(graph: Graph, errors: list[str]) -> None:
+    """R-2.5: beats created by POLISH carry a ``created_by: POLISH`` attribution.
+
+    Beats with roles micro_beat, residue_beat, false_branch_beat, or sidetrack_beat
+    are created by POLISH. Their node data dict must include the created_by
+    attribution for pipeline stage-attribution tracking.
+    """
+    polish_created_roles = frozenset(
+        {"micro_beat", "residue_beat", "false_branch_beat", "sidetrack_beat"}
+    )
+    beat_nodes = graph.get_nodes_by_type("beat")
+    for bid, bdata in sorted(beat_nodes.items()):
+        role = bdata.get("role", "")
+        if role in polish_created_roles and bdata.get("created_by") != "POLISH":
+            errors.append(
+                f"R-2.5: beat {bid!r} has role={role!r} (POLISH-created) but "
+                f"missing 'created_by: POLISH' attribution"
+            )
 
 
 def _check_start_passage(

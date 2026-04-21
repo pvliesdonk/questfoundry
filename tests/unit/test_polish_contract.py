@@ -454,6 +454,19 @@ def test_R_4c_2_zero_choice_edges_fails(compliant_polish_graph: Graph) -> None:
     )
 
 
+def test_R_2_5_polish_beat_missing_created_by(compliant_polish_graph: Graph) -> None:
+    """R-2.5: every POLISH-created beat carries 'created_by: POLISH' attribution."""
+    # Add a micro-beat without the attribution.
+    compliant_polish_graph.create_node(
+        "beat::micro_offender",
+        {"type": "beat", "raw_id": "micro_offender", "role": "micro_beat", "summary": "x"},
+    )
+    errors = validate_polish_output(compliant_polish_graph)
+    assert any("R-2.5" in e and "created_by" in e for e in errors), (
+        f"expected R-2.5 created_by error, got {errors}"
+    )
+
+
 def test_polish_contract_error_is_value_error() -> None:
     """PolishContractError is a ValueError subclass (same convention as GrowContractError)."""
     assert issubclass(PolishContractError, ValueError)

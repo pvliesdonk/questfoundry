@@ -1206,6 +1206,7 @@ def _apply_residue_with_variants(graph: Graph, rspec: ResidueSpec) -> None:
             "scene_type": "sequel",
             "dilemma_impacts": [],
             "entities": [],
+            "created_by": "POLISH",
         },
     )
 
@@ -1377,6 +1378,7 @@ def _apply_sidetrack(graph: Graph, fb_spec: FalseBranchSpec) -> tuple[int, int]:
             "scene_type": "scene",
             "dilemma_impacts": [],
             "entities": fb_spec.sidetrack_entities,
+            "created_by": "POLISH",
         },
     )
 
