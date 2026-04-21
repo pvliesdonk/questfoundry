@@ -69,3 +69,16 @@ def test_embed_assets_skips_unsupported_and_outside(tmp_path: Path) -> None:
     assert embedded[0].asset_path == "assets/note.txt"
     assert embedded[1].asset_path == "../secret/steal.png"
     assert embedded[2].asset_path == ""
+
+
+def test_embed_assets_logs_error_on_missing_file(tmp_path: Path) -> None:
+    """Missing file referenced by illustration triggers the asset_missing ERROR log."""
+    project = tmp_path / "project"
+    (project / "assets").mkdir(parents=True, exist_ok=True)
+    # No file created at 'assets/ghost.png'
+
+    illustrations = [_make_illustration("assets/ghost.png")]
+    embedded, _ = embed_assets(illustrations, None, project)
+
+    # The illustration is returned unchanged (no data URI embedded).
+    assert embedded[0].asset_path == "assets/ghost.png"

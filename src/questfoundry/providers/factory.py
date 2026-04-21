@@ -369,7 +369,7 @@ def _query_ollama_num_ctx(host: str, model: str) -> int | None:
                 num_ctx = int(parts[-1])
                 log.info("ollama_num_ctx_from_model", model=model, num_ctx=num_ctx)
                 return num_ctx
-            except ValueError as e:
+            except ValueError as e:  # pragma: no cover - malformed ollama API response, defensive
                 log.debug(
                     "ollama_num_ctx_parse_failed",
                     error=str(e),
