@@ -145,12 +145,61 @@ R-2.15. Micro-detail updates must not contradict existing Entity state. Contradi
 | Micro-detail "mentor has blue eyes" contradicts existing `mentor.eyes: "gray"` | Contradictory update | R-2.15 |
 | Branch arc rewrites shared passage prose | Canonical prose is authoritative | R-2.10 |
 
+#### Two-Step Prose Generation (Implementation Note)
+
+Prose generation MAY be implemented as two separate LLM calls per passage — a first call to generate the prose text itself, and a second call to extract structured metadata (entity micro-detail updates, dramatic-question closure hints, scene-type classification). Implementations choosing this two-step path retain identical Output Contract obligations: both calls together must produce the same results as a single call would. The split is an implementation detail and is not observable from the graph.
+
+#### Lexical-Diversity Tracking (Implementation Note)
+
+Implementations MAY track lexical diversity over a rolling window (e.g., the last five passages) and log low-diversity runs as diagnostic hints. These hints are informational — they surface in logs for human review and may influence which passages the Phase 3 reviewer examines first, but they do not automatically trigger revision. Lexical-diversity tracking is not spec-mandated quality gating.
+
 ### Output Contract
 
 1. Every Passage has non-empty `prose`.
 2. Entity base-state updated with universal micro-details where applicable.
 3. No Entity nodes created, deleted, or had overlays modified.
 4. No Passage, Choice, or beat structural mutations.
+
+---
+
+## Phase 2a: Mechanical Quality Gate
+
+**Purpose:** Apply deterministic, LLM-free prose-quality checks to all passages before semantic review. The gate identifies passages that exhibit detectable surface-level quality problems (near-duplicate prose, repetitive openings, vocabulary uniformity, monotonous sentence rhythm) and forwards them as candidates to Phase 3 Review — or flags them directly for Phase 4 Revision.
+
+### Input Contract
+
+1. Phase 2 Output Contract satisfied (all passages have non-empty prose).
+
+### Operations
+
+#### Deterministic Checks
+
+**What:** Run the following checks over all passages in the current generation set:
+
+- **Near-duplicate detection:** Compute pairwise text similarity (e.g., rapidfuzz ratio) between passages that share an arc segment. Passages exceeding the similarity threshold are flagged as near-duplicates.
+- **Opening-trigram collision:** Extract the first three words of each passage. Passages with the same opening trigram as an adjacent passage in arc order are flagged.
+- **Vocabulary diversity:** Measure type-token ratio or equivalent lexical-variance metric per passage. Passages falling below the diversity floor are flagged.
+- **Sentence-length variance:** Compute within-passage variance of sentence lengths. Passages with insufficient variance (monotonous rhythm) are flagged.
+
+**Rules:**
+
+R-2a.1. Phase 2a is deterministic — no LLM calls. The same input always produces the same set of flags.
+
+R-2a.2. Phase 2a only flags passages; it does not modify prose. Flagged passages are added to the Phase 3 Review candidate list with the specific check that triggered the flag.
+
+**Violations:**
+
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| Prose modified during Phase 2a | Gate mutated content | R-2a.2 |
+| Phase 2a produces different flags for identical input | Non-deterministic check | R-2a.1 |
+| Flagged passage has no issue description | Flag is not actionable | R-2a.2 |
+
+### Output Contract
+
+1. A list of flagged Passage IDs with the specific mechanical check that triggered each flag.
+2. All passage prose unchanged.
+3. No LLM calls made.
 
 ---
 
@@ -222,6 +271,47 @@ R-4.3. Revision replaces the Passage's prose; previous prose is not preserved in
 
 1. Flagged Passages have updated prose.
 2. Other Passages unchanged.
+
+---
+
+## Phase 4a: Arc-Level Structural Validation
+
+**Purpose:** After per-passage revision, validate the structural integrity of each arc as a whole. The gate checks arc-level properties that cannot be evaluated per-passage in isolation — intensity trajectory, dramatic-question closure, narrative-function variety, and dilemma-prose coverage. Issues found are surfaced in a structural validation report and feed into Phase 5 if a second cycle is run.
+
+### Input Contract
+
+1. Phase 4 Output Contract satisfied (flagged passages revised).
+
+### Operations
+
+#### Per-Arc Structural Checks
+
+**What:** For each arc (canonical arc first, then each non-canonical arc), run the following checks:
+
+- **Intensity progression:** Verify that passage-level intensity scores follow a plausible climax structure (escalation toward a climax passage, release after). Arcs whose intensity sequence is monotonically flat or descending throughout are flagged.
+- **Dramatic-question closure:** Verify that each open dramatic question raised in the arc's passages receives a resolution passage before the arc's terminal. Arcs with unresolved dramatic questions at their terminal are flagged.
+- **Narrative-function variety:** Verify that the arc's passage sequence does not over-repeat any single narrative function (e.g., all passages classified as `sequel` with no `scene`). Arcs where any single function exceeds a configurable concentration threshold are flagged.
+- **Dilemma-prose coverage:** Verify that every Dilemma relevant to the arc has prose coverage at its commit beat passage. Arcs where a dilemma's commit beat passage has no prose addressing the dilemma's question are flagged.
+
+**Rules:**
+
+R-4a.1. Phase 4a is deterministic — no LLM calls. Checks use prose already in the graph and graph-structural data (arc order, dilemma membership, beat roles).
+
+R-4a.2. Phase 4a produces a structural validation report but does NOT regenerate prose. Issues found are recorded as arc-level flags. If Phase 5 is run, these flags are included in the second-cycle review input.
+
+**Violations:**
+
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| Prose regenerated during Phase 4a | Gate mutated content | R-4a.2 |
+| Structural report not produced when issues are found | Flags silently dropped | R-4a.2 |
+| Phase 4a result varies for identical graph state | Non-deterministic check | R-4a.1 |
+
+### Output Contract
+
+1. A structural validation report listing any arc-level flags with the specific check that triggered each flag.
+2. All passage prose unchanged.
+3. No LLM calls made.
 
 ---
 
@@ -313,12 +403,16 @@ R-2.12: Entity updates are universal micro-details (additive only).
 R-2.13: FILL cannot modify overlays.
 R-2.14: FILL cannot create new Entity nodes.
 R-2.15: Micro-detail updates must not contradict existing state.
+R-2a.1: Phase 2a is deterministic — no LLM calls; same input → same flags.
+R-2a.2: Phase 2a only flags passages; it does not modify prose.
 R-3.1: Review runs once per cycle.
 R-3.2: Flags name specific issues with actionable descriptions.
 R-3.3: Review does not modify prose.
 R-4.1: Revision uses Phase 2 rules plus the issue description.
 R-4.2: Each Passage revised at most once per cycle.
 R-4.3: Revision replaces prose (no version history).
+R-4a.1: Phase 4a is deterministic — no LLM calls; checks use graph-structural data.
+R-4a.2: Phase 4a produces a structural validation report but does not regenerate prose.
 R-5.1: Maximum 2 review+revision cycles per FILL run.
 R-5.2: Persistent quality issues escalate upstream, not ship silently.
 R-5.3: Cap is configurable; default 2.
@@ -331,13 +425,15 @@ R-5.3: Cap is configurable; default 2.
 |-------|------|----------|
 | 1 | Voice Document Creation | Required — approve voice document |
 | 2 | Prose Generation | Approve to proceed to review (may spot-check during) |
+| 2a | Mechanical Quality Gate | None — deterministic, automatic |
 | 3 | Review | Required — approve revision targets |
 | 4 | Revision | Required — approve revisions, decide whether to run Phase 5 |
+| 4a | Arc-Level Structural Validation | None — deterministic, automatic; report shown to human before Phase 5 decision |
 | 5 | Second Cycle (optional) | Required — final sign-off |
 
 ## Iteration Control
 
-**Forward flow:** 1 → 2 → 3 → 4 → (optional 5) → done.
+**Forward flow:** 1 → 2 → 2a → 3 → 4 → 4a → (optional 5) → done.
 
 **Backward loops:**
 
@@ -366,8 +462,11 @@ R-5.3: Cap is configurable; default 2.
 | 2 | New Entity needed for prose | R-2.14 violation attempt | Halt; return to SEED |
 | 2 | Micro-detail contradicts existing state | R-2.15 check | Halt; human decides which is correct |
 | 2 | Hard transition without GROW bridge | `fill_hard_transition_detected` warning | Flag for human review; may need GROW re-run |
+| 2a | Near-duplicate passages persist after review | Phase 3 flag not acted on | Escalate with stronger diversification prompt in Phase 4 |
 | 3 | Too many flags | Human overwhelm | Prioritize; accept some imperfection |
 | 4 | Revision doesn't fix issue | Human review | Try different approach or accept with flag |
+| 4a | Dramatic question unresolved at arc terminal | Structural validation report | Add resolution passage in POLISH or accept with flag |
+| 4a | Intensity progression flat across full arc | Structural validation report | Return to POLISH for beat summary adjustments |
 | 5 | Quality still poor after 2 cycles | Cap reached | Ship with escalation flag to upstream stages |
 
 **Structural failures (abort to earlier stage):**
