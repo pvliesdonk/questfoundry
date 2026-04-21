@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from questfoundry.graph.graph import Graph
-from questfoundry.pipeline.stages.polish.llm_phases import _detect_pacing_flags
+from questfoundry.pipeline.stages.polish.llm_phases import (
+    _detect_duplicate_labels_in_passage,
+    _detect_pacing_flags,
+)
 
 
 def _make_beat(graph: Graph, beat_id: str, summary: str, **kwargs: object) -> None:
@@ -99,3 +102,65 @@ def test_pacing_path_id_reported_for_dual_belongs_to_beat() -> None:
     assert len(consecutive) >= 1
     assert all(isinstance(f["path_id"], str) for f in consecutive)
     assert all(f["path_id"] != "" for f in consecutive)
+
+
+# ---------------------------------------------------------------------------
+# Phase 5a: R-5.2 duplicate-label detection
+# ---------------------------------------------------------------------------
+
+
+def test_detect_duplicate_labels_empty_returns_empty() -> None:
+    """No choice specs → no collisions."""
+    assert _detect_duplicate_labels_in_passage([]) == []
+
+
+def test_detect_duplicate_labels_distinct_labels_no_collision() -> None:
+    """Distinct labels from the same passage produce no collisions."""
+    specs = [
+        {"from_passage": "passage::p1", "to_passage": "passage::a", "label": "Go north"},
+        {"from_passage": "passage::p1", "to_passage": "passage::b", "label": "Go south"},
+    ]
+    assert _detect_duplicate_labels_in_passage(specs) == []
+
+
+def test_detect_duplicate_labels_case_insensitive_collision() -> None:
+    """Case-insensitive collision within a passage is reported."""
+    specs = [
+        {"from_passage": "passage::p1", "to_passage": "passage::a", "label": "Forward"},
+        {"from_passage": "passage::p1", "to_passage": "passage::b", "label": "forward"},
+    ]
+    collisions = _detect_duplicate_labels_in_passage(specs)
+    assert len(collisions) == 1
+    assert collisions[0]["from_passage"] == "passage::p1"
+    assert collisions[0]["label"] == "forward"
+    assert collisions[0]["targets"] == ["passage::a", "passage::b"]
+
+
+def test_detect_duplicate_labels_empty_label_skipped() -> None:
+    """A choice spec with empty/missing label is not counted."""
+    specs = [
+        {"from_passage": "passage::p1", "to_passage": "passage::a", "label": ""},
+        {"from_passage": "passage::p1", "to_passage": "passage::b", "label": "Go"},
+    ]
+    assert _detect_duplicate_labels_in_passage(specs) == []
+
+
+def test_detect_duplicate_labels_different_passages_no_collision() -> None:
+    """Same label across different passages is fine (R-5.2 is per-passage)."""
+    specs = [
+        {"from_passage": "passage::p1", "to_passage": "passage::a", "label": "Continue"},
+        {"from_passage": "passage::p2", "to_passage": "passage::b", "label": "Continue"},
+    ]
+    assert _detect_duplicate_labels_in_passage(specs) == []
+
+
+def test_detect_duplicate_labels_multiple_collisions_sorted() -> None:
+    """Multiple source passages with collisions return deterministically sorted results."""
+    specs = [
+        {"from_passage": "passage::p2", "to_passage": "passage::x", "label": "Go"},
+        {"from_passage": "passage::p2", "to_passage": "passage::y", "label": "go"},
+        {"from_passage": "passage::p1", "to_passage": "passage::z", "label": "Wait"},
+        {"from_passage": "passage::p1", "to_passage": "passage::w", "label": "wait"},
+    ]
+    collisions = _detect_duplicate_labels_in_passage(specs)
+    assert [c["from_passage"] for c in collisions] == ["passage::p1", "passage::p2"]

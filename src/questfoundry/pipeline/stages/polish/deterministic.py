@@ -816,9 +816,24 @@ def compute_choice_edges(
                                 combo_count=len(flag_combos),
                             )
                         # Filter to soft-dilemma flags only (R-4c.3/R-4c.4).
-                        soft_flags = [
-                            f for f in combo if flag_to_dilemma_role.get(f, "soft") == "soft"
-                        ]
+                        # Flags without a resolvable dilemma default to "soft"
+                        # (included in requires); surface the fallback so a
+                        # broken derived_from chain is visible, not silent.
+                        soft_flags: list[str] = []
+                        for f in combo:
+                            role = flag_to_dilemma_role.get(f)
+                            if role is None:
+                                log.warning(
+                                    "choice_requires_flag_role_unresolved",
+                                    flag=f,
+                                    from_passage=from_passage,
+                                    to_passage=to_passage,
+                                    hint="state_flag has no derived_from chain to a dilemma; "
+                                    "treating as soft for R-4c.3 purposes",
+                                )
+                                soft_flags.append(f)
+                            elif role == "soft":
+                                soft_flags.append(f)
                         if soft_flags:
                             requires = sorted(soft_flags)
                 except ValueError as e:

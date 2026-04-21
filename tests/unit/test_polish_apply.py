@@ -288,6 +288,11 @@ class TestCreateResidueBeatAndPassage:
         assert ("beat::residue_r_par", "beat::pred") in beat_edges
         assert ("beat::target", "beat::residue_r_par") in beat_edges
 
+        # R-5.8 parallel_passages invariant: the predecessor's original direct
+        # edge to the target is PRESERVED.  Flag-absent players take this
+        # path; flag-present players take the parallel-passage detour above.
+        assert ("beat::target", "beat::pred") in beat_edges
+
 
 class TestCreateChoiceEdge:
     """Tests for _create_choice_edge."""

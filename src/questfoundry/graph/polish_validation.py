@@ -123,9 +123,15 @@ def _check_beat_grouping(
     for beat_id in beat_nodes:
         passages = beat_to_passages.get(beat_id, [])
         if len(passages) == 0:
-            # Skip micro/residue/false_branch beats — they may not exist yet at validation time
+            # ``micro_beat`` is the only legitimately exempt role:
+            # ``_insert_micro_beat`` intentionally does not create a
+            # ``grouped_in`` edge (pacing beats are folded into adjacent
+            # passages during Phase 6 apply).  ``residue_beat`` and
+            # ``false_branch_beat`` are always grouped at creation time
+            # (``_apply_residue_*`` and ``_apply_sidetrack`` both emit
+            # ``grouped_in`` edges), so they must NOT be exempt here.
             role = beat_nodes[beat_id].get("role", "")
-            if role not in ("micro_beat", "false_branch_beat"):  # residue_beat no longer exempt
+            if role != "micro_beat":
                 errors.append(f"Beat {beat_id} not grouped into any passage")
         elif len(passages) > 1:
             errors.append(f"Beat {beat_id} grouped into {len(passages)} passages: {passages}")

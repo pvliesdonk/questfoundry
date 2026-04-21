@@ -70,6 +70,28 @@ def test_polish_stage_execute_requires_project_path() -> None:
         asyncio.run(stage.execute(mock_model, "test prompt"))
 
 
+def test_polish_stage_phase_order_raises_on_unresolvable_phase(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The registry-fallback branch raises PolishStageError when a registered
+    phase is neither a bound method nor a module-level function and the
+    registry cannot resolve it either."""
+    from questfoundry.pipeline.stages.polish.registry import get_polish_registry
+
+    stage = PolishStage()
+    registry = get_polish_registry()
+
+    # Inject a phony phase name into the registry execution order that
+    # isn't in _METHOD_PHASES or _FREE_PHASES, and make
+    # registry.get_function return None for it.
+    fake_order = ["phantom_phase", *registry.execution_order()]
+    monkeypatch.setattr(registry, "execution_order", lambda: fake_order)
+    monkeypatch.setattr(registry, "get_function", lambda _name: None)
+
+    with pytest.raises(PolishStageError, match="phantom_phase"):
+        stage._phase_order()
+
+
 def test_polish_cli_command_exists() -> None:
     """The 'polish' CLI command must be registered."""
     result = runner.invoke(app, ["polish", "--help"])
