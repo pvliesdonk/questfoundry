@@ -10,7 +10,7 @@ import asyncio
 from unittest.mock import MagicMock
 
 from questfoundry.graph.graph import Graph
-from questfoundry.models.polish import CharacterArcMetadata, Phase3Output
+from questfoundry.models.polish import ArcPivot, CharacterArcMetadata, Phase3Output
 from questfoundry.pipeline.stages.polish.llm_phases import (
     _check_consecutive_runs,
     _check_post_commit_sequel,
@@ -395,11 +395,13 @@ class _FakePolishLLMHost(_PolishLLMPhaseMixin):
         return (self._llm_result, 1, 100)
 
 
-class TestPhase3ArcMetadataEdge:
-    """Phase 3 must add has_arc_metadata edge from entity to arc node."""
+class TestPhase3CharacterArcField:
+    """Phase 3 must annotate Entity nodes with character_arc field per R-3.3."""
 
-    def test_has_arc_metadata_edge_created(self) -> None:
-        """Phase 3 creates has_arc_metadata edge from entity to arc metadata node."""
+    def test_character_arc_field_on_entity(self) -> None:
+        """R-3.3: Phase 3 annotates Entity node's data dict with 'character_arc';
+        no separate 'character_arc_metadata' node and no 'has_arc_metadata' edge
+        are created."""
         graph = Graph.empty()
 
         # Create entity node
@@ -413,12 +415,25 @@ class TestPhase3ArcMetadataEdge:
         _make_beat(graph, "beat::b", "Second beat", entities=["entity::hero"])
         _add_predecessor(graph, "beat::b", "beat::a")
 
+        # Create a path (needed to make end_per_path work)
+        graph.create_node(
+            "path::brave",
+            {"type": "path", "raw_id": "brave"},
+        )
+
         # Phase 3 output
         arc_output = Phase3Output(
             character_arcs=[
                 CharacterArcMetadata(
                     entity_id="entity::hero",
                     start="Nervous newcomer",
+                    pivots=[
+                        ArcPivot(
+                            path_id="path::brave",
+                            beat_id="beat::b",
+                            description="Gains confidence",
+                        )
+                    ],
                     end_per_path={"path::brave": "Confident hero"},
                 )
             ]
@@ -429,11 +444,22 @@ class TestPhase3ArcMetadataEdge:
 
         assert result.status == "completed"
 
-        # Verify has_arc_metadata edge exists from entity to arc node
-        arc_node_id = "character_arc_metadata::hero"
-        edges = graph.get_edges(from_id="entity::hero", edge_type="has_arc_metadata")
-        assert len(edges) == 1
-        assert edges[0]["to"] == arc_node_id
+        # Verify character_arc field exists on entity node
+        entity_data = graph.get_node("entity::hero")
+        assert entity_data is not None
+        assert "character_arc" in entity_data
+        arc = entity_data["character_arc"]
+        assert "start" in arc
+        assert arc["start"] == "Nervous newcomer"
+        assert "pivots" in arc
+        assert "path::brave" in arc["pivots"]
+        assert arc["pivots"]["path::brave"] == "beat::b"
+        assert "end_per_path" in arc
+        assert arc["end_per_path"]["path::brave"] == "Confident hero"
+
+        # And the forbidden shapes are absent:
+        assert graph.get_nodes_by_type("character_arc_metadata") == {}
+        assert graph.get_edges(edge_type="has_arc_metadata") == []
 
 
 # ---------------------------------------------------------------------------
