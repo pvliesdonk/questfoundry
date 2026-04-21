@@ -373,9 +373,12 @@ def test_R_4a_3_passage_stops_mid_linear_run(compliant_polish_graph: Graph) -> N
 # --------------------------------------------------------------------------
 
 
-def test_R_5_7_residue_passage_missing_mapping_strategy(
+def test_R_5_8_residue_passage_missing_mapping_strategy(
     compliant_polish_graph: Graph,
 ) -> None:
+    """R-5.8: plan must record the mapping-strategy choice for every residue
+    passage.  The spec violations table ties missing-choice to R-5.8 and the
+    validator emits that tag."""
     compliant_polish_graph.create_node(
         "passage::residue_01",
         {
@@ -388,8 +391,8 @@ def test_R_5_7_residue_passage_missing_mapping_strategy(
         },
     )
     errors = validate_polish_output(compliant_polish_graph)
-    assert any("R-5.7" in e or "R-5.8" in e or "mapping_strategy" in e for e in errors), (
-        f"expected missing mapping_strategy error, got {errors}"
+    assert any("R-5.8" in e and "mapping_strategy" in e for e in errors), (
+        f"expected R-5.8 missing mapping_strategy error, got {errors}"
     )
 
 

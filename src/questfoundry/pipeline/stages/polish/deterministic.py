@@ -257,12 +257,22 @@ def compute_beat_grouping(graph: Graph) -> list[PassageSpec]:
                     merged_entities.append(eid)
                     seen_entities.add(eid)
 
+        # `grouping_type` is a legacy annotation used by Phase 5f
+        # (transition-guidance generation) and by `format_transition_guidance_context`
+        # to identify multi-beat passages that need scene-to-scene transitions.
+        # Both gate on `grouping_type == "collapse"`.  The new rule has no
+        # "collapse" vs "singleton" distinction — it's one uniform algorithm —
+        # but we still populate the field so Phase 5f keeps firing on
+        # multi-beat runs.  Single-beat runs remain `singleton`.
+        grouping_type = "collapse" if len(run) > 1 else "singleton"
+
         specs.append(
             PassageSpec(
                 passage_id=f"passage::{run[0].split('::', 1)[-1]}",
                 beat_ids=list(run),
                 summary=beat_nodes[run[0]].get("summary", ""),
                 entities=merged_entities,
+                grouping_type=grouping_type,
             )
         )
 

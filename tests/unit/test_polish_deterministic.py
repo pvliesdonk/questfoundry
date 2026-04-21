@@ -60,10 +60,12 @@ class TestComputeBeatGrouping:
         assert all(s.grouping_type == "singleton" for s in specs)
 
     def test_collapse_grouping(self) -> None:
-        """Sequential same-path beats collapse into one passage (maximal-linear-collapse).
+        """Sequential beats in a linear run collapse into one passage.
 
-        Under R-4a.3 all grouping_type values are 'singleton'; the collapse is
-        expressed by the passage containing all three beats in a single PassageSpec.
+        Under R-4a.3, multi-beat runs are tagged ``grouping_type="collapse"``
+        so Phase 5f's transition-guidance generator continues to fire; single-
+        beat passages remain ``"singleton"``.  The collapse rule itself is
+        DAG-topology driven — path membership is not consulted.
         """
         graph = Graph.empty()
         graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
@@ -80,6 +82,19 @@ class TestComputeBeatGrouping:
         # All three beats form a maximal linear run → exactly one passage.
         assert len(specs) == 1
         assert set(specs[0].beat_ids) == {"beat::a", "beat::b", "beat::c"}
+        assert specs[0].grouping_type == "collapse"
+
+    def test_singleton_beat_keeps_singleton_grouping_type(self) -> None:
+        """Single-beat passages stay tagged ``singleton`` so Phase 5f's
+        transition-guidance gate does not fire on them (no transition needed
+        within a one-beat passage)."""
+        graph = Graph.empty()
+        graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
+        _make_beat(graph, "beat::solo", "Lone beat")
+        _add_belongs_to(graph, "beat::solo", "path::p1")
+
+        specs = compute_beat_grouping(graph)
+        assert len(specs) == 1
         assert specs[0].grouping_type == "singleton"
 
     # DELETED: test_intersection_grouping
