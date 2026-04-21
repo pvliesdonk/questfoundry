@@ -94,7 +94,7 @@ def validate_polish_output(graph: Graph) -> list[str]:
     _check_variant_integrity(passage_nodes, graph, errors)
     _check_choice_integrity(graph, errors)
     _check_residue_ordering(graph, errors)
-    _check_arc_metadata_edges(graph, errors)
+    _check_no_character_arc_metadata_nodes(graph, errors)
     _check_arc_completeness(graph, errors)
     _check_divergences_have_choices(graph, beat_to_passages, errors)
     _check_no_overlapping_requires(graph, errors)
@@ -432,16 +432,54 @@ def _check_no_unresolved_splits(
             )
 
 
-def _check_arc_metadata_edges(
-    graph: Graph,
-    errors: list[str],
-) -> None:
-    """Every character_arc_metadata node must have a has_arc_metadata edge from an entity."""
-    arc_nodes = graph.get_nodes_by_type("character_arc_metadata")
-    for arc_id in arc_nodes:
-        edges = graph.get_edges(edge_type="has_arc_metadata", to_id=arc_id)
-        if not edges:
-            errors.append(f"Arc metadata node {arc_id} has no has_arc_metadata edge from entity")
+def _check_no_character_arc_metadata_nodes(graph: Graph, errors: list[str]) -> None:
+    """R-3.3: arc metadata is stored as annotation on Entity nodes, never as separate nodes.
+
+    - No node may have type ``character_arc_metadata``.
+    - No ``has_arc_metadata`` edge may exist.
+    - Every Entity with ≥2 ``appears`` edges (arc-worthy) must carry a
+      ``character_arc`` data dict with ``start``, ``pivots``, ``end_per_path``.
+    """
+    for nid, _ndata in graph.get_nodes_by_type("character_arc_metadata").items():
+        errors.append(
+            f"R-3.3: node {nid!r} has forbidden type 'character_arc_metadata'; "
+            "arc metadata must be stored on the Entity node itself"
+        )
+    for edge in graph.get_edges(edge_type="has_arc_metadata"):
+        errors.append(
+            f"R-3.3: forbidden 'has_arc_metadata' edge {edge['from']!r} → "
+            f"{edge['to']!r}; arc metadata is an entity annotation, not a "
+            "separate node"
+        )
+
+    # Arc-worthy entities need a character_arc annotation.  R-3.1 defines
+    # arc-worthy as "2+ beat appearances", so only count beat-directed
+    # ``appears`` edges — DRESS may also populate entity→passage ``appears``
+    # edges, which would otherwise inflate the count.
+    beat_ids = set(graph.get_nodes_by_type("beat").keys())
+    appears_edges = graph.get_edges(edge_type="appears")
+    appearance_count: dict[str, int] = {}
+    for edge in appears_edges:
+        if edge["to"] in beat_ids:
+            appearance_count[edge["from"]] = appearance_count.get(edge["from"], 0) + 1
+
+    entity_nodes = graph.get_nodes_by_type("entity")
+    for entity_id, entity_data in sorted(entity_nodes.items()):
+        if appearance_count.get(entity_id, 0) < 2:
+            continue
+        arc = entity_data.get("character_arc")
+        if not isinstance(arc, dict):
+            errors.append(
+                f"R-3.3: entity {entity_id!r} has {appearance_count[entity_id]} beat "
+                "appearances but no 'character_arc' annotation on its data dict"
+            )
+            continue
+        for required in ("start", "pivots", "end_per_path"):
+            if required not in arc:
+                errors.append(
+                    f"R-3.3: entity {entity_id!r} 'character_arc' annotation "
+                    f"missing required field {required!r}"
+                )
 
 
 # ---------------------------------------------------------------------------
