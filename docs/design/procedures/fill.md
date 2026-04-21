@@ -225,13 +225,53 @@ R-4.3. Revision replaces the Passage's prose; previous prose is not preserved in
 
 ---
 
+## Phase 4a: Arc-Level Structural Validation
+
+**Purpose:** After per-passage revision, validate the structural integrity of each arc as a whole.  Some structural promises made by GROW/SEED (the arc's effect progression, Dilemma commit closure, and per-Dilemma prose coverage at commit beats) cannot be re-checked by reading a single passage — they are properties of the arc's beat sequence and passage prose as a whole.  Phase 4a is FILL's structural QA of its own output against those upstream promises.
+
+### Input Contract
+
+1. Phase 4 Output Contract satisfied.
+
+### Operations
+
+#### Per-Arc Structural Checks
+
+**What:** For each arc (canonical arc first, then each non-canonical arc), run the following deterministic checks:
+
+- **Effect-sequence progression:** Inspect the arc's beats in DAG order and verify the sequence of `dilemma_impacts.effect` values shows structural progression toward a commit — arcs whose beats consist entirely of one effect type (e.g., only `reveals`) or whose sequence never reaches `commits` before the arc's terminal fail this check.  Concretely: locate the first beat on the arc whose `effect` is `commits` and verify at least one earlier beat on the arc has `effect` `advances` or `complicates`.  If no `commits` beat exists on the arc before its terminal, the arc fails.  This is a graph-structural check over ontology-defined fields only.
+- **Dilemma commit closure:** Verify every Dilemma explored on this arc (every Dilemma whose path has `belongs_to` edges from beats on the arc) has at least one beat on the arc whose `dilemma_impacts.effect` is `commits` before the arc's terminal.  An arc that explores a Dilemma but terminates without committing it fails this check.
+- **Dilemma-prose coverage:** Verify every Dilemma committed on the arc has non-empty prose at the commit-beat's passage AND the prose text mentions at least one of the Dilemma's central entities (resolved via `anchored_to` edges, matched by case-insensitive substring against each entity's `name` or `raw_id`).  This is a deterministic prose-text check — no LLM semantic judgment; either the name appears in the passage prose or it does not.  It is the narrative counterpart to Dilemma commit closure: the structural commit must be reflected in prose at the corresponding passage.
+
+**Rules:**
+
+R-4a.1. Phase 4a is deterministic — no LLM calls.  Checks use prose already in the graph plus graph-structural data (arc order, dilemma membership, beat roles).
+
+R-4a.2. Phase 4a produces a structural validation report but does NOT regenerate prose.  Issues found become arc-level flags.  If Phase 5 is run, these flags are included in the second-cycle review input.
+
+**Violations:**
+
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| Prose regenerated during Phase 4a | Gate mutated content | R-4a.2 |
+| Structural report not produced when issues are found | Flags silently dropped | R-4a.2 |
+| Phase 4a result varies for identical graph state | Non-deterministic check | R-4a.1 |
+
+### Output Contract
+
+1. A structural validation report (empty if no issues found) listing any arc-level flags with the specific check that triggered each flag.
+2. All passage prose unchanged.
+3. No LLM calls made.
+
+---
+
 ## Phase 5: Optional Second Cycle
 
 **Purpose:** If quality is still unsatisfactory after Phase 4, run one more review + revision cycle. Hard cap: two total cycles.
 
 ### Input Contract
 
-1. Phase 4 Output Contract satisfied, and human requests another cycle.
+1. Phase 4a Output Contract satisfied, and human requests another cycle.  The Phase 4a structural report is part of the second-cycle review input.
 
 ### Operations
 
@@ -319,6 +359,8 @@ R-3.3: Review does not modify prose.
 R-4.1: Revision uses Phase 2 rules plus the issue description.
 R-4.2: Each Passage revised at most once per cycle.
 R-4.3: Revision replaces prose (no version history).
+R-4a.1: Phase 4a is deterministic — no LLM calls.
+R-4a.2: Phase 4a produces a structural report but does not regenerate prose.
 R-5.1: Maximum 2 review+revision cycles per FILL run.
 R-5.2: Persistent quality issues escalate upstream, not ship silently.
 R-5.3: Cap is configurable; default 2.
@@ -333,11 +375,12 @@ R-5.3: Cap is configurable; default 2.
 | 2 | Prose Generation | Approve to proceed to review (may spot-check during) |
 | 3 | Review | Required — approve revision targets |
 | 4 | Revision | Required — approve revisions, decide whether to run Phase 5 |
+| 4a | Arc-Level Structural Validation | None — automatic (deterministic report; flags feed Phase 5) |
 | 5 | Second Cycle (optional) | Required — final sign-off |
 
 ## Iteration Control
 
-**Forward flow:** 1 → 2 → 3 → 4 → (optional 5) → done.
+**Forward flow:** 1 → 2 → 3 → 4 → 4a → (optional 5) → done.
 
 **Backward loops:**
 
@@ -368,6 +411,9 @@ R-5.3: Cap is configurable; default 2.
 | 2 | Hard transition without GROW bridge | `fill_hard_transition_detected` warning | Flag for human review; may need GROW re-run |
 | 3 | Too many flags | Human overwhelm | Prioritize; accept some imperfection |
 | 4 | Revision doesn't fix issue | Human review | Try different approach or accept with flag |
+| 4a | Effect-sequence progression flag | `run_arc_validation` report | Phase 5 revision first; if unresolved, escalate to GROW (missing `commits` or non-progressing effect sequence is a beat-DAG shape issue) |
+| 4a | Dilemma commit closure flag | `run_arc_validation` report | Escalate to GROW — an unclosed Dilemma on a completed arc is a structural error not fixable by prose revision |
+| 4a | Dilemma-prose coverage flag | `run_arc_validation` report | Phase 5 revision first (add dilemma reference to commit-beat prose); if unresolved, escalate to POLISH (check dilemma is central to the commit passage) |
 | 5 | Quality still poor after 2 cycles | Cap reached | Ship with escalation flag to upstream stages |
 
 **Structural failures (abort to earlier stage):**
@@ -417,6 +463,10 @@ Human + LLM review pass. 2 passages flagged: one for voice drift (Passage 7 soun
 ### Phase 4
 
 Passage 7 regenerated with stronger voice reinforcement (more exemplar passages in context). Passage 10 regenerated with both approach-passage prose blocks as explicit context.
+
+### Phase 4a
+
+Arc-level structural validation runs on both arcs.  Effect-sequence progression: each arc contains `advances` / `complicates` beats followed by a `commits` beat before the arc's terminal, OK.  Dilemma commit closure: `mentor_trust` has a beat with `effect=commits` on both arcs, OK.  Dilemma-prose coverage: the commit-beat passage on each arc contains prose referencing the mentor entity (the Dilemma's `anchored_to` target), OK.  Structural report: empty.
 
 Human approves. No Phase 5 needed.
 
