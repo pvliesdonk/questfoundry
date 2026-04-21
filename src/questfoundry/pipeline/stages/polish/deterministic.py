@@ -244,11 +244,25 @@ def compute_beat_grouping(graph: Graph) -> list[PassageSpec]:
             assigned.add(nxt)
             current = nxt
 
+        # Merge entities across all beats in the run (order-preserving, unique).
+        # Phase 4b's prose feasibility audit reads ``spec.entities`` to compute
+        # entity overlap between the passage and structural flags; if this is
+        # left empty, every structural flag is classified as irrelevant and
+        # no variant/residue specs are generated.
+        merged_entities: list[str] = []
+        seen_entities: set[str] = set()
+        for bid in run:
+            for eid in beat_nodes[bid].get("entities", []) or []:
+                if eid not in seen_entities:
+                    merged_entities.append(eid)
+                    seen_entities.add(eid)
+
         specs.append(
             PassageSpec(
                 passage_id=f"passage::{run[0].split('::', 1)[-1]}",
                 beat_ids=list(run),
                 summary=beat_nodes[run[0]].get("summary", ""),
+                entities=merged_entities,
             )
         )
 

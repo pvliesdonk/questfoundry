@@ -92,30 +92,35 @@ class TestComputeBeatGrouping:
     # linking them) now correctly produce two separate singleton passages.
     # See docs/design/procedures/polish.md §R-4a.3, R-4a.4.
 
-    def test_intersection_grouping_beat_ids_not_node_ids(self) -> None:
-        """Intersection group uses beat_ids field, not node_ids (regression for #1172)."""
+    def test_intersection_groups_are_ignored(self) -> None:
+        """R-4a.4: intersection_group nodes are GROW-internal and must not affect
+        POLISH's passage grouping.  Even a well-formed intersection group yields
+        no intersection-typed passage — the DAG topology alone drives grouping."""
         graph = Graph.empty()
         graph.create_node("path::pa", {"type": "path", "raw_id": "pa"})
         _make_beat(graph, "beat::a", "Path A beat")
         _add_belongs_to(graph, "beat::a", "path::pa")
 
-        # Create intersection group with the WRONG field name (old bug)
+        # Well-formed intersection group (correct beat_ids field) — still ignored.
         graph.create_node(
-            "intersection_group::ig_wrong",
+            "intersection_group::ig1",
             {
                 "type": "intersection_group",
-                "raw_id": "ig_wrong",
-                "node_ids": ["beat::a"],  # wrong field — producer uses beat_ids
+                "raw_id": "ig1",
+                "beat_ids": ["beat::a"],
             },
         )
 
         specs = compute_beat_grouping(graph)
-        # With wrong field, intersection group yields no beats → no intersection passage
-        intersection_specs = [s for s in specs if s.grouping_type == "intersection"]
-        assert len(intersection_specs) == 0
+        # Under R-4a.4 no spec is of intersection type; the beat becomes a
+        # singleton passage based on its DAG topology.
+        assert all(s.grouping_type != "intersection" for s in specs)
+        assert any("beat::a" in s.beat_ids for s in specs)
 
-    def test_different_paths_dont_collapse(self) -> None:
-        """Sequential beats on different paths don't collapse."""
+    def test_cross_path_linear_beats_collapse(self) -> None:
+        """R-4a.3: two linearly-adjacent beats collapse into one passage even
+        when they belong to different paths.  Path membership is not consulted
+        under the new maximal-linear-collapse rule."""
         graph = Graph.empty()
         graph.create_node("path::pa", {"type": "path", "raw_id": "pa"})
         graph.create_node("path::pb", {"type": "path", "raw_id": "pb"})
@@ -126,8 +131,8 @@ class TestComputeBeatGrouping:
         _add_predecessor(graph, "beat::b", "beat::a")
 
         specs = compute_beat_grouping(graph)
-        # Should be singletons, not collapsed
-        assert all(s.grouping_type == "singleton" for s in specs)
+        assert len(specs) == 1
+        assert set(specs[0].beat_ids) == {"beat::a", "beat::b"}
 
     def test_all_beats_assigned(self) -> None:
         """Every beat is assigned to exactly one passage."""

@@ -6,7 +6,10 @@ stage result container.
 
 Node types created by POLISH:
 - micro_beat: Brief transition beats inserted for pacing (Phase 2)
-- character_arc_metadata: Arc data for entities (Phase 3)
+
+Note: Phase 3 writes character_arc annotations directly onto Entity nodes
+(data-dict field) — no separate node type.  See docs/design/procedures/polish.md
+§R-3.3 and ontology Part 1 "Character Arc Metadata".
 
 See docs/design/procedures/polish.md for algorithm details.
 
