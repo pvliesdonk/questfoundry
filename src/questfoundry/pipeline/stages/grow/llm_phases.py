@@ -1312,10 +1312,10 @@ class _LLMPhaseMixin:
                 etype = edata.get("entity_type", "character")
                 arc_type = ARC_TYPE_BY_ENTITY_TYPE.get(etype, "transformation")
 
-                # Warn if pivot is on a shared beat (belongs to multiple paths)
+                # Note if pivot is on a shared beat (belongs to multiple paths); arc still accepted
                 pivot_paths = graph.get_edges(from_id=arc.pivot_beat, edge_type="belongs_to")
                 if len(pivot_paths) > 1:
-                    log.warning(
+                    log.info(
                         "shared_pivot_beat",
                         entity_id=arc.entity_id,
                         pivot_beat=arc.pivot_beat,

@@ -174,7 +174,7 @@ class _LLMHelperMixin:
                     if sem_errors:
                         entry_count = count_entries(validated)
                         error_ratio = len(sem_errors) / max(entry_count, 1)
-                        log.warning(
+                        log.info(
                             "grow_semantic_validation_fail",
                             template=template_name,
                             errors=len(sem_errors),
@@ -193,7 +193,7 @@ class _LLMHelperMixin:
                 return validated, llm_calls, total_tokens
 
             except (ValidationError, TypeError) as e:
-                log.warning(
+                log.info(
                     "grow_llm_validation_fail",
                     template=template_name,
                     attempt=attempt + 1,
@@ -297,7 +297,7 @@ class _LLMHelperMixin:
             if not beat_id.startswith("beat::"):
                 prefixed = f"beat::{beat_id}"
                 if prefixed in valid_beat_set:
-                    log.warning(
+                    log.info(
                         f"{phase_name}_unprefixed_beat_id",
                         beat_id=beat_id,
                         prefixed=prefixed,
@@ -310,23 +310,23 @@ class _LLMHelperMixin:
                 gap.path_id if gap.path_id.startswith("path::") else f"path::{gap.path_id}"
             )
             if prefixed_pid != gap.path_id:
-                log.warning(
+                log.info(
                     f"{phase_name}_unprefixed_path_id",
                     path_id=gap.path_id,
                     prefixed=prefixed_pid,
                 )
             if prefixed_pid not in valid_path_set:
-                log.warning(f"{phase_name}_invalid_path_id", path_id=gap.path_id)
+                log.info(f"{phase_name}_invalid_path_id", path_id=gap.path_id)
                 report.invalid_path_id += 1
                 continue
             after_beat = _normalize_beat_id(gap.after_beat)
             before_beat = _normalize_beat_id(gap.before_beat)
             if after_beat and after_beat not in valid_beat_set:
-                log.warning(f"{phase_name}_invalid_after_beat", beat_id=after_beat)
+                log.info(f"{phase_name}_invalid_after_beat", beat_id=after_beat)
                 report.invalid_after_beat += 1
                 continue
             if before_beat and before_beat not in valid_beat_set:
-                log.warning(f"{phase_name}_invalid_before_beat", beat_id=before_beat)
+                log.info(f"{phase_name}_invalid_before_beat", beat_id=before_beat)
                 report.invalid_before_beat += 1
                 continue
             # Validate path membership: anchors must belong to the gap's path.
@@ -336,7 +336,7 @@ class _LLMHelperMixin:
                     e["to"] for e in graph.get_edges(edge_type="belongs_to", from_id=after_beat)
                 }
                 if prefixed_pid not in after_paths:
-                    log.warning(
+                    log.info(
                         f"{phase_name}_anchor_wrong_path",
                         after_beat=after_beat,
                         path_id=prefixed_pid,
@@ -348,7 +348,7 @@ class _LLMHelperMixin:
                     e["to"] for e in graph.get_edges(edge_type="belongs_to", from_id=before_beat)
                 }
                 if prefixed_pid not in before_paths:
-                    log.warning(
+                    log.info(
                         f"{phase_name}_anchor_wrong_path",
                         before_beat=before_beat,
                         path_id=prefixed_pid,
@@ -362,7 +362,7 @@ class _LLMHelperMixin:
                     after_idx = sequence.index(after_beat)
                     before_idx = sequence.index(before_beat)
                     if after_idx >= before_idx:
-                        log.warning(
+                        log.info(
                             f"{phase_name}_invalid_beat_order",
                             after_beat=after_beat,
                             before_beat=before_beat,
@@ -370,7 +370,7 @@ class _LLMHelperMixin:
                         report.invalid_beat_order += 1
                         continue
                 except ValueError:
-                    log.warning(f"{phase_name}_beat_not_in_sequence", path_id=gap.path_id)
+                    log.info(f"{phase_name}_beat_not_in_sequence", path_id=gap.path_id)
                     report.beat_not_in_sequence += 1
                     continue
 
@@ -389,7 +389,7 @@ class _LLMHelperMixin:
                 and before_beat
                 and _would_create_cycle(before_beat, after_beat, successors, beat_set)
             ):
-                log.warning(
+                log.info(
                     "gap_skipped_would_create_cycle",
                     phase=phase_name,
                     after_beat=after_beat,
