@@ -96,6 +96,7 @@ def validate_polish_output(graph: Graph) -> list[str]:
     _check_residue_ordering(graph, errors)
     _check_residue_mapping_strategy(graph, errors)
     _check_has_choice_edges(graph, errors)
+    _check_post_convergence_requires(graph, errors)
     _check_no_character_arc_metadata_nodes(graph, errors)
     _check_passage_maximal_linear_collapse(graph, errors)
     _check_arc_completeness(graph, errors)
@@ -647,6 +648,49 @@ def _check_has_choice_edges(graph: Graph, errors: list[str]) -> None:
             "R-4c.2: zero choice edges in passage graph — SEED/GROW DAG "
             "has no Y-forks; Phase 4c should have halted"
         )
+
+
+def _check_post_convergence_requires(graph: Graph, errors: list[str]) -> None:
+    """R-4c.3 / R-4c.4: post-convergence soft-dilemma choices carry ``requires``.
+
+    For each choice edge whose target passage's primary beat is the
+    ``converges_at`` beat of a soft dilemma, the choice edge MUST have a
+    non-empty ``requires`` list (R-4c.3).  If the target beat belongs only to
+    hard dilemmas, ``requires`` must be empty (R-4c.4) — but since hard
+    dilemmas have ``converges_at: null``, they are excluded from this check
+    by construction.
+
+    This post-hoc check catches the primary regression symptom: a choice edge
+    whose target is exactly at a soft-dilemma convergence point but has no
+    flag gate.  It does not re-run the full active-flags computation (that
+    would duplicate Phase 4c logic); it catches the simplest violation.
+    """
+    dilemma_nodes = graph.get_nodes_by_type("dilemma")
+
+    # Collect the convergence beats of all soft dilemmas.
+    soft_convergence_beats: set[str] = set()
+    for _did, ddata in dilemma_nodes.items():
+        if ddata.get("dilemma_role") == "soft":
+            conv = ddata.get("converges_at")
+            if conv:
+                soft_convergence_beats.add(conv)
+
+    if not soft_convergence_beats:
+        return  # No soft dilemmas with convergence → nothing to gate
+
+    choice_edges = graph.get_edges(edge_type="choice")
+    for edge in choice_edges:
+        to_passage = edge["to"]
+        target_beat = get_primary_beat(graph, to_passage) or ""
+        if not target_beat or target_beat not in soft_convergence_beats:
+            continue
+        requires: list[str] = edge.get("requires") or []
+        if not requires:
+            errors.append(
+                f"R-4c.3: choice {edge['from']!r} → {to_passage!r} targets "
+                f"soft-dilemma convergence beat {target_beat!r} but has empty "
+                "'requires' — flag gate missing"
+            )
 
 
 # ---------------------------------------------------------------------------

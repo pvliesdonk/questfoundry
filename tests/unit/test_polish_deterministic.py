@@ -1504,8 +1504,12 @@ class TestChoiceSpecRequires:
         _add_predecessor(graph, "beat::c", "beat::merge")
         _add_predecessor(graph, "beat::d", "beat::merge")
 
-    def test_divergence_choice_requires_empty(self) -> None:
-        """Choices from non-intersection passages have empty requires."""
+    def test_divergence_choice_requires_empty_no_flags(self) -> None:
+        """R-4c.4: Choices whose target beat has no active flags have empty requires.
+
+        This covers the common divergence case (no state flags exist in the graph
+        at all).  No flags → no soft flags → requires stays empty.
+        """
         graph = Graph.empty()
         graph.create_node("path::pa", {"type": "path", "raw_id": "pa"})
         graph.create_node("path::pb", {"type": "path", "raw_id": "pb"})
@@ -1530,25 +1534,128 @@ class TestChoiceSpecRequires:
         specs = compute_beat_grouping(graph)
         choices = compute_choice_edges(graph, specs)
 
-        # Divergence choices from non-intersection passages should have no requires
+        # No state_flag nodes in graph → no active flags → requires is empty for all
         for c in choices:
-            from_spec = next((s for s in specs if s.passage_id == c.from_passage), None)
-            if from_spec and from_spec.grouping_type != "intersection":
-                assert c.requires == [], f"Expected empty requires for {c.from_passage}"
+            assert c.requires == [], f"Expected empty requires for {c.from_passage}"
 
-    # DELETED: test_convergence_choice_has_requires
-    # Removed as part of cluster #1311 (maximal-linear-collapse, R-4a.3).
-    # The test filtered choices by `grouping_type == "intersection"` — a field
-    # that is now always "singleton" under the new rule.  The requires-population
-    # logic in compute_choice_edges is guarded by `from_spec.grouping_type ==
-    # "intersection"` (deterministic.py ~line 759), so requires is always empty
-    # under the new rule — the assertion would never be satisfiable.
-    #
-    # This exposes dead code: the `requires` population branch in
-    # compute_choice_edges is now unreachable.  A follow-on issue should either
-    # repurpose `requires` for convergence detection via DAG topology (without
-    # relying on grouping_type) or remove the dead branch.
-    # See cluster #1311 for tracking.
+    def test_post_convergence_soft_dilemma_choice_has_requires(self) -> None:
+        """R-4c.3: Post-convergence soft-dilemma choices have requires set.
+
+        Structure:
+          beat::commit (d1, commits) → beat::pa (path::pa)
+                                     → beat::pb (path::pb)
+
+        A state_flag for d1 is active at beat::pa and beat::pb (soft dilemma).
+        compute_choice_edges must set requires=[state_flag_id] on those choices.
+        """
+        graph = Graph.empty()
+
+        # Soft dilemma
+        graph.create_node(
+            "dilemma::d1",
+            {"type": "dilemma", "raw_id": "d1", "dilemma_role": "soft"},
+        )
+        graph.create_node("path::pa", {"type": "path", "raw_id": "pa", "dilemma_id": "dilemma::d1"})
+        graph.create_node("path::pb", {"type": "path", "raw_id": "pb", "dilemma_id": "dilemma::d1"})
+
+        # State flags for each path (active after commit)
+        graph.create_node(
+            "state_flag::sf_pa",
+            {"type": "state_flag", "raw_id": "sf_pa", "dilemma_id": "dilemma::d1"},
+        )
+        graph.create_node(
+            "state_flag::sf_pb",
+            {"type": "state_flag", "raw_id": "sf_pb", "dilemma_id": "dilemma::d1"},
+        )
+
+        # Commit beat (on path::pa — classic Case A divergence)
+        _make_beat(
+            graph,
+            "beat::commit",
+            "Commit",
+            dilemma_impacts=[{"dilemma_id": "dilemma::d1", "effect": "commits"}],
+        )
+        graph.add_edge("belongs_to", "beat::commit", "path::pa")
+        graph.add_edge("grants", "beat::commit", "state_flag::sf_pa")
+
+        # Post-commit beats on each path
+        _make_beat(graph, "beat::pa", "Path A beat")
+        graph.add_edge("belongs_to", "beat::pa", "path::pa")
+
+        _make_beat(graph, "beat::pb", "Path B beat")
+        graph.add_edge("belongs_to", "beat::pb", "path::pb")
+        graph.add_edge("grants", "beat::pb", "state_flag::sf_pb")
+
+        _add_predecessor(graph, "beat::pa", "beat::commit")
+        _add_predecessor(graph, "beat::pb", "beat::commit")
+
+        specs = compute_beat_grouping(graph)
+        choices = compute_choice_edges(graph, specs)
+
+        assert len(choices) == 2, f"Expected 2 choices, got {len(choices)}: {choices}"
+        for c in choices:
+            # The target beat is a post-commit beat on a soft dilemma path.
+            # compute_active_flags_at_beat returns the granted flags at that beat.
+            # The soft filter should keep them → requires must be non-empty.
+            assert c.requires != [], (
+                f"R-4c.3 violation: choice {c.from_passage!r} → {c.to_passage!r} "
+                f"targets a soft-dilemma post-commit beat but has empty requires"
+            )
+
+    def test_hard_dilemma_choice_has_empty_requires(self) -> None:
+        """R-4c.4: Hard-dilemma choices have empty requires.
+
+        Same divergence structure but dilemma_role == 'hard'.  State flags
+        belonging to hard dilemmas must be filtered out, leaving requires=[].
+        """
+        graph = Graph.empty()
+
+        # Hard dilemma
+        graph.create_node(
+            "dilemma::d1",
+            {"type": "dilemma", "raw_id": "d1", "dilemma_role": "hard"},
+        )
+        graph.create_node("path::pa", {"type": "path", "raw_id": "pa", "dilemma_id": "dilemma::d1"})
+        graph.create_node("path::pb", {"type": "path", "raw_id": "pb", "dilemma_id": "dilemma::d1"})
+
+        # State flags belonging to the hard dilemma
+        graph.create_node(
+            "state_flag::sf_pa",
+            {"type": "state_flag", "raw_id": "sf_pa", "dilemma_id": "dilemma::d1"},
+        )
+        graph.create_node(
+            "state_flag::sf_pb",
+            {"type": "state_flag", "raw_id": "sf_pb", "dilemma_id": "dilemma::d1"},
+        )
+
+        _make_beat(
+            graph,
+            "beat::commit",
+            "Commit",
+            dilemma_impacts=[{"dilemma_id": "dilemma::d1", "effect": "commits"}],
+        )
+        graph.add_edge("belongs_to", "beat::commit", "path::pa")
+        graph.add_edge("grants", "beat::commit", "state_flag::sf_pa")
+
+        _make_beat(graph, "beat::pa", "Path A beat")
+        graph.add_edge("belongs_to", "beat::pa", "path::pa")
+
+        _make_beat(graph, "beat::pb", "Path B beat")
+        graph.add_edge("belongs_to", "beat::pb", "path::pb")
+        graph.add_edge("grants", "beat::pb", "state_flag::sf_pb")
+
+        _add_predecessor(graph, "beat::pa", "beat::commit")
+        _add_predecessor(graph, "beat::pb", "beat::commit")
+
+        specs = compute_beat_grouping(graph)
+        choices = compute_choice_edges(graph, specs)
+
+        assert len(choices) == 2, f"Expected 2 choices, got {len(choices)}: {choices}"
+        for c in choices:
+            assert c.requires == [], (
+                f"R-4c.4 violation: choice {c.from_passage!r} → {c.to_passage!r} "
+                f"targets a hard-dilemma beat but has non-empty requires: {c.requires}"
+            )
 
 
 # ---------------------------------------------------------------------------
