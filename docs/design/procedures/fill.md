@@ -239,7 +239,7 @@ R-4.3. Revision replaces the Passage's prose; previous prose is not preserved in
 
 **What:** For each arc (canonical arc first, then each non-canonical arc), run the following deterministic checks:
 
-- **Intensity progression:** Verify the per-passage intensity scores (from GROW's beat annotations) are reflected in the prose sequence — arcs whose prose reads as monotonically flat or descending throughout fail this check.
+- **Intensity progression:** Derive each beat's intensity from its `narrative_function` and `scene_type` annotations (GROW-populated) and verify the arc's derived intensity sequence exhibits a plausible climax curve — arcs whose derived intensity is monotonically flat or descending throughout fail this check.  This is a graph-structural check; no prose content is inspected.
 - **Dramatic-question closure:** Verify every open dramatic question raised in an arc's passages receives a resolution passage before the arc's terminal.
 - **Narrative-function variety:** Verify the arc's passage sequence does not over-concentrate a single narrative function (e.g., all `sequel`, no `scene`).
 - **Dilemma-prose coverage:** Verify every Dilemma relevant to the arc has prose addressing its question at the commit-beat passage.
@@ -260,7 +260,7 @@ R-4a.2. Phase 4a produces a structural validation report but does NOT regenerate
 
 ### Output Contract
 
-1. A structural validation report listing any arc-level flags with the specific check that triggered each flag.
+1. A structural validation report (empty if no issues found) listing any arc-level flags with the specific check that triggered each flag.
 2. All passage prose unchanged.
 3. No LLM calls made.
 
@@ -272,7 +272,7 @@ R-4a.2. Phase 4a produces a structural validation report but does NOT regenerate
 
 ### Input Contract
 
-1. Phase 4 Output Contract satisfied, and human requests another cycle.
+1. Phase 4a Output Contract satisfied, and human requests another cycle.  The Phase 4a structural report is part of the second-cycle review input.
 
 ### Operations
 
@@ -412,7 +412,8 @@ R-5.3: Cap is configurable; default 2.
 | 2 | Hard transition without GROW bridge | `fill_hard_transition_detected` warning | Flag for human review; may need GROW re-run |
 | 3 | Too many flags | Human overwhelm | Prioritize; accept some imperfection |
 | 4 | Revision doesn't fix issue | Human review | Try different approach or accept with flag |
-| 4a | Arc-level structural flag (e.g., unresolved dramatic question) | `run_arc_validation` report | Feed flags into Phase 5 second cycle; if none run, escalate upstream |
+| 4a | Intensity progression / narrative-function variety flag | `run_arc_validation` report | Phase 5 revision first; if unresolved, escalate to POLISH (pacing / beat grouping) |
+| 4a | Dramatic-question unresolved / dilemma-prose coverage missing | `run_arc_validation` report | Phase 5 revision first; if unresolved, escalate to GROW (structural) or POLISH (pacing) |
 | 5 | Quality still poor after 2 cycles | Cap reached | Ship with escalation flag to upstream stages |
 
 **Structural failures (abort to earlier stage):**
@@ -462,6 +463,10 @@ Human + LLM review pass. 2 passages flagged: one for voice drift (Passage 7 soun
 ### Phase 4
 
 Passage 7 regenerated with stronger voice reinforcement (more exemplar passages in context). Passage 10 regenerated with both approach-passage prose blocks as explicit context.
+
+### Phase 4a
+
+Arc-level structural validation runs on both arcs.  Intensity progression: rising curve on both, OK.  Dramatic-question closure: `mentor_trust` question resolved at its commit passage, OK.  Narrative-function variety: mix of scene and sequel beats on both arcs, OK.  Dilemma-prose coverage: both dilemmas have prose addressing their question at their commit beats, OK.  Structural report: empty.
 
 Human approves. No Phase 5 needed.
 
