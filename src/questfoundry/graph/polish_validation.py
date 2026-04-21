@@ -31,7 +31,23 @@ from questfoundry.graph.validation_types import ValidationCheck, ValidationRepor
 if TYPE_CHECKING:
     from questfoundry.graph.graph import Graph
 
+__all__ = [
+    "PolishContractError",
+    "validate_polish_output",
+]
+
 _ROUTING_APPLIED_NODE_ID = "meta::routing_applied"
+
+
+class PolishContractError(ValueError):
+    """Raised when POLISH Phase 7 validation reports contract errors.
+
+    Mirrors ``GrowContractError`` — a dedicated exception type for
+    stage-exit contract failures so callers can distinguish them from
+    generic ``ValueError`` noise.  Callers receive the formatted error
+    list in the exception message.
+    """
+
 
 # ---------------------------------------------------------------------------
 # Phase 7: Passage graph validation (exit contract)
@@ -78,7 +94,10 @@ def validate_polish_output(graph: Graph) -> list[str]:
     _check_variant_integrity(passage_nodes, graph, errors)
     _check_choice_integrity(graph, errors)
     _check_residue_ordering(graph, errors)
-    _check_arc_metadata_edges(graph, errors)
+    _check_residue_mapping_strategy(graph, errors)
+    _check_has_choice_edges(graph, errors)
+    _check_no_character_arc_metadata_nodes(graph, errors)
+    _check_passage_maximal_linear_collapse(graph, errors)
     _check_arc_completeness(graph, errors)
     _check_divergences_have_choices(graph, beat_to_passages, errors)
     _check_no_overlapping_requires(graph, errors)
@@ -416,16 +435,184 @@ def _check_no_unresolved_splits(
             )
 
 
-def _check_arc_metadata_edges(
-    graph: Graph,
-    errors: list[str],
-) -> None:
-    """Every character_arc_metadata node must have a has_arc_metadata edge from an entity."""
-    arc_nodes = graph.get_nodes_by_type("character_arc_metadata")
-    for arc_id in arc_nodes:
-        edges = graph.get_edges(edge_type="has_arc_metadata", to_id=arc_id)
-        if not edges:
-            errors.append(f"Arc metadata node {arc_id} has no has_arc_metadata edge from entity")
+def _check_no_character_arc_metadata_nodes(graph: Graph, errors: list[str]) -> None:
+    """R-3.3: arc metadata is stored as annotation on Entity nodes, never as separate nodes.
+
+    - No node may have type ``character_arc_metadata``.
+    - No ``has_arc_metadata`` edge may exist.
+    - Every Entity with ≥2 ``appears`` edges (arc-worthy) must carry a
+      ``character_arc`` data dict with ``start``, ``pivots``, ``end_per_path``.
+    """
+    for nid, _ndata in graph.get_nodes_by_type("character_arc_metadata").items():
+        errors.append(
+            f"R-3.3: node {nid!r} has forbidden type 'character_arc_metadata'; "
+            "arc metadata must be stored on the Entity node itself"
+        )
+    for edge in graph.get_edges(edge_type="has_arc_metadata"):
+        errors.append(
+            f"R-3.3: forbidden 'has_arc_metadata' edge {edge['from']!r} → "
+            f"{edge['to']!r}; arc metadata is an entity annotation, not a "
+            "separate node"
+        )
+
+    # Arc-worthy entities need a character_arc annotation.  R-3.1 defines
+    # arc-worthy as "2+ beat appearances", so only count beat-directed
+    # ``appears`` edges — DRESS may also populate entity→passage ``appears``
+    # edges, which would otherwise inflate the count.
+    beat_ids = set(graph.get_nodes_by_type("beat").keys())
+    appears_edges = graph.get_edges(edge_type="appears")
+    appearance_count: dict[str, int] = {}
+    for edge in appears_edges:
+        if edge["to"] in beat_ids:
+            appearance_count[edge["from"]] = appearance_count.get(edge["from"], 0) + 1
+
+    entity_nodes = graph.get_nodes_by_type("entity")
+    for entity_id, entity_data in sorted(entity_nodes.items()):
+        if appearance_count.get(entity_id, 0) < 2:
+            continue
+        arc = entity_data.get("character_arc")
+        if not isinstance(arc, dict):
+            errors.append(
+                f"R-3.3: entity {entity_id!r} has {appearance_count[entity_id]} beat "
+                "appearances but no 'character_arc' annotation on its data dict"
+            )
+            continue
+        for required in ("start", "pivots", "end_per_path"):
+            if required not in arc:
+                errors.append(
+                    f"R-3.3: entity {entity_id!r} 'character_arc' annotation "
+                    f"missing required field {required!r}"
+                )
+
+
+def _check_passage_maximal_linear_collapse(graph: Graph, errors: list[str]) -> None:
+    """R-4a.3 (maximal-linear-collapse): a passage's beats form a maximal linear run.
+
+    For each passage:
+      - Member beats form a linear run: each interior beat has exactly one
+        in-passage predecessor and one in-passage successor.
+      - Passage boundaries sit at DAG divergences/convergences or terminals:
+        the first beat's in-degree ≠ 1 or its predecessor has out-degree ≠ 1;
+        the last beat's out-degree ≠ 1 or its successor has in-degree ≠ 1.
+
+    See docs/design/procedures/polish.md §R-4a.3 (maximal-linear-collapse).
+    """
+    beat_nodes = graph.get_nodes_by_type("beat")
+    passage_nodes = graph.get_nodes_by_type("passage")
+    pred_edges = graph.get_edges(edge_type="predecessor")
+    grouped_in = graph.get_edges(edge_type="grouped_in")
+
+    successors: dict[str, set[str]] = {}
+    predecessors: dict[str, set[str]] = {}
+    for edge in pred_edges:
+        # Convention: predecessor edges point successor → predecessor
+        successor, predecessor = edge["from"], edge["to"]
+        successors.setdefault(predecessor, set()).add(successor)
+        predecessors.setdefault(successor, set()).add(predecessor)
+
+    beat_to_passage: dict[str, str] = {}
+    passage_beats: dict[str, set[str]] = {}
+    for edge in grouped_in:
+        beat_id, passage_id = edge["from"], edge["to"]
+        if beat_id in beat_nodes and passage_id in passage_nodes:
+            beat_to_passage[beat_id] = passage_id
+            passage_beats.setdefault(passage_id, set()).add(beat_id)
+
+    for passage_id, beats in sorted(passage_beats.items()):
+        # Interior linearity: each beat's in-passage predecessors and
+        # successors are ≤ 1.
+        for bid in beats:
+            in_passage_preds = predecessors.get(bid, set()) & beats
+            in_passage_succs = successors.get(bid, set()) & beats
+            if len(in_passage_preds) > 1:
+                errors.append(
+                    f"R-4a.3: passage {passage_id!r} contains beat {bid!r} with "
+                    f"{len(in_passage_preds)} in-passage predecessors — not a "
+                    "linear run"
+                )
+            if len(in_passage_succs) > 1:
+                errors.append(
+                    f"R-4a.3: passage {passage_id!r} contains beat {bid!r} with "
+                    f"{len(in_passage_succs)} in-passage successors — not a "
+                    "linear run"
+                )
+
+        # Boundary check: the passage's first beat starts at a real boundary
+        # (in-degree ≠ 1 OR its predecessor has out-degree ≠ 1).
+        starts = [b for b in beats if not (predecessors.get(b, set()) & beats)]
+        ends = [b for b in beats if not (successors.get(b, set()) & beats)]
+        if len(starts) != 1 or len(ends) != 1:
+            errors.append(
+                f"R-4a.3: passage {passage_id!r} is not a single linear run "
+                f"(starts={len(starts)}, ends={len(ends)})"
+            )
+            continue
+
+        first, last = starts[0], ends[0]
+        # First beat: if it has exactly one predecessor and that predecessor
+        # has out-degree 1, the run should have started earlier.
+        first_preds = predecessors.get(first, set())
+        if len(first_preds) == 1:
+            only_pred = next(iter(first_preds))
+            if len(successors.get(only_pred, set())) == 1 and only_pred in beat_to_passage:
+                errors.append(
+                    f"R-4a.3: passage {passage_id!r} starts at {first!r} but its "
+                    f"predecessor {only_pred!r} has out-degree 1 — grouping "
+                    "stopped mid-linear-run"
+                )
+
+        # Last beat: mirror.
+        last_succs = successors.get(last, set())
+        if len(last_succs) == 1:
+            only_succ = next(iter(last_succs))
+            if len(predecessors.get(only_succ, set())) == 1 and only_succ in beat_to_passage:
+                errors.append(
+                    f"R-4a.3: passage {passage_id!r} ends at {last!r} but its "
+                    f"successor {only_succ!r} has in-degree 1 — grouping "
+                    "stopped mid-linear-run"
+                )
+
+
+_VALID_MAPPING_STRATEGIES = frozenset({"residue_passage_with_variants", "parallel_passages"})
+
+
+def _check_residue_mapping_strategy(graph: Graph, errors: list[str]) -> None:
+    """R-5.7, R-5.8: every residue passage records its chosen mapping strategy.
+
+    Residue passages are identified by a ``residue_for`` field pointing to
+    their target shared passage.  Each must have ``mapping_strategy`` set
+    to one of the two legal values.  See docs/design/procedures/polish.md
+    §R-5.7/R-5.8.
+    """
+    for pid, pdata in sorted(graph.get_nodes_by_type("passage").items()):
+        if not pdata.get("residue_for"):
+            continue
+        strategy = pdata.get("mapping_strategy")
+        if strategy is None:
+            errors.append(
+                f"R-5.8: residue passage {pid!r} missing required 'mapping_strategy' field"
+            )
+            continue
+        if strategy not in _VALID_MAPPING_STRATEGIES:
+            errors.append(
+                f"R-5.8: residue passage {pid!r} has invalid mapping_strategy "
+                f"{strategy!r} (expected one of "
+                f"{sorted(_VALID_MAPPING_STRATEGIES)})"
+            )
+
+
+def _check_has_choice_edges(graph: Graph, errors: list[str]) -> None:
+    """R-4c.2 (belt-and-suspenders): zero choice edges in the passage graph
+    indicates a SEED/GROW bug — Phase 4c should already have raised.  This
+    check catches silent regressions where Phase 4c produced zero choices
+    but did not halt.
+    """
+    choice_edges = graph.get_edges(edge_type="choice")
+    if not choice_edges:
+        errors.append(
+            "R-4c.2: zero choice edges in passage graph — SEED/GROW DAG "
+            "has no Y-forks; Phase 4c should have halted"
+        )
 
 
 # ---------------------------------------------------------------------------

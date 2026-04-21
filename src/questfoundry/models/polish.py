@@ -6,7 +6,10 @@ stage result container.
 
 Node types created by POLISH:
 - micro_beat: Brief transition beats inserted for pacing (Phase 2)
-- character_arc_metadata: Arc data for entities (Phase 3)
+
+Note: Phase 3 writes character_arc annotations directly onto Entity nodes
+(data-dict field) — no separate node type.  See docs/design/procedures/polish.md
+§R-3.3 and ontology Part 1 "Character Arc Metadata".
 
 See docs/design/procedures/polish.md for algorithm details.
 
@@ -17,6 +20,8 @@ Terminology (v5):
 """
 
 from __future__ import annotations
+
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -192,6 +197,18 @@ class ResidueSpec(BaseModel):
     content_hint: str = Field(
         default="", description="Mood-setting prose hint (populated by Phase 5)"
     )
+    mapping_strategy: Literal["residue_passage_with_variants", "parallel_passages"] = Field(
+        default="residue_passage_with_variants",
+        description=(
+            "Passage-layer mapping for this residue spec.  "
+            "'residue_passage_with_variants' creates a single residue passage "
+            "with variant children; 'parallel_passages' creates sibling "
+            "passages that branch and rejoin.  Chosen per-residue by the "
+            "Phase 5b LLM call per spec R-5.7/R-5.8.  Defaults to "
+            "'residue_passage_with_variants' for back-compat; Phase 5b's "
+            "LLM overrides per residue."
+        ),
+    )
 
 
 class ChoiceSpec(BaseModel):
@@ -267,6 +284,16 @@ class ResidueContentItem(BaseModel):
 
     residue_id: str = Field(min_length=1)
     content_hint: str = Field(min_length=1, description="Brief mood-setting prose hint")
+    mapping_strategy: Literal["residue_passage_with_variants", "parallel_passages"] = Field(
+        default="residue_passage_with_variants",
+        description=(
+            "Passage-layer mapping chosen by the LLM for this residue.  "
+            "'residue_passage_with_variants': one residue passage shared across flag "
+            "combinations (use for subtle mood shifts in the same scene).  "
+            "'parallel_passages': sibling passages branching from the predecessor "
+            "and rejoining at the target (use for meaningfully different scenes)."
+        ),
+    )
 
 
 class Phase5bOutput(BaseModel):

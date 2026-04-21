@@ -273,7 +273,9 @@ class _PolishLLMPhaseMixin:
             total_llm_calls += llm_calls
             total_tokens += tokens
 
-            # Store arc metadata
+            # Store arc metadata as an annotation on the Entity node (R-3.3).
+            # The old pattern (separate character_arc_metadata nodes +
+            # has_arc_metadata edges) violated R-3.3 and ontology Part 1.
             for arc in result.character_arcs:
                 if arc.entity_id != entity_id:
                     log.warning(
@@ -283,19 +285,19 @@ class _PolishLLMPhaseMixin:
                     )
                     continue
 
-                arc_node_id = f"character_arc_metadata::{entity_id.split('::')[-1]}"
-                graph.create_node(
-                    arc_node_id,
-                    {
-                        "type": "character_arc_metadata",
-                        "raw_id": entity_id.split("::")[-1],
-                        "entity_id": entity_id,
+                # pivots is a list of ArcPivot models with (path_id, beat_id)
+                # attributes; normalize to path_id → beat_id so the R-3.3
+                # validator's shape check passes.
+                pivots_by_path = {p.path_id: p.beat_id for p in arc.pivots}
+
+                graph.update_node(
+                    entity_id,
+                    character_arc={
                         "start": arc.start,
-                        "pivots": [p.model_dump() for p in arc.pivots],
-                        "end_per_path": arc.end_per_path,
+                        "pivots": pivots_by_path,
+                        "end_per_path": dict(arc.end_per_path),
                     },
                 )
-                graph.add_edge("has_arc_metadata", entity_id, arc_node_id)
                 arcs_created += 1
 
         return PhaseResult(
@@ -383,12 +385,14 @@ class _PolishLLMPhaseMixin:
             total_llm_calls += llm_calls
             total_tokens += tokens
 
-            # Apply content hints to residue specs
-            hint_lookup = {item.residue_id: item.content_hint for item in result_b.residue_content}
+            # Apply content hints and mapping_strategy to residue specs
+            item_lookup = {item.residue_id: item for item in result_b.residue_content}
             for spec in residue_specs:
                 rid = spec.get("residue_id", "")
-                if rid in hint_lookup:
-                    spec["content_hint"] = hint_lookup[rid]
+                if rid in item_lookup:
+                    item = item_lookup[rid]
+                    spec["content_hint"] = item.content_hint
+                    spec["mapping_strategy"] = item.mapping_strategy
 
             enrichment_parts.append(f"{len(result_b.residue_content)} residue hints")
             log.debug("phase5b_complete", hints=len(result_b.residue_content))
