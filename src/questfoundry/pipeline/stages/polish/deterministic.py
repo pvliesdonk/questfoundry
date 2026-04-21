@@ -189,127 +189,79 @@ async def phase_plan_computation(
 
 
 def compute_beat_grouping(graph: Graph) -> list[PassageSpec]:
-    """Group beats into passages via intersection, collapse, and singleton.
+    """Phase 4a: group beats into passages using the maximal-linear-collapse rule.
 
-    Args:
-        graph: Graph with frozen beat DAG.
+    Walk the finalized beat DAG; partition beats into maximal linear runs
+    (no internal divergence or convergence).  Applies uniformly to
+    narrative and structural beats.  Passage boundaries sit at DAG
+    divergences or convergences; every passage ends at a choice point
+    (divergence → choice edges in Phase 4c) or a convergence/terminal.
 
-    Returns:
-        List of PassageSpec objects, one per passage.
+    POLISH does NOT consume intersection groups — those are GROW-internal.
+    See docs/design/procedures/polish.md §R-4a.3, R-4a.4.
     """
     beat_nodes = graph.get_nodes_by_type("beat")
-    predecessor_edges = graph.get_edges(edge_type="predecessor")
+    if not beat_nodes:
+        return []
 
-    # Build adjacency
-    children: dict[str, list[str]] = {bid: [] for bid in beat_nodes}
-    parents: dict[str, list[str]] = {bid: [] for bid in beat_nodes}
-    for edge in predecessor_edges:
-        from_id = edge["from"]
-        to_id = edge["to"]
-        if from_id in beat_nodes and to_id in beat_nodes:
-            parents[from_id].append(to_id)
-            children[to_id].append(from_id)
+    pred_edges = graph.get_edges(edge_type="predecessor")
+    successors: dict[str, set[str]] = {bid: set() for bid in beat_nodes}
+    predecessors: dict[str, set[str]] = {bid: set() for bid in beat_nodes}
+    for edge in pred_edges:
+        # predecessor edges point successor → predecessor
+        succ, pred = edge["from"], edge["to"]
+        if succ in beat_nodes and pred in beat_nodes:
+            successors[pred].add(succ)
+            predecessors[succ].add(pred)
 
-    # Build beat → path-set mapping (Y-shape: pre-commit beats have dual membership)
-    belongs_to_edges = graph.get_edges(edge_type="belongs_to")
-    _bt_accum: dict[str, set[str]] = {}
-    for edge in belongs_to_edges:
-        if edge["from"] in beat_nodes:
-            _bt_accum.setdefault(edge["from"], set()).add(edge["to"])
-    beat_to_paths: dict[str, frozenset[str]] = {bid: frozenset(ps) for bid, ps in _bt_accum.items()}
+    def _is_run_start(bid: str) -> bool:
+        preds = predecessors[bid]
+        if len(preds) != 1:
+            return True  # root or convergence
+        only_pred = next(iter(preds))
+        return len(successors[only_pred]) != 1  # predecessor forks
 
-    # Track which beats are already grouped
-    grouped_beats: set[str] = set()
     specs: list[PassageSpec] = []
-    passage_counter = 0
+    assigned: set[str] = set()
 
-    # 1. Intersection grouping: beats from intersection groups
-    intersection_groups = graph.get_nodes_by_type("intersection_group")
-    for _group_id, group_data in sorted(intersection_groups.items()):
-        raw_beat_ids = group_data.get("beat_ids", [])
-        beat_ids = [bid for bid in raw_beat_ids if bid in beat_nodes and bid not in grouped_beats]
-        if not beat_ids:
+    # Order start beats deterministically so fixture tests are stable.
+    start_beats = sorted(bid for bid in beat_nodes if _is_run_start(bid))
+
+    for start in start_beats:
+        if start in assigned:
             continue
-
-        summary = _merge_summaries(beat_nodes, beat_ids)
-        entities = _merge_entities(beat_nodes, beat_ids)
-
-        specs.append(
-            PassageSpec(
-                passage_id=f"passage::intersection_{passage_counter}",
-                beat_ids=beat_ids,
-                summary=summary,
-                entities=entities,
-                grouping_type="intersection",
-            )
-        )
-        grouped_beats.update(beat_ids)
-        passage_counter += 1
-
-    # 2. Collapse grouping: sequential same-path beats with no choices
-    # Find linear chains of ungrouped beats on the same path
-    for bid in _topological_order(beat_nodes, parents, children):
-        if bid in grouped_beats:
-            continue
-
-        path_set = beat_to_paths.get(bid, frozenset())
-        if not path_set:
-            continue
-
-        # Walk forward collecting same-path-set, single-child, single-parent beats.
-        # Y-shape guard rail: beats collapse only when they share the EXACT same
-        # frozenset of path memberships. A shared pre-commit beat
-        # (frozenset{p_a, p_b}) does not collapse with a post-commit beat
-        # (frozenset{p_a}).
-        chain = [bid]
-        current = bid
+        run = [start]
+        assigned.add(start)
+        current = start
         while True:
-            c = [cid for cid in children[current] if cid not in grouped_beats]
-            if len(c) != 1:
-                break
-            next_beat = c[0]
-            if len(parents[next_beat]) != 1:
-                break
-            if beat_to_paths.get(next_beat, frozenset()) != path_set:
-                break
-            # Entity compatibility check: too many new entities = hard break
-            if not _entities_compatible(beat_nodes, chain[-1], next_beat):
-                break
-            chain.append(next_beat)
-            current = next_beat
+            succs = successors[current]
+            if len(succs) != 1:
+                break  # divergence or terminal
+            nxt = next(iter(succs))
+            if len(predecessors[nxt]) != 1 or nxt in assigned:
+                break  # convergence or already taken
+            run.append(nxt)
+            assigned.add(nxt)
+            current = nxt
 
-        if len(chain) >= 2:
-            summary = _merge_summaries(beat_nodes, chain)
-            entities = _merge_entities(beat_nodes, chain)
-
-            specs.append(
-                PassageSpec(
-                    passage_id=f"passage::collapse_{passage_counter}",
-                    beat_ids=chain,
-                    summary=summary,
-                    entities=entities,
-                    grouping_type="collapse",
-                )
-            )
-            grouped_beats.update(chain)
-            passage_counter += 1
-
-    # 3. Singleton: remaining ungrouped beats
-    for bid in sorted(beat_nodes.keys()):
-        if bid in grouped_beats:
-            continue
-
-        data = beat_nodes[bid]
         specs.append(
             PassageSpec(
-                passage_id=f"passage::single_{passage_counter}",
-                beat_ids=[bid],
-                summary=data.get("summary", ""),
-                entities=data.get("entities", []),
-                grouping_type="singleton",
+                passage_id=f"passage::{run[0].split('::', 1)[-1]}",
+                beat_ids=list(run),
+                summary=beat_nodes[run[0]].get("summary", ""),
             )
         )
-        passage_counter += 1
+
+    # Safety: every beat must be assigned to exactly one PassageSpec.  Any
+    # leftover indicates a graph-topology anomaly; surface loudly rather
+    # than silently skip — matches Silent Degradation policy.
+    leftover = sorted(set(beat_nodes) - assigned)
+    if leftover:
+        raise ValueError(
+            f"compute_beat_grouping: {len(leftover)} beats not assigned to "
+            f"any passage — graph may have disconnected components or "
+            f"malformed predecessor edges: {leftover[:5]}"
+        )
 
     return specs
 
@@ -1460,82 +1412,6 @@ async def phase_validation(
         status="completed",
         detail=detail,
     )
-
-
-# ---------------------------------------------------------------------------
-# Internal helpers
-# ---------------------------------------------------------------------------
-
-
-def _topological_order(
-    beat_nodes: dict[str, dict[str, Any]],
-    parents: dict[str, list[str]],
-    children: dict[str, list[str]],
-) -> list[str]:
-    """Return beat IDs in topological order (parents before children)."""
-    from collections import deque
-
-    in_degree: dict[str, int] = {bid: len(parents.get(bid, [])) for bid in beat_nodes}
-    queue = deque(sorted(bid for bid, deg in in_degree.items() if deg == 0))
-    result: list[str] = []
-
-    while queue:
-        node = queue.popleft()
-        result.append(node)
-        for neighbor in sorted(children.get(node, [])):
-            in_degree[neighbor] -= 1
-            if in_degree[neighbor] == 0:
-                queue.append(neighbor)
-
-    return result
-
-
-def _merge_summaries(
-    beat_nodes: dict[str, dict[str, Any]],
-    beat_ids: list[str],
-) -> str:
-    """Merge summaries from multiple beats into one passage summary."""
-    parts = []
-    for bid in beat_ids:
-        data = beat_nodes.get(bid, {})
-        summary = data.get("summary", "")
-        if summary:
-            parts.append(summary)
-    return "; ".join(parts)
-
-
-def _merge_entities(
-    beat_nodes: dict[str, dict[str, Any]],
-    beat_ids: list[str],
-) -> list[str]:
-    """Merge entity lists from multiple beats (union, deduplicated)."""
-    entities: set[str] = set()
-    for bid in beat_ids:
-        data = beat_nodes.get(bid, {})
-        for eid in data.get("entities", []):
-            entities.add(eid)
-    return sorted(entities)
-
-
-def _entities_compatible(
-    beat_nodes: dict[str, dict[str, Any]],
-    beat_a: str,
-    beat_b: str,
-    max_new_entities: int = 3,
-) -> bool:
-    """Check if two beats have compatible entity sets for collapsing.
-
-    Returns False if beat_b introduces too many new entities not in beat_a,
-    suggesting a natural scene break.
-    """
-    entities_a = set(beat_nodes.get(beat_a, {}).get("entities", []))
-    entities_b = set(beat_nodes.get(beat_b, {}).get("entities", []))
-
-    if not entities_a or not entities_b:
-        return True  # No entity constraint when either has no entities
-
-    new_entities = entities_b - entities_a
-    return len(new_entities) <= max_new_entities
 
 
 # ---------------------------------------------------------------------------
