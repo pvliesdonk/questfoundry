@@ -36,15 +36,25 @@ def _make_beat(graph: Graph, beat_id: str, summary: str = "A beat", **kwargs: ob
 
 
 def _build_valid_graph() -> Graph:
-    """Build a minimal valid passage graph for testing."""
+    """Build a minimal valid passage graph for testing.
+
+    Graph shape: beat::start diverges into beat::end and beat::alt_end,
+    forming a Y-fork.  This makes beat::start a genuine divergence point
+    (out-degree 2), so the passage boundary between passage::start and
+    the two successor passages is valid under R-4a.4 maximal-linear-collapse.
+    """
     graph = Graph.empty()
     graph.create_node("path::pa", {"type": "path", "raw_id": "pa"})
 
     _make_beat(graph, "beat::start", "Start")
     _make_beat(graph, "beat::end", "End")
+    _make_beat(graph, "beat::alt_end", "Alt end")
+    # beat::start → beat::end and beat::start → beat::alt_end (Y-fork)
     graph.add_edge("predecessor", "beat::end", "beat::start")
+    graph.add_edge("predecessor", "beat::alt_end", "beat::start")
 
-    # Create passages
+    # Create passages — each branch is its own passage; passage::start
+    # ends at the divergence point which has out-degree 2 (valid boundary).
     _create_passage_node(
         graph,
         PassageSpec(passage_id="passage::start", beat_ids=["beat::start"], summary="Start"),
@@ -53,11 +63,21 @@ def _build_valid_graph() -> Graph:
         graph,
         PassageSpec(passage_id="passage::end", beat_ids=["beat::end"], summary="End"),
     )
+    _create_passage_node(
+        graph,
+        PassageSpec(passage_id="passage::alt_end", beat_ids=["beat::alt_end"], summary="Alt end"),
+    )
 
-    # Add a choice edge
+    # Add choice edges
     _create_choice_edge(
         graph,
         ChoiceSpec(from_passage="passage::start", to_passage="passage::end", label="Continue"),
+    )
+    _create_choice_edge(
+        graph,
+        ChoiceSpec(
+            from_passage="passage::start", to_passage="passage::alt_end", label="Alt continue"
+        ),
     )
 
     return graph

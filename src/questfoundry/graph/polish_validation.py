@@ -95,6 +95,7 @@ def validate_polish_output(graph: Graph) -> list[str]:
     _check_choice_integrity(graph, errors)
     _check_residue_ordering(graph, errors)
     _check_no_character_arc_metadata_nodes(graph, errors)
+    _check_passage_maximal_linear_collapse(graph, errors)
     _check_arc_completeness(graph, errors)
     _check_divergences_have_choices(graph, beat_to_passages, errors)
     _check_no_overlapping_requires(graph, errors)
@@ -479,6 +480,94 @@ def _check_no_character_arc_metadata_nodes(graph: Graph, errors: list[str]) -> N
                 errors.append(
                     f"R-3.3: entity {entity_id!r} 'character_arc' annotation "
                     f"missing required field {required!r}"
+                )
+
+
+def _check_passage_maximal_linear_collapse(graph: Graph, errors: list[str]) -> None:
+    """R-4a.4 (maximal-linear-collapse): a passage's beats form a maximal linear run.
+
+    For each passage:
+      - Member beats form a linear run: each interior beat has exactly one
+        in-passage predecessor and one in-passage successor.
+      - Passage boundaries sit at DAG divergences/convergences or terminals:
+        the first beat's in-degree ≠ 1 or its predecessor has out-degree ≠ 1;
+        the last beat's out-degree ≠ 1 or its successor has in-degree ≠ 1.
+
+    See docs/design/procedures/polish.md §R-4a.3 (maximal-linear-collapse).
+    """
+    beat_nodes = graph.get_nodes_by_type("beat")
+    passage_nodes = graph.get_nodes_by_type("passage")
+    pred_edges = graph.get_edges(edge_type="predecessor")
+    grouped_in = graph.get_edges(edge_type="grouped_in")
+
+    successors: dict[str, set[str]] = {}
+    predecessors: dict[str, set[str]] = {}
+    for edge in pred_edges:
+        # Convention: predecessor edges point successor → predecessor
+        successor, predecessor = edge["from"], edge["to"]
+        successors.setdefault(predecessor, set()).add(successor)
+        predecessors.setdefault(successor, set()).add(predecessor)
+
+    beat_to_passage: dict[str, str] = {}
+    passage_beats: dict[str, set[str]] = {}
+    for edge in grouped_in:
+        beat_id, passage_id = edge["from"], edge["to"]
+        if beat_id in beat_nodes and passage_id in passage_nodes:
+            beat_to_passage[beat_id] = passage_id
+            passage_beats.setdefault(passage_id, set()).add(beat_id)
+
+    for passage_id, beats in sorted(passage_beats.items()):
+        # Interior linearity: each beat's in-passage predecessors and
+        # successors are ≤ 1.
+        for bid in beats:
+            in_passage_preds = predecessors.get(bid, set()) & beats
+            in_passage_succs = successors.get(bid, set()) & beats
+            if len(in_passage_preds) > 1:
+                errors.append(
+                    f"R-4a.4: passage {passage_id!r} contains beat {bid!r} with "
+                    f"{len(in_passage_preds)} in-passage predecessors — not a "
+                    "linear run"
+                )
+            if len(in_passage_succs) > 1:
+                errors.append(
+                    f"R-4a.4: passage {passage_id!r} contains beat {bid!r} with "
+                    f"{len(in_passage_succs)} in-passage successors — not a "
+                    "linear run"
+                )
+
+        # Boundary check: the passage's first beat starts at a real boundary
+        # (in-degree ≠ 1 OR its predecessor has out-degree ≠ 1).
+        starts = [b for b in beats if not (predecessors.get(b, set()) & beats)]
+        ends = [b for b in beats if not (successors.get(b, set()) & beats)]
+        if len(starts) != 1 or len(ends) != 1:
+            errors.append(
+                f"R-4a.4: passage {passage_id!r} is not a single linear run "
+                f"(starts={len(starts)}, ends={len(ends)})"
+            )
+            continue
+
+        first, last = starts[0], ends[0]
+        # First beat: if it has exactly one predecessor and that predecessor
+        # has out-degree 1, the run should have started earlier.
+        first_preds = predecessors.get(first, set())
+        if len(first_preds) == 1:
+            only_pred = next(iter(first_preds))
+            if len(successors.get(only_pred, set())) == 1 and only_pred in beat_to_passage:
+                errors.append(
+                    f"R-4a.4: passage {passage_id!r} starts at {first!r} but its "
+                    f"predecessor {only_pred!r} has out-degree 1 — grouping "
+                    "stopped mid-linear-run"
+                )
+
+        # Last beat: mirror.
+        last_succs = successors.get(last, set())
+        if len(last_succs) == 1:
+            only_succ = next(iter(last_succs))
+            if len(predecessors.get(only_succ, set())) == 1 and only_succ in beat_to_passage:
+                errors.append(
+                    f"R-4a.4: passage {passage_id!r} ends at {last!r} but its "
+                    f"successor {only_succ!r} has in-degree 1 — grouping "
+                    "stopped mid-linear-run"
                 )
 
 
