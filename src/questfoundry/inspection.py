@@ -520,7 +520,7 @@ def _run_validation(graph: Graph) -> list[dict[str, str]]:
     try:
         report = run_all_checks(graph)
     except Exception as exc:
-        log.warning("validation_skipped", reason=str(exc))
+        log.error("validation_skipped", reason=str(exc))
         return [{"name": "validation", "severity": "warn", "message": f"Skipped: {exc}"}]
 
     return [{"name": c.name, "severity": c.severity, "message": c.message} for c in report.checks]
