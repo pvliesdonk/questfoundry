@@ -369,8 +369,13 @@ def _query_ollama_num_ctx(host: str, model: str) -> int | None:
                 num_ctx = int(parts[-1])
                 log.info("ollama_num_ctx_from_model", model=model, num_ctx=num_ctx)
                 return num_ctx
-            except ValueError:
-                pass
+            except ValueError as e:
+                log.debug(
+                    "ollama_num_ctx_parse_failed",
+                    error=str(e),
+                    model=model,
+                    value=parts[-1] if parts else None,
+                )
 
     # Fallback: check model_info for architecture context_length
     model_info = data.get("model_info", {})

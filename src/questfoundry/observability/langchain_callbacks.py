@@ -46,8 +46,12 @@ def _parse_temperature_from_repr(repr_str: str) -> float | None:
     if match:
         try:
             return float(match.group(1))
-        except ValueError:
-            pass
+        except ValueError as e:
+            log.debug(
+                "langchain_callback_temperature_parse_failed",
+                error=str(e),
+                extracted_value=match.group(1),
+            )
     return None
 
 

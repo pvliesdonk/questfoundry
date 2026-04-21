@@ -149,9 +149,13 @@ def _format_messages_for_summary(messages: list[BaseMessage]) -> str:
                         useful_content = extracted
                     else:
                         useful_content = json.dumps(extracted, indent=2)
-            except (json.JSONDecodeError, TypeError):
+            except (json.JSONDecodeError, TypeError) as e:
                 # If parsing fails, stick with the raw content
-                pass
+                log.debug(
+                    "summarize_json_parse_fallback",
+                    error=str(e),
+                    tool_name=tool_name,
+                )
             formatted_parts.append(f"[Research: {tool_name}]\n{useful_content}")
         elif isinstance(msg, SystemMessage):
             content = extract_text(msg.content)
