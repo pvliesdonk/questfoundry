@@ -1389,22 +1389,27 @@ async def phase_validation(
     """Phase 7: Validate the complete passage graph.
 
     Runs structural, variant, choice, and feasibility checks on the
-    passage layer created by Phase 6. Failures indicate bugs in
-    Phases 4-6 or insufficient GROW output.
+    passage layer created by Phase 6.  On any error, raises
+    ``PolishContractError`` after logging a structured ERROR event —
+    failures at this seam indicate bugs in Phases 4-6 or insufficient
+    GROW output and should halt the pipeline loudly.
     """
-    from questfoundry.graph.polish_validation import validate_polish_output
+    from questfoundry.graph.polish_validation import (
+        PolishContractError,
+        validate_polish_output,
+    )
 
     errors = validate_polish_output(graph)
 
     if errors:
-        detail = f"{len(errors)} validation error(s): {'; '.join(errors[:3])}"
-        if len(errors) > 3:
-            detail += f" (and {len(errors) - 3} more)"
-        log.warning("phase7_validation_failed", errors=len(errors))
-        return PhaseResult(
-            phase="validation",
-            status="failed",
-            detail=detail,
+        log.error(
+            "polish_contract_failed",
+            total_errors=len(errors),  # full count, even when the list below is capped
+            errors=errors[:10],  # cap for log readability; full list is in the raised exception
+        )
+        raise PolishContractError(
+            f"POLISH stage output contract violated ({len(errors)} "
+            f"error(s)):\n" + "\n".join(f"  - {e}" for e in errors)
         )
 
     # Collect summary stats for PolishResult
