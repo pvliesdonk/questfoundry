@@ -236,6 +236,8 @@ def _polish_passage_baseline(graph: Graph) -> None:
         )
         graph.add_edge("choice_from", choice_id, "passage::pre")
         graph.add_edge("choice_to", choice_id, to_id)
+        # Add the proper choice edge from passage to passage (R-4c.2 requirement)
+        graph.add_edge("choice", "passage::pre", to_id, label=f"Choice {idx + 1}")
 
     # Character arc on the recurring entity.
     graph.update_node(
@@ -405,8 +407,12 @@ def test_R_5_8_residue_passage_bad_mapping_strategy(
 
 
 def test_R_4c_2_zero_choice_edges_fails(compliant_polish_graph: Graph) -> None:
+    # Delete choice nodes (which cascade-delete choice_from/choice_to edges)
     for cid in list(compliant_polish_graph.get_nodes_by_type("choice")):
         compliant_polish_graph.delete_node(cid, cascade=True)
+    # Also delete any remaining choice edges (passage→passage edges, not connected to nodes)
+    for edge in list(compliant_polish_graph.get_edges(edge_type="choice")):
+        compliant_polish_graph.remove_edge("choice", edge["from"], edge["to"])
     errors = validate_polish_output(compliant_polish_graph)
     assert any("R-4c.2" in e or "zero choice" in e.lower() for e in errors), (
         f"expected zero-choice error, got {errors}"

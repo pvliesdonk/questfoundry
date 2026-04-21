@@ -95,6 +95,7 @@ def validate_polish_output(graph: Graph) -> list[str]:
     _check_choice_integrity(graph, errors)
     _check_residue_ordering(graph, errors)
     _check_residue_mapping_strategy(graph, errors)
+    _check_has_choice_edges(graph, errors)
     _check_no_character_arc_metadata_nodes(graph, errors)
     _check_passage_maximal_linear_collapse(graph, errors)
     _check_arc_completeness(graph, errors)
@@ -598,6 +599,20 @@ def _check_residue_mapping_strategy(graph: Graph, errors: list[str]) -> None:
                 f"{strategy!r} (expected one of "
                 f"{sorted(_VALID_MAPPING_STRATEGIES)})"
             )
+
+
+def _check_has_choice_edges(graph: Graph, errors: list[str]) -> None:
+    """R-4c.2 (belt-and-suspenders): zero choice edges in the passage graph
+    indicates a SEED/GROW bug — Phase 4c should already have raised.  This
+    check catches silent regressions where Phase 4c produced zero choices
+    but did not halt.
+    """
+    choice_edges = graph.get_edges(edge_type="choice")
+    if not choice_edges:
+        errors.append(
+            "R-4c.2: zero choice edges in passage graph — SEED/GROW DAG "
+            "has no Y-forks; Phase 4c should have halted"
+        )
 
 
 # ---------------------------------------------------------------------------
