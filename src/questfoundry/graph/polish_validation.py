@@ -104,6 +104,7 @@ def validate_polish_output(graph: Graph) -> list[str]:
     _check_variant_requires_non_empty(passage_nodes, graph, errors)
     _check_no_unresolved_splits(graph, errors)
     _check_polish_beat_attribution(graph, errors)
+    _check_false_branch_role_name(graph, errors)
 
     # TODO: check_all_endings_reachable and check_gate_satisfiability use the old
     # choice_from/choice_to edge model and are DEAD — see issue #1165 for migration.
@@ -120,9 +121,9 @@ def _check_beat_grouping(
     for beat_id in beat_nodes:
         passages = beat_to_passages.get(beat_id, [])
         if len(passages) == 0:
-            # Skip micro/residue/sidetrack beats — they may not exist yet at validation time
+            # Skip micro/residue/false_branch beats — they may not exist yet at validation time
             role = beat_nodes[beat_id].get("role", "")
-            if role not in ("micro_beat", "sidetrack_beat"):  # residue_beat no longer exempt
+            if role not in ("micro_beat", "false_branch_beat"):  # residue_beat no longer exempt
                 errors.append(f"Beat {beat_id} not grouped into any passage")
         elif len(passages) > 1:
             errors.append(f"Beat {beat_id} grouped into {len(passages)} passages: {passages}")
@@ -146,13 +147,11 @@ def _check_passage_beats(
 def _check_polish_beat_attribution(graph: Graph, errors: list[str]) -> None:
     """R-2.5: beats created by POLISH carry a ``created_by: POLISH`` attribution.
 
-    Beats with roles micro_beat, residue_beat, false_branch_beat, or sidetrack_beat
+    Beats with roles micro_beat, residue_beat, or false_branch_beat
     are created by POLISH. Their node data dict must include the created_by
     attribution for pipeline stage-attribution tracking.
     """
-    polish_created_roles = frozenset(
-        {"micro_beat", "residue_beat", "false_branch_beat", "sidetrack_beat"}
-    )
+    polish_created_roles = frozenset({"micro_beat", "residue_beat", "false_branch_beat"})
     beat_nodes = graph.get_nodes_by_type("beat")
     for bid, bdata in sorted(beat_nodes.items()):
         role = bdata.get("role", "")
@@ -160,6 +159,20 @@ def _check_polish_beat_attribution(graph: Graph, errors: list[str]) -> None:
             errors.append(
                 f"R-2.5: beat {bid!r} has role={role!r} (POLISH-created) but "
                 f"missing 'created_by: POLISH' attribution"
+            )
+
+
+def _check_false_branch_role_name(graph: Graph, errors: list[str]) -> None:
+    """R-5.10: false-branch beats (Phase 6 cosmetic sidetracks) must use
+    ``role: "false_branch_beat"``. The legacy ``sidetrack_beat`` role is
+    pre-audit nomenclature drift and is forbidden.
+    """
+    beat_nodes = graph.get_nodes_by_type("beat")
+    for bid, bdata in sorted(beat_nodes.items()):
+        if bdata.get("role") == "sidetrack_beat":
+            errors.append(
+                f"R-5.10: beat {bid!r} uses legacy role 'sidetrack_beat'; "
+                "spec requires 'false_branch_beat'"
             )
 
 
@@ -171,10 +184,10 @@ def _check_start_passage(
 ) -> None:
     """Exactly one start passage must exist (containing the earliest beat)."""
     # Find root beats (no predecessor edges pointing TO them)
-    # Exclude synthetic beats (micro_beat, residue_beat, sidetrack_beat) —
+    # Exclude synthetic beats (micro_beat, residue_beat, false_branch_beat) —
     # they're added fresh by Phase 6 with no predecessor edges
     predecessor_edges = graph.get_edges(edge_type="predecessor")
-    _synthetic_roles = {"micro_beat", "residue_beat", "sidetrack_beat"}
+    _synthetic_roles = {"micro_beat", "residue_beat", "false_branch_beat"}
     beats_with_parents: set[str] = set()
     for edge in predecessor_edges:
         if edge["from"] in beat_nodes:

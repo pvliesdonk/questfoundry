@@ -513,3 +513,29 @@ def test_phase_validation_passes_on_clean_graph(monkeypatch: pytest.MonkeyPatch)
 
     result = asyncio.run(deterministic.phase_validation(graph, MagicMock()))
     assert result.status == "completed"
+
+
+# --------------------------------------------------------------------------
+# R-5.10: false_branch_beat role enforcement (Cluster #1315)
+# --------------------------------------------------------------------------
+
+
+def test_R_5_10_sidetrack_beat_role_forbidden(compliant_polish_graph: Graph) -> None:
+    """R-5.10: false-branch beats use role 'false_branch_beat', not 'sidetrack_beat'."""
+    compliant_polish_graph.create_node(
+        "beat::fb_offender",
+        {
+            "type": "beat",
+            "raw_id": "fb_offender",
+            "role": "sidetrack_beat",
+            "summary": "x",
+            "created_by": "POLISH",
+            "scene_type": "scene",
+            "dilemma_impacts": [],
+            "entities": [],
+        },
+    )
+    errors = validate_polish_output(compliant_polish_graph)
+    assert any("R-5.10" in e and "sidetrack_beat" in e for e in errors), (
+        f"expected R-5.10 role-rename error, got {errors}"
+    )

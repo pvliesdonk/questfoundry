@@ -1045,7 +1045,7 @@ async def phase_plan_application(
             "residue_passages": 0,
             "choices": 0,
             "false_branches": 0,
-            "sidetrack_beats": 0,
+            "false_branch_beats": 0,
         }
 
         # 1. Create passage nodes with grouped_in edges
@@ -1084,7 +1084,7 @@ async def phase_plan_application(
 
             new_beats, new_choices = _apply_false_branch(graph, fb_spec)
             counts["false_branches"] += 1
-            counts["sidetrack_beats"] += new_beats
+            counts["false_branch_beats"] += new_beats
             counts["choices"] += new_choices
 
         log.debug("phase6_false_branches_applied", count=counts["false_branches"])
@@ -1288,7 +1288,7 @@ def _apply_false_branch(
     """Apply a false branch decision (diamond or sidetrack).
 
     Returns:
-        Tuple of (sidetrack_beats_created, choice_edges_created).
+        Tuple of (false_branch_beats_created, choice_edges_created).
     """
     if fb_spec.branch_type == "diamond":
         return _apply_diamond(graph, fb_spec)
@@ -1374,7 +1374,7 @@ def _apply_sidetrack(graph: Graph, fb_spec: FalseBranchSpec) -> tuple[int, int]:
             "type": "beat",
             "raw_id": f"sidetrack_{from_passage.split('::')[-1]}",
             "summary": fb_spec.sidetrack_summary or "A brief detour",
-            "role": "sidetrack_beat",
+            "role": "false_branch_beat",
             "scene_type": "scene",
             "dilemma_impacts": [],
             "entities": fb_spec.sidetrack_entities,
@@ -1449,7 +1449,7 @@ async def phase_validation(
     residue_count = sum(1 for p in passage_nodes.values() if p.get("is_residue"))
 
     beat_nodes = graph.get_nodes_by_type("beat")
-    sidetrack_count = sum(1 for b in beat_nodes.values() if b.get("role") == "sidetrack_beat")
+    sidetrack_count = sum(1 for b in beat_nodes.values() if b.get("role") == "false_branch_beat")
 
     # Count false branches from diamond_alt and sidetrack passages
     false_branch_count = sum(1 for p in passage_nodes.values() if p.get("is_diamond_alt")) + sum(

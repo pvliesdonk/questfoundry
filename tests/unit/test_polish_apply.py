@@ -386,7 +386,9 @@ class TestApplySidetrack:
 
         # Check sidetrack beat exists
         beat_nodes = graph.get_nodes_by_type("beat")
-        sidetrack_beats = {k: v for k, v in beat_nodes.items() if v.get("role") == "sidetrack_beat"}
+        sidetrack_beats = {
+            k: v for k, v in beat_nodes.items() if v.get("role") == "false_branch_beat"
+        }
         assert len(sidetrack_beats) == 1
         sb = next(iter(sidetrack_beats.values()))
         assert sb["summary"] == "Meet a stranger"

@@ -23,9 +23,7 @@ from questfoundry.pipeline.stages.polish.deterministic import (
 
 def _make_beat(graph: Graph, beat_id: str, summary: str = "A beat", **kwargs: object) -> None:
     """Helper to create a beat node."""
-    polish_created_roles = frozenset(
-        {"micro_beat", "residue_beat", "false_branch_beat", "sidetrack_beat"}
-    )
+    polish_created_roles = frozenset({"micro_beat", "residue_beat", "false_branch_beat"})
     data = {
         "type": "beat",
         "raw_id": beat_id.split("::")[-1],

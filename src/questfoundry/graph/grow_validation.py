@@ -839,7 +839,7 @@ def check_single_root_beat(graph: Graph) -> ValidationCheck:
     ``from_id`` in any predecessor edge. The beat DAG must have exactly one
     root for POLISH to produce a single start passage.
 
-    Synthetic beat roles (micro_beat, residue_beat, sidetrack_beat) are
+    Synthetic beat roles (micro_beat, residue_beat, false_branch_beat) are
     excluded since they are created by POLISH, not GROW.
 
     Args:
@@ -869,7 +869,7 @@ def check_single_root_beat(graph: Graph) -> ValidationCheck:
     # Exclude synthetic beat roles that are created by POLISH, not GROW.
     # At GROW Phase 10 none exist, but run_all_checks() (used by qf inspect)
     # may run after POLISH when synthetic beats are present.
-    synthetic_roles = {"micro_beat", "residue_beat", "sidetrack_beat"}
+    synthetic_roles = {"micro_beat", "residue_beat", "false_branch_beat"}
     root_beats = sorted(
         bid
         for bid in beat_nodes
