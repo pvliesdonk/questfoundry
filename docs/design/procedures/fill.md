@@ -239,10 +239,9 @@ R-4.3. Revision replaces the Passage's prose; previous prose is not preserved in
 
 **What:** For each arc (canonical arc first, then each non-canonical arc), run the following deterministic checks:
 
-- **Intensity progression:** Derive each beat's intensity from its `narrative_function` and `scene_type` annotations (GROW-populated) and verify the arc's derived intensity sequence exhibits a plausible climax curve — arcs whose derived intensity is monotonically flat or descending throughout fail this check.  This is a graph-structural check; no prose content is inspected.
-- **Dramatic-question closure:** Verify every open dramatic question raised in an arc's passages receives a resolution passage before the arc's terminal.
-- **Narrative-function variety:** Verify the arc's passage sequence does not over-concentrate a single narrative function (e.g., all `sequel`, no `scene`).
-- **Dilemma-prose coverage:** Verify every Dilemma relevant to the arc has prose addressing its question at the commit-beat passage.
+- **Effect-sequence progression:** Inspect the arc's beats in DAG order and verify the sequence of `dilemma_impacts.effect` values shows structural progression toward a commit — arcs whose beats consist entirely of one effect type (e.g., only `reveals`) or whose sequence never reaches `commits` before the arc's terminal fail this check.  Concretely, a compliant arc contains at least one beat whose `effect` is `advances` or `complicates` followed by a beat whose `effect` is `commits`, before any post-commit beats.  This is a graph-structural check over ontology-defined fields only.
+- **Dilemma commit closure:** Verify every Dilemma explored on this arc (every Dilemma whose path has `belongs_to` edges from beats on the arc) has at least one beat on the arc whose `dilemma_impacts.effect` is `commits` before the arc's terminal.  An arc that explores a Dilemma but terminates without committing it fails this check.
+- **Dilemma-prose coverage:** Verify every Dilemma committed on the arc has non-empty prose at the commit-beat's passage that references the Dilemma's central entities (via `anchored_to`).  This is the narrative counterpart to Dilemma commit closure: the structural commit must be reflected in prose at the corresponding passage.
 
 **Rules:**
 
@@ -412,8 +411,9 @@ R-5.3: Cap is configurable; default 2.
 | 2 | Hard transition without GROW bridge | `fill_hard_transition_detected` warning | Flag for human review; may need GROW re-run |
 | 3 | Too many flags | Human overwhelm | Prioritize; accept some imperfection |
 | 4 | Revision doesn't fix issue | Human review | Try different approach or accept with flag |
-| 4a | Intensity progression / narrative-function variety flag | `run_arc_validation` report | Phase 5 revision first; if unresolved, escalate to POLISH (pacing / beat grouping) |
-| 4a | Dramatic-question unresolved / dilemma-prose coverage missing | `run_arc_validation` report | Phase 5 revision first; if unresolved, escalate to GROW (structural) or POLISH (pacing) |
+| 4a | Effect-sequence progression flag | `run_arc_validation` report | Phase 5 revision first; if unresolved, escalate to GROW (missing `commits` or non-progressing effect sequence is a beat-DAG shape issue) |
+| 4a | Dilemma commit closure flag | `run_arc_validation` report | Escalate to GROW — an unclosed Dilemma on a completed arc is a structural error not fixable by prose revision |
+| 4a | Dilemma-prose coverage flag | `run_arc_validation` report | Phase 5 revision first (add dilemma reference to commit-beat prose); if unresolved, escalate to POLISH (check dilemma is central to the commit passage) |
 | 5 | Quality still poor after 2 cycles | Cap reached | Ship with escalation flag to upstream stages |
 
 **Structural failures (abort to earlier stage):**
@@ -466,7 +466,7 @@ Passage 7 regenerated with stronger voice reinforcement (more exemplar passages 
 
 ### Phase 4a
 
-Arc-level structural validation runs on both arcs.  Intensity progression: rising curve on both, OK.  Dramatic-question closure: `mentor_trust` question resolved at its commit passage, OK.  Narrative-function variety: mix of scene and sequel beats on both arcs, OK.  Dilemma-prose coverage: both dilemmas have prose addressing their question at their commit beats, OK.  Structural report: empty.
+Arc-level structural validation runs on both arcs.  Effect-sequence progression: each arc contains `advances` / `complicates` beats followed by a `commits` beat before the arc's terminal, OK.  Dilemma commit closure: `mentor_trust` has a beat with `effect=commits` on both arcs, OK.  Dilemma-prose coverage: the commit-beat passage on each arc contains prose referencing the mentor entity (the Dilemma's `anchored_to` target), OK.  Structural report: empty.
 
 Human approves. No Phase 5 needed.
 
