@@ -13,9 +13,6 @@ direct structured output: context from graph state → single LLM call
 → validate → retry (max 3).
 """
 
-# pyright: reportArgumentType=false
-# TODO(#1310): cleanup during M-POLISH-spec compliance work; tracked in epic #1310
-
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
@@ -137,6 +134,11 @@ class PolishStage(_PolishLLMHelperMixin, _PolishLLMPhaseMixin):
                     "using registry.get_function() fallback",
                 )
                 fn = registry.get_function(phase_name)
+                if fn is None:
+                    raise PolishStageError(
+                        f"Phase {phase_name!r} has no resolvable function "
+                        "(not in _METHOD_PHASES, _FREE_PHASES, or registry)."
+                    )
 
             result.append((fn, phase_name))
 

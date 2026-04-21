@@ -653,12 +653,26 @@ def compute_choice_edges(
             if prefixed in dilemma_nodes:
                 path_to_dilemma[pid] = prefixed
 
+    # Build state_flag → dilemma_role lookup for R-4c.3/R-4c.4.
+    # state_flag nodes carry a ``dilemma_id`` field; dilemma nodes carry
+    # ``dilemma_role`` ("soft" | "hard").  We pre-compute the combined
+    # flag→role mapping so the inner loop doesn't re-query the graph.
+    state_flag_nodes = graph.get_nodes_by_type("state_flag")
+    flag_to_dilemma_role: dict[str, str] = {}
+    for sf_id, sf_data in state_flag_nodes.items():
+        did = sf_data.get("dilemma_id", "")
+        if did:
+            ddata = (
+                dilemma_nodes.get(did)
+                or dilemma_nodes.get(normalize_scoped_id(did, "dilemma"))
+                or {}
+            )
+            role = ddata.get("dilemma_role", "soft")
+            flag_to_dilemma_role[sf_id] = role
+
     # Keyed by (from_passage, to_passage) to deduplicate multiple beats in the
     # same passage that independently diverge to the same target (#1185).
     choices_map: dict[tuple[str, str], ChoiceSpec] = {}
-
-    # Build passage_id_to_spec once outside the loop (not per-divergence-point)
-    passage_id_to_spec: dict[str, PassageSpec] = {s.passage_id: s for s in specs}
 
     # Find divergence points — two cases:
     #
@@ -776,30 +790,58 @@ def compute_choice_edges(
                             if beat_to_paths_ce.get(next_cid, frozenset()) == frozenset({path_id}):
                                 search_queue.append(next_cid)
 
-                # Compute requires: for choices from intersection passages,
-                # populate the required state flags for the target passage.
+                # Compute requires (R-4c.3 / R-4c.4): for post-convergence
+                # soft-dilemma choices, set requires to the state flags that
+                # are active at the target beat and belong to soft dilemmas.
+                # Hard-dilemma flags are excluded per R-4c.4 (the passage
+                # graph is already structurally separate for hard dilemmas).
                 requires: list[str] = []
-                from_spec = passage_id_to_spec.get(from_passage)
-                if from_spec and from_spec.grouping_type == "intersection":
-                    try:
-                        flag_combos = compute_active_flags_at_beat(graph, target_beat)
+                try:
+                    flag_combos = compute_active_flags_at_beat(graph, target_beat)
+                    if flag_combos:
+                        # Pick a deterministic combo when multiple exist.
+                        # Prefer a single combo; warn on ambiguity (R-4c.5
+                        # says single-outgoing-successor choices keep empty
+                        # requires, but here we have 2+ successors by design).
                         if len(flag_combos) == 1:
                             combo = next(iter(flag_combos))
-                            if combo:
-                                requires = sorted(combo)
-                        elif len(flag_combos) > 1:
+                        else:
+                            # Multiple flag combos (rare): pick lexicographically
+                            # smallest to keep output deterministic.
+                            combo = min(flag_combos, key=lambda s: tuple(sorted(s)))
                             log.warning(
                                 "choice_requires_multi_combo",
                                 from_passage=from_passage,
                                 to_passage=to_passage,
                                 combo_count=len(flag_combos),
                             )
-                    except ValueError as e:
-                        log.warning(
-                            "choice_requires_compute_failed",
-                            from_passage=from_passage,
-                            error=str(e),
-                        )
+                        # Filter to soft-dilemma flags only (R-4c.3/R-4c.4).
+                        # Flags without a resolvable dilemma default to "soft"
+                        # (included in requires); surface the fallback so a
+                        # broken derived_from chain is visible, not silent.
+                        soft_flags: list[str] = []
+                        for f in combo:
+                            role = flag_to_dilemma_role.get(f)
+                            if role is None:
+                                log.warning(
+                                    "choice_requires_flag_role_unresolved",
+                                    flag=f,
+                                    from_passage=from_passage,
+                                    to_passage=to_passage,
+                                    hint="state_flag has no derived_from chain to a dilemma; "
+                                    "treating as soft for R-4c.3 purposes",
+                                )
+                                soft_flags.append(f)
+                            elif role == "soft":
+                                soft_flags.append(f)
+                        if soft_flags:
+                            requires = sorted(soft_flags)
+                except ValueError as e:
+                    log.warning(
+                        "choice_requires_compute_failed",
+                        from_passage=from_passage,
+                        error=str(e),
+                    )
 
                 key = (from_passage, to_passage)
                 if key in choices_map:
@@ -1045,7 +1087,7 @@ async def phase_plan_application(
             "residue_passages": 0,
             "choices": 0,
             "false_branches": 0,
-            "sidetrack_beats": 0,
+            "false_branch_beats": 0,
         }
 
         # 1. Create passage nodes with grouped_in edges
@@ -1084,7 +1126,7 @@ async def phase_plan_application(
 
             new_beats, new_choices = _apply_false_branch(graph, fb_spec)
             counts["false_branches"] += 1
-            counts["sidetrack_beats"] += new_beats
+            counts["false_branch_beats"] += new_beats
             counts["choices"] += new_choices
 
         log.debug("phase6_false_branches_applied", count=counts["false_branches"])
@@ -1206,6 +1248,7 @@ def _apply_residue_with_variants(graph: Graph, rspec: ResidueSpec) -> None:
             "scene_type": "sequel",
             "dilemma_impacts": [],
             "entities": [],
+            "created_by": "POLISH",
         },
     )
 
@@ -1253,18 +1296,87 @@ def _apply_residue_with_variants(graph: Graph, rspec: ResidueSpec) -> None:
 
 
 def _apply_residue_parallel_passages(graph: Graph, rspec: ResidueSpec) -> None:
-    """Alternative residue mapping: parallel passages that branch and rejoin.
+    """Alternative residue mapping per R-5.7/R-5.8: a parallel passage gated
+    by ``rspec.flag`` that branches from the target's predecessor and
+    rejoins at the target.
 
-    For a residue spec, create N sibling passages — each with flag-gated
-    prose — branching from the target's predecessor and rejoining at the
-    target.  Currently stubbed; end-to-end test coverage + full
-    implementation tracked in the polish-compliance follow-on (task 18).
+    Creates:
+      - One residue beat (``beat::residue_<id>``) with ``role: residue_beat``,
+        ``created_by: POLISH``.
+      - One parallel passage (``passage::residue_<id>``) containing the beat,
+        with ``residue_for: <target>``, ``is_residue: True``, and
+        ``mapping_strategy: "parallel_passages"``.
+      - A ``precedes`` edge from the parallel passage to the target (the
+        branch rejoins here).  The predecessor passage's existing
+        ``precedes`` edge to the target remains (the non-residue path).
+      - Beat-layer insertion: predecessor beat(s) of the target gain a
+        ``predecessor`` edge from the residue beat; the residue beat
+        precedes the target's first regular (non-transition) beat.
+
+    The flag gating (``requires: [rspec.flag]`` on the residue passage)
+    ensures the parallel path is only taken when the flag is present.
     """
-    raise NotImplementedError(
-        f"R-5.8: 'parallel_passages' mapping_strategy is not yet implemented; "
-        f"residue {rspec.residue_id!r} requires handwritten applier. "
-        f"Tracked as follow-on to epic #1310."
+    residue_suffix = rspec.residue_id.split("::")[-1]
+    beat_id = f"beat::residue_{residue_suffix}"
+    residue_passage_id = f"passage::residue_{residue_suffix}"
+
+    # Create residue beat — same shape as the variants strategy.
+    graph.create_node(
+        beat_id,
+        {
+            "type": "beat",
+            "raw_id": f"residue_{residue_suffix}",
+            "summary": rspec.content_hint or f"Residue moment for {rspec.flag}",
+            "role": "residue_beat",
+            "scene_type": "sequel",
+            "dilemma_impacts": [],
+            "entities": [],
+            "created_by": "POLISH",
+        },
     )
+
+    if rspec.path_id:
+        graph.add_edge("belongs_to", beat_id, rspec.path_id)
+
+    # Create parallel residue passage — residue_for + mapping_strategy set
+    # so Phase 7's _check_residue_mapping_strategy validates successfully.
+    graph.create_node(
+        residue_passage_id,
+        {
+            "type": "passage",
+            "raw_id": f"residue_{residue_suffix}",
+            "summary": rspec.content_hint or f"Residue (parallel) for {rspec.flag}",
+            "requires": [rspec.flag],
+            "is_residue": True,
+            "residue_for": rspec.target_passage_id,
+            "mapping_strategy": rspec.mapping_strategy,
+        },
+    )
+
+    graph.add_edge("grouped_in", beat_id, residue_passage_id)
+    # Parallel branch: residue passage also precedes the target.  The
+    # predecessor passage's existing precedes edge to the target remains
+    # untouched — players without the flag take the direct path.
+    graph.add_edge("precedes", residue_passage_id, rspec.target_passage_id)
+
+    # Beat DAG insertion — mirror the variants strategy's splice logic.
+    # The residue beat sits parallel to the target's first regular beat:
+    # it inherits the target's predecessors and precedes the target.
+    target_beats = [
+        e["from"]
+        for e in graph.get_edges(edge_type="grouped_in")
+        if e["to"] == rspec.target_passage_id
+    ]
+    if target_beats:
+        beat_data = graph.get_nodes_by_type("beat")
+        regular_targets = [
+            tb for tb in target_beats if beat_data.get(tb, {}).get("role") != "transition_beat"
+        ]
+        target_beat = sorted(regular_targets or target_beats)[0]
+        for pred_edge in graph.get_edges(edge_type="predecessor"):
+            if pred_edge["from"] == target_beat:
+                graph.add_edge("predecessor", beat_id, pred_edge["to"])
+        graph.add_edge("predecessor", target_beat, beat_id)
 
 
 def _create_choice_edge(graph: Graph, cspec: ChoiceSpec) -> None:
@@ -1287,7 +1399,7 @@ def _apply_false_branch(
     """Apply a false branch decision (diamond or sidetrack).
 
     Returns:
-        Tuple of (sidetrack_beats_created, choice_edges_created).
+        Tuple of (false_branch_beats_created, choice_edges_created).
     """
     if fb_spec.branch_type == "diamond":
         return _apply_diamond(graph, fb_spec)
@@ -1373,10 +1485,11 @@ def _apply_sidetrack(graph: Graph, fb_spec: FalseBranchSpec) -> tuple[int, int]:
             "type": "beat",
             "raw_id": f"sidetrack_{from_passage.split('::')[-1]}",
             "summary": fb_spec.sidetrack_summary or "A brief detour",
-            "role": "sidetrack_beat",
+            "role": "false_branch_beat",
             "scene_type": "scene",
             "dilemma_impacts": [],
             "entities": fb_spec.sidetrack_entities,
+            "created_by": "POLISH",
         },
     )
 
@@ -1447,7 +1560,7 @@ async def phase_validation(
     residue_count = sum(1 for p in passage_nodes.values() if p.get("is_residue"))
 
     beat_nodes = graph.get_nodes_by_type("beat")
-    sidetrack_count = sum(1 for b in beat_nodes.values() if b.get("role") == "sidetrack_beat")
+    sidetrack_count = sum(1 for b in beat_nodes.values() if b.get("role") == "false_branch_beat")
 
     # Count false branches from diamond_alt and sidetrack passages
     false_branch_count = sum(1 for p in passage_nodes.values() if p.get("is_diamond_alt")) + sum(

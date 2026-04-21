@@ -454,6 +454,19 @@ def test_R_4c_2_zero_choice_edges_fails(compliant_polish_graph: Graph) -> None:
     )
 
 
+def test_R_2_5_polish_beat_missing_created_by(compliant_polish_graph: Graph) -> None:
+    """R-2.5: every POLISH-created beat carries 'created_by: POLISH' attribution."""
+    # Add a micro-beat without the attribution.
+    compliant_polish_graph.create_node(
+        "beat::micro_offender",
+        {"type": "beat", "raw_id": "micro_offender", "role": "micro_beat", "summary": "x"},
+    )
+    errors = validate_polish_output(compliant_polish_graph)
+    assert any("R-2.5" in e and "created_by" in e for e in errors), (
+        f"expected R-2.5 created_by error, got {errors}"
+    )
+
+
 def test_polish_contract_error_is_value_error() -> None:
     """PolishContractError is a ValueError subclass (same convention as GrowContractError)."""
     assert issubclass(PolishContractError, ValueError)
@@ -500,3 +513,49 @@ def test_phase_validation_passes_on_clean_graph(monkeypatch: pytest.MonkeyPatch)
 
     result = asyncio.run(deterministic.phase_validation(graph, MagicMock()))
     assert result.status == "completed"
+
+
+# --------------------------------------------------------------------------
+# R-5.10: false_branch_beat role enforcement (Cluster #1315)
+# --------------------------------------------------------------------------
+
+
+def test_R_5_10_sidetrack_beat_role_forbidden(compliant_polish_graph: Graph) -> None:
+    """R-5.10: false-branch beats use role 'false_branch_beat', not 'sidetrack_beat'."""
+    compliant_polish_graph.create_node(
+        "beat::fb_offender",
+        {
+            "type": "beat",
+            "raw_id": "fb_offender",
+            "role": "sidetrack_beat",
+            "summary": "x",
+            "created_by": "POLISH",
+            "scene_type": "scene",
+            "dilemma_impacts": [],
+            "entities": [],
+        },
+    )
+    errors = validate_polish_output(compliant_polish_graph)
+    assert any("R-5.10" in e and "sidetrack_beat" in e for e in errors), (
+        f"expected R-5.10 role-rename error, got {errors}"
+    )
+
+
+def test_R_5_2_duplicate_labels_within_passage_forbidden(
+    compliant_polish_graph: Graph,
+) -> None:
+    """R-5.2: labels are distinct within a source passage (case-insensitive)."""
+    # Baseline has pre_to_prot with label "Choice 1" and pre_to_mani with "Choice 2".
+    # Force a case-insensitive collision by setting both choice edges to the same label.
+    choice_edges = list(compliant_polish_graph.get_edges(edge_type="choice"))
+    # Delete the existing edges and recreate with duplicate labels.
+    for edge in choice_edges:
+        compliant_polish_graph.remove_edge("choice", edge["from"], edge["to"])
+    # Recreate both edges with the same label (lowercase collision).
+    compliant_polish_graph.add_edge("choice", "passage::pre", "passage::prot", label="forward")
+    compliant_polish_graph.add_edge("choice", "passage::pre", "passage::mani", label="Forward")
+    # "forward" and "Forward" are case-insensitively equal → collision.
+    errors = validate_polish_output(compliant_polish_graph)
+    assert any("R-5.2" in e and "forward" in e.lower() for e in errors), (
+        f"expected R-5.2 duplicate-label error, got {errors}"
+    )

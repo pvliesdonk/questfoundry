@@ -23,6 +23,7 @@ from questfoundry.pipeline.stages.polish.deterministic import (
 
 def _make_beat(graph: Graph, beat_id: str, summary: str = "A beat", **kwargs: object) -> None:
     """Helper to create a beat node."""
+    polish_created_roles = frozenset({"micro_beat", "residue_beat", "false_branch_beat"})
     data = {
         "type": "beat",
         "raw_id": beat_id.split("::")[-1],
@@ -32,6 +33,10 @@ def _make_beat(graph: Graph, beat_id: str, summary: str = "A beat", **kwargs: ob
         "scene_type": "scene",
     }
     data.update(kwargs)
+    # Add created_by attribution for POLISH-created beats (R-2.5)
+    role = data.get("role", "")
+    if role in polish_created_roles and "created_by" not in data:
+        data["created_by"] = "POLISH"
     graph.create_node(beat_id, data)
 
 

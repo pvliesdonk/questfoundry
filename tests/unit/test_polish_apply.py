@@ -233,11 +233,13 @@ class TestCreateResidueBeatAndPassage:
         assert residue_passage.get("residue_for") == "passage::target"
         assert residue_passage.get("mapping_strategy") == "residue_passage_with_variants"
 
-    def test_residue_parallel_passages_is_stubbed(self) -> None:
-        """R-5.8: ``parallel_passages`` branch is a known stub — raises
-        NotImplementedError until the follow-on implements it (epic #1310)."""
+    def test_residue_parallel_passages_applies_correctly(self) -> None:
+        """R-5.7/R-5.8: 'parallel_passages' mapping creates a flag-gated residue
+        passage branching from the predecessor and rejoining at the target."""
         graph = Graph.empty()
+        _make_beat(graph, "beat::pred")
         _make_beat(graph, "beat::target")
+        graph.add_edge("predecessor", "beat::target", "beat::pred")
         graph.create_node("path::brave", {"type": "path", "raw_id": "brave"})
 
         target_spec = PassageSpec(
@@ -245,17 +247,51 @@ class TestCreateResidueBeatAndPassage:
             beat_ids=["beat::target"],
             summary="Target",
         )
+        pred_spec = PassageSpec(
+            passage_id="passage::pred",
+            beat_ids=["beat::pred"],
+            summary="Pred",
+        )
         _create_passage_node(graph, target_spec)
+        _create_passage_node(graph, pred_spec)
+        graph.add_edge("precedes", "passage::pred", "passage::target")
 
         rspec = ResidueSpec(
             target_passage_id="passage::target",
-            residue_id="residue::r4",
+            residue_id="residue::r_par",
             flag="dilemma::d1:path::brave",
             path_id="path::brave",
+            content_hint="You feel confident",
             mapping_strategy="parallel_passages",
         )
-        with pytest.raises(NotImplementedError, match=r"parallel_passages"):
-            _create_residue_beat_and_passage(graph, rspec)
+        _create_residue_beat_and_passage(graph, rspec)
+
+        # Parallel residue passage is created, gated by the flag, with
+        # residue_for + mapping_strategy recorded.
+        residue_passage = graph.get_nodes_by_type("passage").get("passage::residue_r_par")
+        assert residue_passage is not None
+        assert residue_passage["residue_for"] == "passage::target"
+        assert residue_passage["mapping_strategy"] == "parallel_passages"
+        assert residue_passage["requires"] == ["dilemma::d1:path::brave"]
+
+        # Both branches exist: the original pred→target precedes edge
+        # and the new pred→residue→target parallel path.
+        precedes = graph.get_edges(edge_type="precedes")
+        edges = {(e["from"], e["to"]) for e in precedes}
+        assert ("passage::pred", "passage::target") in edges  # main path
+        assert ("passage::residue_r_par", "passage::target") in edges  # parallel rejoin
+
+        # The residue beat inherits the target's predecessors and precedes
+        # the target in the beat DAG.
+        beat_pred = graph.get_edges(edge_type="predecessor")
+        beat_edges = {(e["from"], e["to"]) for e in beat_pred}
+        assert ("beat::residue_r_par", "beat::pred") in beat_edges
+        assert ("beat::target", "beat::residue_r_par") in beat_edges
+
+        # R-5.8 parallel_passages invariant: the predecessor's original direct
+        # edge to the target is PRESERVED.  Flag-absent players take this
+        # path; flag-present players take the parallel-passage detour above.
+        assert ("beat::target", "beat::pred") in beat_edges
 
 
 class TestCreateChoiceEdge:
@@ -386,7 +422,9 @@ class TestApplySidetrack:
 
         # Check sidetrack beat exists
         beat_nodes = graph.get_nodes_by_type("beat")
-        sidetrack_beats = {k: v for k, v in beat_nodes.items() if v.get("role") == "sidetrack_beat"}
+        sidetrack_beats = {
+            k: v for k, v in beat_nodes.items() if v.get("role") == "false_branch_beat"
+        }
         assert len(sidetrack_beats) == 1
         sb = next(iter(sidetrack_beats.values()))
         assert sb["summary"] == "Meet a stranger"

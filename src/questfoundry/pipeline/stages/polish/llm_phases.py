@@ -370,6 +370,17 @@ class _PolishLLMPhaseMixin:
                 if key in label_lookup:
                     spec["label"] = label_lookup[key]
 
+            # R-5.2: labels are distinct within a source passage.  Case-insensitive
+            # uniqueness — detect collisions, log a WARNING so humans can review.
+            for collision in _detect_duplicate_labels_in_passage(choice_specs):
+                log.warning(
+                    "phase5a_duplicate_labels_in_passage",
+                    from_passage=collision["from_passage"],
+                    duplicate_label=collision["label"],
+                    conflicting_targets=collision["targets"],
+                    hint="Human review recommended; R-5.2 requires distinct labels within a passage.",
+                )
+
             enrichment_parts.append(f"{len(result.choice_labels)} choice labels")
             log.debug("phase5a_complete", labels=len(result.choice_labels))
 
@@ -607,6 +618,46 @@ class _PolishLLMPhaseMixin:
 # ---------------------------------------------------------------------------
 # Phase 5 helpers
 # ---------------------------------------------------------------------------
+
+
+def _detect_duplicate_labels_in_passage(
+    choice_specs: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """R-5.2: return collisions where two+ choices from the same passage share a label.
+
+    Pure function — no side effects.  Used by Phase 5a after the LLM
+    assigns labels to detect case-insensitive within-passage collisions.
+    The caller logs each collision; the LLM re-call decision is left to
+    the operator (empty return means no collisions).
+
+    Each collision is a dict with:
+      - ``from_passage``: the source passage.
+      - ``label``: the case-folded label string that collided.
+      - ``targets``: sorted list of target passages sharing the label.
+    """
+    from collections import defaultdict
+
+    labels_by_passage: dict[str, dict[str, list[str]]] = defaultdict(lambda: defaultdict(list))
+    for spec in choice_specs:
+        label = spec.get("label") or ""
+        if not label:
+            continue
+        labels_by_passage[spec["from_passage"]][label.lower()].append(spec["to_passage"])
+
+    collisions: list[dict[str, Any]] = []
+    for from_passage in sorted(labels_by_passage):
+        label_map = labels_by_passage[from_passage]
+        for lower_label in sorted(label_map):
+            targets = label_map[lower_label]
+            if len(targets) > 1:
+                collisions.append(
+                    {
+                        "from_passage": from_passage,
+                        "label": lower_label,
+                        "targets": sorted(targets),
+                    }
+                )
+    return collisions
 
 
 def _update_plan_data(
@@ -1015,6 +1066,7 @@ def _insert_micro_beat(
             "scene_type": "micro_beat",
             "dilemma_impacts": [],
             "entities": entity_ids,
+            "created_by": "POLISH",
         },
     )
 

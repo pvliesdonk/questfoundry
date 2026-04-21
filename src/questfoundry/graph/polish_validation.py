@@ -96,6 +96,7 @@ def validate_polish_output(graph: Graph) -> list[str]:
     _check_residue_ordering(graph, errors)
     _check_residue_mapping_strategy(graph, errors)
     _check_has_choice_edges(graph, errors)
+    _check_post_convergence_requires(graph, errors)
     _check_no_character_arc_metadata_nodes(graph, errors)
     _check_passage_maximal_linear_collapse(graph, errors)
     _check_arc_completeness(graph, errors)
@@ -103,6 +104,9 @@ def validate_polish_output(graph: Graph) -> list[str]:
     _check_no_overlapping_requires(graph, errors)
     _check_variant_requires_non_empty(passage_nodes, graph, errors)
     _check_no_unresolved_splits(graph, errors)
+    _check_polish_beat_attribution(graph, errors)
+    _check_false_branch_role_name(graph, errors)
+    _check_choice_label_distinctness(graph, errors)
 
     # TODO: check_all_endings_reachable and check_gate_satisfiability use the old
     # choice_from/choice_to edge model and are DEAD — see issue #1165 for migration.
@@ -119,9 +123,15 @@ def _check_beat_grouping(
     for beat_id in beat_nodes:
         passages = beat_to_passages.get(beat_id, [])
         if len(passages) == 0:
-            # Skip micro/residue/sidetrack beats — they may not exist yet at validation time
+            # ``micro_beat`` is the only legitimately exempt role:
+            # ``_insert_micro_beat`` intentionally does not create a
+            # ``grouped_in`` edge (pacing beats are folded into adjacent
+            # passages during Phase 6 apply).  ``residue_beat`` and
+            # ``false_branch_beat`` are always grouped at creation time
+            # (``_apply_residue_*`` and ``_apply_sidetrack`` both emit
+            # ``grouped_in`` edges), so they must NOT be exempt here.
             role = beat_nodes[beat_id].get("role", "")
-            if role not in ("micro_beat", "sidetrack_beat"):  # residue_beat no longer exempt
+            if role != "micro_beat":
                 errors.append(f"Beat {beat_id} not grouped into any passage")
         elif len(passages) > 1:
             errors.append(f"Beat {beat_id} grouped into {len(passages)} passages: {passages}")
@@ -142,6 +152,66 @@ def _check_passage_beats(
             errors.append(f"Passage {passage_id} has no beats (no grouped_in edges)")
 
 
+def _check_polish_beat_attribution(graph: Graph, errors: list[str]) -> None:
+    """R-2.5: beats created by POLISH carry a ``created_by: POLISH`` attribution.
+
+    Beats with roles micro_beat, residue_beat, or false_branch_beat
+    are created by POLISH. Their node data dict must include the created_by
+    attribution for pipeline stage-attribution tracking.
+    """
+    polish_created_roles = frozenset({"micro_beat", "residue_beat", "false_branch_beat"})
+    beat_nodes = graph.get_nodes_by_type("beat")
+    for bid, bdata in sorted(beat_nodes.items()):
+        role = bdata.get("role", "")
+        if role in polish_created_roles and bdata.get("created_by") != "POLISH":
+            errors.append(
+                f"R-2.5: beat {bid!r} has role={role!r} (POLISH-created) but "
+                f"missing 'created_by: POLISH' attribution"
+            )
+
+
+def _check_false_branch_role_name(graph: Graph, errors: list[str]) -> None:
+    """R-5.10: false-branch beats (Phase 6 cosmetic sidetracks) must use
+    ``role: "false_branch_beat"``. The legacy ``sidetrack_beat`` role is
+    pre-audit nomenclature drift and is forbidden.
+    """
+    beat_nodes = graph.get_nodes_by_type("beat")
+    for bid, bdata in sorted(beat_nodes.items()):
+        if bdata.get("role") == "sidetrack_beat":
+            errors.append(
+                f"R-5.10: beat {bid!r} uses legacy role 'sidetrack_beat'; "
+                "spec requires 'false_branch_beat'"
+            )
+
+
+def _check_choice_label_distinctness(graph: Graph, errors: list[str]) -> None:
+    """R-5.2: labels are distinct within a source passage (case-insensitive).
+
+    Validates the passage graph's choice edges — each source passage's
+    outgoing choice labels must not collide case-insensitively.  Phase 5a's
+    LLM prompt + the Phase 5a label-collision WARNING are the primary
+    enforcement; this validator is the postcondition.
+    """
+    choice_edges = graph.get_edges(edge_type="choice")
+    labels_by_source: dict[str, dict[str, list[str]]] = {}
+    for edge in choice_edges:
+        from_p = edge["from"]
+        label = edge.get("label") or ""
+        if not label:
+            continue
+        bucket = labels_by_source.setdefault(from_p, {})
+        bucket.setdefault(label.lower(), []).append(edge["to"])
+
+    for from_p, label_map in sorted(labels_by_source.items()):
+        for lower_label, targets in sorted(label_map.items()):
+            if len(targets) > 1:
+                errors.append(
+                    f"R-5.2: passage {from_p!r} has {len(targets)} choices with "
+                    f"label {lower_label!r} (case-insensitive collision): "
+                    f"targets={sorted(targets)}"
+                )
+
+
 def _check_start_passage(
     passage_beats: dict[str, list[str]],
     beat_nodes: dict[str, dict[str, Any]],
@@ -150,10 +220,10 @@ def _check_start_passage(
 ) -> None:
     """Exactly one start passage must exist (containing the earliest beat)."""
     # Find root beats (no predecessor edges pointing TO them)
-    # Exclude synthetic beats (micro_beat, residue_beat, sidetrack_beat) —
+    # Exclude synthetic beats (micro_beat, residue_beat, false_branch_beat) —
     # they're added fresh by Phase 6 with no predecessor edges
     predecessor_edges = graph.get_edges(edge_type="predecessor")
-    _synthetic_roles = {"micro_beat", "residue_beat", "sidetrack_beat"}
+    _synthetic_roles = {"micro_beat", "residue_beat", "false_branch_beat"}
     beats_with_parents: set[str] = set()
     for edge in predecessor_edges:
         if edge["from"] in beat_nodes:
@@ -613,6 +683,49 @@ def _check_has_choice_edges(graph: Graph, errors: list[str]) -> None:
             "R-4c.2: zero choice edges in passage graph — SEED/GROW DAG "
             "has no Y-forks; Phase 4c should have halted"
         )
+
+
+def _check_post_convergence_requires(graph: Graph, errors: list[str]) -> None:
+    """R-4c.3 / R-4c.4: post-convergence soft-dilemma choices carry ``requires``.
+
+    For each choice edge whose target passage's primary beat is the
+    ``converges_at`` beat of a soft dilemma, the choice edge MUST have a
+    non-empty ``requires`` list (R-4c.3).  If the target beat belongs only to
+    hard dilemmas, ``requires`` must be empty (R-4c.4) — but since hard
+    dilemmas have ``converges_at: null``, they are excluded from this check
+    by construction.
+
+    This post-hoc check catches the primary regression symptom: a choice edge
+    whose target is exactly at a soft-dilemma convergence point but has no
+    flag gate.  It does not re-run the full active-flags computation (that
+    would duplicate Phase 4c logic); it catches the simplest violation.
+    """
+    dilemma_nodes = graph.get_nodes_by_type("dilemma")
+
+    # Collect the convergence beats of all soft dilemmas.
+    soft_convergence_beats: set[str] = set()
+    for _did, ddata in dilemma_nodes.items():
+        if ddata.get("dilemma_role") == "soft":
+            conv = ddata.get("converges_at")
+            if conv:
+                soft_convergence_beats.add(conv)
+
+    if not soft_convergence_beats:
+        return  # No soft dilemmas with convergence → nothing to gate
+
+    choice_edges = graph.get_edges(edge_type="choice")
+    for edge in choice_edges:
+        to_passage = edge["to"]
+        target_beat = get_primary_beat(graph, to_passage) or ""
+        if not target_beat or target_beat not in soft_convergence_beats:
+            continue
+        requires: list[str] = edge.get("requires") or []
+        if not requires:
+            errors.append(
+                f"R-4c.3: choice {edge['from']!r} → {to_passage!r} targets "
+                f"soft-dilemma convergence beat {target_beat!r} but has empty "
+                "'requires' — flag gate missing"
+            )
 
 
 # ---------------------------------------------------------------------------
