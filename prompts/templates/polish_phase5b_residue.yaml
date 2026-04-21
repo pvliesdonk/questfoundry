@@ -18,6 +18,22 @@ system: |
   ## Residue Beats to Write
   {residue_details}
 
+  ## Mapping Strategy (choose per residue)
+  For each residue, also choose a **mapping_strategy**:
+
+  - **"residue_passage_with_variants"** — creates a single residue passage with
+    variant prose per flag combination. Use this when all variants describe the
+    same scene with subtle mood differences (e.g., entering the same room
+    confidently vs. nervously).
+
+  - **"parallel_passages"** — creates sibling passages that branch from the
+    predecessor and rejoin at the target passage. Use this when variants
+    describe meaningfully different scenes (different locations, entities,
+    or actions — e.g., one path goes through a garden, another through a
+    market).
+
+  When in doubt, prefer **"residue_passage_with_variants"**.
+
   ## Output Format
   Return a JSON object with a "residue_content" array. One entry per residue above.
 
@@ -26,7 +42,8 @@ system: |
     "residue_content": [
       {{
         "residue_id": "residue::single_2_dilemma__d1_path__brave",
-        "content_hint": "You enter the vault with quiet confidence, the mentor's words still ringing in your ears"
+        "content_hint": "You enter the vault with quiet confidence, the mentor's words still ringing in your ears",
+        "mapping_strategy": "residue_passage_with_variants"
       }}
     ]
   }}
@@ -36,11 +53,13 @@ system: |
   - Do NOT duplicate content from the target passage
   - Do NOT skip any residue — provide content for every residue listed
   - Do NOT add prose before or after the JSON output
+  - Do NOT omit the mapping_strategy field — it is required for every entry
 
 user: |
-  Generate a mood-setting content hint for each of the {residue_count} residue beats listed above.
+  Generate a mood-setting content hint and choose a mapping_strategy for each of the {residue_count} residue beats listed above.
   Each hint should reflect the emotional tone established by the player's path choices.
 
-  REMINDER: Return ONLY valid JSON. Provide exactly one content hint per residue.
+  REMINDER: Return ONLY valid JSON. Provide exactly one entry per residue, with both
+  "content_hint" and "mapping_strategy" fields filled in.
 
 components: []

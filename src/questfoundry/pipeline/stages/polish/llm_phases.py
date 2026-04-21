@@ -385,12 +385,14 @@ class _PolishLLMPhaseMixin:
             total_llm_calls += llm_calls
             total_tokens += tokens
 
-            # Apply content hints to residue specs
-            hint_lookup = {item.residue_id: item.content_hint for item in result_b.residue_content}
+            # Apply content hints and mapping_strategy to residue specs
+            item_lookup = {item.residue_id: item for item in result_b.residue_content}
             for spec in residue_specs:
                 rid = spec.get("residue_id", "")
-                if rid in hint_lookup:
-                    spec["content_hint"] = hint_lookup[rid]
+                if rid in item_lookup:
+                    item = item_lookup[rid]
+                    spec["content_hint"] = item.content_hint
+                    spec["mapping_strategy"] = item.mapping_strategy
 
             enrichment_parts.append(f"{len(result_b.residue_content)} residue hints")
             log.debug("phase5b_complete", hints=len(result_b.residue_content))

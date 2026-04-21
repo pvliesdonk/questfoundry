@@ -1139,10 +1139,31 @@ def _create_variant_passage(graph: Graph, vspec: VariantSpec) -> None:
 
 
 def _create_residue_beat_and_passage(graph: Graph, rspec: ResidueSpec) -> None:
+    """Phase 6: materialize a residue spec into the passage layer.
+
+    Branches on ``rspec.mapping_strategy`` per R-5.7/R-5.8:
+      - ``residue_passage_with_variants`` — one residue passage with
+        variant children carrying flag-gated prose (the existing shape).
+      - ``parallel_passages`` — sibling passages that branch from the
+        target's predecessor and rejoin at the target (new shape).
+    """
+    if rspec.mapping_strategy == "residue_passage_with_variants":
+        _apply_residue_with_variants(graph, rspec)
+    elif rspec.mapping_strategy == "parallel_passages":
+        _apply_residue_parallel_passages(graph, rspec)
+    else:  # defensive — validator catches this too
+        raise ValueError(
+            f"R-5.8: unknown mapping_strategy {rspec.mapping_strategy!r} for "
+            f"residue {rspec.residue_id!r}"
+        )
+
+
+def _apply_residue_with_variants(graph: Graph, rspec: ResidueSpec) -> None:
     """Create a residue beat node and a residue passage containing it.
 
     The residue passage is gated by the residue's state flag and
-    precedes the target shared passage.
+    precedes the target shared passage.  This is the default
+    ``residue_passage_with_variants`` shape.
     """
     # Derive IDs from residue_id — use residue_ prefix to avoid collision
     # with regular beat/passage IDs
@@ -1177,6 +1198,8 @@ def _create_residue_beat_and_passage(graph: Graph, rspec: ResidueSpec) -> None:
             "summary": rspec.content_hint or f"Residue for {rspec.flag}",
             "requires": [rspec.flag],
             "is_residue": True,
+            "residue_for": rspec.target_passage_id,
+            "mapping_strategy": rspec.mapping_strategy,
         },
     )
 
@@ -1203,6 +1226,21 @@ def _create_residue_beat_and_passage(graph: Graph, rspec: ResidueSpec) -> None:
             if pred_edge["from"] == target_beat:
                 graph.add_edge("predecessor", beat_id, pred_edge["to"])
         graph.add_edge("predecessor", target_beat, beat_id)
+
+
+def _apply_residue_parallel_passages(graph: Graph, rspec: ResidueSpec) -> None:
+    """Alternative residue mapping: parallel passages that branch and rejoin.
+
+    For a residue spec, create N sibling passages — each with flag-gated
+    prose — branching from the target's predecessor and rejoining at the
+    target.  Currently stubbed; end-to-end test coverage + full
+    implementation tracked in the polish-compliance follow-on (task 18).
+    """
+    raise NotImplementedError(
+        f"R-5.8: 'parallel_passages' mapping_strategy is not yet implemented; "
+        f"residue {rspec.residue_id!r} requires handwritten applier. "
+        f"Tracked as follow-on to epic #1310."
+    )
 
 
 def _create_choice_edge(graph: Graph, cspec: ChoiceSpec) -> None:
