@@ -227,7 +227,7 @@ R-4.3. Revision replaces the Passage's prose; previous prose is not preserved in
 
 ## Phase 4a: Arc-Level Structural Validation
 
-**Purpose:** After per-passage revision, validate the structural integrity of each arc as a whole.  Some structural promises made by GROW/SEED (the arc's intensity curve, open dramatic questions, per-arc narrative-function variety, and dilemma coverage) cannot be re-checked by reading a single passage — they are properties of the arc's prose sequence.  Phase 4a is FILL's structural QA of its own output against those upstream promises.
+**Purpose:** After per-passage revision, validate the structural integrity of each arc as a whole.  Some structural promises made by GROW/SEED (the arc's effect progression, Dilemma commit closure, and per-Dilemma prose coverage at commit beats) cannot be re-checked by reading a single passage — they are properties of the arc's beat sequence and passage prose as a whole.  Phase 4a is FILL's structural QA of its own output against those upstream promises.
 
 ### Input Contract
 
@@ -239,9 +239,9 @@ R-4.3. Revision replaces the Passage's prose; previous prose is not preserved in
 
 **What:** For each arc (canonical arc first, then each non-canonical arc), run the following deterministic checks:
 
-- **Effect-sequence progression:** Inspect the arc's beats in DAG order and verify the sequence of `dilemma_impacts.effect` values shows structural progression toward a commit — arcs whose beats consist entirely of one effect type (e.g., only `reveals`) or whose sequence never reaches `commits` before the arc's terminal fail this check.  Concretely, a compliant arc contains at least one beat whose `effect` is `advances` or `complicates` followed by a beat whose `effect` is `commits`, before any post-commit beats.  This is a graph-structural check over ontology-defined fields only.
+- **Effect-sequence progression:** Inspect the arc's beats in DAG order and verify the sequence of `dilemma_impacts.effect` values shows structural progression toward a commit — arcs whose beats consist entirely of one effect type (e.g., only `reveals`) or whose sequence never reaches `commits` before the arc's terminal fail this check.  Concretely: locate the first beat on the arc whose `effect` is `commits` and verify at least one earlier beat on the arc has `effect` `advances` or `complicates`.  If no `commits` beat exists on the arc before its terminal, the arc fails.  This is a graph-structural check over ontology-defined fields only.
 - **Dilemma commit closure:** Verify every Dilemma explored on this arc (every Dilemma whose path has `belongs_to` edges from beats on the arc) has at least one beat on the arc whose `dilemma_impacts.effect` is `commits` before the arc's terminal.  An arc that explores a Dilemma but terminates without committing it fails this check.
-- **Dilemma-prose coverage:** Verify every Dilemma committed on the arc has non-empty prose at the commit-beat's passage that references the Dilemma's central entities (via `anchored_to`).  This is the narrative counterpart to Dilemma commit closure: the structural commit must be reflected in prose at the corresponding passage.
+- **Dilemma-prose coverage:** Verify every Dilemma committed on the arc has non-empty prose at the commit-beat's passage AND the prose text mentions at least one of the Dilemma's central entities (resolved via `anchored_to` edges, matched by case-insensitive substring against each entity's `name` or `raw_id`).  This is a deterministic prose-text check — no LLM semantic judgment; either the name appears in the passage prose or it does not.  It is the narrative counterpart to Dilemma commit closure: the structural commit must be reflected in prose at the corresponding passage.
 
 **Rules:**
 
