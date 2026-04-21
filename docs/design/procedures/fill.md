@@ -225,6 +225,47 @@ R-4.3. Revision replaces the Passage's prose; previous prose is not preserved in
 
 ---
 
+## Phase 4a: Arc-Level Structural Validation
+
+**Purpose:** After per-passage revision, validate the structural integrity of each arc as a whole.  Some structural promises made by GROW/SEED (the arc's intensity curve, open dramatic questions, per-arc narrative-function variety, and dilemma coverage) cannot be re-checked by reading a single passage — they are properties of the arc's prose sequence.  Phase 4a is FILL's structural QA of its own output against those upstream promises.
+
+### Input Contract
+
+1. Phase 4 Output Contract satisfied.
+
+### Operations
+
+#### Per-Arc Structural Checks
+
+**What:** For each arc (canonical arc first, then each non-canonical arc), run the following deterministic checks:
+
+- **Intensity progression:** Verify the per-passage intensity scores (from GROW's beat annotations) are reflected in the prose sequence — arcs whose prose reads as monotonically flat or descending throughout fail this check.
+- **Dramatic-question closure:** Verify every open dramatic question raised in an arc's passages receives a resolution passage before the arc's terminal.
+- **Narrative-function variety:** Verify the arc's passage sequence does not over-concentrate a single narrative function (e.g., all `sequel`, no `scene`).
+- **Dilemma-prose coverage:** Verify every Dilemma relevant to the arc has prose addressing its question at the commit-beat passage.
+
+**Rules:**
+
+R-4a.1. Phase 4a is deterministic — no LLM calls.  Checks use prose already in the graph plus graph-structural data (arc order, dilemma membership, beat roles).
+
+R-4a.2. Phase 4a produces a structural validation report but does NOT regenerate prose.  Issues found become arc-level flags.  If Phase 5 is run, these flags are included in the second-cycle review input.
+
+**Violations:**
+
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| Prose regenerated during Phase 4a | Gate mutated content | R-4a.2 |
+| Structural report not produced when issues are found | Flags silently dropped | R-4a.2 |
+| Phase 4a result varies for identical graph state | Non-deterministic check | R-4a.1 |
+
+### Output Contract
+
+1. A structural validation report listing any arc-level flags with the specific check that triggered each flag.
+2. All passage prose unchanged.
+3. No LLM calls made.
+
+---
+
 ## Phase 5: Optional Second Cycle
 
 **Purpose:** If quality is still unsatisfactory after Phase 4, run one more review + revision cycle. Hard cap: two total cycles.
@@ -319,6 +360,8 @@ R-3.3: Review does not modify prose.
 R-4.1: Revision uses Phase 2 rules plus the issue description.
 R-4.2: Each Passage revised at most once per cycle.
 R-4.3: Revision replaces prose (no version history).
+R-4a.1: Phase 4a is deterministic — no LLM calls.
+R-4a.2: Phase 4a produces a structural report but does not regenerate prose.
 R-5.1: Maximum 2 review+revision cycles per FILL run.
 R-5.2: Persistent quality issues escalate upstream, not ship silently.
 R-5.3: Cap is configurable; default 2.
@@ -333,11 +376,12 @@ R-5.3: Cap is configurable; default 2.
 | 2 | Prose Generation | Approve to proceed to review (may spot-check during) |
 | 3 | Review | Required — approve revision targets |
 | 4 | Revision | Required — approve revisions, decide whether to run Phase 5 |
+| 4a | Arc-Level Structural Validation | None — automatic (deterministic report; flags feed Phase 5) |
 | 5 | Second Cycle (optional) | Required — final sign-off |
 
 ## Iteration Control
 
-**Forward flow:** 1 → 2 → 3 → 4 → (optional 5) → done.
+**Forward flow:** 1 → 2 → 3 → 4 → 4a → (optional 5) → done.
 
 **Backward loops:**
 
@@ -368,6 +412,7 @@ R-5.3: Cap is configurable; default 2.
 | 2 | Hard transition without GROW bridge | `fill_hard_transition_detected` warning | Flag for human review; may need GROW re-run |
 | 3 | Too many flags | Human overwhelm | Prioritize; accept some imperfection |
 | 4 | Revision doesn't fix issue | Human review | Try different approach or accept with flag |
+| 4a | Arc-level structural flag (e.g., unresolved dramatic question) | `run_arc_validation` report | Feed flags into Phase 5 second cycle; if none run, escalate upstream |
 | 5 | Quality still poor after 2 cycles | Cap reached | Ship with escalation flag to upstream stages |
 
 **Structural failures (abort to earlier stage):**
