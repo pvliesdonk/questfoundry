@@ -204,6 +204,59 @@ class TestCreateResidueBeatAndPassage:
         assert "beat::residue_r2" in beat_nodes
         assert "Residue moment for" in beat_nodes["beat::residue_r2"]["summary"]
 
+    def test_residue_passage_records_mapping_strategy(self) -> None:
+        """R-5.7/R-5.8: residue passage node carries mapping_strategy so
+        Phase 7 validator (``_check_residue_mapping_strategy``) can verify it."""
+        graph = Graph.empty()
+        _make_beat(graph, "beat::target")
+        graph.create_node("path::brave", {"type": "path", "raw_id": "brave"})
+
+        target_spec = PassageSpec(
+            passage_id="passage::target",
+            beat_ids=["beat::target"],
+            summary="Target",
+        )
+        _create_passage_node(graph, target_spec)
+
+        rspec = ResidueSpec(
+            target_passage_id="passage::target",
+            residue_id="residue::r3",
+            flag="dilemma::d1:path::brave",
+            path_id="path::brave",
+            content_hint="You feel confident",
+            mapping_strategy="residue_passage_with_variants",
+        )
+        _create_residue_beat_and_passage(graph, rspec)
+
+        residue_passage = graph.get_nodes_by_type("passage").get("passage::residue_r3")
+        assert residue_passage is not None
+        assert residue_passage.get("residue_for") == "passage::target"
+        assert residue_passage.get("mapping_strategy") == "residue_passage_with_variants"
+
+    def test_residue_parallel_passages_is_stubbed(self) -> None:
+        """R-5.8: ``parallel_passages`` branch is a known stub — raises
+        NotImplementedError until the follow-on implements it (epic #1310)."""
+        graph = Graph.empty()
+        _make_beat(graph, "beat::target")
+        graph.create_node("path::brave", {"type": "path", "raw_id": "brave"})
+
+        target_spec = PassageSpec(
+            passage_id="passage::target",
+            beat_ids=["beat::target"],
+            summary="Target",
+        )
+        _create_passage_node(graph, target_spec)
+
+        rspec = ResidueSpec(
+            target_passage_id="passage::target",
+            residue_id="residue::r4",
+            flag="dilemma::d1:path::brave",
+            path_id="path::brave",
+            mapping_strategy="parallel_passages",
+        )
+        with pytest.raises(NotImplementedError, match=r"parallel_passages"):
+            _create_residue_beat_and_passage(graph, rspec)
+
 
 class TestCreateChoiceEdge:
     """Tests for _create_choice_edge."""
