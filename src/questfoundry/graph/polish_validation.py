@@ -94,6 +94,7 @@ def validate_polish_output(graph: Graph) -> list[str]:
     _check_variant_integrity(passage_nodes, graph, errors)
     _check_choice_integrity(graph, errors)
     _check_residue_ordering(graph, errors)
+    _check_residue_mapping_strategy(graph, errors)
     _check_no_character_arc_metadata_nodes(graph, errors)
     _check_passage_maximal_linear_collapse(graph, errors)
     _check_arc_completeness(graph, errors)
@@ -484,7 +485,7 @@ def _check_no_character_arc_metadata_nodes(graph: Graph, errors: list[str]) -> N
 
 
 def _check_passage_maximal_linear_collapse(graph: Graph, errors: list[str]) -> None:
-    """R-4a.4 (maximal-linear-collapse): a passage's beats form a maximal linear run.
+    """R-4a.3 (maximal-linear-collapse): a passage's beats form a maximal linear run.
 
     For each passage:
       - Member beats form a linear run: each interior beat has exactly one
@@ -524,13 +525,13 @@ def _check_passage_maximal_linear_collapse(graph: Graph, errors: list[str]) -> N
             in_passage_succs = successors.get(bid, set()) & beats
             if len(in_passage_preds) > 1:
                 errors.append(
-                    f"R-4a.4: passage {passage_id!r} contains beat {bid!r} with "
+                    f"R-4a.3: passage {passage_id!r} contains beat {bid!r} with "
                     f"{len(in_passage_preds)} in-passage predecessors — not a "
                     "linear run"
                 )
             if len(in_passage_succs) > 1:
                 errors.append(
-                    f"R-4a.4: passage {passage_id!r} contains beat {bid!r} with "
+                    f"R-4a.3: passage {passage_id!r} contains beat {bid!r} with "
                     f"{len(in_passage_succs)} in-passage successors — not a "
                     "linear run"
                 )
@@ -541,7 +542,7 @@ def _check_passage_maximal_linear_collapse(graph: Graph, errors: list[str]) -> N
         ends = [b for b in beats if not (successors.get(b, set()) & beats)]
         if len(starts) != 1 or len(ends) != 1:
             errors.append(
-                f"R-4a.4: passage {passage_id!r} is not a single linear run "
+                f"R-4a.3: passage {passage_id!r} is not a single linear run "
                 f"(starts={len(starts)}, ends={len(ends)})"
             )
             continue
@@ -554,7 +555,7 @@ def _check_passage_maximal_linear_collapse(graph: Graph, errors: list[str]) -> N
             only_pred = next(iter(first_preds))
             if len(successors.get(only_pred, set())) == 1 and only_pred in beat_to_passage:
                 errors.append(
-                    f"R-4a.4: passage {passage_id!r} starts at {first!r} but its "
+                    f"R-4a.3: passage {passage_id!r} starts at {first!r} but its "
                     f"predecessor {only_pred!r} has out-degree 1 — grouping "
                     "stopped mid-linear-run"
                 )
@@ -565,10 +566,38 @@ def _check_passage_maximal_linear_collapse(graph: Graph, errors: list[str]) -> N
             only_succ = next(iter(last_succs))
             if len(predecessors.get(only_succ, set())) == 1 and only_succ in beat_to_passage:
                 errors.append(
-                    f"R-4a.4: passage {passage_id!r} ends at {last!r} but its "
+                    f"R-4a.3: passage {passage_id!r} ends at {last!r} but its "
                     f"successor {only_succ!r} has in-degree 1 — grouping "
                     "stopped mid-linear-run"
                 )
+
+
+_VALID_MAPPING_STRATEGIES = frozenset({"residue_passage_with_variants", "parallel_passages"})
+
+
+def _check_residue_mapping_strategy(graph: Graph, errors: list[str]) -> None:
+    """R-5.7, R-5.8: every residue passage records its chosen mapping strategy.
+
+    Residue passages are identified by a ``residue_for`` field pointing to
+    their target shared passage.  Each must have ``mapping_strategy`` set
+    to one of the two legal values.  See docs/design/procedures/polish.md
+    §R-5.7/R-5.8.
+    """
+    for pid, pdata in sorted(graph.get_nodes_by_type("passage").items()):
+        if not pdata.get("residue_for"):
+            continue
+        strategy = pdata.get("mapping_strategy")
+        if strategy is None:
+            errors.append(
+                f"R-5.8: residue passage {pid!r} missing required 'mapping_strategy' field"
+            )
+            continue
+        if strategy not in _VALID_MAPPING_STRATEGIES:
+            errors.append(
+                f"R-5.8: residue passage {pid!r} has invalid mapping_strategy "
+                f"{strategy!r} (expected one of "
+                f"{sorted(_VALID_MAPPING_STRATEGIES)})"
+            )
 
 
 # ---------------------------------------------------------------------------
