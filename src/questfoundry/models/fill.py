@@ -271,4 +271,3 @@ class FillResult(BaseModel):
     entity_updates_applied: int = 0
     review_cycles: int = 0
     phases_completed: list[FillPhaseResult] = Field(default_factory=list)
-    escalations: list[FillEscalation] = Field(default_factory=list)

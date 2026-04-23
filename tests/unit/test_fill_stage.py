@@ -1788,8 +1788,7 @@ class TestVoiceApprovalStamp:
         assert voice is not None
         assert voice.get("approval_mode") == "interactive"
 
-    @pytest.mark.asyncio
-    async def test_phase_1a_rejects_unstamped_voice(self, tmp_path: Path) -> None:
+    def test_phase_1a_rejects_unstamped_voice(self, tmp_path: Path) -> None:
         """If Phase 1a runs without the R-1.7 stamp, it raises FillStageError."""
         g = Graph.empty()
         g.set_last_stage("polish")
@@ -1810,8 +1809,7 @@ class TestVoiceApprovalStamp:
         with pytest.raises(FillStageError, match="approval stamp missing"):
             stage._assert_voice_approved(g)
 
-    @pytest.mark.asyncio
-    async def test_assert_raises_when_voice_node_missing(self, tmp_path: Path) -> None:
+    def test_assert_raises_when_voice_node_missing(self, tmp_path: Path) -> None:
         """Phase 1a entry assertion raises if voice::voice node doesn't exist."""
         g = Graph.empty()
         stage = FillStage(project_path=tmp_path)
