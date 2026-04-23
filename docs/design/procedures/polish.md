@@ -150,10 +150,31 @@ R-2.5. Micro-beats have `created_by: POLISH` for stage-attribution tracking.
 | Micro-beat inserted at a Y-fork boundary (changes topology) | Branching altered | R-2.2 |
 | Micro-beat has `created_by: GROW` | Attribution wrong | R-2.5 |
 
+#### Pacing-Run Detection
+
+**What:** In the same Phase 2 invocation, deterministically detect runs of 3+ consecutive beats with the same `scene_type` along any path (the "monotonous run" condition). For each detected run, propose a correction beat of the opposite type (insert a sequel between scenes, or a scene between sequels) to break the monotony. Implementation may share its LLM call with the micro-beat detection above.
+
+(Absorbed from old GROW 4c. Per audit Q1, pacing rhythm correction is narrative work — POLISH territory.)
+
+**Rules:**
+
+R-2.6. Phase 2 detects runs of 3+ consecutive same-`scene_type` beats per path and inserts correction beats of the opposite type to break the run. Detection is deterministic; the correction-beat content is LLM-generated.
+
+R-2.7. Correction beats carry `is_gap_beat: True`, `role: micro_beat`, zero `dilemma_impacts`, `created_by: "POLISH"`. They are structurally indistinguishable from pacing micro-beats; the `is_gap_beat` flag distinguishes their origin (pacing-run correction vs. pacing-flag micro-beat insertion).
+
+R-2.8. Phase 2 MUST NOT introduce new monotonous runs while breaking existing ones. If a candidate correction beat would extend a run on the opposite side of the insertion point, the proposal is rejected.
+
+**Violations:**
+
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| 4+ consecutive same-`scene_type` beats remain after Phase 2 | Pacing-run detection skipped or correction failed | R-2.6 |
+
 ### Output Contract
 
 1. Zero or more micro-beats added, each within a linear section with correct role/attribution.
 2. Branching topology unchanged.
+3. Zero or more pacing-run correction beats added (`is_gap_beat: True`, `role: micro_beat`, opposite `scene_type` of the run they break).
 
 ---
 
@@ -572,6 +593,9 @@ R-2.2: Micro-beats inserted only in linear sections.
 R-2.3: Micro-beats carry surrounding entity references.
 R-2.4: Pacing flags: 3+ scenes-in-a-row, 3+ sequels-in-a-row, no sequel after commit.
 R-2.5: Micro-beats have `created_by: POLISH`.
+R-2.6: Phase 2 detects 3+ same-`scene_type` runs per path and inserts opposite-type correction beats.
+R-2.7: Correction beats have `is_gap_beat: True`, `role: micro_beat`, zero `dilemma_impacts`, `created_by: "POLISH"`.
+R-2.8: Phase 2 MUST NOT introduce new monotonous runs.
 R-3.1: Arc-worthy entities have 2+ beat appearances.
 R-3.2: Arc metadata: start, pivots per path, end_per_path.
 R-3.3: Arc metadata is entity annotation, not separate node.
@@ -711,7 +735,7 @@ LLM inspects each path's beat sequence. On the `manipulator` path, it flags a le
 
 ### Phase 2
 
-Pacing flag: 3 action beats with no sequel in `archive_nature` path. LLM proposes a brief reflection micro-beat; inserted with `role: micro_beat`.
+Pacing flag: 3 action beats with no sequel in `archive_nature` path. LLM proposes a brief reflection micro-beat; inserted with `role: micro_beat`. Pacing-run detection finds a separate run of 3 consecutive sequels in `mentor_trust`'s post-commit chain on the protector path; LLM proposes a brief scene-type correction beat (`is_gap_beat: True`, `role: micro_beat`, opposite `scene_type`) to break the monotony.
 
 ### Phase 3
 
