@@ -24,6 +24,9 @@ FILL does NOT create, reorder, split, or merge beats or passages; does NOT add p
 12. Every passage has a prose feasibility annotation (clean / annotated / residue / variant). No `structural split` passages unresolved.
 13. No prose exists — `passage.prose` is empty until FILL.
 14. No cycles in the passage graph.
+15. Every beat has `atmospheric_detail` populated (or a WARNING was logged for partial coverage from POLISH Phase 5e).
+16. Every multi-beat path has `path_theme` and `path_mood` populated (or a WARNING was logged for per-path Phase 5f failure).
+17. Gap beats from POLISH Phase 1a carry `is_gap_beat: True`, traceability fields (`bridges_from`, `bridges_to`, `transition_style`), and structural-beat invariants.
 
 ---
 

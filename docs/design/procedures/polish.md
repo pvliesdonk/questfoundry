@@ -599,10 +599,13 @@ R-7.12. Validation failure halts POLISH with ERROR — partial output is not del
 8. Variant passages exist for every passage with incompatible heavy-residue state combinations, with `variant_of` edges and satisfiable `requires`.
 9. Residue beat passages exist wherever light-residue mood-bridging is needed; passage-layer mapping (residue-passage-with-variants or parallel-passages) is recorded.
 10. False-branch passages exist where Phase 5 approved diamond or sidetrack patterns; false-branch beats have `role: "false_branch_beat"`, zero `belongs_to`, zero `dilemma_impacts`.
-11. Character arc metadata is annotated on every entity with 2+ beat appearances (start, pivots per path, end per path).
+11. Character arc metadata is annotated on every entity with 2+ beat appearances (`start`, `pivots` per path, `end_per_path`, AND `arcs_per_path` per audit Q6 / Phase 3 extended).
 12. Every passage has a prose feasibility annotation (clean / annotated / residue / variant). No `structural split` passages unresolved.
 13. No prose exists — `passage.prose` is empty until FILL.
 14. No cycles in the passage graph.
+15. Every beat has `atmospheric_detail` populated (10–200 characters describing sensory environment), or a WARNING was logged for partial Phase 5e coverage.
+16. Every multi-beat path has `path_theme` (10–200 characters) and `path_mood` (2–50 characters) populated, or a WARNING was logged for per-path Phase 5f failure.
+17. Gap beats inserted by Phase 1a carry `is_gap_beat: True`, `role: gap_beat`, `created_by: "POLISH"`, zero `dilemma_impacts`, and traceability fields (`bridges_from`, `bridges_to`, `transition_style`).
 
 ## Implementation Constraints
 
