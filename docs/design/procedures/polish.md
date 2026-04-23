@@ -180,7 +180,7 @@ R-2.8. Phase 2 MUST NOT introduce new monotonous runs while breaking existing on
 
 ## Phase 3: Character Arc Synthesis
 
-**Purpose:** For each entity appearing in 2+ beats, synthesize explicit arc metadata — start, pivot(s) per path, end per path — that FILL uses to maintain prose consistency.
+**Purpose:** For each entity appearing in 2+ beats, synthesize explicit arc metadata — start, pivots per path, end per path, AND per-path positional trajectory data — that FILL uses to maintain prose consistency. The per-path positional data (`arcs_per_path`) was previously produced by old GROW 4f and is now consolidated here per audit Q6 resolution: a single source of truth on Entity nodes, indexed for FILL's per-passage positional context.
 
 ### Input Contract
 
@@ -204,6 +204,12 @@ R-3.4. Arc metadata is working data for FILL. POLISH does not write prose based 
 
 R-3.5. The LLM receives full context for each entity: beat summaries in order, dilemma questions, path descriptions, overlay details.
 
+R-3.6. The character_arc annotation includes `arcs_per_path: list[{path_id: str, arc_type: str, arc_line: str, pivot_beat: str}]`, one entry per path on which the entity is arc-worthy. Single LLM call produces both the existing fields (start, pivots, end_per_path) and `arcs_per_path` together, ensuring internal consistency.
+
+R-3.7. `arc_type` is determined deterministically by the entity's category: character → "transformation", location → "atmosphere", object → "significance", faction → "relationship". The LLM does not choose `arc_type`; POLISH derives it from the entity node and validates the LLM output matches.
+
+R-3.8. For each `path_id` present in both `pivots` and `arcs_per_path`, the values MUST agree: `pivots[path_id]` (the entity-scoped pivot beat for that path) MUST equal the `pivot_beat` of the matching `arcs_per_path` entry. POLISH enforces this at synthesis time (single LLM call producing both, validated together).
+
 **Violations:**
 
 | Symptom | Root cause | Broken rule |
@@ -211,11 +217,15 @@ R-3.5. The LLM receives full context for each entity: beat summaries in order, d
 | Entity with 5 beat appearances has no arc metadata | Phase 3 skipped this entity | R-3.1 |
 | Arc metadata stored as separate `CharacterArc` nodes | Should be entity annotation | R-3.3 |
 | LLM call for arc synthesis receives bare entity IDs | Context enrichment missing | R-3.5 |
+| `arcs_per_path` missing for an entity with 2+ appearances on a path | Phase 3 partial coverage | R-3.6 |
+| `arc_type` does not match the entity's category | Validation gap | R-3.7 |
+| `pivots[path_id] != arcs_per_path[*].pivot_beat` for the same path | Internal-consistency check skipped | R-3.8 |
 
 ### Output Contract
 
 1. Every entity with 2+ beat appearances has arc metadata annotation (start, pivots per path, end per path).
 2. No separate CharacterArc nodes created.
+3. `arcs_per_path` populated alongside the existing fields, with `arc_type` matching entity category and `pivot_beat` agreeing with `pivots[path_id]` for each path.
 
 ---
 
@@ -601,6 +611,9 @@ R-3.2: Arc metadata: start, pivots per path, end_per_path.
 R-3.3: Arc metadata is entity annotation, not separate node.
 R-3.4: POLISH does not write prose from arc metadata.
 R-3.5: Arc-synthesis LLM receives full context.
+R-3.6: character_arc includes `arcs_per_path[]`; produced in same LLM call as start/pivots/end_per_path.
+R-3.7: `arc_type` derived from entity category (character/location/object/faction).
+R-3.8: `pivots[path_id]` MUST equal `arcs_per_path[*].pivot_beat` for the same path.
 R-4a.1: Every beat in exactly one Passage.
 R-4a.2: (Removed — linear runs may span different `belongs_to` sets; path-membership uniformity within a passage is not required.)
 R-4a.3: Maximal-linear-collapse — a passage is a maximal run of beats with no internal divergence or convergence.
@@ -739,7 +752,7 @@ Pacing flag: 3 action beats with no sequel in `archive_nature` path. LLM propose
 
 ### Phase 3
 
-`character::mentor` appears in 8 beats. Arc metadata: start = "cryptic authority figure"; pivot on protector path = commit beat (mentor confesses); pivot on manipulator path = post-commit reveal; end_per_path populated. Annotated on entity node.
+`character::mentor` appears in 8 beats. Arc metadata: start = "cryptic authority figure"; pivot on protector path = commit beat (mentor confesses); pivot on manipulator path = post-commit reveal; end_per_path populated. The same LLM call also produces `arcs_per_path` for the mentor — one entry per path with `arc_type: "transformation"` (derived from the character category), an `arc_line` summarizing trajectory, and `pivot_beat` equal to the corresponding `pivots[path_id]`. Annotated on entity node.
 
 ### Beat DAG Freeze — Human Gate
 
