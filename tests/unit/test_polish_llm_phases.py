@@ -279,3 +279,203 @@ class TestPolishPhase1aNarrativeGaps:
 
         assert result.status == "skipped"
         assert "No paths with 2+ beats" in result.detail
+
+
+# ---------------------------------------------------------------------------
+# Phase 5e Atmospheric Annotation (migrated from GROW Phase 4d per PR #1370)
+# ---------------------------------------------------------------------------
+
+
+class TestPolishPhase5eAtmospheric:
+    """POLISH Phase 5e — Atmospheric Annotation.
+
+    Migrated from GROW Phase 4d when the implementation moved per the
+    structural-vs-narrative migration (issue #1368).
+    """
+
+    @pytest.mark.asyncio
+    async def test_phase_5e_no_beats_returns_skipped(self) -> None:
+        """No beats → status='skipped' with no LLM call."""
+        graph = Graph.empty()
+        stage = PolishStage()
+        result = await stage._phase_5e_atmospheric(graph, MagicMock())
+        assert result.status == "skipped"
+        assert "No beats" in result.detail
+        assert result.llm_calls == 0
+
+    @pytest.mark.asyncio
+    async def test_phase_5e_applies_atmospheric_to_all_beats(self) -> None:
+        """Happy path: every beat receives atmospheric_detail."""
+        from questfoundry.models.grow import AtmosphericDetail, Phase4dOutput
+
+        graph = Graph.empty()
+        graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
+        for bid in ("beat::a", "beat::b"):
+            _make_beat(graph, bid, f"Summary of {bid}")
+            graph.add_edge("belongs_to", bid, "path::p1")
+
+        phase_output = Phase4dOutput(
+            details=[
+                AtmosphericDetail(
+                    beat_id="beat::a",
+                    atmospheric_detail="dim torchlight; cold stone underfoot",
+                ),
+                AtmosphericDetail(
+                    beat_id="beat::b",
+                    atmospheric_detail="howling wind through cracked windows",
+                ),
+            ]
+        )
+
+        async def mock_call(*_args: object, **_kwargs: object) -> tuple:
+            return phase_output, 1, 250
+
+        stage = PolishStage()
+        stage._polish_llm_call = mock_call  # type: ignore[method-assign]
+        result = await stage._phase_5e_atmospheric(graph, MagicMock())
+
+        assert result.status == "completed"
+        assert result.llm_calls == 1
+        beat_a = graph.get_node("beat::a")
+        beat_b = graph.get_node("beat::b")
+        assert beat_a is not None and beat_b is not None
+        assert beat_a.get("atmospheric_detail") == "dim torchlight; cold stone underfoot"
+        assert beat_b.get("atmospheric_detail") == "howling wind through cracked windows"
+
+    @pytest.mark.asyncio
+    async def test_phase_5e_partial_coverage_logs_warning(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """R-5e.1: partial coverage (LLM details only some beats) emits WARNING."""
+        from questfoundry.models.grow import AtmosphericDetail, Phase4dOutput
+
+        graph = Graph.empty()
+        graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
+        for bid in ("beat::a", "beat::b", "beat::c"):
+            _make_beat(graph, bid, f"Summary of {bid}")
+            graph.add_edge("belongs_to", bid, "path::p1")
+
+        # LLM details only beat::a — the other two should trigger partial-coverage WARNING
+        phase_output = Phase4dOutput(
+            details=[
+                AtmosphericDetail(beat_id="beat::a", atmospheric_detail="cold mist on stone"),
+            ]
+        )
+
+        async def mock_call(*_args: object, **_kwargs: object) -> tuple:
+            return phase_output, 1, 100
+
+        stage = PolishStage()
+        stage._polish_llm_call = mock_call  # type: ignore[method-assign]
+        with caplog.at_level("WARNING"):
+            result = await stage._phase_5e_atmospheric(graph, MagicMock())
+
+        assert result.status == "completed"
+        assert "1/3" in result.detail
+        # Confirm partial-coverage warning was emitted
+        assert any("phase5e_partial_coverage" in r.message for r in caplog.records)
+
+    @pytest.mark.asyncio
+    async def test_phase_5e_invalid_beat_id_skipped(self) -> None:
+        """Invalid beat IDs in LLM output are skipped (logged at INFO)."""
+        from questfoundry.models.grow import AtmosphericDetail, Phase4dOutput
+
+        graph = Graph.empty()
+        graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
+        _make_beat(graph, "beat::real", "Real beat")
+        graph.add_edge("belongs_to", "beat::real", "path::p1")
+
+        phase_output = Phase4dOutput(
+            details=[
+                AtmosphericDetail(
+                    beat_id="beat::ghost",
+                    atmospheric_detail="phantom whispers in the empty corridor",
+                ),
+                AtmosphericDetail(
+                    beat_id="beat::real",
+                    atmospheric_detail="real detail of the chamber",
+                ),
+            ]
+        )
+
+        async def mock_call(*_args: object, **_kwargs: object) -> tuple:
+            return phase_output, 1, 100
+
+        stage = PolishStage()
+        stage._polish_llm_call = mock_call  # type: ignore[method-assign]
+        result = await stage._phase_5e_atmospheric(graph, MagicMock())
+
+        assert result.status == "completed"
+        beat_real = graph.get_node("beat::real")
+        assert beat_real is not None
+        assert beat_real.get("atmospheric_detail") == "real detail of the chamber"
+        assert graph.get_node("beat::ghost") is None  # phantom never created
+
+
+# ---------------------------------------------------------------------------
+# Phase 5f Path Thematic Annotation (migrated from GROW Phase 4e per PR #1370)
+# ---------------------------------------------------------------------------
+
+
+class TestPolishPhase5fPathThematic:
+    """POLISH Phase 5f — Path Thematic Annotation."""
+
+    @pytest.mark.asyncio
+    async def test_phase_5f_no_paths_returns_skipped(self) -> None:
+        """No paths → status='skipped' with no LLM call."""
+        graph = Graph.empty()
+        stage = PolishStage()
+        result = await stage._phase_5f_path_thematic(graph, MagicMock())
+        assert result.status == "skipped"
+        assert "No paths" in result.detail
+        assert result.llm_calls == 0
+
+    @pytest.mark.asyncio
+    async def test_phase_5f_skips_short_paths(self) -> None:
+        """R-5f.1: paths with <2 beats are skipped (no narrative arc to summarize)."""
+        graph = Graph.empty()
+        graph.create_node("path::short", {"type": "path", "raw_id": "short"})
+        _make_beat(graph, "beat::lone", "Only beat")
+        graph.add_edge("belongs_to", "beat::lone", "path::short")
+
+        stage = PolishStage()
+        # No need to mock LLM — phase short-circuits before any call
+        result = await stage._phase_5f_path_thematic(graph, MagicMock())
+        assert result.status == "completed"
+        assert "0/0" in result.detail  # no paths qualified, none annotated
+        assert result.llm_calls == 0
+
+    @pytest.mark.asyncio
+    async def test_phase_5f_annotates_multi_beat_path(self) -> None:
+        """Happy path: a 2+ beat path receives path_theme + path_mood."""
+        from questfoundry.models.grow import PathMiniArc
+
+        graph = Graph.empty()
+        graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
+        _make_beat(graph, "beat::a", "Beat A")
+        _make_beat(graph, "beat::b", "Beat B")
+        graph.add_edge("belongs_to", "beat::a", "path::p1")
+        graph.add_edge("belongs_to", "beat::b", "path::p1")
+        graph.add_edge("predecessor", "beat::b", "beat::a")
+
+        async def mock_call(*_args: object, **_kwargs: object) -> tuple:
+            return (
+                PathMiniArc(
+                    path_id="path::p1",
+                    path_theme="trust transforms into reluctant alliance",
+                    path_mood="cautious-then-warming",
+                ),
+                1,
+                100,
+            )
+
+        stage = PolishStage()
+        stage._polish_llm_call = mock_call  # type: ignore[method-assign]
+        result = await stage._phase_5f_path_thematic(graph, MagicMock())
+
+        assert result.status == "completed"
+        assert "1/1" in result.detail
+        path = graph.get_node("path::p1")
+        assert path is not None
+        assert path.get("path_theme") == "trust transforms into reluctant alliance"
+        assert path.get("path_mood") == "cautious-then-warming"

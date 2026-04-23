@@ -1035,7 +1035,6 @@ class _LLMPhaseMixin:
         1-2 sentence bridge beats for each seam.
 
         Preconditions:
-        - Atmospheric details assigned (Phase 4d complete).
         - Beats have summaries, entities, and locations.
         - Predecessor edges from interleave_beats are in place.
 

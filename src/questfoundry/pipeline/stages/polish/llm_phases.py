@@ -624,11 +624,15 @@ class _PolishLLMPhaseMixin:
             )
             return (pid, result), llm_calls, tokens
 
+        # PolishStage doesn't carry _max_concurrency / _on_connectivity_error
+        # the way GrowStage does (those were added for GROW's batch phases).
+        # Default to concurrency=2 and no retry hook; if PolishStage grows
+        # those attrs later, getattr picks them up automatically.
         results, total_llm_calls, total_tokens, errors = await batch_llm_calls(
             path_items,
             _arc_for_path,
-            self._max_concurrency,  # type: ignore[attr-defined]
-            on_connectivity_error=self._on_connectivity_error,  # type: ignore[attr-defined]
+            getattr(self, "_max_concurrency", 2),
+            on_connectivity_error=getattr(self, "_on_connectivity_error", None),
         )
 
         for item in results:
