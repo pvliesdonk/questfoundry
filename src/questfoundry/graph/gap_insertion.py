@@ -29,7 +29,11 @@ log = get_logger(__name__)
 
 @dataclass
 class GapInsertionReport:
-    """Summary of gap insertion validation and results."""
+    """Summary of gap insertion validation and results.
+
+    The invariant ``inserted + total_invalid == len(gaps)`` holds: every
+    proposal either lands or contributes to one of the rejection counts.
+    """
 
     inserted: int = 0
     invalid_path_id: int = 0
@@ -38,6 +42,7 @@ class GapInsertionReport:
     invalid_beat_order: int = 0
     beat_not_in_sequence: int = 0
     anchor_wrong_path: int = 0
+    cycle_skipped: int = 0
 
     @property
     def total_invalid(self) -> int:
@@ -48,6 +53,7 @@ class GapInsertionReport:
             + self.invalid_beat_order
             + self.beat_not_in_sequence
             + self.anchor_wrong_path
+            + self.cycle_skipped
         )
 
 
@@ -107,7 +113,8 @@ def validate_and_insert_gaps(
             prefixed = f"beat::{beat_id}"
             if prefixed in valid_beat_set:
                 log.info(
-                    f"{phase_name}_unprefixed_beat_id",
+                    "gap_unprefixed_beat_id",
+                    phase=phase_name,
                     beat_id=beat_id,
                     prefixed=prefixed,
                 )
@@ -118,22 +125,23 @@ def validate_and_insert_gaps(
         prefixed_pid = gap.path_id if gap.path_id.startswith("path::") else f"path::{gap.path_id}"
         if prefixed_pid != gap.path_id:
             log.info(
-                f"{phase_name}_unprefixed_path_id",
+                "gap_unprefixed_path_id",
+                phase=phase_name,
                 path_id=gap.path_id,
                 prefixed=prefixed_pid,
             )
         if prefixed_pid not in valid_path_set:
-            log.info(f"{phase_name}_invalid_path_id", path_id=gap.path_id)
+            log.info("gap_invalid_path_id", phase=phase_name, path_id=gap.path_id)
             report.invalid_path_id += 1
             continue
         after_beat = _normalize_beat_id(gap.after_beat)
         before_beat = _normalize_beat_id(gap.before_beat)
         if after_beat and after_beat not in valid_beat_set:
-            log.info(f"{phase_name}_invalid_after_beat", beat_id=after_beat)
+            log.info("gap_invalid_after_beat", phase=phase_name, beat_id=after_beat)
             report.invalid_after_beat += 1
             continue
         if before_beat and before_beat not in valid_beat_set:
-            log.info(f"{phase_name}_invalid_before_beat", beat_id=before_beat)
+            log.info("gap_invalid_before_beat", phase=phase_name, beat_id=before_beat)
             report.invalid_before_beat += 1
             continue
         # Validate path membership: anchors must belong to the gap's path.
@@ -144,7 +152,8 @@ def validate_and_insert_gaps(
             }
             if prefixed_pid not in after_paths:
                 log.info(
-                    f"{phase_name}_anchor_wrong_path",
+                    "gap_anchor_wrong_path",
+                    phase=phase_name,
                     after_beat=after_beat,
                     path_id=prefixed_pid,
                 )
@@ -156,7 +165,8 @@ def validate_and_insert_gaps(
             }
             if prefixed_pid not in before_paths:
                 log.info(
-                    f"{phase_name}_anchor_wrong_path",
+                    "gap_anchor_wrong_path",
+                    phase=phase_name,
                     before_beat=before_beat,
                     path_id=prefixed_pid,
                 )
@@ -170,14 +180,15 @@ def validate_and_insert_gaps(
                 before_idx = sequence.index(before_beat)
                 if after_idx >= before_idx:
                     log.info(
-                        f"{phase_name}_invalid_beat_order",
+                        "gap_invalid_beat_order",
+                        phase=phase_name,
                         after_beat=after_beat,
                         before_beat=before_beat,
                     )
                     report.invalid_beat_order += 1
                     continue
             except ValueError:
-                log.info(f"{phase_name}_beat_not_in_sequence", path_id=gap.path_id)
+                log.info("gap_beat_not_in_sequence", phase=phase_name, path_id=gap.path_id)
                 report.beat_not_in_sequence += 1
                 continue
 
@@ -203,6 +214,7 @@ def validate_and_insert_gaps(
                 before_beat=before_beat,
                 path_id=prefixed_pid,
             )
+            report.cycle_skipped += 1
             continue
 
         new_beat_id = insert_gap_beat(

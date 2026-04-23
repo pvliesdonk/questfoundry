@@ -191,8 +191,6 @@ class _PolishLLMPhaseMixin:
           ``role: gap_beat``, ``created_by: "POLISH"``.
         - Per-path cap: maximum 2 gap beats per path.
         """
-        from functools import partial
-
         from questfoundry.graph.gap_insertion import validate_and_insert_gaps
         from questfoundry.graph.grow_algorithms import get_path_beat_sequence
         from questfoundry.models.grow import Phase4bOutput
@@ -251,10 +249,11 @@ class _PolishLLMPhaseMixin:
             "valid_dilemma_ids": valid_dilemma_ids_text,
         }
 
-        # The LLM call uses POLISH's helper (no semantic_validator support
-        # currently — invalid IDs in the response are caught by
-        # validate_and_insert_gaps at insertion time).
-        _ = partial  # keep for future semantic-validator support
+        # The LLM call uses POLISH's helper. POLISH's _polish_llm_call has no
+        # semantic_validator parameter, so invalid IDs in the response are
+        # caught by validate_and_insert_gaps at insertion time instead of
+        # forcing a retry. If retry-on-invalid-IDs becomes important, add
+        # semantic_validator support to _polish_llm_call (mirroring GROW's).
         result, llm_calls, tokens = await self._polish_llm_call(  # type: ignore[attr-defined]
             model=model,
             template_name="polish_phase1a_narrative_gaps",

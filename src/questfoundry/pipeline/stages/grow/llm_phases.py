@@ -696,8 +696,8 @@ class _LLMPhaseMixin:
         to propose correction beats for any violations found.
 
         Preconditions:
-        - Narrative gaps resolved (Phase 4b complete).
-        - Beats have scene_type tags from Phase 4a.
+        - Beats have scene_type tags from Phase 4a (the only direct
+          dependency since narrative_gaps moved to POLISH per #1368).
 
         Postconditions:
         - Pacing violations (3+ consecutive same scene_type) corrected.

@@ -2383,6 +2383,9 @@ def insert_gap_beat(
     summary: str,
     scene_type: str,
     dilemma_impacts: list[dict[str, Any]] | None = None,
+    *,
+    role: str = "gap_beat",
+    created_by: str = "POLISH",
 ) -> str:
     """Insert a new gap beat into the graph between existing beats.
 
@@ -2401,6 +2404,12 @@ def insert_gap_beat(
         summary: Summary text for the new beat.
         scene_type: Scene type tag for the new beat.
         dilemma_impacts: List of dilemma impact dicts (dilemma_id, effect, note).
+        role: Beat role tag. Defaults to ``"gap_beat"`` (POLISH Phase 1a per
+            spec R-1a.1). Pacing-correction beats override this with
+            ``"micro_beat"`` per POLISH Phase 2 R-2.7.
+        created_by: Stage that created this beat. Defaults to ``"POLISH"``
+            since both narrative-gap insertion and pacing-correction
+            insertion are POLISH responsibilities post-migration.
 
     Returns:
         The new beat's node ID.
@@ -2441,7 +2450,9 @@ def insert_gap_beat(
     # Infer transition style based on context
     transition_style = _infer_transition_style(after_node, before_node)
 
-    # Create the beat node with enriched context
+    # Create the beat node with enriched context.
+    # ``role`` and ``created_by`` are required by spec R-1a.1 (narrative gaps)
+    # and R-2.7 (pacing-correction); FILL's structural-beat handling reads them.
     graph.create_node(
         beat_id,
         {
@@ -2451,6 +2462,8 @@ def insert_gap_beat(
             "scene_type": scene_type,
             "paths": [path_id.removeprefix("path::")],
             "is_gap_beat": True,
+            "role": role,
+            "created_by": created_by,
             # Enrichment fields for transition handling
             "entities": entities,
             "location": location,
