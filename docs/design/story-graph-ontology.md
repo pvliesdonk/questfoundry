@@ -87,6 +87,12 @@ An answer that is not actively lived by the player is a **shadow** — the road 
 
 Neither kind requires a dedicated node type. Context builders surface both so FILL has the narrative weight of unexplored alternatives.
 
+#### Path Annotations
+
+**Path theme** — `path_theme: str` (10–200 characters). Populated by POLISH Phase 5f. Per-path emotional through-line / "controlling idea" (McKee). In branching fiction, different answers to the same dilemma should produce qualitatively different narrative experiences; `path_theme` is the path's answer to "what is this journey's emotional identity?" Consumed by FILL (narrative context, choice consequence labels) and DRESS (illustration `path_undertone`).
+
+**Path mood** — `path_mood: str` (2–50 characters). Populated by POLISH Phase 5f. Tonal palette for the path as a whole (e.g., "melancholic", "frenetic", "tense-then-resolved"). Distinct from beat-level `exit_mood` which describes per-beat handoff feeling — `path_mood` is the path's macro-tone. Consumed by FILL and DRESS for tonal framing.
+
 **Working.** Consumed by GROW.
 
 ### Beat
