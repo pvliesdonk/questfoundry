@@ -87,6 +87,12 @@ An answer that is not actively lived by the player is a **shadow** — the road 
 
 Neither kind requires a dedicated node type. Context builders surface both so FILL has the narrative weight of unexplored alternatives.
 
+#### Path Annotations
+
+**Path theme** — `path_theme: str` (10–200 characters). Populated by POLISH Phase 5f. Per-path emotional through-line / "controlling idea" (McKee). In branching fiction, different answers to the same dilemma should produce qualitatively different narrative experiences; `path_theme` is the path's answer to "what is this journey's emotional identity?" Consumed by FILL (narrative context, choice consequence labels) and DRESS (illustration `path_undertone`).
+
+**Path mood** — `path_mood: str` (2–50 characters). Populated by POLISH Phase 5f. Tonal palette for the path as a whole (e.g., "melancholic", "frenetic", "tense-then-resolved"). Distinct from beat-level `exit_mood` which describes per-beat handoff feeling — `path_mood` is the path's macro-tone. Consumed by FILL and DRESS for tonal framing.
+
 **Working.** Consumed by GROW.
 
 ### Beat
@@ -103,18 +109,31 @@ A narrative beat directly advances a dilemma. It carries **dilemma impacts** (wh
 
 #### Structural Beats
 
-A structural beat serves the DAG without advancing any dilemma. It carries zero `dilemma_impacts` and zero `belongs_to` edges. Every arc that reaches a structural beat via the predecessor chain traverses it — it belongs to no path but is walked through naturally. Six sub-types:
+A structural beat serves the DAG without advancing any dilemma. It carries zero `dilemma_impacts`. Most structural sub-types also carry zero `belongs_to` edges and are traversed by every arc that reaches them via the predecessor chain. Gap beats (POLISH Phase 1a) are the sole exception: they carry a single `belongs_to` to one path so they appear only on arcs traversing that path. Seven sub-types:
 
 - **Setup beat** (SEED) — world-building before any dilemma is introduced. Establishes context without serving a dilemma.
 - **Epilogue beat** (SEED) — shared narrative resolution after all dilemmas have committed and converged. Wraps up the story as a whole rather than any single dilemma. Distinct from a Setup beat in timing and purpose — Setup opens, Epilogue closes — even though both carry zero `belongs_to`.
 - **Transition beat** (GROW) — atmospheric bridge between cross-dilemma scenes that share no entities or location.
 - **Micro-beat** (POLISH) — brief moment added for pacing within a linear section.
+- **Gap beat** (POLISH) — bridge beat inserted by POLISH Phase 1a (Narrative Gap Insertion) to smooth abrupt narrative leaps in a path's beat sequence. Carries `is_gap_beat=True`, `role: gap_beat`, and traceability fields (`bridges_from`, `bridges_to`, `transition_style`). Zero `dilemma_impacts`; single `belongs_to` to its path.
 - **Residue beat** (POLISH) — mood-setter placed before a shared beat. Carries state-flag-specific prose hints; only shown to players holding the relevant flag. Has no `dilemma_impacts` but is flag-dependent.
 - **False branch beat** (POLISH) — a beat on a cosmetic fork-rejoin structure that gives the player the experience of choice without dilemma consequence. A diamond pattern uses one beat per arm; a sidetrack may use several beats on its detour arm. Carries no dilemma relationship. The surrounding choice edges may optionally grant cosmetic state flags (flags unrelated to any dilemma, used later by residue beats or prose variation for flavor).
 
+#### Beat Annotations
+
+**Scene-type annotation** — `scene_type ∈ {scene, sequel, micro_beat}`. Populated by GROW Phase 4b. Encodes Scene/Sequel rhythm (Swain): `scene` = active conflict (goal → conflict → disaster); `sequel` = reactive processing (emotion → thought → decision); `micro_beat` = brief transition. Consumed by POLISH Phase 2 for pacing detection and by FILL for prose intensity / target length derivation.
+
+**Narrative function** — `narrative_function ∈ {introduce, develop, complicate, confront, resolve}`. Populated by GROW Phase 4b. The beat's role in story structure (Freytag-style, compressed to beat level). Consumed by FILL for prose pacing and by DRESS for illustration priority.
+
+**Exit mood** — `exit_mood: str` (2–40 characters). Populated by GROW Phase 4b. Free-form descriptor of the emotional state the beat hands off to its successor. Consumed by FILL for narrative-context generation; informs reader-affect transitions between beats.
+
+**Atmospheric detail** — `atmospheric_detail: str` (10–200 characters). Populated by POLISH Phase 5e. Sensory environment description (sight, sound, smell, texture) — environment, not character emotion. Consumed by FILL for sensory grounding when no scene blueprint supersedes.
+
+**Gap-beat traceability** — `is_gap_beat: bool`, `role: "gap_beat"`, `transition_style: str`, `bridges_from: str | None`, `bridges_to: str | None`. Populated by POLISH Phase 1a (Narrative Gap Insertion) on POLISH-created bridge beats. `bridges_from` and `bridges_to` reference the IDs of the beats this gap beat sits between. `transition_style` is a free-form descriptor (e.g., "smooth", "cut") that informs FILL's transition-context. The `role` field distinguishes gap beats from pacing-correction beats (POLISH Phase 2 R-2.7), which share `is_gap_beat=True` but have `role: "micro_beat"`. `is_gap_beat=True` excludes the beat from intersection candidate generation if intersection detection is re-derived during a backward loop from GROW Phase 7.
+
 #### Beat Lifecycle
 
-SEED creates the initial narrative beats (the Y-shaped scaffold per dilemma) plus setup beats (opening world-building) and epilogue beats (post-all-dilemmas wrap-up) as needed. GROW combines all per-dilemma scaffolds into a single beat DAG, adding transition beats for structural continuity. Once GROW has combined all dilemmas, **beats are never removed** and the **dilemma topology is frozen** — the forks and convergences driven by dilemmas cannot change. POLISH operates within that frozen topology, adding micro-beats, residue beats, and false branch beats. At the end of POLISH, one or more beats are grouped into a passage. Throughout this lifecycle, a beat's identity — what happens — remains stable. The metadata around it evolves.
+SEED creates the initial narrative beats (the Y-shaped scaffold per dilemma) plus setup beats (opening world-building) and epilogue beats (post-all-dilemmas wrap-up) as needed. GROW combines all per-dilemma scaffolds into a single beat DAG, adding transition beats for structural continuity. Once GROW has combined all dilemmas, **beats are never removed** and the **dilemma topology is frozen** — the forks and convergences driven by dilemmas cannot change. POLISH operates within that frozen topology, adding micro-beats, gap beats, residue beats, and false branch beats. At the end of POLISH, one or more beats are grouped into a passage. Throughout this lifecycle, a beat's identity — what happens — remains stable. The metadata around it evolves.
 
 **Working.** Beats are not exported. They are the authoring abstraction. The player sees passages.
 
@@ -171,6 +190,10 @@ The total number of codewords is naturally bounded by the number of soft dilemma
 A per-entity summary of how a character changes across the story, synthesized by POLISH from the beat structure. "The mentor begins as a cryptic authority figure, is gradually revealed as either a protector or a manipulator (depending on path), and ends as either a trusted ally or a defeated adversary."
 
 Character arc metadata is stored as an annotation on entity nodes — it describes the entity's trajectory on each path (start → pivot → end). It is working data for FILL: when the prose writer encounters the mentor in a mid-story scene, they need to know where the mentor has been and where the mentor is going. Without it, the writer sees individual beats in isolation and risks inconsistency.
+
+**Per-path arc trajectories** — `arcs_per_path: list[{path_id: str, arc_type: str, arc_line: str, pivot_beat: str}]`. Populated by POLISH Phase 3 (Character Arc Synthesis, extended). One entry per path on which this entity is arc-worthy. `arc_type` is determined by the entity's category: character → "transformation", location → "atmosphere", object → "significance", faction → "relationship". `arc_line` is a concise A → B → C trajectory. `pivot_beat` is the beat at which the entity's trajectory turns. Consumed by FILL for per-passage positional context (pre-pivot / at-pivot / post-pivot).
+
+The full `character_arc` annotation contains `start`, `pivots`, `end_per_path`, AND `arcs_per_path`. The `pivots` field (entity-scoped per-path map: `dict[path_id → beat_id]`) and `arcs_per_path[*].pivot_beat` (path-scoped record) MUST agree for the same `path_id` — they describe the same pivot from different indexing angles. POLISH Phase 3 enforces this by producing both in a single LLM call.
 
 **Working.** Created by POLISH, consumed by FILL. Not exported.
 
@@ -320,9 +343,9 @@ Beats are not cloned per reachable state — each beat is one node with one set 
 
 ### Total Order Per Arc
 
-The DAG defines a partial order. Each arc (a specific combination of path choices) defines a **total order** — the exact sequence of beats a player on that arc experiences. This total order is computed by **walking the DAG** from the root beat, following `predecessor` edges forward. At each Y-shape fork (where a shared beat has successors on different paths of the same dilemma), the traversal follows the successor matching the arc's selected path for that dilemma. Beats that are not on any dilemma fork branch — setup, epilogue, transition, and micro-beats — are traversed naturally as the walk passes through them. False branch beats follow their own cosmetic-fork choice; residue beats are flag-gated and shown only to players holding the corresponding flag.
+The DAG defines a partial order. Each arc (a specific combination of path choices) defines a **total order** — the exact sequence of beats a player on that arc experiences. This total order is computed by **walking the DAG** from the root beat, following `predecessor` edges forward. At each Y-shape fork (where a shared beat has successors on different paths of the same dilemma), the traversal follows the successor matching the arc's selected path for that dilemma. Beats that are not on any dilemma fork branch — setup, epilogue, transition, and micro-beats — are traversed naturally as the walk passes through them. False branch beats follow their own cosmetic-fork choice; residue beats are flag-gated and shown only to players holding the corresponding flag. Gap beats carry a single `belongs_to` to one path and appear in the total order only for arcs traversing that path.
 
-This is a DAG walk, not a collection-by-membership operation. The `belongs_to` edges define which path a beat furthers narratively (the Y-shape from SEED), but the arc traversal follows the `predecessor` DAG structure that GROW built. Beats without `belongs_to` edges (all structural beat sub-types: setup, epilogue, transition, micro-beat, residue, false branch) are included whenever the walk reaches them — they sit on the predecessor chain between path-member beats and are traversed like any other node.
+This is a DAG walk, not a collection-by-membership operation. The `belongs_to` edges define which path a beat furthers narratively (the Y-shape from SEED), but the arc traversal follows the `predecessor` DAG structure that GROW built. Beats without `belongs_to` edges (setup, epilogue, transition, micro-beat, residue, false branch — all structural sub-types except gap beats) are included whenever the walk reaches them; they sit on the predecessor chain between path-member beats and are traversed like any other node. Gap beats are the structural exception: they carry a single `belongs_to` and appear only on arcs traversing that path.
 
 Arcs are not stored as graph nodes. They are **computed traversals** of the DAG. Any stage that needs an arc's beat sequence computes it on demand from the DAG structure. Diagnostic tools may snapshot pre-computed arc sequences for inspection, but pipeline stages must never read arcs from stored nodes — they traverse the DAG.
 
@@ -619,15 +642,16 @@ Intersection beats participate in scenes with beats from other paths, but they s
 
 **Same-dilemma pre-commit multi-`belongs_to` is permitted.** A pre-commit beat — one that occurs before the dilemma's commit point — belongs to both paths of its own dilemma. This is structurally correct: every player experiences pre-commit beats regardless of which path they will later choose. Pre-commit beats have two `belongs_to` edges (one to each path in the dilemma); post-commit beats have exactly one. Cross-dilemma multi-`belongs_to` remains forbidden.
 
-**Zero-`belongs_to` beats.** Beats that are not part of any dilemma's Y-shape — all structural beat sub-types (setup, epilogue, transition, micro-beat, residue beat, false branch beat) — have no `belongs_to` edges. They sit on the DAG between path-member beats and do not "belong to" any path. Setup, epilogue, transition, and micro-beats are traversed by every arc that reaches them via the predecessor chain; residue beats are flag-gated and shown only to players holding the corresponding flag; false branch beats are traversed by players who take the cosmetic fork's corresponding choice. See "Total Order Per Arc" in Part 3.
+**Zero-`belongs_to` beats.** Most structural beat sub-types (setup, epilogue, transition, micro-beat, residue beat, false branch beat) have no `belongs_to` edges. They sit on the DAG between path-member beats and do not "belong to" any path. Setup, epilogue, transition, and micro-beats are traversed by every arc that reaches them via the predecessor chain; residue beats are flag-gated and shown only to players holding the corresponding flag; false branch beats are traversed by players who take the cosmetic fork's corresponding choice. **Gap beats** (POLISH Phase 1a) are the structural exception: they carry a single `belongs_to` to one path because they bridge narrative seams within that path's specific beat sequence. See "Total Order Per Arc" in Part 3.
 
 #### Determining a beat's `belongs_to`
 
-A beat's `belongs_to` edges are a **narrative** statement: "this beat furthers the narrative of this dilemma." They are not a graph-shape statement about which path chains reach the beat. Three beat categories cover every legal beat:
+A beat's `belongs_to` edges are a **narrative** statement: "this beat furthers the narrative of this dilemma." They are not a graph-shape statement about which path chains reach the beat. Four beat categories cover every legal beat:
 
 1. **Shared pre-commit** — the beat sets up the dilemma's tension for both possible answers. Two `belongs_to` edges, one to each explored path of the dilemma.
 2. **Commit and exclusive post-commit** — the beat locks in or plays out one answer's consequences. One `belongs_to` edge to the answer's path.
-3. **Structural beats** (setup, epilogue, transition, micro-beat, residue beat, false branch beat) — the beat furthers no dilemma's narrative. Zero `belongs_to` edges. Examples: a world-setup opening beat before any dilemma is introduced; a transition beat that bridges between unrelated scenes; a closing epilogue beat after the final dilemma has committed and converged.
+3. **Zero-`belongs_to` structural beats** (setup, epilogue, transition, micro-beat, residue beat, false branch beat) — the beat furthers no dilemma's narrative. Zero `belongs_to` edges. Examples: a world-setup opening beat before any dilemma is introduced; a transition beat that bridges between unrelated scenes; a closing epilogue beat after the final dilemma has committed and converged.
+4. **Path-specific structural beats** (gap beat only) — the beat bridges a narrative seam within one path's beat sequence without advancing any dilemma. One `belongs_to` edge to that path. Zero `dilemma_impacts`. Created by POLISH Phase 1a; structurally indistinguishable from category 2 by `belongs_to` count, distinguished by zero `dilemma_impacts` and `is_gap_beat=True`.
 
 Cross-dilemma co-occurrence (a scene that serves two dilemmas at once) is **not** represented as a beat belonging to two dilemmas. It is represented as two distinct beats (one per dilemma) linked by an `intersection_group`. This preserves guard rail 1 below (no cross-dilemma dual `belongs_to`).
 
@@ -642,7 +666,7 @@ For residue and false-branch beats, passage placement is governed by the Phase 6
 Guard rails:
 
 1. **Same-dilemma constraint.** A beat with two `belongs_to` edges must reference two paths that belong to the same dilemma. Cross-dilemma multi-`belongs_to` is a hard-convergence violation.
-2. **Pre-commit only.** Only beats before the dilemma's commit may have two `belongs_to` edges. The commit beat itself has one (it is the first beat exclusive to its path). Post-commit beats of a dilemma have exactly one `belongs_to` edge; beats that serve no dilemma have zero (see "Determining a beat's `belongs_to`" above, category 3).
+2. **Pre-commit only.** Only beats before the dilemma's commit may have two `belongs_to` edges. The commit beat itself has one (it is the first beat exclusive to its path). Post-commit beats of a dilemma have exactly one `belongs_to` edge; beats that serve no dilemma have zero (see "Determining a beat's `belongs_to`" above, category 3) — gap beats are the structural exception, carrying exactly one `belongs_to` despite serving no dilemma (category 4).
 3. **Same-dilemma pre-commit exclusion.** An intersection group must not contain two pre-commit beats of the same dilemma (identified by identical dual `belongs_to` path sets). Such beats are already sequentially ordered in the dilemma's pre-commit chain; grouping them into an intersection implies simultaneity, contradicting the chain ordering. Cross-dilemma pre-commit co-occurrence IS the intended use of intersection groups and remains allowed.
 
 ### Beat Ordering ≠ Temporal Position Relative to Commits
@@ -731,7 +755,7 @@ Vision and Voice Document are singleton nodes with no incoming or outgoing edges
 | `anchored_to` | Dilemma → Entity | BRAINSTORM | Entities central to this dilemma |
 | `explores` | Path → Answer | SEED | Which answer this path develops |
 | `has_consequence` | Path → Consequence | SEED | Narrative outcomes of this path |
-| `belongs_to` | Beat → Path | SEED | Which path this beat serves. Pre-commit beats have two edges (both paths in the dilemma); post-commit beats have one. |
+| `belongs_to` | Beat → Path | SEED, POLISH | Which path this beat serves. Pre-commit beats have two edges (both paths in the dilemma); post-commit beats have one; gap beats (POLISH Phase 1a) have one to their bridging path. |
 | `flexibility` | Beat → Entity | SEED | Substitutable entity. Carries a `role` property on the edge itself (e.g., `role: "mentor"` when the spy could play the mentor role). Working — consumed by GROW. |
 | `predecessor` | Beat → Beat | GROW | Ordering in the beat DAG (B comes after A) |
 | `intersection` | Beat → Intersection Group | GROW | This beat participates in this co-occurrence group |

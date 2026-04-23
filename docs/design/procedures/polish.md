@@ -26,6 +26,7 @@ POLISH does NOT change the branching topology set by SEED and GROW (Y-shape fork
 14. No orphan beats (all reachable from root by at least one arc).
 15. Setup beats from SEED persist (structural, zero `belongs_to`, zero `dilemma_impacts`) — GROW does not add to or remove from them.
 16. Epilogue beats from SEED persist (structural, zero `belongs_to`, zero `dilemma_impacts`) — GROW does not add to or remove from them.
+17. Every beat has `scene_type`, `narrative_function`, and `exit_mood` populated by GROW Phase 4b (or a WARNING was logged for partial coverage; downstream phases fall back per R-4b.1).
 
 ---
 
@@ -72,13 +73,56 @@ R-1.5. Sections with fewer than 3 beats are not reordered (not worth the LLM cal
 
 ---
 
+## Phase 1a: Narrative Gap Insertion
+
+**Purpose:** Detect structural narrative jumps in path beat sequences (e.g., a path goes setup → climax with no development beat) and insert bridging gap beats to smooth abrupt narrative leaps. Absorbed from old GROW 4b per audit Q1 resolution: gap insertion is narrative-craft work (improves how the story reads), not structural skeleton (which dilemmas exist).
+
+### Input Contract
+
+1. Phase 1 Output Contract satisfied.
+2. Beats carry `scene_type` annotation (populated by GROW Phase 4b).
+
+### Operations
+
+#### Gap Detection and Insertion
+
+**What:** For each path with 2+ beats, the LLM is given the beat sequence (with truncated summaries and scene-type tags). It identifies missing intermediate beats and proposes new beats to insert at specified positions. POLISH validates each proposal (referenced beat IDs exist, ordering is correct) and inserts gap beats with the appropriate predecessor edges and `belongs_to` to the path.
+
+**Rules:**
+
+R-1a.1. Inserted gap beats carry `is_gap_beat: True` and `role: gap_beat` and `created_by: "POLISH"`.
+
+R-1a.2. Inserted gap beats carry zero `dilemma_impacts`. They are structural transition beats; they MUST NOT advance any dilemma. This matches the structural-beat invariant for all POLISH-created beats (R-2.1, R-5.10, etc.).
+
+R-1a.3. Inserted gap beats record traceability fields: `bridges_from` (the earlier beat ID), `bridges_to` (the later beat ID), `transition_style` (free-form descriptor).
+
+R-1a.4. Per-path cap: maximum 2 gap beats inserted per path per Phase 1a invocation.
+
+R-1a.5. Invalid LLM proposals (bad beat IDs, ordering violations) MUST log at WARNING and skip the proposal; do not silently accept.
+
+**Violations:**
+
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| Gap beat with non-empty `dilemma_impacts` | Structural-beat invariant violated | R-1a.2 |
+| Gap beat without `bridges_from` / `bridges_to` | Traceability missing | R-1a.3 |
+| 3+ gap beats on one path | Cap not enforced | R-1a.4 |
+| Phase 1a accepts a proposal referencing non-existent `before_beat` ID | Validation skipped | R-1a.5 |
+
+### Output Contract
+
+1. Zero or more gap beats added to the graph. Each carries `is_gap_beat=True`, zero `dilemma_impacts`, `belongs_to` to its path, predecessor edges placing it between `bridges_from` and `bridges_to`, and `created_by: "POLISH"`.
+2. Path beat sequences may be longer than at Phase 1a's start; original (non-gap) beats are unmodified.
+
+---
+
 ## Phase 2: Pacing Micro-Beat Injection
 
 **Purpose:** Flag pacing issues (too many scenes or sequels in a row; no sequel after a commit beat) and insert micro-beats to smooth rhythm. Micro-beats are structural beats that carry no dilemma relationship.
 
 ### Input Contract
 
-1. Phase 1 Output Contract satisfied.
+1. Phase 1a Output Contract satisfied.
 
 ### Operations
 
@@ -107,16 +151,37 @@ R-2.5. Micro-beats have `created_by: POLISH` for stage-attribution tracking.
 | Micro-beat inserted at a Y-fork boundary (changes topology) | Branching altered | R-2.2 |
 | Micro-beat has `created_by: GROW` | Attribution wrong | R-2.5 |
 
+#### Pacing-Run Detection
+
+**What:** In the same Phase 2 invocation, deterministically detect runs of 3+ consecutive beats with the same `scene_type` along any path (the "monotonous run" condition). For each detected run, propose a correction beat of the opposite type (insert a sequel between scenes, or a scene between sequels) to break the monotony. Implementation may share its LLM call with the micro-beat detection above.
+
+(Absorbed from old GROW 4c. Per audit Q1, pacing rhythm correction is narrative work — POLISH territory.)
+
+**Rules:**
+
+R-2.6. Phase 2 detects runs of 3+ consecutive same-`scene_type` beats per path and inserts correction beats of the opposite type to break the run. Detection is deterministic; the correction-beat content is LLM-generated.
+
+R-2.7. Correction beats carry `is_gap_beat: True`, `role: micro_beat`, zero `dilemma_impacts`, `created_by: "POLISH"`. They are structurally indistinguishable from pacing micro-beats; the `is_gap_beat` flag distinguishes their origin (pacing-run correction vs. pacing-flag micro-beat insertion).
+
+R-2.8. Phase 2 MUST NOT introduce new monotonous runs while breaking existing ones. If a candidate correction beat would extend a run on the opposite side of the insertion point, the proposal is rejected.
+
+**Violations:**
+
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| 4+ consecutive same-`scene_type` beats remain after Phase 2 | Pacing-run detection skipped or correction failed | R-2.6 |
+
 ### Output Contract
 
 1. Zero or more micro-beats added, each within a linear section with correct role/attribution.
 2. Branching topology unchanged.
+3. Zero or more pacing-run correction beats added (`is_gap_beat: True`, `role: micro_beat`, opposite `scene_type` of the run they break).
 
 ---
 
 ## Phase 3: Character Arc Synthesis
 
-**Purpose:** For each entity appearing in 2+ beats, synthesize explicit arc metadata — start, pivot(s) per path, end per path — that FILL uses to maintain prose consistency.
+**Purpose:** For each entity appearing in 2+ beats, synthesize explicit arc metadata — start, pivots per path, end per path, AND per-path positional trajectory data — that FILL uses to maintain prose consistency. The per-path positional data (`arcs_per_path`) was previously produced by old GROW 4f and is now consolidated here per audit Q6 resolution: a single source of truth on Entity nodes, indexed for FILL's per-passage positional context.
 
 ### Input Contract
 
@@ -140,6 +205,12 @@ R-3.4. Arc metadata is working data for FILL. POLISH does not write prose based 
 
 R-3.5. The LLM receives full context for each entity: beat summaries in order, dilemma questions, path descriptions, overlay details.
 
+R-3.6. The character_arc annotation includes `arcs_per_path: list[{path_id: str, arc_type: str, arc_line: str, pivot_beat: str}]`, one entry per path on which the entity is arc-worthy. Single LLM call produces both the existing fields (start, pivots, end_per_path) and `arcs_per_path` together, ensuring internal consistency.
+
+R-3.7. `arc_type` is determined deterministically by the entity's category: character → "transformation", location → "atmosphere", object → "significance", faction → "relationship". The LLM does not choose `arc_type`; POLISH derives it from the entity node and validates the LLM output matches.
+
+R-3.8. For each `path_id` present in both `pivots` and `arcs_per_path`, the values MUST agree: `pivots[path_id]` (the entity-scoped pivot beat for that path) MUST equal the `pivot_beat` of the matching `arcs_per_path` entry. POLISH enforces this at synthesis time (single LLM call producing both, validated together).
+
 **Violations:**
 
 | Symptom | Root cause | Broken rule |
@@ -147,11 +218,15 @@ R-3.5. The LLM receives full context for each entity: beat summaries in order, d
 | Entity with 5 beat appearances has no arc metadata | Phase 3 skipped this entity | R-3.1 |
 | Arc metadata stored as separate `CharacterArc` nodes | Should be entity annotation | R-3.3 |
 | LLM call for arc synthesis receives bare entity IDs | Context enrichment missing | R-3.5 |
+| `arcs_per_path` missing for an entity with 2+ appearances on a path | Phase 3 partial coverage | R-3.6 |
+| `arc_type` does not match the entity's category | Validation gap | R-3.7 |
+| `pivots[path_id] != arcs_per_path[*].pivot_beat` for the same path | Internal-consistency check skipped | R-3.8 |
 
 ### Output Contract
 
 1. Every entity with 2+ beat appearances has arc metadata annotation (start, pivots per path, end per path).
 2. No separate CharacterArc nodes created.
+3. `arcs_per_path` populated alongside the existing fields, with `arc_type` matching entity category and `pivot_beat` agreeing with `pivots[path_id]` for each path.
 
 ---
 
@@ -188,7 +263,7 @@ R-4a.4. POLISH does NOT consume Intersection Group nodes as a constraint on grou
 
 R-4a.5. (Subsumed by R-4a.3.) The prior allowance for optional multi-path grouping is now automatic: multi-path chains that are linear in the DAG are collapsed by the topology rule; those separated by divergences or convergences are in different passages by topology.
 
-**Notes on structural beats.** Residue and false-branch beats are created by POLISH in Phase 6 *after* Phase 4a completes; their passage placement is governed by Phase 6 creation rules (R-6.x), not Phase 4a. Micro-beats (Phase 2, from POLISH) and transition beats (from GROW) are already in the DAG at Phase 4a and are grouped uniformly by R-4a.3. No sub-type-specific grouping rules are needed in Phase 4a.
+**Notes on structural beats.** Residue and false-branch beats are created by POLISH in Phase 6 *after* Phase 4a completes; their passage placement is governed by Phase 6 creation rules (R-6.x), not Phase 4a. Micro-beats (Phase 2, from POLISH), gap beats (Phase 1a, from POLISH), and transition beats (from GROW) are already in the DAG at Phase 4a and are grouped uniformly by R-4a.3. No sub-type-specific grouping rules are needed in Phase 4a.
 
 **Violations:**
 
@@ -366,12 +441,52 @@ R-5.13. Each variant has a distinct summary reflecting its flag combination.
 
 R-5.14. Variant passages share the same beats (via `grouped_in`) but have different prose.
 
+#### 5e — Atmospheric Annotation
+
+**What:** For every beat in the frozen DAG, produce an `atmospheric_detail` string (10–200 characters) describing the sensory environment: sight, sound, smell, texture. Environment, not character emotion. A single LLM call produces details for all beats. Absorbed from old GROW 4d per audit Q1: sensory grounding is prose-prep, not structural.
+
+**Rules:**
+
+R-5e.1. Every beat receives `atmospheric_detail` populated by Phase 5e. Partial coverage (LLM details only some beats) MUST log a WARNING; FILL falls back to scene-blueprint sensory data when `atmospheric_detail` is absent.
+
+R-5e.2. `atmospheric_detail` describes ENVIRONMENT (sight/sound/smell/texture/light/temperature/etc.), not character interiority. This separation is enforced by the LLM prompt; the spec does not mandate prose-content checks.
+
+R-5e.3. Phase 5e runs after Beat DAG Freeze, so transition beats inserted by GROW Phase 4c receive `atmospheric_detail` like any other beat (auto-fixes the transition-beat-atmospheric gap noted in the audit Q3).
+
+**Violations:**
+
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| Beat without `atmospheric_detail` and no WARNING | Partial coverage detection skipped | R-5e.1 |
+| Transition beat without `atmospheric_detail` | Phase 5e ran before transition-beat creation, OR transition beats excluded from coverage | R-5e.3 |
+
+#### 5f — Path Thematic Annotation
+
+**What:** For each path, produce a `path_theme` (10–200 characters) and `path_mood` (2–50 characters) summarizing the path's emotional through-line and tonal palette. One LLM call per path; the LLM consumes the full beat sequence with their summaries, scene types, narrative functions, and exit moods. Absorbed from old GROW 4e per audit Q1: per-path narrative identity is prose-prep, not structural.
+
+**Rules:**
+
+R-5f.1. Every path with 2+ beats receives `path_theme` and `path_mood`. Paths with fewer than 2 beats are skipped (no narrative arc to summarize).
+
+R-5f.2. `path_theme` is the path's emotional through-line / "controlling idea" (McKee). `path_mood` is its tonal palette. Both are LLM-generated free-form strings; the spec does not enforce specific vocabularies.
+
+R-5f.3. Per-path LLM failures MUST log at WARNING and leave the path's fields unpopulated. FILL and DRESS handle missing fields by falling back to path description / dilemma question text.
+
+**Violations:**
+
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| Multi-beat path without `path_theme` and no WARNING | Per-path failure detection skipped | R-5f.3 |
+| `path_mood` exceeds 50 characters | Schema length not enforced | R-5f.2 |
+
 ### Output Contract
 
 1. All ChoiceSpecs have labels.
 2. All ResidueSpecs have content and a passage-layer mapping choice.
 3. All FalseBranchCandidates have a decision (skip / diamond / sidetrack).
 4. All VariantSpecs have summaries.
+5. Every beat has `atmospheric_detail` populated (or a WARNING logged for partial coverage).
+6. Every multi-beat path has `path_theme` and `path_mood` populated (or a WARNING logged for per-path failure).
 
 ---
 
@@ -485,10 +600,13 @@ R-7.12. Validation failure halts POLISH with ERROR — partial output is not del
 8. Variant passages exist for every passage with incompatible heavy-residue state combinations, with `variant_of` edges and satisfiable `requires`.
 9. Residue beat passages exist wherever light-residue mood-bridging is needed; passage-layer mapping (residue-passage-with-variants or parallel-passages) is recorded.
 10. False-branch passages exist where Phase 5 approved diamond or sidetrack patterns; false-branch beats have `role: "false_branch_beat"`, zero `belongs_to`, zero `dilemma_impacts`.
-11. Character arc metadata is annotated on every entity with 2+ beat appearances (start, pivots per path, end per path).
+11. Character arc metadata is annotated on every entity with 2+ beat appearances: `start`, `pivots` per path, `end_per_path`, and `arcs_per_path` (see Phase 3 §Output Contract for the full schema).
 12. Every passage has a prose feasibility annotation (clean / annotated / residue / variant). No `structural split` passages unresolved.
 13. No prose exists — `passage.prose` is empty until FILL.
 14. No cycles in the passage graph.
+15. Every beat has `atmospheric_detail` populated (10–200 characters describing sensory environment), or a WARNING was logged for partial Phase 5e coverage.
+16. Every multi-beat path has `path_theme` (10–200 characters) and `path_mood` (2–50 characters) populated, or a WARNING was logged for per-path Phase 5f failure.
+17. Gap beats inserted by Phase 1a carry `is_gap_beat: True`, `role: gap_beat`, `created_by: "POLISH"`, zero `dilemma_impacts`, single `belongs_to` to their path, and traceability fields (`bridges_from`, `bridges_to`, `transition_style`).
 
 ## Implementation Constraints
 
@@ -519,16 +637,27 @@ R-1.2: Reordered sequence preserves beat set exactly.
 R-1.3: Reordering preserves hard constraints (commit timing, cross-section edges).
 R-1.4: Invalid proposal → original order + WARNING; never silent accept.
 R-1.5: Sections <3 beats not reordered.
+R-1a.1: Gap beats have `is_gap_beat: True`, `role: gap_beat`, `created_by: "POLISH"`.
+R-1a.2: Gap beats carry zero `dilemma_impacts` (structural-beat invariant).
+R-1a.3: Gap beats record traceability: `bridges_from`, `bridges_to`, `transition_style`.
+R-1a.4: Per-path cap: max 2 gap beats per Phase 1a invocation.
+R-1a.5: Invalid LLM proposals → WARNING + skip; never silent accept.
 R-2.1: Micro-beats have `role: micro_beat`, zero `dilemma_impacts`, zero `belongs_to`.
 R-2.2: Micro-beats inserted only in linear sections.
 R-2.3: Micro-beats carry surrounding entity references.
 R-2.4: Pacing flags: 3+ scenes-in-a-row, 3+ sequels-in-a-row, no sequel after commit.
 R-2.5: Micro-beats have `created_by: POLISH`.
+R-2.6: Phase 2 detects 3+ same-`scene_type` runs per path and inserts opposite-type correction beats.
+R-2.7: Correction beats have `is_gap_beat: True`, `role: micro_beat`, zero `dilemma_impacts`, `created_by: "POLISH"`.
+R-2.8: Phase 2 MUST NOT introduce new monotonous runs.
 R-3.1: Arc-worthy entities have 2+ beat appearances.
 R-3.2: Arc metadata: start, pivots per path, end_per_path.
 R-3.3: Arc metadata is entity annotation, not separate node.
 R-3.4: POLISH does not write prose from arc metadata.
 R-3.5: Arc-synthesis LLM receives full context.
+R-3.6: character_arc includes `arcs_per_path[]`; produced in same LLM call as start/pivots/end_per_path.
+R-3.7: `arc_type` derived from entity category (character/location/object/faction).
+R-3.8: `pivots[path_id]` MUST equal `arcs_per_path[*].pivot_beat` for the same path.
 R-4a.1: Every beat in exactly one Passage.
 R-4a.2: (Removed — linear runs may span different `belongs_to` sets; path-membership uniformity within a passage is not required.)
 R-4a.3: Maximal-linear-collapse — a passage is a maximal run of beats with no internal divergence or convergence.
@@ -564,6 +693,12 @@ R-5.11: False-branch choice edges may grant cosmetic state flags.
 R-5.12: False branches never affect dilemma-driven branching.
 R-5.13: Variants have distinct summaries per flag combination.
 R-5.14: Variants share beats via `grouped_in`; differ in prose only.
+R-5e.1: Every beat receives `atmospheric_detail`; partial coverage emits WARNING.
+R-5e.2: `atmospheric_detail` describes environment, not interiority.
+R-5e.3: Phase 5e runs after Beat DAG Freeze; transition beats receive `atmospheric_detail`.
+R-5f.1: Multi-beat paths receive `path_theme` and `path_mood`; <2-beat paths skipped.
+R-5f.2: `path_theme` (controlling idea) and `path_mood` (tonal palette) are free-form LLM strings.
+R-5f.3: Per-path LLM failure → WARNING + leave unpopulated; consumers fall back.
 R-6.1: Phase 6 runs in a single transaction.
 R-6.2: Application order: passages → variants → residue beats → residue passages → choices → false branches.
 R-6.3: Any step failure rolls back.
@@ -588,6 +723,7 @@ R-7.12: Validation failure halts POLISH; no partial output.
 | Phase | Gate | Decision |
 |-------|------|----------|
 | 1 | Beat Reordering | Automated (WARNING on invalid proposals) |
+| 1a | Narrative Gap Insertion | Automated (WARNING on invalid proposals) |
 | 2 | Pacing Micro-beats | Automated |
 | 3 | Character Arc Synthesis | Automated |
 | — | Beat DAG Freeze | Required — user reviews finalized beat DAG before passage layer |
@@ -600,7 +736,7 @@ The single human gate is between Phase 3 (beat DAG freeze) and Phase 4 (plan com
 
 ## Iteration Control
 
-**Forward flow:** 1 → 2 → 3 → [freeze gate] → 4 → 5 → 6 → 7.
+**Forward flow:** 1 → 1a → 2 → 3 → [freeze gate] → 4 → 5 → 6 → 7.
 
 **Backward loops:**
 
@@ -613,6 +749,7 @@ The single human gate is between Phase 3 (beat DAG freeze) and Phase 4 (plan com
 **Maximum iterations:**
 
 - Phase 1 reordering: at most 1 proposal per section; invalid fallbacks to original.
+- Phase 1a gap insertion: at most 1 LLM call per path; per-path cap of 2 gap beats per R-1a.4.
 - Phase 2 micro-beats: at most 1 proposal per pacing flag.
 - Phase 4: deterministic, single pass.
 - Phase 5 LLM enrichment: at most 2 retries per LLM call (per CLAUDE.md §Validation & Repair Loop).
@@ -623,6 +760,7 @@ The single human gate is between Phase 3 (beat DAG freeze) and Phase 4 (plan com
 | Phase | Failure | Detection | Recovery |
 |-------|---------|-----------|----------|
 | 1 | Invalid reordering | R-1.4 validation | Keep original + WARNING |
+| 1a | Invalid gap-beat proposal | R-1a.5 validation | Skip proposal + WARNING |
 | 2 | Micro-beat wrongly has `belongs_to` | R-2.1 check | Halt; fix in Phase 2 logic |
 | 4a | Beat grouped into two passages | R-4a.1 check | Plan bug — re-run Phase 4 |
 | 4c | Zero choice edges | R-4c.2 check | Halt ERROR; fix in SEED (Y-shape) or GROW (DAG) |
@@ -654,13 +792,17 @@ Phase 4b's prose feasibility audit needs to know which state flags are *structur
 
 One linear section of 4 beats in `mentor_trust`'s post-commit chain. LLM proposes reordering two beats for better scene-sequel rhythm. Validation passes; edges updated.
 
+### Phase 1a
+
+LLM inspects each path's beat sequence. On the `manipulator` path, it flags a leap from setup to confrontation with no rising-tension beat between; proposes one gap beat (`bridges_from`/`bridges_to` set, `transition_style: "rising suspicion"`). The other path passes without insertion. Per-path cap (R-1a.4) not approached.
+
 ### Phase 2
 
-Pacing flag: 3 action beats with no sequel in `archive_nature` path. LLM proposes a brief reflection micro-beat; inserted with `role: micro_beat`.
+Pacing flag: 3 action beats with no sequel in `archive_nature` path. LLM proposes a brief reflection micro-beat; inserted with `role: micro_beat`. Pacing-run detection finds a separate run of 3 consecutive sequels in `mentor_trust`'s post-commit chain on the protector path; LLM proposes a brief scene-type correction beat (`is_gap_beat: True`, `role: micro_beat`, opposite `scene_type`) to break the monotony.
 
 ### Phase 3
 
-`character::mentor` appears in 8 beats. Arc metadata: start = "cryptic authority figure"; pivot on protector path = commit beat (mentor confesses); pivot on manipulator path = post-commit reveal; end_per_path populated. Annotated on entity node.
+`character::mentor` appears in 8 beats. Arc metadata: start = "cryptic authority figure"; pivot on protector path = commit beat (mentor confesses); pivot on manipulator path = post-commit reveal; end_per_path populated. The same LLM call also produces `arcs_per_path` for the mentor — one entry per path with `arc_type: "transformation"` (derived from the character category), an `arc_line` summarizing trajectory, and `pivot_beat` equal to the corresponding `pivots[path_id]`. Annotated on entity node.
 
 ### Beat DAG Freeze — Human Gate
 
@@ -682,6 +824,8 @@ User reviews. Approves.
 - Residue content for 2 spec: one variant per path.
 - False branch decision: `diamond` pattern for the opening stretch.
 - Variant summary for the climax passage: two versions.
+- **5e:** atmospheric_detail populated for all 14 beats (including the gap and micro beats from Phases 1a/2 and the transition beat from GROW 4c).
+- **5f:** path_theme and path_mood populated for both `mentor_trust` paths and the `archive_nature` canonical path.
 
 ### Phase 6
 
