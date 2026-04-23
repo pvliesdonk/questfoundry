@@ -18,9 +18,7 @@ from questfoundry.graph.context import (
 )
 from questfoundry.graph.context_compact import (
     ContextItem,
-    build_narrative_frame,
     compact_items,
-    enrich_beat_line,
     truncate_summary,
 )
 from questfoundry.graph.graph import Graph
@@ -834,234 +832,15 @@ class _LLMPhaseMixin:
             tokens_used=tokens,
         )
 
-    @grow_phase(name="atmospheric", depends_on=["pacing_gaps"], priority=6)
-    async def _phase_4d_atmospheric(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
-        """Phase 4d: Atmospheric detail for beats.
+    # NOTE: GROW Phase 4d (atmospheric) was MOVED to POLISH Phase 5e
+    # per the spec migration in PR #1366 / issue #1368 PR B. The
+    # implementation lives in ``polish/llm_phases.py`` as
+    # ``_phase_5e_atmospheric``.
 
-        Generates sensory environment details for all beats.
-
-        Preconditions:
-        - Pacing gaps resolved (Phase 4c complete).
-        - Beat nodes have summaries.
-
-        Postconditions:
-        - All beats annotated with atmospheric_detail (sensory environment).
-
-        Invariants:
-        - Single LLM call for all beats.
-        - Narrative frame built from dilemma questions and path themes.
-        """
-        from questfoundry.models.grow import Phase4dOutput
-
-        beat_nodes = graph.get_nodes_by_type("beat")
-        if not beat_nodes:
-            return GrowPhaseResult(
-                phase="atmospheric",
-                status="completed",
-                detail="No beats to annotate",
-            )
-
-        # Build enriched beat summaries with entity names
-        beat_items: list[ContextItem] = []
-        for bid in sorted(beat_nodes.keys()):
-            data = beat_nodes[bid]
-            line = enrich_beat_line(graph, bid, data, include_entities=True)
-            beat_items.append(ContextItem(id=bid, text=line))
-
-        # Build narrative frame from dilemmas and paths
-        dilemma_ids = sorted(graph.get_nodes_by_type("dilemma").keys())
-        path_ids = sorted(graph.get_nodes_by_type("path").keys())
-        narrative_frame = build_narrative_frame(graph, dilemma_ids=dilemma_ids, path_ids=path_ids)
-
-        context = {
-            "narrative_frame": narrative_frame,
-            "beat_summaries": compact_items(beat_items, self._compact_config()),  # type: ignore[attr-defined]
-            "beat_count": str(len(beat_nodes)),
-            "valid_beat_ids": ", ".join(sorted(beat_nodes.keys())),
-        }
-
-        try:
-            result, llm_calls, tokens = await self._grow_llm_call(  # type: ignore[attr-defined]
-                model=model,
-                template_name="grow_phase4d_atmospheric",
-                context=context,
-                output_schema=Phase4dOutput,
-            )
-        except GrowStageError as e:
-            return GrowPhaseResult(
-                phase="atmospheric",
-                status="failed",
-                detail=str(e),
-            )
-
-        # Apply atmospheric details
-        applied_details = 0
-        for detail in result.details:
-            if detail.beat_id not in beat_nodes:
-                log.info("phase4d_invalid_beat_id", beat_id=detail.beat_id)
-                continue
-            graph.update_node(
-                detail.beat_id,
-                atmospheric_detail=detail.atmospheric_detail,
-            )
-            applied_details += 1
-
-        return GrowPhaseResult(
-            phase="atmospheric",
-            status="completed",
-            detail=f"Applied atmospheric details to {applied_details}/{len(beat_nodes)} beats",
-            llm_calls=llm_calls,
-            tokens_used=tokens,
-        )
-
-    @grow_phase(name="path_arcs", depends_on=["atmospheric"], priority=7)
-    async def _phase_4e_path_arcs(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
-        """Phase 4e: Per-path thematic mini-arcs.
-
-        Generates a thematic through-line and mood descriptor for each path.
-
-        Preconditions:
-        - Atmospheric details assigned (Phase 4d complete).
-        - Each path has beats with scene_type and narrative_function.
-        - Entity nodes have concept and entity_type fields.
-
-        Postconditions:
-        - Each path annotated with path_theme and path_mood.
-        - Themes and moods derived from beat sequence and entity context.
-
-        Invariants:
-        - One LLM call per path via batch_llm_calls.
-        - Dilemma question and stakes included in per-path context.
-        - Entity arcs from path node included for thematic coherence.
-        """
-        from questfoundry.graph.grow_algorithms import get_path_beat_sequence
-        from questfoundry.models.grow import PathMiniArc
-
-        path_nodes = graph.get_nodes_by_type("path")
-        if not path_nodes:
-            return GrowPhaseResult(
-                phase="path_arcs",
-                status="completed",
-                detail="No paths to annotate",
-            )
-
-        applied = 0
-
-        # Pre-compute context for each path (graph reads are not async)
-        path_items: list[tuple[str, dict[str, str]]] = []
-        for pid in sorted(path_nodes.keys()):
-            pdata = path_nodes[pid]
-            dilemma_id = pdata.get("dilemma_id", "")
-            dilemma_node = graph.get_node(dilemma_id) if dilemma_id else None
-            dilemma_question = dilemma_node.get("question", "") if dilemma_node else ""
-            dilemma_stakes = dilemma_node.get("why_it_matters", "") if dilemma_node else ""
-            path_description = pdata.get("description", "")
-
-            try:
-                beat_ids = get_path_beat_sequence(graph, pid)
-            except ValueError:
-                log.info("phase4e_cycle_in_path", path_id=pid)
-                continue
-
-            if not beat_ids:
-                log.info("phase4e_no_beats_for_path", path_id=pid)
-                continue
-
-            # Collect entity IDs from all beats in this path
-            beat_entity_ids: set[str] = set()
-            beat_lines: list[str] = []
-            for i, bid in enumerate(beat_ids, 1):
-                bdata = graph.get_node(bid)
-                if not bdata:
-                    continue
-                summary = bdata.get("summary", "")
-                narrative_fn = bdata.get("narrative_function", "")
-                scene_type = bdata.get("scene_type", "")
-                beat_lines.append(
-                    f"{i}. {bid}: {summary} [function={narrative_fn}, scene_type={scene_type}]"
-                )
-                for eid in bdata.get("entities", []):
-                    beat_entity_ids.add(eid)
-
-            # Format entity context (name + concept for all entities)
-            entity_lines: list[str] = []
-            for eid in sorted(beat_entity_ids):
-                enode = graph.get_node(eid)
-                if enode:
-                    name = enode.get("name") or enode.get("raw_id", eid)
-                    concept = enode.get("concept", "")
-                    entity_lines.append(
-                        f"- {name}: {concept}" if concept else f"- {name}: (no concept yet)"
-                    )
-                else:
-                    entity_lines.append(f"- {eid}: (not in graph)")
-
-            # Format entity arcs from path node (subset: entity_id + arc_line only;
-            # pivot_beat and arc_type are not needed for thematic context)
-            arc_lines: list[str] = []
-            for arc in pdata.get("entity_arcs", []):
-                arc_entity = arc.get("entity_id", "")
-                arc_line = arc.get("arc_line", "")
-                if arc_entity and arc_line:
-                    ename = arc_entity
-                    enode = graph.get_node(arc_entity)
-                    if enode:
-                        ename = enode.get("name") or enode.get("raw_id", arc_entity)
-                    arc_lines.append(f"- {ename}: {arc_line}")
-
-            context = {
-                "path_id": pid,
-                "dilemma_question": dilemma_question or "(none)",
-                "dilemma_stakes": dilemma_stakes or "(none)",
-                "path_description": path_description or "(none)",
-                "entity_context": "\n".join(entity_lines) if entity_lines else "(none)",
-                "entity_arcs": "\n".join(arc_lines) if arc_lines else "(none)",
-                "beat_sequence": "\n".join(beat_lines) if beat_lines else "(none)",
-            }
-            path_items.append((pid, context))
-
-        async def _arc_for_path(
-            item: tuple[str, dict[str, str]],
-        ) -> tuple[tuple[str, PathMiniArc], int, int]:
-            pid, ctx = item
-            result, llm_calls, tokens = await self._grow_llm_call(  # type: ignore[attr-defined]
-                model=model,
-                template_name="grow_phase4e_path_arcs",
-                context=ctx,
-                output_schema=PathMiniArc,
-            )
-            return (pid, result), llm_calls, tokens
-
-        results, total_llm_calls, total_tokens, errors = await batch_llm_calls(
-            path_items,
-            _arc_for_path,
-            self._max_concurrency,  # type: ignore[attr-defined]
-            on_connectivity_error=self._on_connectivity_error,  # type: ignore[attr-defined]
-        )
-
-        for item in results:
-            if item is None:
-                continue
-            pid, result = item
-            graph.update_node(
-                pid,
-                path_theme=result.path_theme,
-                path_mood=result.path_mood,
-            )
-            applied += 1
-
-        if errors:
-            for idx, e in errors:
-                pid = path_items[idx][0]
-                log.warning("phase4e_llm_failed", path_id=pid, error=str(e))
-
-        return GrowPhaseResult(
-            phase="path_arcs",
-            status="completed",
-            detail=f"Applied path arcs to {applied}/{len(path_nodes)} paths",
-            llm_calls=total_llm_calls,
-            tokens_used=total_tokens,
-        )
+    # NOTE: GROW Phase 4e (path_arcs) was MOVED to POLISH Phase 5f
+    # per the spec migration in PR #1366 / issue #1368 PR B. The
+    # implementation lives in ``polish/llm_phases.py`` as
+    # ``_phase_5f_path_thematic``.
 
     @grow_phase(name="entity_arcs", depends_on=["interleave_beats"], priority=8)
     async def _phase_4f_entity_arcs(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
@@ -1247,7 +1026,7 @@ class _LLMPhaseMixin:
             tokens_used=total_tokens,
         )
 
-    @grow_phase(name="transition_gaps", depends_on=["path_arcs", "entity_arcs"], priority=8)
+    @grow_phase(name="transition_gaps", depends_on=["entity_arcs"], priority=8)
     async def _phase_transition_gaps(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
         """Phase 4g: Insert transition beats at hard cross-dilemma seams.
 

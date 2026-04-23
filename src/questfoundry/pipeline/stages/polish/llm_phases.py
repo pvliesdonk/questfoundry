@@ -420,6 +420,242 @@ class _PolishLLMPhaseMixin:
             tokens_used=total_tokens,
         )
 
+    @polish_phase(name="atmospheric_annotation", depends_on=["character_arcs"], priority=3)
+    async def _phase_5e_atmospheric(self, graph: Graph, model: BaseChatModel) -> PhaseResult:
+        """Phase 5e: Atmospheric Annotation.
+
+        For every beat in the frozen DAG, generate an
+        ``atmospheric_detail`` string describing the sensory environment
+        (sight, sound, smell, texture). Single LLM call covers all beats.
+
+        Per spec ``polish.md`` §Phase 5e (R-5e.1 through R-5e.3) and the
+        structural-vs-narrative migration in PR #1366: sensory grounding
+        is prose-prep, POLISH territory. Migrated from GROW Phase 4d
+        per issue #1368 (PR B).
+
+        R-5e.3: runs after Beat DAG Freeze, so transition beats inserted
+        by GROW Phase 4c receive ``atmospheric_detail`` like any other
+        beat (auto-fixes the audit Q3 gap).
+        """
+        from questfoundry.graph.context_compact import (
+            ContextItem,
+            build_narrative_frame,
+            compact_items,
+            enrich_beat_line,
+        )
+        from questfoundry.models.grow import Phase4dOutput
+
+        beat_nodes = graph.get_nodes_by_type("beat")
+        if not beat_nodes:
+            log.info("phase5e_no_beats", detail="No beats to annotate")
+            return PhaseResult(
+                phase="atmospheric_annotation",
+                status="skipped",
+                detail="No beats to annotate",
+            )
+
+        # Build enriched beat summaries with entity names
+        beat_items: list[ContextItem] = []
+        for bid in sorted(beat_nodes.keys()):
+            data = beat_nodes[bid]
+            line = enrich_beat_line(graph, bid, data, include_entities=True)
+            beat_items.append(ContextItem(id=bid, text=line))
+
+        # Build narrative frame from dilemmas and paths
+        dilemma_ids = sorted(graph.get_nodes_by_type("dilemma").keys())
+        path_ids = sorted(graph.get_nodes_by_type("path").keys())
+        narrative_frame = build_narrative_frame(graph, dilemma_ids=dilemma_ids, path_ids=path_ids)
+
+        # POLISH's _polish_llm_call doesn't accept a compact-config the way
+        # GROW does; pass the items directly with a generous default budget
+        # since the prompt is small and the LLM can handle many beats.
+        context = {
+            "narrative_frame": narrative_frame,
+            "beat_summaries": compact_items(beat_items, None),
+            "beat_count": str(len(beat_nodes)),
+            "valid_beat_ids": ", ".join(sorted(beat_nodes.keys())),
+        }
+
+        result, llm_calls, tokens = await self._polish_llm_call(  # type: ignore[attr-defined]
+            model=model,
+            template_name="polish_phase5e_atmospheric",
+            context=context,
+            output_schema=Phase4dOutput,
+        )
+
+        # Apply atmospheric details (R-5e.1: partial coverage emits WARNING)
+        applied = 0
+        for detail in result.details:
+            if detail.beat_id not in beat_nodes:
+                log.info("phase5e_invalid_beat_id", beat_id=detail.beat_id)
+                continue
+            graph.update_node(
+                detail.beat_id,
+                atmospheric_detail=detail.atmospheric_detail,
+            )
+            applied += 1
+
+        if applied < len(beat_nodes):
+            log.warning(
+                "phase5e_partial_coverage",
+                applied=applied,
+                total=len(beat_nodes),
+                missing=len(beat_nodes) - applied,
+            )
+
+        return PhaseResult(
+            phase="atmospheric_annotation",
+            status="completed",
+            detail=f"Applied atmospheric details to {applied}/{len(beat_nodes)} beats",
+            llm_calls=llm_calls,
+            tokens_used=tokens,
+        )
+
+    @polish_phase(
+        name="path_thematic_annotation",
+        depends_on=["atmospheric_annotation"],
+        priority=3,
+    )
+    async def _phase_5f_path_thematic(self, graph: Graph, model: BaseChatModel) -> PhaseResult:
+        """Phase 5f: Path Thematic Annotation.
+
+        For each multi-beat path, generate ``path_theme`` (controlling
+        idea) and ``path_mood`` (tonal palette). One LLM call per path.
+
+        Per spec ``polish.md`` §Phase 5f (R-5f.1 through R-5f.3) and the
+        structural-vs-narrative migration in PR #1366: per-path narrative
+        identity is prose-prep, POLISH territory. Migrated from GROW
+        Phase 4e per issue #1368 (PR B).
+        """
+        from questfoundry.graph.grow_algorithms import get_path_beat_sequence
+        from questfoundry.models.grow import PathMiniArc
+        from questfoundry.pipeline.batching import batch_llm_calls
+
+        path_nodes = graph.get_nodes_by_type("path")
+        if not path_nodes:
+            log.info("phase5f_no_paths", detail="No paths to annotate")
+            return PhaseResult(
+                phase="path_thematic_annotation",
+                status="skipped",
+                detail="No paths to annotate",
+            )
+
+        applied = 0
+
+        # Pre-compute context for each path (graph reads are sync)
+        path_items: list[tuple[str, dict[str, str]]] = []
+        for pid in sorted(path_nodes.keys()):
+            pdata = path_nodes[pid]
+            dilemma_id = pdata.get("dilemma_id", "")
+            dilemma_node = graph.get_node(dilemma_id) if dilemma_id else None
+            dilemma_question = dilemma_node.get("question", "") if dilemma_node else ""
+            dilemma_stakes = dilemma_node.get("why_it_matters", "") if dilemma_node else ""
+            path_description = pdata.get("description", "")
+
+            try:
+                beat_ids = get_path_beat_sequence(graph, pid)
+            except ValueError:
+                log.info("phase5f_cycle_in_path", path_id=pid)
+                continue
+
+            # R-5f.1: skip paths with <2 beats (no narrative arc to summarize)
+            if len(beat_ids) < 2:
+                log.info("phase5f_skip_short_path", path_id=pid, beats=len(beat_ids))
+                continue
+
+            beat_entity_ids: set[str] = set()
+            beat_lines: list[str] = []
+            for i, bid in enumerate(beat_ids, 1):
+                bdata = graph.get_node(bid)
+                if not bdata:
+                    continue
+                summary = bdata.get("summary", "")
+                narrative_fn = bdata.get("narrative_function", "")
+                scene_type = bdata.get("scene_type", "")
+                beat_lines.append(
+                    f"{i}. {bid}: {summary} [function={narrative_fn}, scene_type={scene_type}]"
+                )
+                for eid in bdata.get("entities", []):
+                    beat_entity_ids.add(eid)
+
+            entity_lines: list[str] = []
+            for eid in sorted(beat_entity_ids):
+                enode = graph.get_node(eid)
+                if enode:
+                    name = enode.get("name") or enode.get("raw_id", eid)
+                    concept = enode.get("concept", "")
+                    entity_lines.append(
+                        f"- {name}: {concept}" if concept else f"- {name}: (no concept yet)"
+                    )
+                else:
+                    entity_lines.append(f"- {eid}: (not in graph)")
+
+            arc_lines: list[str] = []
+            for arc in pdata.get("entity_arcs", []):
+                arc_entity = arc.get("entity_id", "")
+                arc_line = arc.get("arc_line", "")
+                if arc_entity and arc_line:
+                    ename = arc_entity
+                    enode = graph.get_node(arc_entity)
+                    if enode:
+                        ename = enode.get("name") or enode.get("raw_id", arc_entity)
+                    arc_lines.append(f"- {ename}: {arc_line}")
+
+            context = {
+                "path_id": pid,
+                "dilemma_question": dilemma_question or "(none)",
+                "dilemma_stakes": dilemma_stakes or "(none)",
+                "path_description": path_description or "(none)",
+                "entity_context": "\n".join(entity_lines) if entity_lines else "(none)",
+                "entity_arcs": "\n".join(arc_lines) if arc_lines else "(none)",
+                "beat_sequence": "\n".join(beat_lines) if beat_lines else "(none)",
+            }
+            path_items.append((pid, context))
+
+        async def _arc_for_path(
+            item: tuple[str, dict[str, str]],
+        ) -> tuple[tuple[str, PathMiniArc], int, int]:
+            pid, ctx = item
+            result, llm_calls, tokens = await self._polish_llm_call(  # type: ignore[attr-defined]
+                model=model,
+                template_name="polish_phase5f_path_thematic",
+                context=ctx,
+                output_schema=PathMiniArc,
+            )
+            return (pid, result), llm_calls, tokens
+
+        results, total_llm_calls, total_tokens, errors = await batch_llm_calls(
+            path_items,
+            _arc_for_path,
+            self._max_concurrency,  # type: ignore[attr-defined]
+            on_connectivity_error=self._on_connectivity_error,  # type: ignore[attr-defined]
+        )
+
+        for item in results:
+            if item is None:
+                continue
+            pid, result = item
+            graph.update_node(
+                pid,
+                path_theme=result.path_theme,
+                path_mood=result.path_mood,
+            )
+            applied += 1
+
+        # R-5f.3: per-path failures log at WARNING; field stays unpopulated
+        if errors:
+            for idx, e in errors:
+                pid = path_items[idx][0]
+                log.warning("phase5f_llm_failed", path_id=pid, error=str(e))
+
+        return PhaseResult(
+            phase="path_thematic_annotation",
+            status="completed",
+            detail=f"Annotated {applied}/{len(path_items)} multi-beat paths",
+            llm_calls=total_llm_calls,
+            tokens_used=total_tokens,
+        )
+
     @polish_phase(name="llm_enrichment", depends_on=["plan_computation"], priority=4)
     async def _phase_5_llm_enrichment(self, graph: Graph, model: BaseChatModel) -> PhaseResult:
         """Phase 5: LLM Enrichment of the deterministic plan.

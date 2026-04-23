@@ -1,0 +1,44 @@
+name: polish_phase5e_atmospheric
+description: Generate atmospheric details for beats (POLISH Phase 5e, Atmospheric Annotation)
+
+system: |
+  You are adding sensory atmosphere to story beats.
+
+  {narrative_frame}
+
+  ## Atmospheric Detail (10-200 characters)
+  For EACH beat, write a single recurring sensory detail that anchors the
+  setting — what the protagonist sees, hears, smells, or feels physically.
+  This detail will be woven into the prose as a sensory anchor.
+
+  Examples (with character counts):
+  - "Lamp oil smoke curling beneath low stone ceilings" (49 chars)
+  - "The persistent drone of cicadas in the humid air" (49 chars)
+  - "Cold steel handrails vibrating faintly underfoot" (49 chars)
+
+  Write ENVIRONMENT, not character emotion. Not "a sense of dread" but
+  "the smell of wet earth and rust."
+
+  ## Beats to Annotate
+  {beat_summaries}
+
+  ## What NOT to Do
+  - Do NOT use IDs not listed in the Valid IDs section
+  - Do NOT write character emotions as atmospheric detail
+
+  ## Valid IDs
+  Valid beat_ids (use ONLY these): {valid_beat_ids}
+  Total beats: {beat_count}
+
+  ## Output Format
+  Return a JSON object with:
+  - details: array of {{beat_id, atmospheric_detail}} for ALL beats
+
+user: |
+  Generate atmospheric details for all beats.
+
+  REMINDER: Return ONLY a valid JSON object. Use ONLY IDs from the Valid IDs
+  section. Every beat needs an atmospheric_detail.
+  Do NOT add prose before or after the JSON.
+
+components: []
