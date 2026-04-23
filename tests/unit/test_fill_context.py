@@ -501,13 +501,15 @@ class TestFormatSlidingWindow:
 
 
 class TestFormatLookaheadContext:
-    def test_convergence_point_no_longer_emitted(self, fill_graph: Graph) -> None:
-        # Convergence context was removed (relied on stored arc nodes).
-        # p_aftermath is on the spine arc, so lookahead returns empty.
+    def test_spine_convergence_emits_branch_summaries(self, fill_graph: Graph) -> None:
+        """R-2.6: writing a spine convergence passage receives the branch
+        beat summaries that converge there. p_aftermath is on the spine
+        and the manipulator branch arrives there."""
         result = format_lookahead_context(
             fill_graph, "passage::p_aftermath", "mentor_trust__protector"
         )
-        assert result == ""
+        assert "Converging Branches" in result
+        assert "mentor_trust__manipulator" in result
 
     def test_no_lookahead_needed(self, fill_graph: Graph) -> None:
         result = format_lookahead_context(

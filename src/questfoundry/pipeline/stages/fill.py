@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypeVar
 
@@ -73,11 +74,13 @@ from questfoundry.graph.fill_context import (
     get_arc_passage_order,
     get_spine_arc_key,
 )
+from questfoundry.graph.fill_validation import FillContractError
 from questfoundry.graph.graph import Graph
 from questfoundry.graph.snapshots import save_snapshot
 from questfoundry.models.fill import (
     BatchedExpandOutput,
     ExpandBlueprint,
+    FillEscalation,
     FillExtractOutput,
     FillPhase0Output,
     FillPhase1Output,
@@ -276,6 +279,9 @@ class FillStage:
         self._on_llm_start: LLMCallbackFn | None = None
         self._on_llm_end: LLMCallbackFn | None = None
         self._on_connectivity_error: ConnectivityRetryFn | None = None
+        # Escalations collected during the run; raised as FillContractError at stage exit
+        # if non-empty (R-2.14, R-5.2 — see fill_validation.FillContractError).
+        self._escalations: list[FillEscalation] = []
 
     # Type for async phase functions: (Graph, BaseChatModel) -> FillPhaseResult
     PhaseFunc = Callable[["Graph", "BaseChatModel"], Awaitable[FillPhaseResult]]
@@ -372,6 +378,8 @@ class FillStage:
         self._lang_instruction = get_output_language_instruction(self._language)
         self._two_step = kwargs.get("two_step", True)
         self._on_connectivity_error = kwargs.get("on_connectivity_error")
+        # Reset escalations for this run; previous runs' escalations don't carry over.
+        self._escalations = []
         log.info("stage_start", stage="fill", interactive=interactive)
 
         phases = self._phase_order()
@@ -443,6 +451,13 @@ class FillStage:
             graph.release(phase_name)
             log.debug("phase_complete", phase=phase_name, status=result.status)
 
+            # R-1.7: stamp the Voice node with approval_mode + approved_at once
+            # the gate has approved Phase 0. The stamp records *that* approval
+            # happened (and which mode) so Phase 1a can assert a precondition
+            # rather than implicitly trusting the gate.
+            if phase_name == "voice":
+                self._stamp_voice_approval(graph, interactive=interactive)
+
             if on_phase_progress is not None:
                 on_phase_progress(phase_name, result.status, result.detail)
 
@@ -459,9 +474,31 @@ class FillStage:
             stage="fill",
             total_passages=total_passages,
             passages_with_prose=passages_with_prose,
+            escalation_count=len(self._escalations),
         )
 
-        # Return summary for validation (graph is the source of truth)
+        # R-2.14, R-5.2: if any escalations were collected (missing entities,
+        # unresolved review flags after final cycle), halt loudly at stage exit
+        # rather than returning a "completed" status with hidden quality issues.
+        # The full escalation list rides on the raised exception's
+        # ``.escalations`` attribute for caller rendering.
+        if self._escalations:
+            kinds = sorted({e.kind for e in self._escalations})
+            log.error(
+                "fill_contract_failed",
+                escalation_count=len(self._escalations),
+                kinds=kinds,
+            )
+            raise FillContractError(
+                f"FILL stage halted with {len(self._escalations)} escalation(s) "
+                f"({', '.join(kinds)}). See the .escalations attribute on this "
+                f"exception for the full list.",
+                escalations=self._escalations,
+            )
+
+        # Return summary for validation (graph is the source of truth).
+        # No `escalations` key — when the stage returns normally,
+        # ``self._escalations`` is empty by construction.
         return (
             {
                 "total_passages": total_passages,
@@ -940,6 +977,50 @@ class FillStage:
 
     _EXPAND_BATCH_SIZE = 8
 
+    def _stamp_voice_approval(self, graph: Graph, *, interactive: bool) -> None:
+        """Stamp the Voice node with approval mode + timestamp (R-1.7).
+
+        Called from execute() after the Phase 0 gate decision is non-reject.
+        Records *that* approval happened — interactive review or
+        ``--no-interactive`` pre-approval — so downstream phases can assert
+        the precondition rather than implicitly trusting the gate.
+        """
+        voice_data = graph.get_node("voice::voice")
+        if voice_data is None:
+            # Phase 0 always creates the node before this stamp runs;
+            # if it's missing the gate logic itself is broken.
+            raise FillStageError(
+                "Voice node missing at gate-pass time — Phase 0 did not "
+                "create voice::voice. R-1.7 stamp cannot be applied."
+            )
+        approval_mode = "interactive" if interactive else "no_interactive"
+        graph.update_node(
+            "voice::voice",
+            approved_at=datetime.now(UTC).isoformat(),
+            approval_mode=approval_mode,
+        )
+        log.info("voice_approved", approval_mode=approval_mode)
+
+    def _assert_voice_approved(self, graph: Graph) -> None:
+        """Assert the Voice node carries the R-1.7 approval stamp.
+
+        Called at Phase 1a entry to fail loudly if Phase 0 is somehow
+        bypassed without an approval — covers wiring bugs that would
+        otherwise let prose generation start without recorded consent.
+        """
+        voice_data = graph.get_node("voice::voice")
+        if voice_data is None:
+            raise FillStageError(
+                "Voice node missing at Phase 1a entry — Phase 0 did not run. "
+                "FILL requires Phase 0 voice creation + approval before prose generation."
+            )
+        if not voice_data.get("approved_at") or not voice_data.get("approval_mode"):
+            raise FillStageError(
+                "Voice approval stamp missing (R-1.7). Phase 0 ran but the "
+                "gate-pass stamp (approved_at + approval_mode) was not applied. "
+                "Re-run FILL from voice phase."
+            )
+
     async def _phase_1a_expand(
         self,
         graph: Graph,
@@ -955,6 +1036,9 @@ class FillStage:
         from random import Random
 
         from questfoundry.pipeline.craft_constraints import select_constraint
+
+        # R-1.7: refuse to start prose generation without the Phase 0 approval stamp.
+        self._assert_voice_approved(graph)
 
         generation_order = self._get_generation_order(graph)
         if not generation_order:
@@ -1150,6 +1234,22 @@ class FillStage:
                 arc_passage_orders[arc_id] = arc_order
                 arc_passage_indices[arc_id] = {pid: i for i, pid in enumerate(arc_order)}
 
+        # Pre-compute graph-wide traversals once for the lookahead helper.
+        # format_lookahead_context is called per-passage; without these
+        # caches it would recompute compute_passage_traversals and
+        # compute_arc_traversals on every call (O(N²) over the passage
+        # set). The cached dicts are stable for the duration of Phase 1
+        # generate — POLISH froze the DAG before FILL started, and FILL
+        # mutates only prose / extracted entity fields, not the structural
+        # nodes/edges these traversals depend on.
+        from questfoundry.graph.algorithms import (
+            compute_arc_traversals,
+            compute_passage_traversals,
+        )
+
+        cached_passage_traversals = compute_passage_traversals(graph)
+        cached_arc_beat_sequences = compute_arc_traversals(graph)
+
         for passage_id, arc_id in generation_order:
             passage = graph.get_node(passage_id)
             if not passage:
@@ -1196,7 +1296,13 @@ class FillStage:
                 "entity_arc_context": format_entity_arc_context(graph, passage_id, arc_id),
                 "sliding_window": format_sliding_window(graph, arc_id, current_idx, window_size),
                 "continuity_warning": format_continuity_warning(graph, arc_id, current_idx),
-                "lookahead": format_lookahead_context(graph, passage_id, arc_id),
+                "lookahead": format_lookahead_context(
+                    graph,
+                    passage_id,
+                    arc_id,
+                    passage_traversals=cached_passage_traversals,
+                    arc_beat_sequences=cached_arc_beat_sequences,
+                ),
                 "path_arcs": format_path_arc_context(graph, passage_id, arc_id),
                 "vocabulary_note": vocabulary_note,
                 "ending_guidance": format_ending_guidance(
@@ -1302,10 +1408,27 @@ class FillStage:
                         **{update.field: update.value},
                     )
                 else:
-                    log.warning(
-                        "entity_update_skipped",
+                    # R-2.14: a missing entity is a structural problem (phantom ID
+                    # or graph inconsistency) — collect for end-of-stage escalation
+                    # rather than silently skip.
+                    log.error(
+                        "entity_update_missing_entity",
                         entity_id=update.entity_id,
-                        reason="entity not found in graph",
+                        passage_id=passage_id,
+                        field=update.field,
+                    )
+                    self._escalations.append(
+                        FillEscalation(
+                            kind="missing_entity",
+                            passage_id=passage_id,
+                            detail=(
+                                f"Entity update referenced unknown entity "
+                                f"{update.entity_id!r} (field={update.field!r}). "
+                                f"Likely a phantom ID from prose generation or a "
+                                f"graph inconsistency."
+                            ),
+                            upstream_stage="SEED",
+                        )
                     )
 
             # Spoke label updates: single-call mode only (two-step doesn't extract these)
@@ -1735,10 +1858,27 @@ class FillStage:
                         if entity_id:
                             graph.update_node(entity_id, **{update.field: update.value})
                         else:
-                            log.warning(
-                                "entity_update_skipped",
+                            # R-2.14: missing entity from revision-cycle update —
+                            # same escalation as Phase 1 (see above).
+                            log.error(
+                                "entity_update_missing_entity",
                                 entity_id=update.entity_id,
-                                reason="entity not found in graph",
+                                passage_id=passage_id,
+                                field=update.field,
+                                phase="revision",
+                            )
+                            self._escalations.append(
+                                FillEscalation(
+                                    kind="missing_entity",
+                                    passage_id=passage_id,
+                                    detail=(
+                                        f"Revision-cycle entity update referenced "
+                                        f"unknown entity {update.entity_id!r} "
+                                        f"(field={update.field!r}). Likely a phantom "
+                                        f"ID or graph inconsistency."
+                                    ),
+                                    upstream_stage="SEED",
+                                )
                             )
                 else:
                     log.warning(
@@ -1753,18 +1893,34 @@ class FillStage:
             if all_addressed:
                 graph.update_node(passage_id, review_flags=[])
             elif final_cycle:
-                # Exhausted all revision cycles — escalate as upstream problem.
+                # R-5.2: Exhausted all revision cycles with unresolved flags —
+                # collect for end-of-stage escalation rather than ship low-quality
+                # prose with only a WARNING in the logs.
                 # Preserve review_flags on the passage (do NOT clear them).
                 # Re-fetch after possible prose update above to avoid stale data.
                 current_node = graph.get_node(passage_id) or {}
                 remaining = current_node.get("review_flags", [])
                 issue_types = [f.get("issue_type", "unknown") for f in remaining]
-                log.warning(
+                log.error(
                     "upstream_escalation",
                     passage_id=passage_id,
                     remaining_flags=len(remaining),
                     issue_types=issue_types,
                     reason="revision exhausted after 2 cycles; problem likely upstream (POLISH/GROW)",
+                )
+                self._escalations.append(
+                    FillEscalation(
+                        kind="unresolved_review_flags",
+                        passage_id=passage_id,
+                        detail=(
+                            f"Passage retains {len(remaining)} unresolved review "
+                            f"flag(s) after the final revision cycle "
+                            f"(issue_types={issue_types}). Persistent quality "
+                            f"problems indicate an upstream issue (POLISH grouping, "
+                            f"GROW structure, or SEED design)."
+                        ),
+                        upstream_stage="POLISH",
+                    )
                 )
 
         # Count escalated passages from results (avoids redundant graph reads)

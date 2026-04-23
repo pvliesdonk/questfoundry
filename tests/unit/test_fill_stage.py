@@ -647,6 +647,11 @@ def _make_prose_graph() -> Graph:
             "pov": "third_limited",
             "tense": "past",
             "voice_register": "literary",
+            # R-1.7 stamp — Phase 1a's entry assertion requires this. Tests
+            # call Phase 1a directly; in real runs, the stamp is applied by
+            # execute() after the Phase 0 gate decision.
+            "approved_at": "2026-04-23T12:00:00+00:00",
+            "approval_mode": "no_interactive",
         },
     )
     g.create_node(
@@ -887,6 +892,16 @@ class TestPhase1aExpand:
     @pytest.mark.asyncio
     async def test_no_passages_returns_completed(self) -> None:
         graph = Graph.empty()
+        # R-1.7 stamp required by Phase 1a entry assertion.
+        graph.create_node(
+            "voice::voice",
+            {
+                "type": "voice",
+                "raw_id": "voice",
+                "approved_at": "2026-04-23T12:00:00+00:00",
+                "approval_mode": "no_interactive",
+            },
+        )
         stage = FillStage()
         result = await stage._phase_1a_expand(graph, MagicMock())
         assert result.status == "completed"
@@ -1730,3 +1745,348 @@ class TestMechanicalQualityGate:
         stage._language = "en"
         result = await stage._phase_1c_mechanical_gate(g, mock_model)
         assert result.status == "completed"
+
+
+class TestVoiceApprovalStamp:
+    """R-1.7: Voice node carries an approval stamp at gate-pass time."""
+
+    @pytest.mark.asyncio
+    async def test_stamp_applied_in_no_interactive_mode(
+        self, mock_model: MagicMock, tmp_path: Path
+    ) -> None:
+        """After Phase 0 gate passes in --no-interactive mode, voice node
+        gets approved_at + approval_mode='no_interactive'."""
+        g = Graph.empty()
+        g.set_last_stage("polish")
+        g.save(tmp_path / "graph.db")
+
+        stage = FillStage(project_path=tmp_path)
+        _mock_implemented_phases(stage)
+        await stage.execute(mock_model, "", interactive=False)
+
+        saved = Graph.load(tmp_path)
+        voice = saved.get_node("voice::voice")
+        assert voice is not None
+        assert voice.get("approval_mode") == "no_interactive"
+        assert voice.get("approved_at"), "approved_at timestamp must be set"
+
+    @pytest.mark.asyncio
+    async def test_stamp_applied_in_interactive_mode(
+        self, mock_model: MagicMock, tmp_path: Path
+    ) -> None:
+        """After Phase 0 gate passes interactively, approval_mode='interactive'."""
+        g = Graph.empty()
+        g.set_last_stage("polish")
+        g.save(tmp_path / "graph.db")
+
+        stage = FillStage(project_path=tmp_path)
+        _mock_implemented_phases(stage)
+        await stage.execute(mock_model, "", interactive=True)
+
+        saved = Graph.load(tmp_path)
+        voice = saved.get_node("voice::voice")
+        assert voice is not None
+        assert voice.get("approval_mode") == "interactive"
+
+    def test_phase_1a_rejects_unstamped_voice(self, tmp_path: Path) -> None:
+        """If Phase 1a runs without the R-1.7 stamp, it raises FillStageError."""
+        g = Graph.empty()
+        g.set_last_stage("polish")
+        # Create voice node WITHOUT the approval stamp
+        g.create_node(
+            "voice::voice",
+            {
+                "type": "voice",
+                "raw_id": "voice",
+                "pov": "third_limited",
+                "tense": "past",
+            },
+        )
+        g.save(tmp_path / "graph.db")
+        g = Graph.load(tmp_path)
+
+        stage = FillStage(project_path=tmp_path)
+        with pytest.raises(FillStageError, match="approval stamp missing"):
+            stage._assert_voice_approved(g)
+
+    def test_assert_raises_when_voice_node_missing(self, tmp_path: Path) -> None:
+        """Phase 1a entry assertion raises if voice::voice node doesn't exist."""
+        g = Graph.empty()
+        stage = FillStage(project_path=tmp_path)
+        with pytest.raises(FillStageError, match="Voice node missing at Phase 1a entry"):
+            stage._assert_voice_approved(g)
+
+
+class TestEntityUpdateEscalation:
+    """R-2.14: missing-entity events become escalations, not silent skips."""
+
+    @pytest.mark.asyncio
+    async def test_revision_phase_phantom_entity_appends_escalation(self) -> None:
+        """Drives the actual code path: _phase_3_revision sees an LLM-output
+        entity_update referencing a missing entity, must escalate."""
+        graph = _make_prose_graph()
+        graph.update_node(
+            "passage::p1",
+            review_flags=[{"issue_type": "voice_drift", "detail": "x"}],
+            prose="draft prose",
+        )
+
+        from questfoundry.models.fill import EntityUpdate, FillPassageOutput, FillPhase1Output
+
+        async def mock_llm_call(
+            model: MagicMock,  # noqa: ARG001
+            template_name: str,  # noqa: ARG001
+            context: dict,  # noqa: ARG001
+            output_schema: type,  # noqa: ARG001
+            max_retries: int = 3,  # noqa: ARG001
+            **kwargs: object,  # noqa: ARG001
+        ) -> tuple:
+            # Non-empty prose so the entity_updates branch executes,
+            # plus a phantom entity_id that will fail _resolve_entity_id.
+            return (
+                FillPhase1Output(
+                    passage=FillPassageOutput(
+                        passage_id="p1",
+                        prose="revised prose",
+                        entity_updates=[
+                            EntityUpdate(
+                                entity_id="ghost",
+                                field="disposition",
+                                value="hostile",
+                            )
+                        ],
+                    )
+                ),
+                1,
+                100,
+            )
+
+        stage = FillStage()
+        stage._fill_llm_call = mock_llm_call  # type: ignore[method-assign]
+        await stage._phase_3_revision(graph, MagicMock(), final_cycle=False)
+
+        assert len(stage._escalations) == 1
+        e = stage._escalations[0]
+        assert e.kind == "missing_entity"
+        assert e.passage_id == "passage::p1"
+        assert "ghost" in e.detail
+        assert e.upstream_stage == "SEED"
+
+    @pytest.mark.asyncio
+    async def test_stage_raises_FillContractError_on_escalations(
+        self, mock_model: MagicMock, tmp_path: Path
+    ) -> None:
+        """A non-empty escalations list at stage exit triggers FillContractError."""
+        from questfoundry.graph.fill_validation import FillContractError
+        from questfoundry.models.fill import FillEscalation
+
+        g = Graph.empty()
+        g.set_last_stage("polish")
+        g.save(tmp_path / "graph.db")
+
+        stage = FillStage(project_path=tmp_path)
+        _mock_implemented_phases(stage)
+
+        # Inject an escalation during one of the phases by patching phase_1
+        original = stage._phase_1_generate
+
+        async def _phase_1_with_escalation(graph: Graph, model: MagicMock) -> FillPhaseResult:
+            stage._escalations.append(
+                FillEscalation(
+                    kind="missing_entity",
+                    passage_id="passage::p1",
+                    detail="phantom entity",
+                    upstream_stage="SEED",
+                )
+            )
+            return await original(graph, model)
+
+        stage._phase_1_generate = _phase_1_with_escalation  # type: ignore[method-assign]
+
+        with pytest.raises(FillContractError, match="missing_entity"):
+            await stage.execute(mock_model, "", interactive=False)
+
+
+class TestReviewCycleEscalation:
+    """R-5.2: unresolved review flags after the final cycle become escalations."""
+
+    def test_escalation_field_shape(self) -> None:
+        """FillEscalation.kind enumerates 'unresolved_review_flags'."""
+        from questfoundry.models.fill import FillEscalation
+
+        e = FillEscalation(
+            kind="unresolved_review_flags",
+            passage_id="passage::p3",
+            detail="2 unresolved flags after final cycle",
+            upstream_stage="POLISH",
+        )
+        assert e.kind == "unresolved_review_flags"
+        assert e.upstream_stage == "POLISH"
+
+    @pytest.mark.asyncio
+    async def test_final_cycle_escalates_unresolved_flags(self) -> None:
+        """When _phase_3_revision runs with final_cycle=True and an LLM
+        returns empty prose (so flags can't be cleared), an escalation of
+        kind unresolved_review_flags is appended."""
+        graph = _make_prose_graph()
+        graph.update_node(
+            "passage::p1",
+            review_flags=[
+                {"issue_type": "voice_drift", "detail": "POV slipped"},
+                {"issue_type": "near_duplicate", "detail": "echoes p_opening"},
+            ],
+            prose="some draft prose",
+        )
+
+        from questfoundry.models.fill import FillPassageOutput, FillPhase1Output
+
+        async def mock_llm_call(
+            model: MagicMock,  # noqa: ARG001
+            template_name: str,  # noqa: ARG001
+            context: dict,  # noqa: ARG001
+            output_schema: type,  # noqa: ARG001
+            max_retries: int = 3,  # noqa: ARG001
+            **kwargs: object,  # noqa: ARG001
+        ) -> tuple:
+            # Empty prose → revision can't clear flags; final_cycle path triggers escalation.
+            return (
+                FillPhase1Output(
+                    passage=FillPassageOutput(passage_id="p1", prose="", entity_updates=[])
+                ),
+                1,
+                100,
+            )
+
+        stage = FillStage()
+        stage._fill_llm_call = mock_llm_call  # type: ignore[method-assign]
+        await stage._phase_3_revision(graph, MagicMock(), final_cycle=True)
+
+        assert len(stage._escalations) == 1
+        e = stage._escalations[0]
+        assert e.kind == "unresolved_review_flags"
+        assert e.passage_id == "passage::p1"
+        assert e.upstream_stage == "POLISH"
+
+        # Review flags must be PRESERVED on the passage (not cleared).
+        p1 = graph.get_node("passage::p1")
+        assert p1 is not None
+        assert len(p1.get("review_flags", [])) == 2
+
+    @pytest.mark.asyncio
+    async def test_non_final_cycle_does_not_escalate(self) -> None:
+        """A non-final revision cycle (final_cycle=False) with empty prose
+        does NOT trigger escalation — only the final cycle does."""
+        graph = _make_prose_graph()
+        graph.update_node(
+            "passage::p1",
+            review_flags=[{"issue_type": "voice_drift", "detail": "x"}],
+            prose="draft",
+        )
+
+        from questfoundry.models.fill import FillPassageOutput
+
+        async def mock_llm_call(
+            model: MagicMock,  # noqa: ARG001
+            template_name: str,  # noqa: ARG001
+            context: dict,  # noqa: ARG001
+            output_schema: type,  # noqa: ARG001
+            max_retries: int = 3,  # noqa: ARG001
+            **kwargs: object,  # noqa: ARG001
+        ) -> tuple:
+            return (
+                FillPhase1Output(
+                    passage=FillPassageOutput(passage_id="p1", prose="", entity_updates=[])
+                ),
+                1,
+                100,
+            )
+
+        stage = FillStage()
+        stage._fill_llm_call = mock_llm_call  # type: ignore[method-assign]
+        await stage._phase_3_revision(graph, MagicMock(), final_cycle=False)
+
+        assert stage._escalations == []
+
+
+class TestConvergenceLookahead:
+    """R-2.6: spine convergence lookahead includes branch beat summaries."""
+
+    def test_no_branches_returns_empty_list(self) -> None:
+        """Single-arc story: convergence helper returns empty list."""
+        from questfoundry.graph.fill_context import _format_converging_branches
+
+        g = Graph.empty()
+        g.create_node(
+            "path::canonical", {"type": "path", "raw_id": "canonical", "is_canonical": True}
+        )
+        out = _format_converging_branches(g, "passage::p1", "canonical")
+        assert out == []
+
+    def test_branch_tail_beats_included_at_spine_convergence(
+        self,
+        tmp_path: Path,  # noqa: ARG002
+    ) -> None:
+        """When a branch arc converges at a spine passage, the branch's
+        last branch-exclusive beat summary appears in the output."""
+        from questfoundry.graph.fill_context import _format_converging_branches
+
+        g = Graph.empty()
+        g.create_node("dilemma::d1", {"type": "dilemma", "raw_id": "d1"})
+        # Two paths: spine canonical, branch non-canonical
+        g.create_node(
+            "path::canonical",
+            {"type": "path", "raw_id": "canonical", "is_canonical": True, "dilemma_id": "d1"},
+        )
+        g.create_node(
+            "path::branch",
+            {"type": "path", "raw_id": "branch", "is_canonical": False, "dilemma_id": "d1"},
+        )
+        # Spine beats: shared, then post_spine. Branch beats: shared, branch_only, then post_spine.
+        g.create_node(
+            "beat::shared",
+            {"type": "beat", "raw_id": "shared", "summary": "shared opening", "role": "setup"},
+        )
+        g.create_node(
+            "beat::branch_only",
+            {
+                "type": "beat",
+                "raw_id": "branch_only",
+                "summary": "branch-exclusive moment of doubt",
+                "role": "post_commit",
+            },
+        )
+        g.create_node(
+            "beat::convergence",
+            {
+                "type": "beat",
+                "raw_id": "convergence",
+                "summary": "they meet again",
+                "role": "post_commit",
+            },
+        )
+        # belongs_to edges. convergence is a zero-membership structural beat
+        # so it appears on every arc that reaches it via predecessor.
+        g.add_edge("belongs_to", "beat::shared", "path::canonical")
+        g.add_edge("belongs_to", "beat::shared", "path::branch")
+        g.add_edge("belongs_to", "beat::branch_only", "path::branch")
+        # predecessor edges are child→parent (the "from" beat is the child,
+        # i.e. comes AFTER the "to" parent). Spine: shared → convergence;
+        # branch: shared → branch_only → convergence.
+        g.add_edge("predecessor", "beat::convergence", "beat::shared")
+        g.add_edge("predecessor", "beat::branch_only", "beat::shared")
+        g.add_edge("predecessor", "beat::convergence", "beat::branch_only")
+        # Passages: opening (shared), branch_passage (branch_only), spine_convergence (convergence)
+        g.create_node("passage::opening", {"type": "passage", "raw_id": "opening"})
+        g.create_node("passage::branch_passage", {"type": "passage", "raw_id": "branch_passage"})
+        g.create_node(
+            "passage::spine_convergence", {"type": "passage", "raw_id": "spine_convergence"}
+        )
+        g.add_edge("grouped_in", "beat::shared", "passage::opening")
+        g.add_edge("grouped_in", "beat::branch_only", "passage::branch_passage")
+        g.add_edge("grouped_in", "beat::convergence", "passage::spine_convergence")
+
+        # Spine arc key is "canonical"; branch arc key is "branch" (single-path arcs)
+        out = _format_converging_branches(g, "passage::spine_convergence", "canonical")
+        text = "\n".join(out)
+        assert "Converging Branches" in text
+        assert "branch-exclusive moment of doubt" in text

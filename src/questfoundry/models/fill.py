@@ -238,6 +238,31 @@ class FillPhaseResult(PhaseResult):
     """
 
 
+class FillEscalation(BaseModel):
+    """A FILL escalation event collected during the run.
+
+    Escalations represent contract violations that the stage cannot
+    resolve locally — a missing entity (R-2.14) needs SEED, persistent
+    quality issues after the final cycle (R-5.2) need POLISH or upstream
+    fixes. The stage collects them rather than failing fast on the
+    first one (so the user sees the full set), then raises
+    ``FillContractError`` at stage exit if any were recorded.
+    """
+
+    kind: Literal["missing_entity", "unresolved_review_flags"] = Field(
+        description="What kind of escalation this is."
+    )
+    passage_id: str = Field(
+        description="Passage where the escalation was raised. Empty string if not passage-scoped."
+    )
+    detail: str = Field(
+        description="Human-readable description of the specific violation.",
+    )
+    upstream_stage: Literal["SEED", "GROW", "POLISH"] = Field(
+        description="Which upstream stage owns the fix.",
+    )
+
+
 class FillResult(BaseModel):
     """Overall FILL stage result."""
 
