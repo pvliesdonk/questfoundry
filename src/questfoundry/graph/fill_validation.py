@@ -8,6 +8,11 @@ Validation checks:
 - Dramatic questions closed: every opened question should be committed before arc end
 - Narrative function variety: no 5+ consecutive identical functions, must include
   at least one confront or resolve
+
+Also defines ``FillContractError`` — raised at FILL stage exit when one
+or more escalations were collected during the run (R-2.14, R-5.2). See
+``models.fill.FillEscalation`` for the escalation value type and
+``models.fill.FillResult.escalations`` for the collection field.
 """
 
 from __future__ import annotations
@@ -27,6 +32,18 @@ if TYPE_CHECKING:
 
 # Maximum allowed run of identical consecutive narrative_function values.
 MAX_CONSECUTIVE_SAME_FUNCTION = 4
+
+
+class FillContractError(ValueError):
+    """Raised when FILL's stage exits with one or more escalations.
+
+    FILL collects escalations during the run (missing-entity events from
+    Phase 2, unresolved-flag events from Phase 5 final cycle) into
+    ``FillResult.escalations``. At stage exit, if the list is non-empty,
+    the stage halts loudly via this exception rather than returning a
+    "completed" status with hidden problems (per CLAUDE.md §Silent
+    Degradation).
+    """
 
 
 def check_intensity_progression(graph: Graph, arc_id: str) -> ValidationCheck:

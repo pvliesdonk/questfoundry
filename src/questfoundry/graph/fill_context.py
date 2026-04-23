@@ -947,7 +947,90 @@ def format_lookahead_context(
             lines.append("Consider echoing or inverting this imagery to create resonance.")
             lines.append("")
 
+    # R-2.6: when generating the canonical (spine) arc and the current passage
+    # is a convergence point that branches return to, include the converging
+    # branches' last beats so the spine prose can accommodate what arrives.
+    # Without this, branch passages may later be written to converge into
+    # canonical prose that ignores their narrative state.
+    is_spine = bool(
+        path_ids and all(path_nodes.get(pid, {}).get("is_canonical", False) for pid in path_ids)
+    )
+    if is_spine:
+        branch_lines = _format_converging_branches(graph, passage_id, arc_id)
+        if branch_lines:
+            lines.extend(branch_lines)
+
     return "\n".join(lines).strip()
+
+
+def _format_converging_branches(
+    graph: Graph,
+    spine_passage_id: str,
+    spine_arc_id: str,
+) -> list[str]:
+    """Format beat summaries of branches converging into ``spine_passage_id``.
+
+    A spine passage is a convergence point when one or more non-spine arcs'
+    passage sequences include it. For each such branch, walk backward in
+    that branch's beat sequence to collect the most-recent branch-exclusive
+    beats (those NOT also on the spine arc), and format their summaries.
+
+    Returns an empty list when the passage is not a convergence point or
+    when no branch arcs exist (single-arc stories). The list of formatted
+    lines is concatenable directly into the lookahead context.
+    """
+    from questfoundry.graph.algorithms import compute_passage_traversals
+
+    passage_traversals = compute_passage_traversals(graph)
+    spine_beats = set(get_arc_beat_sequence(graph, spine_arc_id))
+
+    converging: dict[str, list[str]] = {}
+    path_nodes = graph.get_nodes_by_type("path")
+    for arc_key, passage_seq in passage_traversals.items():
+        if arc_key == spine_arc_id:
+            continue
+        if spine_passage_id not in passage_seq:
+            continue
+        # Branch arc only — skip arcs that happen to reuse spine paths exclusively
+        arc_paths = get_arc_paths(graph, arc_key)
+        if not arc_paths or all(
+            path_nodes.get(pid, {}).get("is_canonical", False) for pid in arc_paths
+        ):
+            continue
+        # Collect branch-exclusive beats that immediately precede the
+        # convergence — i.e., the tail of the branch before it merges back
+        # into the spine. Capture up to MAX_LOOKBACK such beats.
+        MAX_LOOKBACK = 3
+        branch_beats = get_arc_beat_sequence(graph, arc_key)
+        # Find the convergence boundary: the first spine beat in the branch
+        # sequence that lies inside the converging passage. Beats BEFORE
+        # that boundary that are NOT on the spine are the branch's tail.
+        tail: list[str] = []
+        for beat_id in branch_beats:
+            beat_passage = _find_passage_for_beat(graph, beat_id)
+            if beat_passage == spine_passage_id and beat_id in spine_beats:
+                break
+            if beat_id not in spine_beats:
+                tail.append(beat_id)
+        if tail:
+            converging[arc_key] = tail[-MAX_LOOKBACK:]
+
+    if not converging:
+        return []
+
+    out: list[str] = ["**Converging Branches (their final beats arrive here):**"]
+    for arc_key in sorted(converging):
+        out.append(f"- Branch `{arc_key}`:")
+        for beat_id in converging[arc_key]:
+            beat = graph.get_node(beat_id) or {}
+            summary = (beat.get("summary") or "").strip()
+            if summary:
+                # Truncate long summaries to keep lookahead context compact.
+                if len(summary) > 200:
+                    summary = summary[:197].rstrip() + "..."
+                out.append(f"    - {summary}")
+    out.append("")
+    return out
 
 
 def format_entity_states(graph: Graph, passage_id: str) -> str:
