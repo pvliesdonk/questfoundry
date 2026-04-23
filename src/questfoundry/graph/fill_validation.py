@@ -11,8 +11,7 @@ Validation checks:
 
 Also defines ``FillContractError`` — raised at FILL stage exit when one
 or more escalations were collected during the run (R-2.14, R-5.2). See
-``models.fill.FillEscalation`` for the escalation value type and
-``models.fill.FillResult.escalations`` for the collection field.
+``models.fill.FillEscalation`` for the escalation value type.
 """
 
 from __future__ import annotations
@@ -29,6 +28,7 @@ from questfoundry.graph.grow_validation import ValidationCheck, ValidationReport
 
 if TYPE_CHECKING:
     from questfoundry.graph.graph import Graph
+    from questfoundry.models.fill import FillEscalation
 
 # Maximum allowed run of identical consecutive narrative_function values.
 MAX_CONSECUTIVE_SAME_FUNCTION = 4
@@ -38,12 +38,23 @@ class FillContractError(ValueError):
     """Raised when FILL's stage exits with one or more escalations.
 
     FILL collects escalations during the run (missing-entity events from
-    Phase 2, unresolved-flag events from Phase 5 final cycle) into
-    ``FillResult.escalations``. At stage exit, if the list is non-empty,
-    the stage halts loudly via this exception rather than returning a
-    "completed" status with hidden problems (per CLAUDE.md §Silent
-    Degradation).
+    Phase 1 ``generate`` and Phase 3 ``revision``; unresolved-flag events
+    from the final revision cycle) onto its instance state. At stage
+    exit, if any were recorded, the stage halts loudly via this
+    exception rather than returning a "completed" status with hidden
+    problems (per CLAUDE.md §Silent Degradation).
+
+    The full escalation list is exposed as ``self.escalations`` so
+    callers (CLI, orchestrator) can render the violations.
     """
+
+    def __init__(
+        self,
+        message: str,
+        escalations: list[FillEscalation] | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.escalations: list[FillEscalation] = list(escalations) if escalations else []
 
 
 def check_intensity_progression(graph: Graph, arc_id: str) -> ValidationCheck:

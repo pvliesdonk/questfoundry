@@ -73,6 +73,7 @@ from questfoundry.graph.fill_context import (
     get_arc_passage_order,
     get_spine_arc_key,
 )
+from questfoundry.graph.fill_validation import FillContractError
 from questfoundry.graph.graph import Graph
 from questfoundry.graph.snapshots import save_snapshot
 from questfoundry.models.fill import (
@@ -478,30 +479,29 @@ class FillStage:
         # R-2.14, R-5.2: if any escalations were collected (missing entities,
         # unresolved review flags after final cycle), halt loudly at stage exit
         # rather than returning a "completed" status with hidden quality issues.
-        # The escalation list is included on the raised exception's `escalations`
-        # attribute so callers can render them to the user.
+        # The full escalation list rides on the raised exception's
+        # ``.escalations`` attribute for caller rendering.
         if self._escalations:
-            from questfoundry.graph.fill_validation import FillContractError
-
             kinds = sorted({e.kind for e in self._escalations})
             log.error(
                 "fill_contract_failed",
                 escalation_count=len(self._escalations),
                 kinds=kinds,
             )
-            err = FillContractError(
+            raise FillContractError(
                 f"FILL stage halted with {len(self._escalations)} escalation(s) "
-                f"({', '.join(kinds)}). See FillResult.escalations for details."
+                f"({', '.join(kinds)}). See the .escalations attribute on this "
+                f"exception for the full list.",
+                escalations=self._escalations,
             )
-            err.escalations = list(self._escalations)  # type: ignore[attr-defined]
-            raise err
 
-        # Return summary for validation (graph is the source of truth)
+        # Return summary for validation (graph is the source of truth).
+        # No `escalations` key — when the stage returns normally,
+        # ``self._escalations`` is empty by construction.
         return (
             {
                 "total_passages": total_passages,
                 "passages_with_prose": passages_with_prose,
-                "escalations": [e.model_dump() for e in self._escalations],
             },
             total_llm_calls,
             total_tokens,
@@ -1235,6 +1235,22 @@ class FillStage:
                 arc_passage_orders[arc_id] = arc_order
                 arc_passage_indices[arc_id] = {pid: i for i, pid in enumerate(arc_order)}
 
+        # Pre-compute graph-wide traversals once for the lookahead helper.
+        # format_lookahead_context is called per-passage; without these
+        # caches it would recompute compute_passage_traversals and
+        # compute_arc_traversals on every call (O(N²) over the passage
+        # set). The cached dicts are stable for the duration of Phase 1
+        # generate — POLISH froze the DAG before FILL started, and FILL
+        # mutates only prose / extracted entity fields, not the structural
+        # nodes/edges these traversals depend on.
+        from questfoundry.graph.algorithms import (
+            compute_arc_traversals,
+            compute_passage_traversals,
+        )
+
+        cached_passage_traversals = compute_passage_traversals(graph)
+        cached_arc_beat_sequences = compute_arc_traversals(graph)
+
         for passage_id, arc_id in generation_order:
             passage = graph.get_node(passage_id)
             if not passage:
@@ -1281,7 +1297,13 @@ class FillStage:
                 "entity_arc_context": format_entity_arc_context(graph, passage_id, arc_id),
                 "sliding_window": format_sliding_window(graph, arc_id, current_idx, window_size),
                 "continuity_warning": format_continuity_warning(graph, arc_id, current_idx),
-                "lookahead": format_lookahead_context(graph, passage_id, arc_id),
+                "lookahead": format_lookahead_context(
+                    graph,
+                    passage_id,
+                    arc_id,
+                    passage_traversals=cached_passage_traversals,
+                    arc_beat_sequences=cached_arc_beat_sequences,
+                ),
                 "path_arcs": format_path_arc_context(graph, passage_id, arc_id),
                 "vocabulary_note": vocabulary_note,
                 "ending_guidance": format_ending_guidance(

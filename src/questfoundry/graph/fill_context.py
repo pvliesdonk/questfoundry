@@ -878,6 +878,9 @@ def format_lookahead_context(
     graph: Graph,
     passage_id: str,
     arc_id: str,
+    *,
+    passage_traversals: dict[str, list[str]] | None = None,
+    arc_beat_sequences: dict[str, list[str]] | None = None,
 ) -> str:
     """Format lookahead context for structural junctures.
 
@@ -893,6 +896,12 @@ def format_lookahead_context(
         graph: Graph containing arc, passage, and beat nodes.
         passage_id: The current passage being generated.
         arc_id: The arc being traversed.
+        passage_traversals: Optional pre-computed passage traversals
+            (arc_key → ordered passage IDs). Pass this when calling
+            inside a per-passage loop to avoid the O(N²) cost of
+            recomputing graph-wide traversals on every call.
+        arc_beat_sequences: Optional pre-computed arc beat sequences
+            (arc_key → ordered beat IDs). Same caching motivation.
 
     Returns:
         Formatted lookahead context, or empty string if no lookahead needed.
@@ -956,17 +965,32 @@ def format_lookahead_context(
         path_ids and all(path_nodes.get(pid, {}).get("is_canonical", False) for pid in path_ids)
     )
     if is_spine:
-        branch_lines = _format_converging_branches(graph, passage_id, arc_id)
+        branch_lines = _format_converging_branches(
+            graph,
+            passage_id,
+            arc_id,
+            passage_traversals=passage_traversals,
+            arc_beat_sequences=arc_beat_sequences,
+        )
         if branch_lines:
             lines.extend(branch_lines)
 
     return "\n".join(lines).strip()
 
 
+# Maximum number of branch-tail beats to surface per converging branch.
+# Three is small enough to keep the lookahead context compact and large
+# enough to capture the immediate pre-convergence narrative state.
+_MAX_CONVERGENCE_LOOKBACK = 3
+
+
 def _format_converging_branches(
     graph: Graph,
     spine_passage_id: str,
     spine_arc_id: str,
+    *,
+    passage_traversals: dict[str, list[str]] | None = None,
+    arc_beat_sequences: dict[str, list[str]] | None = None,
 ) -> list[str]:
     """Format beat summaries of branches converging into ``spine_passage_id``.
 
@@ -978,11 +1002,23 @@ def _format_converging_branches(
     Returns an empty list when the passage is not a convergence point or
     when no branch arcs exist (single-arc stories). The list of formatted
     lines is concatenable directly into the lookahead context.
+
+    ``passage_traversals`` and ``arc_beat_sequences`` are accepted as
+    optional pre-computed caches because callers in the FILL Phase 1
+    generate loop iterate per-passage; recomputing graph-wide traversals
+    on every call is O(N²) where N is the passage count. If omitted,
+    they are computed inline (acceptable for one-off calls).
     """
     from questfoundry.graph.algorithms import compute_passage_traversals
 
-    passage_traversals = compute_passage_traversals(graph)
-    spine_beats = set(get_arc_beat_sequence(graph, spine_arc_id))
+    if passage_traversals is None:
+        passage_traversals = compute_passage_traversals(graph)
+    if arc_beat_sequences is None:
+        arc_beat_sequences = {}
+
+    spine_beats = set(
+        arc_beat_sequences.get(spine_arc_id) or get_arc_beat_sequence(graph, spine_arc_id)
+    )
 
     converging: dict[str, list[str]] = {}
     path_nodes = graph.get_nodes_by_type("path")
@@ -998,10 +1034,9 @@ def _format_converging_branches(
         ):
             continue
         # Collect branch-exclusive beats that immediately precede the
-        # convergence — i.e., the tail of the branch before it merges back
-        # into the spine. Capture up to MAX_LOOKBACK such beats.
-        MAX_LOOKBACK = 3
-        branch_beats = get_arc_beat_sequence(graph, arc_key)
+        # convergence — i.e., the tail of the branch before it merges
+        # back into the spine.
+        branch_beats = arc_beat_sequences.get(arc_key) or get_arc_beat_sequence(graph, arc_key)
         # Find the convergence boundary: the first spine beat in the branch
         # sequence that lies inside the converging passage. Beats BEFORE
         # that boundary that are NOT on the spine are the branch's tail.
@@ -1013,7 +1048,7 @@ def _format_converging_branches(
             if beat_id not in spine_beats:
                 tail.append(beat_id)
         if tail:
-            converging[arc_key] = tail[-MAX_LOOKBACK:]
+            converging[arc_key] = tail[-_MAX_CONVERGENCE_LOOKBACK:]
 
     if not converging:
         return []

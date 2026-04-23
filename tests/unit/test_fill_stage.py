@@ -1894,6 +1894,90 @@ class TestReviewCycleEscalation:
         assert e.kind == "unresolved_review_flags"
         assert e.upstream_stage == "POLISH"
 
+    @pytest.mark.asyncio
+    async def test_final_cycle_escalates_unresolved_flags(self) -> None:
+        """When _phase_3_revision runs with final_cycle=True and an LLM
+        returns empty prose (so flags can't be cleared), an escalation of
+        kind unresolved_review_flags is appended."""
+        graph = _make_prose_graph()
+        graph.update_node(
+            "passage::p1",
+            review_flags=[
+                {"issue_type": "voice_drift", "detail": "POV slipped"},
+                {"issue_type": "near_duplicate", "detail": "echoes p_opening"},
+            ],
+            prose="some draft prose",
+        )
+
+        from questfoundry.models.fill import FillPassageOutput, FillPhase1Output
+
+        async def mock_llm_call(
+            model: MagicMock,  # noqa: ARG001
+            template_name: str,  # noqa: ARG001
+            context: dict,  # noqa: ARG001
+            output_schema: type,  # noqa: ARG001
+            max_retries: int = 3,  # noqa: ARG001
+            **kwargs: object,  # noqa: ARG001
+        ) -> tuple:
+            # Empty prose → revision can't clear flags; final_cycle path triggers escalation.
+            return (
+                FillPhase1Output(
+                    passage=FillPassageOutput(passage_id="p1", prose="", entity_updates=[])
+                ),
+                1,
+                100,
+            )
+
+        stage = FillStage()
+        stage._fill_llm_call = mock_llm_call  # type: ignore[method-assign]
+        await stage._phase_3_revision(graph, MagicMock(), final_cycle=True)
+
+        assert len(stage._escalations) == 1
+        e = stage._escalations[0]
+        assert e.kind == "unresolved_review_flags"
+        assert e.passage_id == "passage::p1"
+        assert e.upstream_stage == "POLISH"
+
+        # Review flags must be PRESERVED on the passage (not cleared).
+        p1 = graph.get_node("passage::p1")
+        assert p1 is not None
+        assert len(p1.get("review_flags", [])) == 2
+
+    @pytest.mark.asyncio
+    async def test_non_final_cycle_does_not_escalate(self) -> None:
+        """A non-final revision cycle (final_cycle=False) with empty prose
+        does NOT trigger escalation — only the final cycle does."""
+        graph = _make_prose_graph()
+        graph.update_node(
+            "passage::p1",
+            review_flags=[{"issue_type": "voice_drift", "detail": "x"}],
+            prose="draft",
+        )
+
+        from questfoundry.models.fill import FillPassageOutput
+
+        async def mock_llm_call(
+            model: MagicMock,  # noqa: ARG001
+            template_name: str,  # noqa: ARG001
+            context: dict,  # noqa: ARG001
+            output_schema: type,  # noqa: ARG001
+            max_retries: int = 3,  # noqa: ARG001
+            **kwargs: object,  # noqa: ARG001
+        ) -> tuple:
+            return (
+                FillPhase1Output(
+                    passage=FillPassageOutput(passage_id="p1", prose="", entity_updates=[])
+                ),
+                1,
+                100,
+            )
+
+        stage = FillStage()
+        stage._fill_llm_call = mock_llm_call  # type: ignore[method-assign]
+        await stage._phase_3_revision(graph, MagicMock(), final_cycle=False)
+
+        assert stage._escalations == []
+
 
 class TestConvergenceLookahead:
     """R-2.6: spine convergence lookahead includes branch beat summaries."""
