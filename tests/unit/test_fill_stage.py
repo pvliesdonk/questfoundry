@@ -1820,26 +1820,57 @@ class TestVoiceApprovalStamp:
 class TestEntityUpdateEscalation:
     """R-2.14: missing-entity events become escalations, not silent skips."""
 
-    def test_missing_entity_appends_escalation(self, tmp_path: Path) -> None:  # noqa: ARG002
-        """When _resolve_entity_id returns None, an escalation is recorded."""
-        from questfoundry.models.fill import FillEscalation
+    @pytest.mark.asyncio
+    async def test_revision_phase_phantom_entity_appends_escalation(self) -> None:
+        """Drives the actual code path: _phase_3_revision sees an LLM-output
+        entity_update referencing a missing entity, must escalate."""
+        graph = _make_prose_graph()
+        graph.update_node(
+            "passage::p1",
+            review_flags=[{"issue_type": "voice_drift", "detail": "x"}],
+            prose="draft prose",
+        )
+
+        from questfoundry.models.fill import EntityUpdate, FillPassageOutput, FillPhase1Output
+
+        async def mock_llm_call(
+            model: MagicMock,  # noqa: ARG001
+            template_name: str,  # noqa: ARG001
+            context: dict,  # noqa: ARG001
+            output_schema: type,  # noqa: ARG001
+            max_retries: int = 3,  # noqa: ARG001
+            **kwargs: object,  # noqa: ARG001
+        ) -> tuple:
+            # Non-empty prose so the entity_updates branch executes,
+            # plus a phantom entity_id that will fail _resolve_entity_id.
+            return (
+                FillPhase1Output(
+                    passage=FillPassageOutput(
+                        passage_id="p1",
+                        prose="revised prose",
+                        entity_updates=[
+                            EntityUpdate(
+                                entity_id="ghost",
+                                field="disposition",
+                                value="hostile",
+                            )
+                        ],
+                    )
+                ),
+                1,
+                100,
+            )
 
         stage = FillStage()
-        # Simulate the escalation path directly (the inline call sites use this)
-        stage._escalations.append(
-            FillEscalation(
-                kind="missing_entity",
-                passage_id="passage::p1",
-                detail="Entity update referenced unknown entity 'character::ghost' (field='disposition').",
-                upstream_stage="SEED",
-            )
-        )
+        stage._fill_llm_call = mock_llm_call  # type: ignore[method-assign]
+        await stage._phase_3_revision(graph, MagicMock(), final_cycle=False)
 
         assert len(stage._escalations) == 1
         e = stage._escalations[0]
         assert e.kind == "missing_entity"
         assert e.passage_id == "passage::p1"
         assert "ghost" in e.detail
+        assert e.upstream_stage == "SEED"
 
     @pytest.mark.asyncio
     async def test_stage_raises_FillContractError_on_escalations(

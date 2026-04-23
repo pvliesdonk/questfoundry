@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypeVar
 
@@ -984,8 +985,6 @@ class FillStage:
         ``--no-interactive`` pre-approval — so downstream phases can assert
         the precondition rather than implicitly trusting the gate.
         """
-        from datetime import UTC, datetime
-
         voice_data = graph.get_node("voice::voice")
         if voice_data is None:
             # Phase 0 always creates the node before this stamp runs;

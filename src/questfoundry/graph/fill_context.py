@@ -1007,7 +1007,9 @@ def _format_converging_branches(
     optional pre-computed caches because callers in the FILL Phase 1
     generate loop iterate per-passage; recomputing graph-wide traversals
     on every call is O(N²) where N is the passage count. If omitted,
-    they are computed inline (acceptable for one-off calls).
+    ``passage_traversals`` is computed once and ``arc_beat_sequences``
+    falls back to per-arc ``get_arc_beat_sequence`` lookups (acceptable
+    for one-off callers).
     """
     from questfoundry.graph.algorithms import compute_passage_traversals
 
