@@ -440,12 +440,52 @@ R-5.13. Each variant has a distinct summary reflecting its flag combination.
 
 R-5.14. Variant passages share the same beats (via `grouped_in`) but have different prose.
 
+#### 5e — Atmospheric Annotation
+
+**What:** For every beat in the frozen DAG, produce an `atmospheric_detail` string (10–200 characters) describing the sensory environment: sight, sound, smell, texture. Environment, not character emotion. A single LLM call produces details for all beats. Absorbed from old GROW 4d per audit Q1: sensory grounding is prose-prep, not structural.
+
+**Rules:**
+
+R-5e.1. Every beat receives `atmospheric_detail` populated by Phase 5e. Partial coverage (LLM details only some beats) MUST log a WARNING; FILL falls back to scene-blueprint sensory data when `atmospheric_detail` is absent.
+
+R-5e.2. `atmospheric_detail` describes ENVIRONMENT (sight/sound/smell/texture/light/temperature/etc.), not character interiority. This separation is enforced by the LLM prompt; the spec does not mandate prose-content checks.
+
+R-5e.3. Phase 5e runs after Beat DAG Freeze, so transition beats inserted by GROW Phase 4c receive `atmospheric_detail` like any other beat (auto-fixes the transition-beat-atmospheric gap noted in the audit Q3).
+
+**Violations:**
+
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| Beat without `atmospheric_detail` and no WARNING | Partial coverage detection skipped | R-5e.1 |
+| Transition beat without `atmospheric_detail` | Phase 5e ran before transition-beat creation, OR transition beats excluded from coverage | R-5e.3 |
+
+#### 5f — Path Thematic Annotation
+
+**What:** For each path, produce a `path_theme` (10–200 characters) and `path_mood` (2–50 characters) summarizing the path's emotional through-line and tonal palette. One LLM call per path; the LLM consumes the full beat sequence with their summaries, scene types, narrative functions, and exit moods. Absorbed from old GROW 4e per audit Q1: per-path narrative identity is prose-prep, not structural.
+
+**Rules:**
+
+R-5f.1. Every path with 2+ beats receives `path_theme` and `path_mood`. Paths with fewer than 2 beats are skipped (no narrative arc to summarize).
+
+R-5f.2. `path_theme` is the path's emotional through-line / "controlling idea" (McKee). `path_mood` is its tonal palette. Both are LLM-generated free-form strings; the spec does not enforce specific vocabularies.
+
+R-5f.3. Per-path LLM failures MUST log at WARNING and leave the path's fields unpopulated. FILL and DRESS handle missing fields by falling back to path description / dilemma question text.
+
+**Violations:**
+
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| Multi-beat path without `path_theme` and no WARNING | Per-path failure detection skipped | R-5f.3 |
+| `path_mood` exceeds 50 characters | Schema length not enforced | R-5f.2 |
+
 ### Output Contract
 
 1. All ChoiceSpecs have labels.
 2. All ResidueSpecs have content and a passage-layer mapping choice.
 3. All FalseBranchCandidates have a decision (skip / diamond / sidetrack).
 4. All VariantSpecs have summaries.
+5. Every beat has `atmospheric_detail` populated (or a WARNING logged for partial coverage).
+6. Every multi-beat path has `path_theme` and `path_mood` populated (or a WARNING logged for per-path failure).
 
 ---
 
@@ -649,6 +689,12 @@ R-5.11: False-branch choice edges may grant cosmetic state flags.
 R-5.12: False branches never affect dilemma-driven branching.
 R-5.13: Variants have distinct summaries per flag combination.
 R-5.14: Variants share beats via `grouped_in`; differ in prose only.
+R-5e.1: Every beat receives `atmospheric_detail`; partial coverage emits WARNING.
+R-5e.2: `atmospheric_detail` describes environment, not interiority.
+R-5e.3: Phase 5e runs after Beat DAG Freeze; transition beats receive `atmospheric_detail`.
+R-5f.1: Multi-beat paths receive `path_theme` and `path_mood`; <2-beat paths skipped.
+R-5f.2: `path_theme` (controlling idea) and `path_mood` (tonal palette) are free-form LLM strings.
+R-5f.3: Per-path LLM failure → WARNING + leave unpopulated; consumers fall back.
 R-6.1: Phase 6 runs in a single transaction.
 R-6.2: Application order: passages → variants → residue beats → residue passages → choices → false branches.
 R-6.3: Any step failure rolls back.
@@ -774,6 +820,8 @@ User reviews. Approves.
 - Residue content for 2 spec: one variant per path.
 - False branch decision: `diamond` pattern for the opening stretch.
 - Variant summary for the climax passage: two versions.
+- **5e:** atmospheric_detail populated for all 14 beats (including the gap and micro beats from Phases 1a/2 and the transition beat from GROW 4c).
+- **5f:** path_theme and path_mood populated for both `mentor_trust` paths and the `archive_nature` canonical path.
 
 ### Phase 6
 
