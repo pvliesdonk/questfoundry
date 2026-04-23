@@ -191,6 +191,10 @@ A per-entity summary of how a character changes across the story, synthesized by
 
 Character arc metadata is stored as an annotation on entity nodes — it describes the entity's trajectory on each path (start → pivot → end). It is working data for FILL: when the prose writer encounters the mentor in a mid-story scene, they need to know where the mentor has been and where the mentor is going. Without it, the writer sees individual beats in isolation and risks inconsistency.
 
+**Per-path arc trajectories** — `arcs_per_path: list[{path_id: str, arc_type: str, arc_line: str, pivot_beat: str}]`. Populated by POLISH Phase 3 (Character Arc Synthesis, extended). One entry per path on which this entity is arc-worthy. `arc_type` is determined by the entity's category: character → "transformation", location → "atmosphere", object → "significance", faction → "relationship". `arc_line` is a concise A → B → C trajectory. `pivot_beat` is the beat at which the entity's trajectory turns. Consumed by FILL for per-passage positional context (pre-pivot / at-pivot / post-pivot).
+
+The full `character_arc` annotation contains `start`, `pivots`, `end_per_path`, AND `arcs_per_path`. The `pivots` field (entity-scoped per-path map: `dict[path_id → beat_id]`) and `arcs_per_path[*].pivot_beat` (path-scoped record) MUST agree for the same `path_id` — they describe the same pivot from different indexing angles. POLISH Phase 3 enforces this by producing both in a single LLM call.
+
 **Working.** Created by POLISH, consumed by FILL. Not exported.
 
 ### Scene Blueprint
