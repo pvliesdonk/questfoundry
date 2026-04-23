@@ -216,11 +216,11 @@ class TestGrowPhaseDecorator:
 class TestGlobalRegistry:
     """Tests for the global registry populated by actual GROW phases."""
 
-    def test_global_registry_has_18_phases(self) -> None:
-        """All GROW phases are registered (18 after transition_gaps added)."""
+    def test_global_registry_has_17_phases(self) -> None:
+        """All GROW phases are registered (17 after narrative_gaps moved to POLISH per #1368)."""
         registry = get_registry()
-        assert len(registry) == 18, (
-            f"Expected 18 phases, got {len(registry)}: {registry.phase_names}"
+        assert len(registry) == 17, (
+            f"Expected 17 phases, got {len(registry)}: {registry.phase_names}"
         )
 
     def test_global_registry_validates(self) -> None:
@@ -230,7 +230,7 @@ class TestGlobalRegistry:
         assert errors == [], f"Registry validation errors: {errors}"
 
     def test_global_registry_execution_order_matches_expected(self) -> None:
-        """Execution order matches the current phase structure (18 phases)."""
+        """Execution order matches the current phase structure (17 phases)."""
         expected = [
             "validate_dag",
             "intersections",
@@ -238,7 +238,7 @@ class TestGlobalRegistry:
             "resolve_temporal_hints",
             "interleave_beats",
             "scene_types",
-            "narrative_gaps",
+            # narrative_gaps moved to POLISH Phase 1a per PR #1366 / issue #1368
             "pacing_gaps",
             "atmospheric",
             "path_arcs",

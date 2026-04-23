@@ -215,10 +215,10 @@ class TestGrowStageExecute:
 
 class TestGrowStagePhaseOrder:
     def test_phase_order_returns_correct_count(self) -> None:
-        """18 phases; transition_gaps added in Phase 4g."""
+        """17 phases after narrative_gaps moved to POLISH (PR for #1368)."""
         stage = GrowStage()
         phases = stage._phase_order()
-        assert len(phases) == 18
+        assert len(phases) == 17
 
     def test_phase_order_names(self) -> None:
         stage = GrowStage()
@@ -230,7 +230,7 @@ class TestGrowStagePhaseOrder:
             "resolve_temporal_hints",
             "interleave_beats",
             "scene_types",
-            "narrative_gaps",
+            # narrative_gaps moved to POLISH Phase 1a per PR #1366 / issue #1368
             "pacing_gaps",
             "atmospheric",
             "path_arcs",
@@ -1124,107 +1124,11 @@ class TestValidateAndInsertGaps:
         assert len(gap_beats) == 1
 
 
-class TestPhase4bNarrativeGaps:
-    @pytest.mark.asyncio
-    async def test_phase_4b_inserts_gap_beats(self) -> None:
-        """Phase 4b inserts gap beats from LLM proposals."""
-        from questfoundry.models.grow import GapProposal, Phase4bOutput
-        from tests.fixtures.grow_fixtures import make_single_dilemma_graph
-
-        graph = make_single_dilemma_graph()
-        stage = GrowStage()
-
-        phase4b_output = Phase4bOutput(
-            gaps=[
-                GapProposal(
-                    path_id="path::mentor_trust_canonical",
-                    after_beat="beat::mentor_meet",
-                    before_beat="beat::mentor_commits_canonical",
-                    summary="Hero reflects on mentor's words",
-                    scene_type="sequel",
-                ),
-            ]
-        )
-
-        mock_structured = AsyncMock()
-        mock_structured.ainvoke = AsyncMock(return_value=phase4b_output)
-        mock_model = MagicMock()
-        mock_model.with_structured_output = MagicMock(return_value=mock_structured)
-
-        result = await stage._phase_4b_narrative_gaps(graph, mock_model)
-
-        assert result.status == "completed"
-        assert result.llm_calls == 1
-        assert "1" in result.detail
-
-        # Verify gap beat was inserted
-        beat_nodes = graph.get_nodes_by_type("beat")
-        gap_beats = [bid for bid in beat_nodes if "gap" in bid]
-        assert len(gap_beats) == 1
-
-    @pytest.mark.asyncio
-    async def test_phase_4b_skips_invalid_path(self) -> None:
-        """Phase 4b skips gap proposals with invalid path IDs."""
-        from questfoundry.models.grow import GapProposal, Phase4bOutput
-        from tests.fixtures.grow_fixtures import make_single_dilemma_graph
-
-        graph = make_single_dilemma_graph()
-        stage = GrowStage()
-
-        phase4b_output = Phase4bOutput(
-            gaps=[
-                GapProposal(
-                    path_id="path::nonexistent",
-                    after_beat="beat::opening",
-                    before_beat="beat::mentor_meet",
-                    summary="Invalid path gap",
-                    scene_type="sequel",
-                ),
-            ]
-        )
-
-        mock_structured = AsyncMock()
-        mock_structured.ainvoke = AsyncMock(return_value=phase4b_output)
-        mock_model = MagicMock()
-        mock_model.with_structured_output = MagicMock(return_value=mock_structured)
-
-        result = await stage._phase_4b_narrative_gaps(graph, mock_model)
-
-        assert result.status == "completed"
-        assert "0" in result.detail
-
-    @pytest.mark.asyncio
-    async def test_phase_4b_no_paths(self) -> None:
-        """Phase 4b returns completed when no paths exist."""
-        from questfoundry.graph.graph import Graph
-
-        graph = Graph.empty()
-        stage = GrowStage()
-        mock_model = MagicMock()
-
-        result = await stage._phase_4b_narrative_gaps(graph, mock_model)
-
-        assert result.status == "completed"
-        assert "No paths" in result.detail
-        assert result.llm_calls == 0
-
-    @pytest.mark.asyncio
-    async def test_phase_4b_single_beat_paths_skipped(self) -> None:
-        """Phase 4b skips paths with only 1 beat (no sequence to gap-check)."""
-        from questfoundry.graph.graph import Graph
-
-        graph = Graph.empty()
-        graph.create_node("path::short", {"type": "path", "raw_id": "short"})
-        graph.create_node("beat::only", {"type": "beat", "summary": "Lone beat"})
-        graph.add_edge("belongs_to", "beat::only", "path::short")
-
-        stage = GrowStage()
-        mock_model = MagicMock()
-
-        result = await stage._phase_4b_narrative_gaps(graph, mock_model)
-
-        assert result.status == "completed"
-        assert "No paths with 2+ beats" in result.detail
+# NOTE: TestPhase4bNarrativeGaps was MOVED to tests/unit/test_polish_llm_phases.py
+# as TestPolishPhase1aNarrativeGaps when GROW's narrative_gaps phase migrated to
+# POLISH per PR #1366 / issue #1368. The same behaviors (insert valid gap, skip
+# invalid path, no-paths early-return, single-beat-path skip) are covered there
+# against the POLISH implementation.
 
 
 class TestPhase4cPacingGaps:

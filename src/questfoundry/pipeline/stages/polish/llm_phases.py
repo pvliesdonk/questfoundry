@@ -172,7 +172,119 @@ class _PolishLLMPhaseMixin:
             tokens_used=total_tokens,
         )
 
-    @polish_phase(name="pacing", depends_on=["beat_reordering"], priority=1)
+    @polish_phase(name="narrative_gaps", depends_on=["beat_reordering"], priority=1)
+    async def _phase_1a_narrative_gaps(self, graph: Graph, model: BaseChatModel) -> PhaseResult:
+        """Phase 1a: Narrative Gap Insertion.
+
+        For each path with 2+ beats, the LLM identifies missing
+        intermediate beats (e.g., a path goes setup → climax with no
+        development beat) and proposes new beats to insert at specified
+        positions. Insertion validates IDs, ordering, and cycle safety.
+
+        Per the structural-vs-narrative migration (PR #1366), this is
+        narrative-prep work — POLISH territory, not GROW. See
+        ``docs/design/procedures/polish.md`` §Phase 1a for the spec.
+
+        Postconditions:
+        - Gap beats inserted into the graph with predecessor edges,
+          ``belongs_to`` to their path, ``is_gap_beat=True``,
+          ``role: gap_beat``, ``created_by: "POLISH"``.
+        - Per-path cap: maximum 2 gap beats per path.
+        """
+        from questfoundry.graph.gap_insertion import validate_and_insert_gaps
+        from questfoundry.graph.grow_algorithms import get_path_beat_sequence
+        from questfoundry.models.grow import Phase4bOutput
+
+        path_nodes = graph.get_nodes_by_type("path")
+        if not path_nodes:
+            log.info("phase1a_no_paths", detail="No paths to check for gaps")
+            return PhaseResult(
+                phase="narrative_gaps",
+                status="skipped",
+                detail="No paths to check for gaps",
+            )
+
+        # Build path sequences with truncated summaries (matches GROW Phase 4b's
+        # original context shape so the prompt can be migrated verbatim).
+        path_sequences: list[str] = []
+        valid_beat_ids: set[str] = set()
+        for pid in sorted(path_nodes.keys()):
+            sequence = get_path_beat_sequence(graph, pid)
+            if len(sequence) < 2:
+                continue
+            beat_list: list[str] = []
+            for bid in sequence:
+                node = graph.get_node(bid)
+                summary = (node.get("summary", "") or "")[:80] if node else ""
+                scene_type = node.get("scene_type", "untagged") if node else "untagged"
+                beat_list.append(f"    {bid} [{scene_type}]: {summary}")
+                valid_beat_ids.add(bid)
+            raw_pid = path_nodes[pid].get("raw_id", pid)
+            path_sequences.append(f"  Path: {raw_pid} ({pid})\n" + "\n".join(beat_list))
+
+        if not path_sequences:
+            log.info("phase1a_no_multibeat_paths", detail="No paths with 2+ beats")
+            return PhaseResult(
+                phase="narrative_gaps",
+                status="skipped",
+                detail="No paths with 2+ beats to check",
+            )
+
+        # Path → dilemma map for the prompt's Valid IDs section.
+        # Matches the helper used by GROW Phase 4b/4c (kept in grow llm_phases
+        # while pacing_gaps still lives there; will move with PR C).
+        from questfoundry.pipeline.stages.grow.llm_phases import (
+            _build_path_dilemma_context,
+        )
+
+        path_dilemma_map_text, valid_dilemma_ids_text = _build_path_dilemma_context(
+            graph, path_nodes
+        )
+
+        context = {
+            "path_sequences": "\n\n".join(path_sequences),
+            "valid_path_ids": ", ".join(sorted(path_nodes.keys())),
+            "valid_beat_ids": ", ".join(sorted(valid_beat_ids)),
+            "path_dilemma_map": path_dilemma_map_text,
+            "valid_dilemma_ids": valid_dilemma_ids_text,
+        }
+
+        # The LLM call uses POLISH's helper. POLISH's _polish_llm_call has no
+        # semantic_validator parameter, so invalid IDs in the response are
+        # caught by validate_and_insert_gaps at insertion time instead of
+        # forcing a retry. If retry-on-invalid-IDs becomes important, add
+        # semantic_validator support to _polish_llm_call (mirroring GROW's).
+        result, llm_calls, tokens = await self._polish_llm_call(  # type: ignore[attr-defined]
+            model=model,
+            template_name="polish_phase1a_narrative_gaps",
+            context=context,
+            output_schema=Phase4bOutput,
+        )
+
+        # Validate proposals and insert gap beats.
+        report = validate_and_insert_gaps(
+            graph,
+            result.gaps,
+            valid_path_ids=set(path_nodes.keys()),
+            valid_beat_ids=valid_beat_ids,
+            phase_name="phase1a",
+        )
+
+        log.info(
+            "phase1a_complete",
+            inserted=report.inserted,
+            invalid=report.total_invalid,
+            proposals=len(result.gaps),
+        )
+        return PhaseResult(
+            phase="narrative_gaps",
+            status="completed",
+            detail=f"Inserted {report.inserted} gap beats from {len(result.gaps)} proposals",
+            llm_calls=llm_calls,
+            tokens_used=tokens,
+        )
+
+    @polish_phase(name="pacing", depends_on=["narrative_gaps"], priority=1)
     async def _phase_2_pacing(self, graph: Graph, model: BaseChatModel) -> PhaseResult:
         """Phase 2: Pacing & Micro-beat Injection.
 
