@@ -72,13 +72,56 @@ R-1.5. Sections with fewer than 3 beats are not reordered (not worth the LLM cal
 
 ---
 
+## Phase 1a: Narrative Gap Insertion
+
+**Purpose:** Detect structural narrative jumps in path beat sequences (e.g., a path goes setup → climax with no development beat) and insert bridging gap beats to smooth abrupt narrative leaps. Absorbed from old GROW 4b per audit Q1 resolution: gap insertion is narrative-craft work (improves how the story reads), not structural skeleton (which dilemmas exist).
+
+### Input Contract
+
+1. Phase 1 Output Contract satisfied.
+2. Beats carry `scene_type` annotation (populated by GROW Phase 4b).
+
+### Operations
+
+#### Gap Detection and Insertion
+
+**What:** For each path with 2+ beats, the LLM is given the beat sequence (with truncated summaries and scene-type tags). It identifies missing intermediate beats and proposes new beats to insert at specified positions. POLISH validates each proposal (referenced beat IDs exist, ordering is correct) and inserts gap beats with the appropriate predecessor edges and `belongs_to` to the path.
+
+**Rules:**
+
+R-1a.1. Inserted gap beats carry `is_gap_beat: True` and `role: gap_beat` and `created_by: "POLISH"`.
+
+R-1a.2. Inserted gap beats carry zero `dilemma_impacts`. They are structural transition beats; they MUST NOT advance any dilemma. This matches the structural-beat invariant for all POLISH-created beats (R-2.1, R-5.10, etc.).
+
+R-1a.3. Inserted gap beats record traceability fields: `bridges_from` (the earlier beat ID), `bridges_to` (the later beat ID), `transition_style` (free-form descriptor).
+
+R-1a.4. Per-path cap: maximum 2 gap beats inserted per path per Phase 1a invocation.
+
+R-1a.5. Invalid LLM proposals (bad beat IDs, ordering violations) MUST log at WARNING and skip the proposal; do not silently accept.
+
+**Violations:**
+
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| Gap beat with non-empty `dilemma_impacts` | Structural-beat invariant violated | R-1a.2 |
+| Gap beat without `bridges_from` / `bridges_to` | Traceability missing | R-1a.3 |
+| 3+ gap beats on one path | Cap not enforced | R-1a.4 |
+| Phase 1a accepts a proposal referencing non-existent `before_beat` ID | Validation skipped | R-1a.5 |
+
+### Output Contract
+
+1. Zero or more gap beats added to the graph. Each carries `is_gap_beat=True`, zero `dilemma_impacts`, `belongs_to` to its path, predecessor edges placing it between `bridges_from` and `bridges_to`, and `created_by: "POLISH"`.
+2. Path beat sequences may be longer than at Phase 1a's start; original (non-gap) beats are unmodified.
+
+---
+
 ## Phase 2: Pacing Micro-Beat Injection
 
 **Purpose:** Flag pacing issues (too many scenes or sequels in a row; no sequel after a commit beat) and insert micro-beats to smooth rhythm. Micro-beats are structural beats that carry no dilemma relationship.
 
 ### Input Contract
 
-1. Phase 1 Output Contract satisfied.
+1. Phase 1a Output Contract satisfied.
 
 ### Operations
 
@@ -519,6 +562,11 @@ R-1.2: Reordered sequence preserves beat set exactly.
 R-1.3: Reordering preserves hard constraints (commit timing, cross-section edges).
 R-1.4: Invalid proposal → original order + WARNING; never silent accept.
 R-1.5: Sections <3 beats not reordered.
+R-1a.1: Gap beats have `is_gap_beat: True`, `role: gap_beat`, `created_by: "POLISH"`.
+R-1a.2: Gap beats carry zero `dilemma_impacts` (structural-beat invariant).
+R-1a.3: Gap beats record traceability: `bridges_from`, `bridges_to`, `transition_style`.
+R-1a.4: Per-path cap: max 2 gap beats per Phase 1a invocation.
+R-1a.5: Invalid LLM proposals → WARNING + skip; never silent accept.
 R-2.1: Micro-beats have `role: micro_beat`, zero `dilemma_impacts`, zero `belongs_to`.
 R-2.2: Micro-beats inserted only in linear sections.
 R-2.3: Micro-beats carry surrounding entity references.
@@ -588,6 +636,7 @@ R-7.12: Validation failure halts POLISH; no partial output.
 | Phase | Gate | Decision |
 |-------|------|----------|
 | 1 | Beat Reordering | Automated (WARNING on invalid proposals) |
+| 1a | Narrative Gap Insertion | Automated (WARNING on invalid proposals) |
 | 2 | Pacing Micro-beats | Automated |
 | 3 | Character Arc Synthesis | Automated |
 | — | Beat DAG Freeze | Required — user reviews finalized beat DAG before passage layer |
@@ -600,7 +649,7 @@ The single human gate is between Phase 3 (beat DAG freeze) and Phase 4 (plan com
 
 ## Iteration Control
 
-**Forward flow:** 1 → 2 → 3 → [freeze gate] → 4 → 5 → 6 → 7.
+**Forward flow:** 1 → 1a → 2 → 3 → [freeze gate] → 4 → 5 → 6 → 7.
 
 **Backward loops:**
 
@@ -613,6 +662,7 @@ The single human gate is between Phase 3 (beat DAG freeze) and Phase 4 (plan com
 **Maximum iterations:**
 
 - Phase 1 reordering: at most 1 proposal per section; invalid fallbacks to original.
+- Phase 1a gap insertion: at most 1 LLM call per path; per-path cap of 2 gap beats per R-1a.4.
 - Phase 2 micro-beats: at most 1 proposal per pacing flag.
 - Phase 4: deterministic, single pass.
 - Phase 5 LLM enrichment: at most 2 retries per LLM call (per CLAUDE.md §Validation & Repair Loop).
@@ -623,6 +673,7 @@ The single human gate is between Phase 3 (beat DAG freeze) and Phase 4 (plan com
 | Phase | Failure | Detection | Recovery |
 |-------|---------|-----------|----------|
 | 1 | Invalid reordering | R-1.4 validation | Keep original + WARNING |
+| 1a | Invalid gap-beat proposal | R-1a.5 validation | Skip proposal + WARNING |
 | 2 | Micro-beat wrongly has `belongs_to` | R-2.1 check | Halt; fix in Phase 2 logic |
 | 4a | Beat grouped into two passages | R-4a.1 check | Plan bug — re-run Phase 4 |
 | 4c | Zero choice edges | R-4c.2 check | Halt ERROR; fix in SEED (Y-shape) or GROW (DAG) |
@@ -653,6 +704,10 @@ Phase 4b's prose feasibility audit needs to know which state flags are *structur
 ### Phase 1
 
 One linear section of 4 beats in `mentor_trust`'s post-commit chain. LLM proposes reordering two beats for better scene-sequel rhythm. Validation passes; edges updated.
+
+### Phase 1a
+
+LLM inspects each path's beat sequence. On the `manipulator` path, it flags a leap from setup to confrontation with no rising-tension beat between; proposes one gap beat (`bridges_from`/`bridges_to` set, `transition_style: "rising suspicion"`). The other path passes without insertion. Per-path cap (R-1a.4) not approached.
 
 ### Phase 2
 
