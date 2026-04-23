@@ -263,7 +263,7 @@ R-4a.4. POLISH does NOT consume Intersection Group nodes as a constraint on grou
 
 R-4a.5. (Subsumed by R-4a.3.) The prior allowance for optional multi-path grouping is now automatic: multi-path chains that are linear in the DAG are collapsed by the topology rule; those separated by divergences or convergences are in different passages by topology.
 
-**Notes on structural beats.** Residue and false-branch beats are created by POLISH in Phase 6 *after* Phase 4a completes; their passage placement is governed by Phase 6 creation rules (R-6.x), not Phase 4a. Micro-beats (Phase 2, from POLISH) and transition beats (from GROW) are already in the DAG at Phase 4a and are grouped uniformly by R-4a.3. No sub-type-specific grouping rules are needed in Phase 4a.
+**Notes on structural beats.** Residue and false-branch beats are created by POLISH in Phase 6 *after* Phase 4a completes; their passage placement is governed by Phase 6 creation rules (R-6.x), not Phase 4a. Micro-beats (Phase 2, from POLISH), gap beats (Phase 1a, from POLISH), and transition beats (from GROW) are already in the DAG at Phase 4a and are grouped uniformly by R-4a.3. No sub-type-specific grouping rules are needed in Phase 4a.
 
 **Violations:**
 

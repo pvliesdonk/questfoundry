@@ -343,9 +343,9 @@ Beats are not cloned per reachable state — each beat is one node with one set 
 
 ### Total Order Per Arc
 
-The DAG defines a partial order. Each arc (a specific combination of path choices) defines a **total order** — the exact sequence of beats a player on that arc experiences. This total order is computed by **walking the DAG** from the root beat, following `predecessor` edges forward. At each Y-shape fork (where a shared beat has successors on different paths of the same dilemma), the traversal follows the successor matching the arc's selected path for that dilemma. Beats that are not on any dilemma fork branch — setup, epilogue, transition, and micro-beats — are traversed naturally as the walk passes through them. False branch beats follow their own cosmetic-fork choice; residue beats are flag-gated and shown only to players holding the corresponding flag.
+The DAG defines a partial order. Each arc (a specific combination of path choices) defines a **total order** — the exact sequence of beats a player on that arc experiences. This total order is computed by **walking the DAG** from the root beat, following `predecessor` edges forward. At each Y-shape fork (where a shared beat has successors on different paths of the same dilemma), the traversal follows the successor matching the arc's selected path for that dilemma. Beats that are not on any dilemma fork branch — setup, epilogue, transition, and micro-beats — are traversed naturally as the walk passes through them. False branch beats follow their own cosmetic-fork choice; residue beats are flag-gated and shown only to players holding the corresponding flag. Gap beats carry a single `belongs_to` to one path and appear in the total order only for arcs traversing that path.
 
-This is a DAG walk, not a collection-by-membership operation. The `belongs_to` edges define which path a beat furthers narratively (the Y-shape from SEED), but the arc traversal follows the `predecessor` DAG structure that GROW built. Beats without `belongs_to` edges (all structural beat sub-types: setup, epilogue, transition, micro-beat, residue, false branch) are included whenever the walk reaches them — they sit on the predecessor chain between path-member beats and are traversed like any other node.
+This is a DAG walk, not a collection-by-membership operation. The `belongs_to` edges define which path a beat furthers narratively (the Y-shape from SEED), but the arc traversal follows the `predecessor` DAG structure that GROW built. Beats without `belongs_to` edges (setup, epilogue, transition, micro-beat, residue, false branch — all structural sub-types except gap beats) are included whenever the walk reaches them; they sit on the predecessor chain between path-member beats and are traversed like any other node. Gap beats are the structural exception: they carry a single `belongs_to` and appear only on arcs traversing that path.
 
 Arcs are not stored as graph nodes. They are **computed traversals** of the DAG. Any stage that needs an arc's beat sequence computes it on demand from the DAG structure. Diagnostic tools may snapshot pre-computed arc sequences for inspection, but pipeline stages must never read arcs from stored nodes — they traverse the DAG.
 
@@ -646,11 +646,12 @@ Intersection beats participate in scenes with beats from other paths, but they s
 
 #### Determining a beat's `belongs_to`
 
-A beat's `belongs_to` edges are a **narrative** statement: "this beat furthers the narrative of this dilemma." They are not a graph-shape statement about which path chains reach the beat. Three beat categories cover every legal beat:
+A beat's `belongs_to` edges are a **narrative** statement: "this beat furthers the narrative of this dilemma." They are not a graph-shape statement about which path chains reach the beat. Four beat categories cover every legal beat:
 
 1. **Shared pre-commit** — the beat sets up the dilemma's tension for both possible answers. Two `belongs_to` edges, one to each explored path of the dilemma.
 2. **Commit and exclusive post-commit** — the beat locks in or plays out one answer's consequences. One `belongs_to` edge to the answer's path.
-3. **Structural beats** (setup, epilogue, transition, micro-beat, residue beat, false branch beat) — the beat furthers no dilemma's narrative. Zero `belongs_to` edges. Examples: a world-setup opening beat before any dilemma is introduced; a transition beat that bridges between unrelated scenes; a closing epilogue beat after the final dilemma has committed and converged.
+3. **Zero-`belongs_to` structural beats** (setup, epilogue, transition, micro-beat, residue beat, false branch beat) — the beat furthers no dilemma's narrative. Zero `belongs_to` edges. Examples: a world-setup opening beat before any dilemma is introduced; a transition beat that bridges between unrelated scenes; a closing epilogue beat after the final dilemma has committed and converged.
+4. **Path-specific structural beats** (gap beat only) — the beat bridges a narrative seam within one path's beat sequence without advancing any dilemma. One `belongs_to` edge to that path. Zero `dilemma_impacts`. Created by POLISH Phase 1a; structurally indistinguishable from category 2 by `belongs_to` count, distinguished by zero `dilemma_impacts` and `is_gap_beat=True`.
 
 Cross-dilemma co-occurrence (a scene that serves two dilemmas at once) is **not** represented as a beat belonging to two dilemmas. It is represented as two distinct beats (one per dilemma) linked by an `intersection_group`. This preserves guard rail 1 below (no cross-dilemma dual `belongs_to`).
 
@@ -665,7 +666,7 @@ For residue and false-branch beats, passage placement is governed by the Phase 6
 Guard rails:
 
 1. **Same-dilemma constraint.** A beat with two `belongs_to` edges must reference two paths that belong to the same dilemma. Cross-dilemma multi-`belongs_to` is a hard-convergence violation.
-2. **Pre-commit only.** Only beats before the dilemma's commit may have two `belongs_to` edges. The commit beat itself has one (it is the first beat exclusive to its path). Post-commit beats of a dilemma have exactly one `belongs_to` edge; beats that serve no dilemma have zero (see "Determining a beat's `belongs_to`" above, category 3).
+2. **Pre-commit only.** Only beats before the dilemma's commit may have two `belongs_to` edges. The commit beat itself has one (it is the first beat exclusive to its path). Post-commit beats of a dilemma have exactly one `belongs_to` edge; beats that serve no dilemma have zero (see "Determining a beat's `belongs_to`" above, category 3) — gap beats are the structural exception, carrying exactly one `belongs_to` despite serving no dilemma (category 4).
 3. **Same-dilemma pre-commit exclusion.** An intersection group must not contain two pre-commit beats of the same dilemma (identified by identical dual `belongs_to` path sets). Such beats are already sequentially ordered in the dilemma's pre-commit chain; grouping them into an intersection implies simultaneity, contradicting the chain ordering. Cross-dilemma pre-commit co-occurrence IS the intended use of intersection groups and remains allowed.
 
 ### Beat Ordering ≠ Temporal Position Relative to Commits
@@ -754,7 +755,7 @@ Vision and Voice Document are singleton nodes with no incoming or outgoing edges
 | `anchored_to` | Dilemma → Entity | BRAINSTORM | Entities central to this dilemma |
 | `explores` | Path → Answer | SEED | Which answer this path develops |
 | `has_consequence` | Path → Consequence | SEED | Narrative outcomes of this path |
-| `belongs_to` | Beat → Path | SEED | Which path this beat serves. Pre-commit beats have two edges (both paths in the dilemma); post-commit beats have one. |
+| `belongs_to` | Beat → Path | SEED, POLISH | Which path this beat serves. Pre-commit beats have two edges (both paths in the dilemma); post-commit beats have one; gap beats (POLISH Phase 1a) have one to their bridging path. |
 | `flexibility` | Beat → Entity | SEED | Substitutable entity. Carries a `role` property on the edge itself (e.g., `role: "mentor"` when the spy could play the mentor role). Working — consumed by GROW. |
 | `predecessor` | Beat → Beat | GROW | Ordering in the beat DAG (B comes after A) |
 | `intersection` | Beat → Intersection Group | GROW | This beat participates in this co-occurrence group |
