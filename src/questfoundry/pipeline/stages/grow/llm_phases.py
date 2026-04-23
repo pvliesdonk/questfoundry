@@ -683,112 +683,12 @@ class _LLMPhaseMixin:
             tokens_used=tokens,
         )
 
-    @grow_phase(name="narrative_gaps", depends_on=["scene_types"], priority=4)
-    async def _phase_4b_narrative_gaps(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
-        """Phase 4b: Detect narrative gaps in path beat sequences.
+    # NOTE: GROW Phase 4b (narrative_gaps) was MOVED to POLISH Phase 1a
+    # per the spec migration in PR #1366. The implementation lives in
+    # ``polish/llm_phases.py``. The shared gap-insertion helper lives in
+    # ``graph/gap_insertion.py``. See issue #1368 for the migration epic.
 
-        For each path, traces the beat sequence and asks the LLM
-        to identify missing beats (e.g., a path jumps from setup
-        to climax without a development beat).
-
-        Preconditions:
-        - Scene types assigned (Phase 4a complete).
-        - Paths have 2+ beats with requires-based ordering.
-
-        Postconditions:
-        - Gap beats inserted into the graph with requires edges.
-        - New beats have belongs_to edges linking them to their path.
-        - Beat summaries provided by LLM for each gap.
-
-        Invariants:
-        - Only paths with 2+ beats assessed.
-        - Inserted beats placed between valid before/after beat pairs.
-        - Invalid proposals (bad IDs, wrong ordering) silently rejected.
-        """
-        from questfoundry.graph.grow_algorithms import get_path_beat_sequence
-        from questfoundry.models.grow import Phase4bOutput
-
-        path_nodes = graph.get_nodes_by_type("path")
-        if not path_nodes:
-            return GrowPhaseResult(
-                phase="narrative_gaps",
-                status="completed",
-                detail="No paths to check for gaps",
-            )
-
-        # Build path sequences with truncated summaries
-        path_sequences: list[str] = []
-        valid_beat_ids: set[str] = set()
-        for pid in sorted(path_nodes.keys()):
-            sequence = get_path_beat_sequence(graph, pid)
-            if len(sequence) < 2:
-                continue
-            beat_list: list[str] = []
-            for bid in sequence:
-                node = graph.get_node(bid)
-                summary = truncate_summary(node.get("summary", ""), 80) if node else ""
-                scene_type = node.get("scene_type", "untagged") if node else "untagged"
-                beat_list.append(f"    {bid} [{scene_type}]: {summary}")
-                valid_beat_ids.add(bid)
-            raw_pid = path_nodes[pid].get("raw_id", pid)
-            path_sequences.append(f"  Path: {raw_pid} ({pid})\n" + "\n".join(beat_list))
-
-        if not path_sequences:
-            return GrowPhaseResult(
-                phase="narrative_gaps",
-                status="completed",
-                detail="No paths with 2+ beats to check",
-            )
-
-        path_dilemma_map_text, valid_dilemma_ids_text = _build_path_dilemma_context(
-            graph, path_nodes
-        )
-
-        context = {
-            "path_sequences": "\n\n".join(path_sequences),
-            "valid_path_ids": ", ".join(sorted(path_nodes.keys())),
-            "valid_beat_ids": ", ".join(sorted(valid_beat_ids)),
-            "path_dilemma_map": path_dilemma_map_text,
-            "valid_dilemma_ids": valid_dilemma_ids_text,
-        }
-
-        from questfoundry.graph.grow_validators import validate_phase4_output
-
-        validator = partial(
-            validate_phase4_output,
-            valid_path_ids=set(path_nodes.keys()),
-            valid_beat_ids=valid_beat_ids,
-            graph=graph,
-        )
-        try:
-            result, llm_calls, tokens = await self._grow_llm_call(  # type: ignore[attr-defined]
-                model=model,
-                template_name="grow_phase4b_narrative_gaps",
-                context=context,
-                output_schema=Phase4bOutput,
-                semantic_validator=validator,
-            )
-        except GrowStageError as e:
-            return GrowPhaseResult(
-                phase="narrative_gaps",
-                status="failed",
-                detail=str(e),
-            )
-
-        # Validate and insert gap beats
-        report = self._validate_and_insert_gaps(  # type: ignore[attr-defined]
-            graph, result.gaps, path_nodes, valid_beat_ids, "phase4b"
-        )
-
-        return GrowPhaseResult(
-            phase="narrative_gaps",
-            status="completed",
-            detail=f"Inserted {report.inserted} gap beats from {len(result.gaps)} proposals",
-            llm_calls=llm_calls,
-            tokens_used=tokens,
-        )
-
-    @grow_phase(name="pacing_gaps", depends_on=["narrative_gaps"], priority=5)
+    @grow_phase(name="pacing_gaps", depends_on=["scene_types"], priority=5)
     async def _phase_4c_pacing_gaps(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
         """Phase 4c: Detect and fix pacing issues (3+ same scene_type in a row).
 
