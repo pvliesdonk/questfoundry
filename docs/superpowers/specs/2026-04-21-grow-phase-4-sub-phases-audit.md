@@ -220,6 +220,87 @@ Candidate breakdowns, listed for later discussion:
 
 ---
 
-## Next step
+## Resolutions (2026-04-23)
 
-Resolve Q1 through Q7 with the human.  Once resolved, this doc becomes the brief for the spec-writing plan, which then produces ontology + grow.md updates in a plan document.
+### Q1 — Structural vs narrative principle (RESOLVED)
+
+The GROW/POLISH boundary is **structural vs narrative**, not DAG-layer vs passage-layer.  GROW makes the structure (load-bearing skeleton: forks, convergences, dilemma scaffolding, intersection coordination, foundation annotation).  POLISH prepares the narrative (rhythm, pacing, prose-readiness, sensory grounding, thematic context).
+
+**Historical context:** POLISH used to be part of GROW.  The split (epic #990 / cleanup #1057) didn't move everything correctly.  The 5 sub-phases below are leftover GROW phases that should have moved to POLISH but didn't.  **This work completes that migration.**
+
+**Resolution per sub-phase:**
+
+| Sub-phase | Verdict | Stage |
+|---|---|---|
+| 4a `scene_types` | Foundation annotation (POLISH Phase 2 pacing depends on `scene_type`) | **GROW** |
+| 4b `narrative_gaps` | Narrative gap filling | **POLISH** |
+| 4c `pacing_gaps` | Pure rhythm correction | **POLISH** |
+| 4d `atmospheric` | Sensory annotation for prose | **POLISH** |
+| 4e `path_arcs` | Per-path narrative context | **POLISH** |
+| 4f `entity_arcs` | Per-entity narrative context (see Q6 resolution) | **POLISH** |
+| 4g `transition_gaps` | Bridge structural seams (cross-dilemma hard cuts) | **GROW** |
+
+GROW Phase 4 collapses to 3 sub-phases: `interleave_beats` + `scene_types` + `transition_gaps`.  POLISH absorbs 5 sub-phases.
+
+### Q2 — 4d location (RESOLVED via Q1)
+
+POLISH.
+
+### Q3 — Transition beat `atmospheric_detail` gap (AUTO-RESOLVED via Q1)
+
+`atmospheric` moves to POLISH.  POLISH's atmospheric pass runs **after** GROW completes (including 4g transition beat creation), so transition beats receive `atmospheric_detail` naturally.  Bug eliminated by the migration.
+
+### Q4 — gap beats with `dilemma_impacts` (AUTO-RESOLVED via Q1)
+
+Gap and pacing-correction beats move to POLISH (sub-phases absorbed from 4b / 4c).  POLISH's existing rule (R-2.1: micro-beats have zero `dilemma_impacts`; residue and false-branch beats also zero) extends to these new POLISH-created beats.  All POLISH-created beats are structural by virtue of being POLISH-created.
+
+### Q5 — 4e/4f ordering bug (AUTO-RESOLVED via Q1)
+
+Both phases move to POLISH; the ordering can be re-derived in the new stage (and Q6's resolution removes 4f's content into POLISH Phase 3, eliminating the dependency entirely).
+
+### Q6 — 4f vs POLISH Phase 3 redundancy (RESOLVED)
+
+**B: POLISH Phase 3 absorbs 4f.**  Phase 3 is the spec'd authority and 4f is migration leftover.  Phase 3 is extended to also produce per-path positional data (current 4f content): `[{entity_id, arc_type, arc_line, pivot_beat}]` per path joins the existing `{start, pivots, end_per_path}` structure on the entity node.  FILL builds positional context by indexing into the entity-node arc data.  Eliminates the redundancy entirely; one source of truth on entity nodes; fewer LLM calls.
+
+### Q7 — `exit_mood` (beat) vs `path_mood` (path) (RESOLVED)
+
+**A: Keep both, independent.**  They are genuinely different narrative-craft concepts at different scales.  `exit_mood` is reader-affect at the handoff between beats (Swain-adjacent); `path_mood` is the path's tonal identity (consumed by FILL/DRESS for tonal framing).  No formal relationship enforced.  POLISH may consult `exit_mood` sequence as one input when generating `path_mood`, but the LLM has freedom.
+
+---
+
+## Final design
+
+### Stage responsibilities (post-migration)
+
+**GROW Phase 4** (3 sub-phases):
+1. `interleave_beats` (existing, deterministic) — cross-dilemma ordering edges.
+2. `scene_types` — annotate beats with `scene_type`, `narrative_function`, `exit_mood`.  Foundation annotation that POLISH Phase 2 depends on.
+3. `transition_gaps` — insert bridge beats at cross-dilemma hard cuts (no shared entity/location).  Structural seam smoothing.  Currently labeled "Phase 5" in grow.md spec but priority=8 in code; renumber for consistency.
+
+**POLISH** absorbs:
+- `narrative_gaps` (was 4b) — insert beats to fix narrative jumps.  Likely a new POLISH sub-phase or fold into Phase 1 (Beat Reordering).
+- `pacing_gaps` (was 4c) — insert correction beats for 3+ same-`scene_type` runs.  Fold into POLISH Phase 2 (Pacing Micro-Beat Injection); the trigger is identical.
+- `atmospheric` (was 4d) — `atmospheric_detail` per beat.  New POLISH sub-phase.
+- `path_arcs` (was 4e) — `path_theme`, `path_mood` per path.  New POLISH sub-phase.
+- `entity_arcs` content (was 4f) — absorbed into POLISH Phase 3 (Character Arc Synthesis).  Phase 3 extends to produce per-path positional data on entity nodes.
+
+### Ontology field placements
+
+**Beat** (populated by **GROW**): `scene_type`, `narrative_function`, `exit_mood`.
+**Beat** (populated by **POLISH**): `atmospheric_detail`; gap-beat traceability fields (`is_gap_beat`, `transition_style`, `bridges_from`, `bridges_to`).
+**Path** (populated by **POLISH**): `path_theme`, `path_mood`.
+**Entity** (populated by **POLISH** Phase 3, extended): per-entity arc data including `start`, `pivots`, `end_per_path`, AND per-path positional list (absorbed from 4f).
+
+All fields need formal definition in `story-graph-ontology.md` with type, value constraints, population stage, and consumers.
+
+## Path forward
+
+This audit has produced a clear final design.  Three categories of work follow:
+
+1. **Spec updates** — grow.md (Phase 4 restructure), polish.md (absorb 5 sub-phases), story-graph-ontology.md (~10 field additions with stage attribution).
+2. **Code migration** — move 5 sub-phase implementations from GROW to POLISH; consolidate `pacing_gaps` into POLISH Phase 2; consolidate 4f content into POLISH Phase 3; delete dead DRESS branches; add missing semantic validators.
+3. **Audit-side bookkeeping** — close #1365 by reference to this doc; potentially split into smaller follow-on issues for each migration step.
+
+The **spec updates** must come first per CLAUDE.md §Design Doc Authority — the spec describes the target state, code follows.
+
+Proceed via `superpowers:writing-plans` to produce a detailed implementation plan for the spec updates.
