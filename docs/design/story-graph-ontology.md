@@ -109,13 +109,13 @@ A narrative beat directly advances a dilemma. It carries **dilemma impacts** (wh
 
 #### Structural Beats
 
-A structural beat serves the DAG without advancing any dilemma. It carries zero `dilemma_impacts` and zero `belongs_to` edges. Every arc that reaches a structural beat via the predecessor chain traverses it — it belongs to no path but is walked through naturally. Seven sub-types:
+A structural beat serves the DAG without advancing any dilemma. It carries zero `dilemma_impacts`. Most structural sub-types also carry zero `belongs_to` edges and are traversed by every arc that reaches them via the predecessor chain. Gap beats (POLISH Phase 1a) are the sole exception: they carry a single `belongs_to` to one path so they appear only on arcs traversing that path. Seven sub-types:
 
 - **Setup beat** (SEED) — world-building before any dilemma is introduced. Establishes context without serving a dilemma.
 - **Epilogue beat** (SEED) — shared narrative resolution after all dilemmas have committed and converged. Wraps up the story as a whole rather than any single dilemma. Distinct from a Setup beat in timing and purpose — Setup opens, Epilogue closes — even though both carry zero `belongs_to`.
 - **Transition beat** (GROW) — atmospheric bridge between cross-dilemma scenes that share no entities or location.
 - **Micro-beat** (POLISH) — brief moment added for pacing within a linear section.
-- **Gap beat** (POLISH) — bridge beat inserted by POLISH Phase 1a (Narrative Gap Insertion) to smooth abrupt narrative leaps in a path's beat sequence. Carries `is_gap_beat=True` and traceability fields (`bridges_from`, `bridges_to`, `transition_style`). Zero `dilemma_impacts`; single `belongs_to` to its path.
+- **Gap beat** (POLISH) — bridge beat inserted by POLISH Phase 1a (Narrative Gap Insertion) to smooth abrupt narrative leaps in a path's beat sequence. Carries `is_gap_beat=True`, `role: gap_beat`, and traceability fields (`bridges_from`, `bridges_to`, `transition_style`). Zero `dilemma_impacts`; single `belongs_to` to its path.
 - **Residue beat** (POLISH) — mood-setter placed before a shared beat. Carries state-flag-specific prose hints; only shown to players holding the relevant flag. Has no `dilemma_impacts` but is flag-dependent.
 - **False branch beat** (POLISH) — a beat on a cosmetic fork-rejoin structure that gives the player the experience of choice without dilemma consequence. A diamond pattern uses one beat per arm; a sidetrack may use several beats on its detour arm. Carries no dilemma relationship. The surrounding choice edges may optionally grant cosmetic state flags (flags unrelated to any dilemma, used later by residue beats or prose variation for flavor).
 
@@ -129,7 +129,7 @@ A structural beat serves the DAG without advancing any dilemma. It carries zero 
 
 **Atmospheric detail** — `atmospheric_detail: str` (10–200 characters). Populated by POLISH Phase 5e. Sensory environment description (sight, sound, smell, texture) — environment, not character emotion. Consumed by FILL for sensory grounding when no scene blueprint supersedes.
 
-**Gap-beat traceability** — `is_gap_beat: bool`, `transition_style: str`, `bridges_from: str | None`, `bridges_to: str | None`. Populated by POLISH Phase 1a (Narrative Gap Insertion) on POLISH-created bridge beats. `bridges_from` and `bridges_to` reference the IDs of the beats this gap beat sits between. `transition_style` is a free-form descriptor (e.g., "smooth", "cut") that informs FILL's transition-context. `is_gap_beat=True` excludes the beat from intersection candidate generation.
+**Gap-beat traceability** — `is_gap_beat: bool`, `role: "gap_beat"`, `transition_style: str`, `bridges_from: str | None`, `bridges_to: str | None`. Populated by POLISH Phase 1a (Narrative Gap Insertion) on POLISH-created bridge beats. `bridges_from` and `bridges_to` reference the IDs of the beats this gap beat sits between. `transition_style` is a free-form descriptor (e.g., "smooth", "cut") that informs FILL's transition-context. The `role` field distinguishes gap beats from pacing-correction beats (POLISH Phase 2 R-2.7), which share `is_gap_beat=True` but have `role: "micro_beat"`. `is_gap_beat=True` excludes the beat from intersection candidate generation if intersection detection is re-derived during a backward loop from GROW Phase 7.
 
 #### Beat Lifecycle
 
@@ -642,7 +642,7 @@ Intersection beats participate in scenes with beats from other paths, but they s
 
 **Same-dilemma pre-commit multi-`belongs_to` is permitted.** A pre-commit beat — one that occurs before the dilemma's commit point — belongs to both paths of its own dilemma. This is structurally correct: every player experiences pre-commit beats regardless of which path they will later choose. Pre-commit beats have two `belongs_to` edges (one to each path in the dilemma); post-commit beats have exactly one. Cross-dilemma multi-`belongs_to` remains forbidden.
 
-**Zero-`belongs_to` beats.** Beats that are not part of any dilemma's Y-shape — all structural beat sub-types (setup, epilogue, transition, micro-beat, residue beat, false branch beat) — have no `belongs_to` edges. They sit on the DAG between path-member beats and do not "belong to" any path. Setup, epilogue, transition, and micro-beats are traversed by every arc that reaches them via the predecessor chain; residue beats are flag-gated and shown only to players holding the corresponding flag; false branch beats are traversed by players who take the cosmetic fork's corresponding choice. See "Total Order Per Arc" in Part 3.
+**Zero-`belongs_to` beats.** Most structural beat sub-types (setup, epilogue, transition, micro-beat, residue beat, false branch beat) have no `belongs_to` edges. They sit on the DAG between path-member beats and do not "belong to" any path. Setup, epilogue, transition, and micro-beats are traversed by every arc that reaches them via the predecessor chain; residue beats are flag-gated and shown only to players holding the corresponding flag; false branch beats are traversed by players who take the cosmetic fork's corresponding choice. **Gap beats** (POLISH Phase 1a) are the structural exception: they carry a single `belongs_to` to one path because they bridge narrative seams within that path's specific beat sequence. See "Total Order Per Arc" in Part 3.
 
 #### Determining a beat's `belongs_to`
 

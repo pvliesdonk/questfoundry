@@ -565,6 +565,7 @@ R-8.4. Pruning never deletes a beat that has `belongs_to` to an explored Path �
 14. No orphan beats (all reachable from root by at least one arc).
 15. Setup beats from SEED persist (structural, zero `belongs_to`, zero `dilemma_impacts`) — GROW does not add to or remove from them.
 16. Epilogue beats from SEED persist (structural, zero `belongs_to`, zero `dilemma_impacts`) — GROW does not add to or remove from them.
+17. Every beat has `scene_type`, `narrative_function`, and `exit_mood` populated by Phase 4b. Partial coverage (LLM missed some beats) emits a WARNING; downstream consumers handle absent fields via the R-4b.1 fallback (default `scene_type` to `"scene"`).
 
 ## Implementation Constraints
 
