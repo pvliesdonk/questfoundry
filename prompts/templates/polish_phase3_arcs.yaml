@@ -29,10 +29,18 @@ system: |
      different paths). Use the beat IDs and path IDs from above.
   3. **End per path**: Where the entity ends up on each path. One entry
      per path where the entity appears.
+  4. **Per-path arcs** (`arcs_per_path`): for each path the entity is
+     arc-worthy on, give a concise A → B → C trajectory line and the
+     ``pivot_beat`` where the trajectory turns. The ``pivot_beat`` MUST
+     equal the beat_id of that path's entry in the ``pivots`` list (same
+     LLM call enforces this — pick one beat per path and use it for both
+     fields). The ``arc_type`` field is set by code from the entity's
+     category — use the placeholder string `"_set_by_code"` and POLISH
+     will overwrite it; do not invent a value.
 
   ## Valid IDs
   Valid path_ids: {valid_path_ids}
-  Valid beat_ids (for pivots): {valid_beat_ids}
+  Valid beat_ids (for pivots and arcs_per_path[*].pivot_beat): {valid_beat_ids}
 
   ## Output Format
   Return a JSON object with a "character_arcs" array containing exactly
@@ -59,7 +67,21 @@ system: |
         "end_per_path": {{
           "path::trust": "The mentor becomes a true ally, having earned full trust",
           "path::doubt": "The mentor is estranged, their motives forever uncertain"
-        }}
+        }},
+        "arcs_per_path": [
+          {{
+            "path_id": "path::trust",
+            "arc_type": "_set_by_code",
+            "arc_line": "guarded authority → trusted confidant → committed ally",
+            "pivot_beat": "beat::mentor_reveal"
+          }},
+          {{
+            "path_id": "path::doubt",
+            "arc_type": "_set_by_code",
+            "arc_line": "guarded authority → suspicious shadow → estranged figure",
+            "pivot_beat": "beat::mentor_secret"
+          }}
+        ]
       }}
     ]
   }}
@@ -68,6 +90,8 @@ system: |
   - Do NOT use IDs not listed in the Valid IDs sections
   - Do NOT return arcs for entities other than {entity_id}
   - Do NOT write novel-length descriptions — keep each field to 1-2 sentences
+  - Do NOT use a different ``pivot_beat`` than the matching ``pivots[path_id]`` entry
+  - Do NOT invent ``arc_type`` values — leave the placeholder, code will set it
   - Do NOT add prose before or after the JSON output
 
 user: |

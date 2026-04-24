@@ -669,3 +669,231 @@ class TestPolishPhase2GapBeatTagging:
             "no_sequel_after_commit micro-beat must NOT carry is_gap_beat"
         )
         assert mb.get("role") == "micro_beat"
+
+
+# ---------------------------------------------------------------------------
+# Phase 3 R-3.6/3.7/3.8 — arcs_per_path extension (#1372)
+# ---------------------------------------------------------------------------
+
+
+class TestPolishPhase3ArcsPerPath:
+    """POLISH Phase 3 produces arcs_per_path per spec R-3.6/3.7/3.8."""
+
+    def _make_two_path_graph(self) -> Graph:
+        """Helper: graph with one entity in 2+ beats across two paths."""
+        g = Graph.empty()
+        g.create_node("dilemma::d1", {"type": "dilemma", "raw_id": "d1"})
+        g.create_node(
+            "path::trust",
+            {"type": "path", "raw_id": "trust", "is_canonical": True, "dilemma_id": "d1"},
+        )
+        g.create_node(
+            "path::doubt",
+            {"type": "path", "raw_id": "doubt", "is_canonical": False, "dilemma_id": "d1"},
+        )
+        g.create_node(
+            "entity::mentor",
+            {
+                "type": "entity",
+                "raw_id": "mentor",
+                "entity_category": "character",
+                "concept": "A wise mentor",
+            },
+        )
+        for bid in ("beat::open", "beat::trust_pivot", "beat::doubt_pivot"):
+            _make_beat(g, bid, f"summary {bid}", entities=["entity::mentor"])
+        g.add_edge("belongs_to", "beat::open", "path::trust")
+        g.add_edge("belongs_to", "beat::open", "path::doubt")
+        g.add_edge("belongs_to", "beat::trust_pivot", "path::trust")
+        g.add_edge("belongs_to", "beat::doubt_pivot", "path::doubt")
+        return g
+
+    @pytest.mark.asyncio
+    async def test_phase_3_writes_arcs_per_path_with_derived_arc_type(self) -> None:
+        """R-3.6 + R-3.7: arcs_per_path is written and arc_type comes from
+        the entity's category (not the LLM)."""
+        from questfoundry.models.polish import (
+            ArcPivot,
+            CharacterArcMetadata,
+            PerPathArc,
+            Phase3Output,
+        )
+
+        graph = self._make_two_path_graph()
+
+        async def mock_call(*_args: object, **_kwargs: object) -> tuple:
+            return (
+                Phase3Output(
+                    character_arcs=[
+                        CharacterArcMetadata(
+                            entity_id="entity::mentor",
+                            start="A wise authority offering guidance",
+                            pivots=[
+                                ArcPivot(
+                                    path_id="path::trust",
+                                    beat_id="beat::trust_pivot",
+                                    description="Reveals hidden knowledge",
+                                ),
+                                ArcPivot(
+                                    path_id="path::doubt",
+                                    beat_id="beat::doubt_pivot",
+                                    description="Hides their motives",
+                                ),
+                            ],
+                            end_per_path={
+                                "path::trust": "Trusted ally",
+                                "path::doubt": "Estranged figure",
+                            },
+                            arcs_per_path=[
+                                PerPathArc(
+                                    path_id="path::trust",
+                                    arc_type="_set_by_code",
+                                    arc_line="guarded → trusted → committed",
+                                    pivot_beat="beat::trust_pivot",
+                                ),
+                                PerPathArc(
+                                    path_id="path::doubt",
+                                    arc_type="_set_by_code",
+                                    arc_line="guarded → suspicious → estranged",
+                                    pivot_beat="beat::doubt_pivot",
+                                ),
+                            ],
+                        )
+                    ]
+                ),
+                1,
+                500,
+            )
+
+        stage = PolishStage()
+        stage._polish_llm_call = mock_call  # type: ignore[method-assign]
+        result = await stage._phase_3_character_arcs(graph, MagicMock())
+        assert result.status == "completed"
+
+        mentor = graph.get_node("entity::mentor")
+        assert mentor is not None
+        ca = mentor.get("character_arc")
+        assert ca is not None
+        assert ca["start"]
+        assert "path::trust" in ca["pivots"]
+        # arcs_per_path field is present and has 2 entries (one per path)
+        assert len(ca["arcs_per_path"]) == 2
+        # R-3.7: arc_type was derived from category="character" → "transformation"
+        for entry in ca["arcs_per_path"]:
+            assert entry["arc_type"] == "transformation"
+        # arc_line was preserved
+        trust_entry = next(e for e in ca["arcs_per_path"] if e["path_id"] == "path::trust")
+        assert "guarded" in trust_entry["arc_line"]
+        # R-3.8: pivot_beat matches pivots[path_id]
+        assert trust_entry["pivot_beat"] == "beat::trust_pivot"
+        assert trust_entry["pivot_beat"] == ca["pivots"]["path::trust"]
+
+    @pytest.mark.asyncio
+    async def test_phase_3_drops_arcs_per_path_entry_with_pivot_mismatch(self) -> None:
+        """R-3.8: an arcs_per_path entry whose pivot_beat disagrees with
+        pivots[path_id] is dropped from the stored arcs_per_path."""
+        from questfoundry.models.polish import (
+            ArcPivot,
+            CharacterArcMetadata,
+            PerPathArc,
+            Phase3Output,
+        )
+
+        graph = self._make_two_path_graph()
+
+        async def mock_call(*_args: object, **_kwargs: object) -> tuple:
+            return (
+                Phase3Output(
+                    character_arcs=[
+                        CharacterArcMetadata(
+                            entity_id="entity::mentor",
+                            start="A wise authority",
+                            pivots=[
+                                ArcPivot(
+                                    path_id="path::trust",
+                                    beat_id="beat::trust_pivot",
+                                    description="Pivot",
+                                )
+                            ],
+                            end_per_path={"path::trust": "Ally"},
+                            arcs_per_path=[
+                                PerPathArc(
+                                    path_id="path::trust",
+                                    arc_type="_set_by_code",
+                                    arc_line="A → B → C",
+                                    pivot_beat="beat::WRONG",  # disagrees with pivots
+                                )
+                            ],
+                        )
+                    ]
+                ),
+                1,
+                500,
+            )
+
+        stage = PolishStage()
+        stage._polish_llm_call = mock_call  # type: ignore[method-assign]
+        await stage._phase_3_character_arcs(graph, MagicMock())
+
+        mentor = graph.get_node("entity::mentor")
+        assert mentor is not None
+        ca = mentor.get("character_arc")
+        assert ca is not None
+        # The mismatched entry was dropped from arcs_per_path
+        assert ca["arcs_per_path"] == []
+        # Pivots map (which the LLM agreed with itself on) is preserved
+        assert ca["pivots"]["path::trust"] == "beat::trust_pivot"
+
+    @pytest.mark.asyncio
+    async def test_phase_3_overrides_llm_chosen_arc_type(self) -> None:
+        """R-3.7: if the LLM emits a non-placeholder arc_type, code overrides
+        it with the category-derived value."""
+        from questfoundry.models.polish import (
+            ArcPivot,
+            CharacterArcMetadata,
+            PerPathArc,
+            Phase3Output,
+        )
+
+        graph = self._make_two_path_graph()
+
+        async def mock_call(*_args: object, **_kwargs: object) -> tuple:
+            return (
+                Phase3Output(
+                    character_arcs=[
+                        CharacterArcMetadata(
+                            entity_id="entity::mentor",
+                            start="A wise authority",
+                            pivots=[
+                                ArcPivot(
+                                    path_id="path::trust",
+                                    beat_id="beat::trust_pivot",
+                                    description="Pivot",
+                                )
+                            ],
+                            end_per_path={"path::trust": "Ally"},
+                            arcs_per_path=[
+                                PerPathArc(
+                                    path_id="path::trust",
+                                    arc_type="atmosphere",  # wrong: should be "transformation"
+                                    arc_line="A → B → C",
+                                    pivot_beat="beat::trust_pivot",
+                                )
+                            ],
+                        )
+                    ]
+                ),
+                1,
+                500,
+            )
+
+        stage = PolishStage()
+        stage._polish_llm_call = mock_call  # type: ignore[method-assign]
+        await stage._phase_3_character_arcs(graph, MagicMock())
+
+        mentor = graph.get_node("entity::mentor")
+        assert mentor is not None
+        ca = mentor.get("character_arc")
+        assert ca is not None
+        # R-3.7: arc_type was overridden to category-derived "transformation"
+        assert ca["arcs_per_path"][0]["arc_type"] == "transformation"
