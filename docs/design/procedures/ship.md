@@ -149,6 +149,8 @@ R-3.7. Illustration assets are copied into the export bundle (HTML/PDF) or refer
 
 R-3.8. If DRESS was skipped: exports degrade gracefully — no illustrations, no codex, no visual metadata. Core gameplay works.
 
+R-3.9. If DRESS *ran but produced an incomplete `art_direction` node* (one or more of the DRESS-required visual fields — `style`, `medium`, `palette`, `composition_notes`, `negative_defaults`, `aspect_ratio` — missing or blank): the export still proceeds (graceful degradation, like R-3.8), but SHIP logs a WARNING naming the missing fields. Partial DRESS is a recoverable degradation, not a silent one — the user must be told so they can rerun DRESS.
+
 **Violations:**
 
 | Symptom | Root cause | Broken rule |
@@ -157,6 +159,7 @@ R-3.8. If DRESS was skipped: exports degrade gracefully — no illustrations, no
 | JSON export renames `prose` to `text` between releases (non-backward-compatible) | Breaking change in schema | R-3.4 |
 | Gamebook pagination uses non-seeded random | Non-reproducible | R-3.5 |
 | Export with no metadata header | Missing provenance | R-3.6 |
+| Art direction has `style` but no `palette`; export proceeds with no warning | Partial DRESS silently shipped | R-3.9 |
 
 ### Output Contract
 
@@ -256,6 +259,7 @@ R-3.5: Gamebook pagination uses seeded random.
 R-3.6: Every export has deterministic metadata header.
 R-3.7: Illustration assets bundled or referenced by path.
 R-3.8: DRESS absence handled gracefully.
+R-3.9: Partial DRESS (incomplete `art_direction`) handled gracefully with WARNING naming missing fields.
 R-4.1: Every export file validated.
 R-4.2: Validation failure halts SHIP with ERROR.
 R-4.3: Validation is technical only (loadable, consistent).

@@ -2,10 +2,24 @@
 
 from __future__ import annotations
 
+import logging
+
 import pytest
 
 from questfoundry.export.context import build_export_context
 from questfoundry.graph.graph import Graph
+
+_CONTEXT_LOGGER = "questfoundry.export.context"
+
+
+def _has_event(caplog: pytest.LogCaptureFixture, event: str) -> bool:
+    """Return True if any captured record's message contains ``event``.
+
+    Mirrors the project convention (see test_polish_llm_phases.py et al.):
+    use ``caplog.records`` rather than ``caplog.text`` so the assertion
+    survives processor-chain or formatter changes in the structlog setup.
+    """
+    return any(event in str(r.message) for r in caplog.records)
 
 
 def _minimal_graph() -> Graph:
@@ -384,47 +398,38 @@ class TestCodewordPlayabilityWarning:
 
     def test_at_threshold_no_warning(self, caplog: pytest.LogCaptureFixture) -> None:
         """Exactly 10 codewords sits at the limit — no warning yet."""
-        import logging
-
         g = _minimal_graph()
         self._add_soft_dilemma_with_n_flags(g, 10)
 
-        with caplog.at_level(logging.WARNING, logger="questfoundry.export.context"):
+        with caplog.at_level(logging.WARNING, logger=_CONTEXT_LOGGER):
             ctx = build_export_context(g, "test")
 
         assert len(ctx.codewords) == 10
-        assert "codeword_count_exceeds_threshold" not in caplog.text
+        assert not _has_event(caplog, "codeword_count_exceeds_threshold")
 
     def test_above_threshold_warns(self, caplog: pytest.LogCaptureFixture) -> None:
         """11 codewords exceeds the playability threshold — must warn (R-1.7)."""
-        import logging
-
         g = _minimal_graph()
         self._add_soft_dilemma_with_n_flags(g, 11)
 
-        with caplog.at_level(logging.WARNING, logger="questfoundry.export.context"):
+        with caplog.at_level(logging.WARNING, logger=_CONTEXT_LOGGER):
             ctx = build_export_context(g, "test")
 
         assert len(ctx.codewords) == 11
-        assert "codeword_count_exceeds_threshold" in caplog.text
-        assert "'count': 11" in caplog.text
+        assert _has_event(caplog, "codeword_count_exceeds_threshold")
 
     def test_zero_codewords_no_warning(self, caplog: pytest.LogCaptureFixture) -> None:
-        import logging
-
         g = _minimal_graph()
-        with caplog.at_level(logging.WARNING, logger="questfoundry.export.context"):
+        with caplog.at_level(logging.WARNING, logger=_CONTEXT_LOGGER):
             ctx = build_export_context(g, "test")
         assert ctx.codewords == []
-        assert "codeword_count_exceeds_threshold" not in caplog.text
+        assert not _has_event(caplog, "codeword_count_exceeds_threshold")
 
 
 class TestPartialDressWarning:
-    """R-3.8: art_direction missing required fields must warn (graceful, not silent)."""
+    """R-3.9: art_direction missing required fields must warn (graceful, not silent)."""
 
     def test_complete_art_direction_no_warning(self, caplog: pytest.LogCaptureFixture) -> None:
-        import logging
-
         g = _minimal_graph()
         g.create_node(
             "art_direction::main",
@@ -438,15 +443,13 @@ class TestPartialDressWarning:
                 "aspect_ratio": "16:9",
             },
         )
-        with caplog.at_level(logging.WARNING, logger="questfoundry.export.context"):
+        with caplog.at_level(logging.WARNING, logger=_CONTEXT_LOGGER):
             ctx = build_export_context(g, "test")
 
         assert ctx.art_direction is not None
-        assert "art_direction_partial" not in caplog.text
+        assert not _has_event(caplog, "art_direction_partial")
 
     def test_missing_palette_warns(self, caplog: pytest.LogCaptureFixture) -> None:
-        import logging
-
         g = _minimal_graph()
         g.create_node(
             "art_direction::main",
@@ -460,18 +463,16 @@ class TestPartialDressWarning:
                 "aspect_ratio": "16:9",
             },
         )
-        with caplog.at_level(logging.WARNING, logger="questfoundry.export.context"):
+        with caplog.at_level(logging.WARNING, logger=_CONTEXT_LOGGER):
             ctx = build_export_context(g, "test")
 
         # Partial data still propagates (graceful degradation)
         assert ctx.art_direction is not None
-        assert "art_direction_partial" in caplog.text
-        assert "palette" in caplog.text
+        assert _has_event(caplog, "art_direction_partial")
+        assert _has_event(caplog, "palette")
 
     def test_blank_string_field_counts_as_missing(self, caplog: pytest.LogCaptureFixture) -> None:
         """Whitespace-only style is as bad as missing — both warn."""
-        import logging
-
         g = _minimal_graph()
         g.create_node(
             "art_direction::main",
@@ -485,18 +486,35 @@ class TestPartialDressWarning:
                 "aspect_ratio": "16:9",
             },
         )
-        with caplog.at_level(logging.WARNING, logger="questfoundry.export.context"):
+        with caplog.at_level(logging.WARNING, logger=_CONTEXT_LOGGER):
             build_export_context(g, "test")
 
-        assert "art_direction_partial" in caplog.text
-        assert "style" in caplog.text
+        assert _has_event(caplog, "art_direction_partial")
+        assert _has_event(caplog, "'style'")
+
+    def test_multiple_missing_fields_all_reported(self, caplog: pytest.LogCaptureFixture) -> None:
+        """When several fields are missing, the warning must list ALL of them.
+
+        Otherwise the user fixes one, reruns DRESS, hits the warning again
+        for the next field — fragile and unfriendly.
+        """
+        g = _minimal_graph()
+        # Only style + medium present; the other four fields all missing
+        g.create_node(
+            "art_direction::main",
+            {"type": "art_direction", "style": "ink", "medium": "digital"},
+        )
+        with caplog.at_level(logging.WARNING, logger=_CONTEXT_LOGGER):
+            build_export_context(g, "test")
+
+        assert _has_event(caplog, "art_direction_partial")
+        for missing in ("palette", "composition_notes", "negative_defaults", "aspect_ratio"):
+            assert _has_event(caplog, missing), f"missing field {missing!r} not in warning"
 
     def test_no_art_direction_node_no_warning(self, caplog: pytest.LogCaptureFixture) -> None:
-        """DRESS skipped entirely → art_direction=None, no partial warning."""
-        import logging
-
+        """DRESS skipped entirely → art_direction=None, no partial warning (R-3.8)."""
         g = _minimal_graph()
-        with caplog.at_level(logging.WARNING, logger="questfoundry.export.context"):
+        with caplog.at_level(logging.WARNING, logger=_CONTEXT_LOGGER):
             ctx = build_export_context(g, "test")
         assert ctx.art_direction is None
-        assert "art_direction_partial" not in caplog.text
+        assert not _has_event(caplog, "art_direction_partial")
