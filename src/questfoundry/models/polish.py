@@ -110,6 +110,40 @@ class ArcPivot(BaseModel):
     )
 
 
+class PerPathArc(BaseModel):
+    """Per-path arc trajectory entry for one entity on one path (R-3.6).
+
+    Produced by POLISH Phase 3 in the same LLM call that synthesizes
+    ``start``/``pivots``/``end_per_path``, ensuring internal consistency
+    by construction (single LLM context).
+
+    ``arc_type`` is set deterministically by POLISH from the entity's
+    category per R-3.7 (NOT chosen by the LLM); the LLM-supplied value
+    is validated against the derived value. ``pivot_beat`` MUST equal
+    ``CharacterArcMetadata.pivots[path_id]`` for the same path per R-3.8.
+    """
+
+    path_id: str = Field(min_length=1, description="Path this entry describes")
+    arc_type: str = Field(
+        min_length=1,
+        description=(
+            "Entity-category-derived arc type. The LLM emits the placeholder "
+            '``"_set_by_code"`` (or any value); POLISH overwrites this with '
+            "the value derived from the entity's category per R-3.7 — "
+            "character → transformation, location → atmosphere, "
+            "object → significance, faction → relationship."
+        ),
+    )
+    arc_line: str = Field(
+        min_length=1,
+        description="Concise A → B → C trajectory of the entity on this path",
+    )
+    pivot_beat: str = Field(
+        min_length=1,
+        description="Beat where the entity's trajectory turns (same path's pivots[path_id])",
+    )
+
+
 class CharacterArcMetadata(BaseModel):
     """Arc description for a single entity across the story.
 
@@ -129,6 +163,15 @@ class CharacterArcMetadata(BaseModel):
     end_per_path: dict[str, str] = Field(
         default_factory=dict,
         description="Where the entity ends up on each path (path_id → description)",
+    )
+    arcs_per_path: list[PerPathArc] = Field(
+        default_factory=list,
+        description=(
+            "R-3.6: per-path positional trajectories (path_id, arc_type, "
+            "arc_line, pivot_beat). One entry per path on which the entity "
+            "is arc-worthy. Same-LLM-call consistency: arcs_per_path[*].pivot_beat "
+            "MUST equal pivots[path_id] for the same path (R-3.8)."
+        ),
     )
 
 

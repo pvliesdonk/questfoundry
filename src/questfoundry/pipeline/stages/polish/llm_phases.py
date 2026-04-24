@@ -363,10 +363,18 @@ class _PolishLLMPhaseMixin:
         """Phase 3: Character Arc Synthesis.
 
         For entities appearing in 2+ beats, synthesizes arc descriptions
-        (start, pivots, end per path) for FILL's prose consistency.
+        (start, pivots, end per path, AND arcs_per_path) for FILL's prose
+        consistency. Per spec R-3.6, ``arcs_per_path`` is produced in the
+        SAME LLM call as start/pivots/end_per_path so the per-path arc
+        line and pivot_beat are internally consistent with the
+        per-entity pivot map. Per R-3.7 ``arc_type`` is set by code from
+        the entity's category. Per R-3.8 ``pivots[path_id]`` MUST equal
+        ``arcs_per_path[*].pivot_beat`` for the same path; mismatches
+        log INFO and the entry is dropped from arcs_per_path.
 
         Postconditions:
-        - CharacterArcMetadata nodes created for arc-worthy entities.
+        - Entity nodes carry ``character_arc`` annotation with start,
+          pivots, end_per_path, and arcs_per_path fields.
         """
         beat_nodes = graph.get_nodes_by_type("beat")
         entity_nodes = graph.get_nodes_by_type("entity")
@@ -391,6 +399,16 @@ class _PolishLLMPhaseMixin:
         total_tokens = 0
         arcs_created = 0
 
+        # R-3.7: arc_type is determined by entity category, NOT by the LLM.
+        # The LLM emits a placeholder which we overwrite with the derived
+        # value (and log a mismatch if the LLM tried to set a real type).
+        arc_type_by_category = {
+            "character": "transformation",
+            "location": "atmosphere",
+            "object": "significance",
+            "faction": "relationship",
+        }
+
         # Process entities in batches via a single LLM call per entity
         for entity_id, beat_appearances in sorted(arc_worthy.items()):
             context = format_entity_arc_context(graph, entity_id, beat_appearances)
@@ -404,9 +422,24 @@ class _PolishLLMPhaseMixin:
             total_llm_calls += llm_calls
             total_tokens += tokens
 
+            # Derive arc_type for this entity from its category (R-3.7).
+            # An unknown category is a graph-validation gap upstream — log
+            # a WARNING rather than silently emitting "transformation"
+            # (CLAUDE.md §Anti-Patterns: silent fallbacks are bugs).
+            entity_data = entity_nodes.get(entity_id, {})
+            category = entity_data.get("entity_category", "character")
+            if category not in arc_type_by_category:
+                log.warning(
+                    "phase3_unknown_entity_category",
+                    entity_id=entity_id,
+                    category=category,
+                    fallback="transformation",
+                )
+                derived_arc_type = "transformation"
+            else:
+                derived_arc_type = arc_type_by_category[category]
+
             # Store arc metadata as an annotation on the Entity node (R-3.3).
-            # The old pattern (separate character_arc_metadata nodes +
-            # has_arc_metadata edges) violated R-3.3 and ontology Part 1.
             for arc in result.character_arcs:
                 if arc.entity_id != entity_id:
                     log.info(
@@ -421,12 +454,67 @@ class _PolishLLMPhaseMixin:
                 # validator's shape check passes.
                 pivots_by_path = {p.path_id: p.beat_id for p in arc.pivots}
 
+                # Build arcs_per_path with R-3.7 arc_type override + R-3.8
+                # pivot consistency check. Entries that disagree with the
+                # entity-scoped pivot map are logged and dropped.
+                # Note R-3.8's "for each path_id present in BOTH" framing —
+                # an arcs_per_path entry for a path the entity has no pivot
+                # on is allowed (some paths have a trajectory line without a
+                # distinct turning point), so we only enforce equality when
+                # both maps reference the path.
+                arcs_per_path: list[dict[str, str]] = []
+                for entry in arc.arcs_per_path:
+                    expected_pivot = pivots_by_path.get(entry.path_id)
+                    if expected_pivot and expected_pivot != entry.pivot_beat:
+                        log.info(
+                            "phase3_arcs_per_path_pivot_mismatch",
+                            entity_id=entity_id,
+                            path_id=entry.path_id,
+                            pivots_value=expected_pivot,
+                            arcs_per_path_value=entry.pivot_beat,
+                        )
+                        continue
+                    if entry.arc_type not in {"_set_by_code", derived_arc_type}:
+                        log.info(
+                            "phase3_arc_type_overridden",
+                            entity_id=entity_id,
+                            path_id=entry.path_id,
+                            llm_value=entry.arc_type,
+                            derived=derived_arc_type,
+                        )
+                    arcs_per_path.append(
+                        {
+                            "path_id": entry.path_id,
+                            "arc_type": derived_arc_type,
+                            "arc_line": entry.arc_line,
+                            "pivot_beat": entry.pivot_beat,
+                        }
+                    )
+
+                # R-3.6 partial coverage: every path on which the entity is
+                # arc-worthy (i.e., has a pivot) should also have an
+                # arcs_per_path entry. Missing entries log a WARNING per the
+                # polish.md violation table; partial coverage is accepted but
+                # surfaced.
+                paths_with_pivot = set(pivots_by_path.keys())
+                covered_paths = {e["path_id"] for e in arcs_per_path}
+                missing_paths = paths_with_pivot - covered_paths
+                if missing_paths:
+                    log.warning(
+                        "phase3_arcs_per_path_partial_coverage",
+                        entity_id=entity_id,
+                        missing_paths=sorted(missing_paths),
+                        covered=len(covered_paths),
+                        total=len(paths_with_pivot),
+                    )
+
                 graph.update_node(
                     entity_id,
                     character_arc={
                         "start": arc.start,
                         "pivots": pivots_by_path,
                         "end_per_path": dict(arc.end_per_path),
+                        "arcs_per_path": arcs_per_path,
                     },
                 )
                 arcs_created += 1
