@@ -35,9 +35,11 @@ HTML_FORMAT_VERSION = "1.0.0"
 # R-3.3 voice-document-driven CSS. Each register/rhythm value maps to a
 # body class plus a scoped rule block. Falls back to baseline styling
 # (no class added) when FILL hasn't produced a voice document.
-_VOICE_REGISTERS = ("formal", "conversational", "literary", "sparse")
-_VOICE_RHYTHMS = ("varied", "punchy", "flowing")
-
+#
+# The CSS dicts below are the SINGLE SOURCE OF TRUTH for the valid
+# register/rhythm values: _voice_body_class and _voice_css_block both
+# validate against dict membership so a class can never be emitted
+# without a matching scoped rule (or vice versa).
 _VOICE_REGISTER_CSS = {
     "formal": """body.register-formal .prose {
   font-family: 'EB Garamond', Garamond, Georgia, serif;
@@ -206,10 +208,10 @@ def _voice_body_class(voice: dict[str, Any] | None) -> str:
         return ""
     classes: list[str] = []
     register = voice.get("voice_register")
-    if register in _VOICE_REGISTERS:
+    if register in _VOICE_REGISTER_CSS:
         classes.append(f"register-{register}")
     rhythm = voice.get("sentence_rhythm")
-    if rhythm in _VOICE_RHYTHMS:
+    if rhythm in _VOICE_RHYTHM_CSS:
         classes.append(f"rhythm-{rhythm}")
     if not classes:
         return ""

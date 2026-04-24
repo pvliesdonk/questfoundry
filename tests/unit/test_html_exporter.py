@@ -385,6 +385,36 @@ class TestHtmlVoiceStyling:
         # No rhythm artifacts
         assert "rhythm-" not in content
 
+    def test_only_rhythm_present(self, tmp_path: Path) -> None:
+        """Symmetric to test_only_register_present: missing register field
+        doesn't break export — only rhythm class added.
+        """
+        ctx = _simple_context()
+        ctx.voice = {"sentence_rhythm": "punchy"}
+
+        result = HtmlExporter().export(ctx, tmp_path / "out")
+        content = result.read_text()
+
+        assert '<body class="rhythm-punchy">' in content
+        assert "body.rhythm-punchy .prose" in content
+        # No register artifacts
+        assert "register-" not in content
+
+    def test_all_unknown_values_no_body_class(self, tmp_path: Path) -> None:
+        """Both fields unknown → no class= attribute at all (not class="").
+
+        Pinning this behaviour: an empty class attribute would be valid
+        HTML but signals "voice was attempted" when in fact nothing
+        useful was applied.
+        """
+        ctx = _simple_context()
+        ctx.voice = {"voice_register": "shouty", "sentence_rhythm": "chaotic"}
+        result = HtmlExporter().export(ctx, tmp_path / "out")
+        content = result.read_text()
+
+        assert "<body>" in content
+        assert "<body class=" not in content
+
     def test_unknown_register_silently_ignored(self, tmp_path: Path) -> None:
         """Out-of-vocabulary register doesn't emit a body class.
 
