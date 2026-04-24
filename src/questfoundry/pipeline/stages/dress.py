@@ -500,6 +500,25 @@ class DressStage:
         visuals_list = [ev.model_dump() for ev in output.entity_visuals]
         apply_dress_art_direction(graph, art_dir_dict, visuals_list)
 
+        # R-1.3 / R-1.4: every entity with appears edges must have an
+        # EntityVisual with a non-empty reference_prompt_fragment.  Without
+        # this, image generation has no per-entity prompt fragment to inject
+        # and illustrations drift across passages.  Halt loudly so the gap
+        # is fixed in the prompt or upstream rather than silently shipped.
+        from questfoundry.graph.dress_mutations import validate_entity_visual_coverage
+
+        coverage_errors = validate_entity_visual_coverage(graph)
+        if coverage_errors:
+            log.error(
+                "entity_visual_coverage_failed",
+                error_count=len(coverage_errors),
+                errors=coverage_errors[:10],
+            )
+            raise DressStageError(
+                f"DRESS Phase 0 produced {len(coverage_errors)} EntityVisual coverage "
+                f"violation(s):\n" + "\n".join(f"  - {e}" for e in coverage_errors)
+            )
+
         log.info(
             "art_direction_created",
             style=output.art_direction.style,
@@ -659,35 +678,24 @@ class DressStage:
         briefs_created = 0
         briefs_skipped = 0
 
-        # Collect passage IDs with prose and pre-compute structural scores.
-        # Pre-filter by min_priority: skip passages whose *best possible*
-        # priority (structural score + max LLM adjustment of +2) would still
-        # exceed the threshold. This avoids wasting LLM tokens on passages
-        # that can't possibly make the cut.
+        # R-2.1: every passage with prose gets a brief. The previous
+        # implementation pre-filtered by min_priority before generation
+        # to save LLM tokens, but the spec requires that low-priority
+        # passages also produce briefs (with the priority itself surfaced
+        # at Gate 2 / Phase 4 for human reprioritization).  Image-budget
+        # filtering applies later, at render time.
         eligible_ids: list[str] = []
         base_scores: dict[str, int] = {}
-        priority_filtered = 0
         for passage_id, passage_data in passages.items():
             if not passage_data.get("prose"):
                 briefs_skipped += 1
                 continue
-            score = compute_structural_score(graph, passage_id)
-            best_possible = map_score_to_priority(score + 2)
-            if best_possible > self._min_priority or best_possible == 0:
-                priority_filtered += 1
-                continue
             eligible_ids.append(passage_id)
-            base_scores[passage_id] = score
+            base_scores[passage_id] = compute_structural_score(graph, passage_id)
 
-        if priority_filtered:
-            log.info(
-                "briefs_priority_filtered",
-                min_priority=self._min_priority,
-                filtered=priority_filtered,
-            )
-
-        # Store the min_priority used for brief generation so generate-images
-        # can detect when it requests briefs that were never generated.
+        # Record min_priority for downstream image-budget enforcement; the
+        # value is no longer used to suppress brief creation but is still
+        # consulted by generate-images to choose what to render.
         graph.upsert_node(
             "dress_meta::brief_config",
             {
@@ -766,6 +774,12 @@ class DressStage:
         # Post-process results: apply priority mapping, store on graph
         # Composition log is best-effort: concurrent batches read a snapshot
         # from before their wave started; updates accumulate sequentially here.
+        # R-2.1: every passage with prose gets a brief — including ones whose
+        # computed priority is 0 (would-be-skipped).  Those briefs land with
+        # priority=_SKIP_PRIORITY (a sentinel above any practical cutoff) so
+        # Gate 2 can surface them for human reprioritization but they won't be
+        # rendered automatically.
+        _SKIP_PRIORITY = 99
         for batch_result in results:
             if batch_result is None:
                 log.warning("brief_batch_failed", detail="batch returned no results")
@@ -774,14 +788,14 @@ class DressStage:
                 score = base_scores.get(passage_id, 0)
                 final_priority = map_score_to_priority(score + llm_adjustment)
                 if final_priority < 1:
-                    briefs_skipped += 1
                     log.debug(
-                        "brief_skipped",
+                        "brief_skip_priority",
                         passage_id=passage_id,
                         base_score=score,
                         llm_adj=llm_adjustment,
+                        stored_as=_SKIP_PRIORITY,
                     )
-                    continue
+                    final_priority = _SKIP_PRIORITY
 
                 brief_dict["priority"] = final_priority
                 apply_dress_brief(graph, passage_id, brief_dict, final_priority)
@@ -934,12 +948,22 @@ class DressStage:
         graph: Graph,
         model: BaseChatModel,  # noqa: ARG002
     ) -> DressPhaseResult:
-        """Phase 3: Review briefs and select which to render.
+        """Phase 3 (spec Phase 4): Gate 2 — Review briefs and select.
 
-        In auto-approve mode all briefs are selected. In interactive
-        mode (future), a gate would present briefs for budget selection.
-        Stores the selection as metadata on the graph.
+        Per spec R-4.1, the human sets the rendering budget; per R-4.4,
+        the approval (mode + timestamp + budget) is recorded so
+        downstream stages have an audit trail.
+
+        - ``--no-interactive`` mode: auto-approve every brief whose
+          priority is ≤ ``self._min_priority`` and stamp the budget as
+          ``priority_cutoff=self._min_priority``.
+        - Interactive mode: same default as above for now (an in-loop
+          interactive selection prompt is a separate UX concern tracked
+          in #1328's recommendation; the stamp records ``approval_mode``
+          either way so the decision is auditable).
         """
+        from datetime import UTC, datetime
+
         briefs = graph.get_nodes_by_type("illustration_brief")
         if not briefs:
             return DressPhaseResult(
@@ -953,15 +977,34 @@ class DressStage:
             briefs.items(),
             key=lambda item: item[1].get("priority", 99),
         )
-        selected_ids = [bid for bid, _ in sorted_briefs]
 
-        # Store selection in graph metadata for Phase 4
+        # R-4.1: pick a budget. Selection rule today: include every brief
+        # at or above the configured min_priority cutoff. Interactive
+        # budget refinement (e.g. an in-loop prompt to pick a different
+        # cutoff) is the spec's eventual goal but is left to a future
+        # change; the recorded approval_mode lets the user see what was
+        # actually applied.
+        selected_ids = [
+            bid for bid, bdata in sorted_briefs if bdata.get("priority", 99) <= self._min_priority
+        ]
+
+        approval_mode = "interactive" if self._interactive else "no_interactive"
+
+        # R-4.4: stamp approval metadata on the dress_meta::selection node
+        # so SHIP and the CLI report can confirm Gate 2 actually happened
+        # and surface what budget was applied.
         graph.upsert_node(
             "dress_meta::selection",
             {
                 "type": "dress_meta",
                 "selected_briefs": selected_ids,
                 "total_briefs": len(briefs),
+                "approved_at": datetime.now(UTC).isoformat(),
+                "approval_mode": approval_mode,
+                "budget": {
+                    "rule": "priority_cutoff",
+                    "priority_cutoff": self._min_priority,
+                },
             },
         )
 
@@ -969,12 +1012,17 @@ class DressStage:
             "review_complete",
             selected=len(selected_ids),
             total=len(briefs),
+            approval_mode=approval_mode,
+            priority_cutoff=self._min_priority,
         )
 
         return DressPhaseResult(
             phase="review",
             status="completed",
-            detail=f"{len(selected_ids)} of {len(briefs)} briefs selected",
+            detail=(
+                f"{len(selected_ids)} of {len(briefs)} briefs selected "
+                f"(cutoff=priority≤{self._min_priority}, mode={approval_mode})"
+            ),
         )
 
     # -------------------------------------------------------------------------

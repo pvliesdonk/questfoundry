@@ -288,6 +288,88 @@ class TestPhase0ArtDirection:
         assert graph.get_last_stage() == "dress"
 
     @pytest.mark.asyncio()
+    async def test_phase0_halts_when_appearing_entity_lacks_visual(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """R-1.3 / R-1.4: Phase 0 raises DressStageError if any entity
+        with appears edges ends up without an EntityVisual (or with an
+        empty reference_prompt_fragment) after the LLM call."""
+        from questfoundry.pipeline.stages.dress import DressStageError
+
+        g = Graph()
+        g.set_last_stage("fill")
+        g.create_node(
+            "vision::main",
+            {
+                "type": "vision",
+                "genre": "dark fantasy",
+                "tone": "brooding",
+                "themes": ["betrayal"],
+                "scope": {"story_size": "short"},
+            },
+        )
+        g.create_node(
+            "entity::protagonist",
+            {"type": "entity", "raw_id": "protagonist", "entity_type": "character"},
+        )
+        g.create_node(
+            "entity::ghost",
+            {"type": "entity", "raw_id": "ghost", "entity_type": "character"},
+        )
+        g.create_node("passage::opening", {"type": "passage", "raw_id": "opening"})
+        # Both entities appear in the prose
+        g.add_edge("appears", "entity::protagonist", "passage::opening")
+        g.add_edge("appears", "entity::ghost", "passage::opening")
+        g.save(tmp_path / "graph.db")
+
+        # LLM provides a visual for protagonist only — ghost is missing
+        partial_output = DressPhase0Output(
+            art_direction=ArtDirection(
+                style="ink",
+                medium="brush ink on rice paper",
+                palette=["midnight blue"],
+                composition_notes="balanced framing",
+                negative_defaults="cartoon",
+                aspect_ratio="16:9",
+            ),
+            entity_visuals=[
+                EntityVisualWithId(
+                    entity_id="protagonist",
+                    description="Young scholar",
+                    distinguishing_features=["focused eyes"],
+                    color_associations=["indigo"],
+                    reference_prompt_fragment="young scholar, focused eyes",
+                ),
+            ],
+        )
+
+        stage = DressStage(project_path=tmp_path)
+        # The phase reads two execute()-set attrs we'd otherwise miss when
+        # calling the phase directly. Set them to no-op defaults.
+        stage._unload_after_discuss = None  # type: ignore[attr-defined]
+        stage._unload_after_summarize = None  # type: ignore[attr-defined]
+        with (
+            patch(
+                "questfoundry.pipeline.stages.dress.run_discuss_phase",
+                new_callable=AsyncMock,
+                return_value=([AIMessage(content="ok")], 1, 100),
+            ),
+            patch(
+                "questfoundry.pipeline.stages.dress.summarize_discussion",
+                new_callable=AsyncMock,
+                return_value=("brief", 50),
+            ),
+            patch(
+                "questfoundry.pipeline.stages.dress.serialize_to_artifact",
+                new_callable=AsyncMock,
+                return_value=(partial_output, 100),
+            ),
+            pytest.raises(DressStageError, match="EntityVisual coverage"),
+        ):
+            await stage._phase_0_art_direction(g, MagicMock())
+
+    @pytest.mark.asyncio()
     async def test_phase0_counts_metrics(
         self,
         tmp_path: Path,
@@ -376,8 +458,8 @@ class TestPhase0ArtDirection:
 
 class TestPhase3Review:
     @pytest.mark.asyncio()
-    async def test_selects_all_briefs(self) -> None:
-        """Auto-approve mode selects all briefs sorted by priority."""
+    async def test_selects_briefs_within_priority_cutoff(self) -> None:
+        """Default cutoff (_min_priority=3) selects priorities 1, 2, 3 sorted."""
         g = Graph()
         g.create_node(
             "illustration_brief::opening",
@@ -396,7 +478,7 @@ class TestPhase3Review:
 
         selection = g.get_node("dress_meta::selection")
         assert selection is not None
-        # Should be sorted by priority (1 first)
+        # Sorted by priority (1 first)
         assert selection["selected_briefs"][0] == "illustration_brief::climax"
 
     @pytest.mark.asyncio()
@@ -405,6 +487,64 @@ class TestPhase3Review:
         stage = DressStage()
         result = await stage._phase_3_review(g, MagicMock())
         assert result.detail == "no briefs to review"
+
+    @pytest.mark.asyncio()
+    async def test_priority_cutoff_excludes_low_priority_briefs(self) -> None:
+        """R-2.1 + R-4.1: low-priority briefs exist (no pre-filter) but
+        Gate 2 selection respects the min_priority budget."""
+        g = Graph()
+        g.create_node(
+            "illustration_brief::high",
+            {"type": "illustration_brief", "priority": 1, "subject": "high"},
+        )
+        g.create_node(
+            "illustration_brief::low",
+            {"type": "illustration_brief", "priority": 4, "subject": "low"},
+        )
+
+        stage = DressStage()
+        stage._min_priority = 2  # tight budget — only priority 1+2 render
+        result = await stage._phase_3_review(g, MagicMock())
+
+        assert result.status == "completed"
+        assert "1 of 2" in result.detail
+        selection = g.get_node("dress_meta::selection")
+        assert selection["selected_briefs"] == ["illustration_brief::high"]
+        # The low-priority brief still EXISTS (no pre-filter at Phase 1) —
+        # it's just not selected for rendering.
+        assert g.get_node("illustration_brief::low") is not None
+
+    @pytest.mark.asyncio()
+    async def test_review_records_approval_stamp(self) -> None:
+        """R-4.4: dress_meta::selection carries approved_at + approval_mode + budget."""
+        g = Graph()
+        g.create_node(
+            "illustration_brief::a",
+            {"type": "illustration_brief", "priority": 1, "subject": "a"},
+        )
+
+        stage = DressStage()
+        # Default mode is non-interactive (False)
+        await stage._phase_3_review(g, MagicMock())
+        sel = g.get_node("dress_meta::selection")
+        assert sel is not None
+        assert sel.get("approved_at"), "approved_at timestamp must be set"
+        assert sel.get("approval_mode") == "no_interactive"
+        assert sel.get("budget", {}).get("rule") == "priority_cutoff"
+        assert sel.get("budget", {}).get("priority_cutoff") == stage._min_priority
+
+    @pytest.mark.asyncio()
+    async def test_review_records_interactive_mode_when_set(self) -> None:
+        g = Graph()
+        g.create_node(
+            "illustration_brief::a",
+            {"type": "illustration_brief", "priority": 1, "subject": "a"},
+        )
+        stage = DressStage()
+        stage._interactive = True
+        await stage._phase_3_review(g, MagicMock())
+        sel = g.get_node("dress_meta::selection")
+        assert sel.get("approval_mode") == "interactive"
 
 
 # ---------------------------------------------------------------------------
@@ -983,8 +1123,10 @@ class TestPhase1Briefs:
         assert result.detail == "no passages"
 
     @pytest.mark.asyncio()
-    async def test_low_priority_skipped(self) -> None:
-        """Brief with very low combined score is skipped."""
+    async def test_low_priority_brief_still_created(self) -> None:
+        """R-2.1: every passage with prose gets a brief, even if the computed
+        priority is 0. The brief is stored with a high sentinel priority so
+        Gate 2 can surface it, but it won't be auto-rendered."""
         g = Graph()
         g.create_node(
             "passage::boring",
@@ -1000,9 +1142,13 @@ class TestPhase1Briefs:
         ):
             result = await stage._phase_1_briefs(g, MagicMock())
 
-        # base_score=0, llm_adj=-2 → total=-2 → priority=0 → skipped
-        assert g.get_node("illustration_brief::boring") is None
-        assert "skipped" in result.detail
+        # base_score=0, llm_adj=-2 → total=-2 → priority would be 0;
+        # spec-compliant behaviour: brief is created with sentinel priority=99
+        # so it appears at Gate 2 but lies below any reasonable budget cutoff.
+        assert result.status == "completed"
+        brief = g.get_node("illustration_brief::boring")
+        assert brief is not None
+        assert brief.get("priority") == 99
 
     @pytest.mark.asyncio()
     async def test_batching_groups_passages(self) -> None:
