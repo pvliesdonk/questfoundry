@@ -775,6 +775,34 @@ class TestComputeArcTraversalsCycleFallback:
         assert result == {"p1": []}
 
 
+class TestTopologicalSortSubsetRaisesOnCycle:
+    """Direct cycle in the subset must raise PipelineInvariantError (#1344).
+
+    Production callers filter to reachable beats before calling, so this
+    raise primarily catches programmer error in future callers — but the
+    behaviour must be loud either way per CLAUDE.md §Anti-Patterns.
+    """
+
+    def test_cyclic_subset_raises(self) -> None:
+        from questfoundry.graph.algorithms import _topological_sort_subset
+        from questfoundry.graph.invariants import PipelineInvariantError
+
+        # 3-node cycle a → b → c → a, all in subset
+        beat_set = {"a", "b", "c"}
+        successors = {"a": ["b"], "b": ["c"], "c": ["a"]}
+        with pytest.raises(PipelineInvariantError, match="cycle detected"):
+            _topological_sort_subset(beat_set, successors)
+
+    def test_acyclic_subset_returns_topo_order(self) -> None:
+        """Sanity: clean subset still produces a valid topological order."""
+        from questfoundry.graph.algorithms import _topological_sort_subset
+
+        beat_set = {"a", "b", "c"}
+        successors = {"a": ["b"], "b": ["c"], "c": []}
+        result = _topological_sort_subset(beat_set, successors)
+        assert result.index("a") < result.index("b") < result.index("c")
+
+
 # ---------------------------------------------------------------------------
 # compute_passage_traversals tests
 # ---------------------------------------------------------------------------

@@ -667,15 +667,17 @@ def enumerate_arcs(graph: Graph, *, max_arc_count: int | None = None) -> list[Ar
         all_beats.update(beats)
 
     reference_positions: dict[str, int] | None = None
-    try:
-        global_sequence = topological_sort_beats(
-            graph,
-            list(all_beats),
-            priority_beats=shared,
-        )
-        reference_positions = {bid: idx for idx, bid in enumerate(global_sequence)}
-    except ValueError:
-        pass  # Fallback: no reference if global beat set has cycles
+    # A cycle in the beat DAG is a structural-invariant violation per
+    # CLAUDE.md §Anti-Patterns; both call sites below now propagate the
+    # ValueError to the phase runner instead of degrading silently to
+    # sorted-by-id order. The previous fallbacks shipped wrong narrative
+    # order to downstream POLISH/FILL with no surfaced signal.
+    global_sequence = topological_sort_beats(
+        graph,
+        list(all_beats),
+        priority_beats=shared,
+    )
+    reference_positions = {bid: idx for idx, bid in enumerate(global_sequence)}
 
     # Cartesian product of paths
     arcs: list[Arc] = []
@@ -689,15 +691,12 @@ def enumerate_arcs(graph: Graph, *, max_arc_count: int | None = None) -> list[Ar
         for pid in path_combo:
             beat_set.update(path_beat_sets.get(pid, set()))
 
-        try:
-            sequence = topological_sort_beats(
-                graph,
-                list(beat_set),
-                priority_beats=shared,
-                reference_positions=reference_positions,
-            )
-        except ValueError:
-            sequence = sorted(beat_set)  # Fallback for cycles
+        sequence = topological_sort_beats(
+            graph,
+            list(beat_set),
+            priority_beats=shared,
+            reference_positions=reference_positions,
+        )
 
         arcs.append(
             Arc(
@@ -2626,15 +2625,12 @@ def _get_path_beats_ordered(
     beats = path_beats_map.get(path_id, [])
     if not beats:
         return []
-    try:
-        return topological_sort_beats(graph, beats)
-    except ValueError:
-        log.warning(
-            "interleave_path_cycle_fallback",
-            path_id=path_id,
-            beats=beats,
-        )
-        return sorted(beats)  # Fallback to alphabetical on cycle (should not happen)
+    # Cycle on the per-path beat subgraph is a structural-invariant
+    # violation — the comment used to read "should not happen", but the
+    # fallback was shipping degraded order to interleave anyway. Per
+    # CLAUDE.md §Anti-Patterns we now propagate the failure so the phase
+    # runner halts and the bug is visible.
+    return topological_sort_beats(graph, beats)
 
 
 def _commits_beats_for_dilemma(

@@ -336,7 +336,14 @@ def _topological_sort_subset(
     """Topologically sort a subset of beats using successor edges.
 
     Uses Kahn's algorithm restricted to beats in ``beat_set``.
-    Falls back to sorted order if cycles are detected.
+
+    Raises:
+        PipelineInvariantError: If the subgraph contains a cycle. A cycle
+            in the beat DAG is a structural-invariant violation per
+            CLAUDE.md §Anti-Patterns and POLISH R-4c.1; producing a
+            sorted-by-id fallback would silently corrupt downstream
+            beat ordering. Callers must fix the upstream cycle, not
+            tolerate it.
     """
     if not beat_set:
         return []
@@ -363,9 +370,17 @@ def _topological_sort_subset(
 
                     bisect.insort(queue_sorted, child)
 
-    # Cycle fallback: if not all beats were emitted, append remaining sorted
     if len(result) < len(beat_set):
-        remaining = sorted(beat_set - set(result))
-        result.extend(remaining)
+        from questfoundry.graph.invariants import PipelineInvariantError
+
+        unprocessed = sorted(beat_set - set(result))
+        msg = (
+            f"Beat DAG cycle detected in topological sort: "
+            f"{len(unprocessed)} beat(s) could not be ordered: "
+            f"{', '.join(repr(b) for b in unprocessed[:5])}"
+            f"{' …' if len(unprocessed) > 5 else ''}. "
+            f"This is a structural invariant violation — fix the cycle upstream."
+        )
+        raise PipelineInvariantError(msg)
 
     return result
