@@ -313,16 +313,7 @@ class PdfExporter:
 
         # R-3.6 + #1336 sidecar: pipeline metadata + the page-number map
         # next to the PDF for debugging and provenance.
-        metadata = build_export_metadata(context, PDF_FORMAT_VERSION, timestamp=timestamp)
-        sidecar = {
-            "_metadata": metadata.to_dict(),
-            "page_map": dict(sorted(numbering.items())),
-        }
-        sidecar_file = output_file.with_suffix(".pdf.map.json")
-        sidecar_file.write_text(
-            json.dumps(sidecar, indent=2, ensure_ascii=False),
-            encoding="utf-8",
-        )
+        sidecar_file = _write_pdf_sidecar(output_file, context, numbering, timestamp=timestamp)
 
         log.info(
             "pdf_export_complete",
@@ -333,6 +324,32 @@ class PdfExporter:
         )
 
         return output_file
+
+
+def _write_pdf_sidecar(
+    pdf_path: Path,
+    context: ExportContext,
+    numbering: dict[str, int],
+    *,
+    timestamp: str | None = None,
+) -> Path:
+    """Write the ``story.pdf.map.json`` sidecar next to a rendered PDF.
+
+    Carries the R-3.6 metadata block plus the R-3.5 ``passage_id →
+    page_number`` map (#1336). Factored out so it can be exercised
+    without the optional WeasyPrint dependency installed.
+    """
+    metadata = build_export_metadata(context, PDF_FORMAT_VERSION, timestamp=timestamp)
+    sidecar = {
+        "_metadata": metadata.to_dict(),
+        "page_map": dict(sorted(numbering.items())),
+    }
+    sidecar_file = pdf_path.with_suffix(".pdf.map.json")
+    sidecar_file.write_text(
+        json.dumps(sidecar, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    return sidecar_file
 
 
 def _render_html(

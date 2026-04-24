@@ -99,13 +99,24 @@ class Exporter(Protocol):
     """Protocol for story export format handlers."""
 
     format_name: str
+    format_version: str
 
-    def export(self, context: ExportContext, output_dir: Path) -> Path:
+    def export(
+        self,
+        context: ExportContext,
+        output_dir: Path,
+        *,
+        timestamp: str | None = None,
+    ) -> Path:
         """Export the story to the given output directory.
 
         Args:
             context: Extracted story data.
             output_dir: Directory to write output files.
+            timestamp: Optional ISO 8601 string used by the R-3.6 metadata
+                header. Tests inject a fixed value for deterministic
+                assertions; production callers should leave it ``None`` so
+                the exporter stamps ``datetime.now(UTC)`` itself.
 
         Returns:
             Path to the main output file.

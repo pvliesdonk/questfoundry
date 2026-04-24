@@ -23,9 +23,11 @@ if TYPE_CHECKING:
 def compute_passage_numbering(passages: list[ExportPassage]) -> dict[str, int]:
     """Map passage IDs to randomized section numbers (start passage = 1).
 
-    Uses a SHA256 of the sorted-and-joined passage IDs as the seed so
-    the shuffle is reproducible across runs and Python versions
-    (Python's built-in ``hash()`` is randomized per process).
+    Uses an MD5 digest of the sorted-and-joined passage IDs as the
+    PRNG seed so the shuffle is reproducible across runs and Python
+    versions (Python's built-in ``hash()`` is randomized per process).
+    MD5 is used purely as a fast non-cryptographic content fingerprint
+    here — there is no security implication.
 
     Args:
         passages: All passages destined for the export.

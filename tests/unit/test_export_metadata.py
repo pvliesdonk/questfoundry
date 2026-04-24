@@ -145,9 +145,20 @@ class TestTweeExporterMetadata:
         out2 = TweeExporter().export(_ctx(), tmp_path / "b", timestamp=_FIXED_TS)
 
         def _metadata_block(text: str) -> str:
+            """Extract the StoryMetadata block.
+
+            Read until the next Twee passage header (``::``) or a blank
+            line, instead of slicing a fixed line count — adding a fifth
+            metadata field would otherwise silently truncate the assertion.
+            """
             lines = text.splitlines()
             start = next(i for i, line in enumerate(lines) if ":: StoryMetadata" in line)
-            return "\n".join(lines[start : start + 5])
+            block = [lines[start]]
+            for line in lines[start + 1 :]:
+                if not line.strip() or line.startswith("::"):
+                    break
+                block.append(line)
+            return "\n".join(block)
 
         assert _metadata_block(out1.read_text()) == _metadata_block(out2.read_text())
 
@@ -211,3 +222,52 @@ def test_snapshot_hash_consistent_across_formats(tmp_path: Path) -> None:
 def test_format_version_passed_through(format_version: str) -> None:
     meta = build_export_metadata(_ctx(), format_version, timestamp=_FIXED_TS)
     assert meta.format_version == format_version
+
+
+# ---------------------------------------------------------------------------
+# PDF sidecar — exercised without WeasyPrint via the helper
+# ---------------------------------------------------------------------------
+
+
+def test_pdf_sidecar_written_without_weasyprint(tmp_path: Path) -> None:
+    """``_write_pdf_sidecar`` runs independently of WeasyPrint.
+
+    The sidecar is the R-3.6 + #1336 contract and must be testable on
+    machines that don't have the optional PDF dependency installed (CI
+    in particular). Touching ``_write_pdf_sidecar`` directly bypasses
+    ``write_pdf`` while still exercising the spec-relevant code path.
+    """
+    from questfoundry.export.pdf_exporter import (
+        PDF_FORMAT_VERSION,
+        _write_pdf_sidecar,
+    )
+
+    pdf_path = tmp_path / "story.pdf"
+    pdf_path.touch()  # the helper only needs the path, not the file
+    numbering = {"passage::start": 1, "passage::end": 2}
+
+    sidecar = _write_pdf_sidecar(pdf_path, _ctx(), numbering, timestamp=_FIXED_TS)
+
+    assert sidecar.name == "story.pdf.map.json"
+    data = json.loads(sidecar.read_text())
+    assert data["_metadata"]["format_version"] == PDF_FORMAT_VERSION
+    assert data["_metadata"]["generation_timestamp"] == _FIXED_TS
+    assert data["page_map"] == {"passage::start": 1, "passage::end": 2}
+
+
+def test_get_pipeline_version_falls_back_to_sentinel(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """If the package isn't installed, return a stable sentinel rather than
+    crashing. The sentinel keeps the metadata block well-formed and the
+    snapshot hash stable across checkout-only runs.
+    """
+    from importlib.metadata import PackageNotFoundError
+
+    import questfoundry.export.metadata as md
+
+    def _raise(_name: str) -> str:
+        raise PackageNotFoundError
+
+    monkeypatch.setattr(md, "version", _raise)
+    assert md.get_pipeline_version() == md._UNKNOWN_VERSION

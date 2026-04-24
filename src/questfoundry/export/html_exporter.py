@@ -231,17 +231,24 @@ def _build_html_document(
     title: str,
     passages_html: str,
     start_id: str,
+    metadata: ExportMetadata,
     codex_html: str = "",
     art_direction_meta: str = "",
-    metadata: ExportMetadata | None = None,
     cover_html: str = "",
     language: str = "en",
     ui: dict[str, str] | None = None,
 ) -> str:
-    """Build the complete HTML document."""
-    metadata_meta = _render_metadata_meta_tags(metadata) if metadata else ""
-    extra_meta_parts = [m for m in (metadata_meta, art_direction_meta) if m]
-    extra_meta = ("\n" + "\n".join(extra_meta_parts)) if extra_meta_parts else ""
+    """Build the complete HTML document.
+
+    ``metadata`` is required: R-3.6 mandates a metadata header on every
+    export, so an HTML build without it would silently violate the spec.
+    Make the parameter mandatory rather than defaulting to ``None`` so a
+    forgotten argument fails at call time, not at audit time.
+    """
+    extra_meta_parts = [_render_metadata_meta_tags(metadata)]
+    if art_direction_meta:
+        extra_meta_parts.append(art_direction_meta)
+    extra_meta = "\n" + "\n".join(extra_meta_parts)
     codex_label = html.escape((ui or {}).get("codex", "Codex"))
     codex_button = (
         f'<button class="codex-toggle" id="codex-toggle">{codex_label}</button>'

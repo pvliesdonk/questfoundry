@@ -131,16 +131,20 @@ class TestPassageNumbering:
         assert numbering == {"only": 1}
 
     def test_no_start_passage_uses_first(self) -> None:
-        """When no passage has is_start=True, first passage gets number 1."""
+        """When no passage has is_start=True, the first passage in list order
+        (NOT alphabetically first) gets number 1.
+        """
+        # Pass passages in non-alphabetical order so this test actually
+        # discriminates list-order behavior from sorted-order behavior.
         passages = [
+            ExportPassage(id="passage::gamma", prose="Gamma."),
             ExportPassage(id="passage::alpha", prose="Alpha."),
             ExportPassage(id="passage::beta", prose="Beta."),
-            ExportPassage(id="passage::gamma", prose="Gamma."),
         ]
         numbering = _build_passage_numbering(passages)
 
-        # First passage (alphabetically sorted) should be 1
-        assert numbering["passage::alpha"] == 1
+        # First in list order, NOT alphabetically first
+        assert numbering["passage::gamma"] == 1
         # All passages should have unique numbers
         assert len(set(numbering.values())) == 3
 
