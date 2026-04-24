@@ -23,7 +23,6 @@ from questfoundry.graph.context_compact import (
 )
 from questfoundry.graph.graph import Graph
 from questfoundry.models.grow import GrowPhaseResult
-from questfoundry.pipeline.batching import batch_llm_calls
 from questfoundry.pipeline.stages.grow._helpers import (
     GrowStageError,
     _format_structural_feedback,
@@ -39,38 +38,6 @@ if TYPE_CHECKING:
     from langchain_core.language_models import BaseChatModel
 
     from questfoundry.graph.mutations import GrowValidationError
-
-
-def _build_path_dilemma_context(
-    graph: Graph,
-    path_nodes: dict[str, Any],
-) -> tuple[str, str]:
-    """Build path-to-dilemma mapping text and valid dilemma ID text for LLM context.
-
-    Args:
-        graph: The graph store to query for dilemma nodes.
-        path_nodes: Dict of path_id → path data.
-
-    Returns:
-        A tuple of (path_dilemma_map_text, valid_dilemma_ids_text) ready for
-        injection into a prompt context dict.
-    """
-    dilemma_nodes = graph.get_nodes_by_type("dilemma")
-    valid_dilemma_ids = sorted(dilemma_nodes.keys())
-    path_dilemma_lines = []
-    for pid in sorted(path_nodes.keys()):
-        pdata = path_nodes[pid]
-        dilemma_id = pdata.get("dilemma_id", "")
-        if dilemma_id and not dilemma_id.startswith("dilemma::"):
-            dilemma_id = f"dilemma::{dilemma_id}"
-        question = ""
-        if dilemma_id and dilemma_id in dilemma_nodes:
-            question = dilemma_nodes[dilemma_id].get("question", "")
-        suffix = f' ("{question}")' if question else ""
-        path_dilemma_lines.append(f"  {pid} → {dilemma_id or '(none)'}{suffix}")
-    path_dilemma_map_text = "\n".join(path_dilemma_lines) or "(no paths with dilemmas)"
-    valid_dilemma_ids_text = ", ".join(valid_dilemma_ids) or "(none)"
-    return path_dilemma_map_text, valid_dilemma_ids_text
 
 
 class _LLMPhaseMixin:
@@ -686,151 +653,12 @@ class _LLMPhaseMixin:
     # ``polish/llm_phases.py``. The shared gap-insertion helper lives in
     # ``graph/gap_insertion.py``. See issue #1368 for the migration epic.
 
-    @grow_phase(name="pacing_gaps", depends_on=["scene_types"], priority=5)
-    async def _phase_4c_pacing_gaps(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
-        """Phase 4c: Detect and fix pacing issues (3+ same scene_type in a row).
-
-        Runs deterministic pacing detection first, then asks the LLM
-        to propose correction beats for any violations found.
-
-        Preconditions:
-        - Beats have scene_type tags from Phase 4a (the only direct
-          dependency since narrative_gaps moved to POLISH per #1368).
-
-        Postconditions:
-        - Pacing violations (3+ consecutive same scene_type) corrected.
-        - Correction beats inserted to break monotonous sequences.
-
-        Invariants:
-        - Skipped if no scene_type tags found (Phase 4a did not run).
-        - Only affected paths included in LLM context.
-        - Deterministic pacing detection precedes LLM correction.
-        """
-        from questfoundry.graph.grow_algorithms import (
-            detect_pacing_issues,
-            get_path_beat_sequence,
-        )
-        from questfoundry.models.grow import Phase4bOutput
-
-        beat_nodes = graph.get_nodes_by_type("beat")
-        if not beat_nodes:
-            return GrowPhaseResult(
-                phase="pacing_gaps",
-                status="completed",
-                detail="No beats to check for pacing",
-            )
-
-        # Check if scene types have been assigned
-        has_scene_types = any(b.get("scene_type") for b in beat_nodes.values())
-        if not has_scene_types:
-            return GrowPhaseResult(
-                phase="pacing_gaps",
-                status="skipped",
-                detail="No scene_type tags found (Phase 4a may not have run)",
-            )
-
-        issues = detect_pacing_issues(graph)
-        if not issues:
-            return GrowPhaseResult(
-                phase="pacing_gaps",
-                status="completed",
-                detail="No pacing issues detected",
-            )
-
-        # Build path sequences for affected paths with truncated summaries
-        path_nodes = graph.get_nodes_by_type("path")
-        affected_pids = {issue.path_id for issue in issues}
-        path_sequences: list[str] = []
-        valid_beat_ids: set[str] = set()
-        for pid in sorted(affected_pids):
-            sequence = get_path_beat_sequence(graph, pid)
-            if len(sequence) < 2:
-                continue
-            beat_list: list[str] = []
-            for idx, bid in enumerate(sequence, 1):
-                node = graph.get_node(bid)
-                summary = truncate_summary(node.get("summary", ""), 80) if node else ""
-                scene_type = node.get("scene_type", "untagged") if node else "untagged"
-                beat_list.append(f"    #{idx} {bid} [{scene_type}]: {summary}")
-                valid_beat_ids.add(bid)
-            raw_pid = pid.removeprefix("path::")
-            path_sequences.append(f"  Path: {raw_pid} ({pid})\n" + "\n".join(beat_list))
-
-        # Build issue descriptions with truncated summaries
-        issue_descriptions: list[str] = []
-        for issue in issues:
-            issue_beats: list[str] = []
-            for bid in issue.beat_ids:
-                node = graph.get_node(bid)
-                summary = truncate_summary(node.get("summary", ""), 80) if node else ""
-                issue_beats.append(f"    {bid}: {summary}")
-            raw_pid = issue.path_id.removeprefix("path::")
-            issue_descriptions.append(
-                f"  Path {raw_pid}: {len(issue.beat_ids)} consecutive "
-                f"'{issue.scene_type}' beats:\n" + "\n".join(issue_beats)
-            )
-
-        path_dilemma_map_text_4c, valid_dilemma_ids_text_4c = _build_path_dilemma_context(
-            graph, path_nodes
-        )
-
-        context = {
-            "path_sequences": "\n\n".join(path_sequences),
-            "pacing_issues": "\n\n".join(issue_descriptions),
-            "valid_path_ids": ", ".join(sorted(path_nodes.keys())),
-            "valid_beat_ids": ", ".join(sorted(valid_beat_ids)),
-            "issue_count": str(len(issues)),
-            "path_dilemma_map": path_dilemma_map_text_4c,
-            "valid_dilemma_ids": valid_dilemma_ids_text_4c,
-        }
-
-        from questfoundry.graph.grow_validators import validate_phase4_output
-
-        validator = partial(
-            validate_phase4_output,
-            valid_path_ids=set(path_nodes.keys()),
-            valid_beat_ids=valid_beat_ids,
-            graph=graph,
-        )
-        try:
-            result, llm_calls, tokens = await self._grow_llm_call(  # type: ignore[attr-defined]
-                model=model,
-                template_name="grow_phase4c_pacing_gaps",
-                context=context,
-                output_schema=Phase4bOutput,
-                semantic_validator=validator,
-            )
-        except GrowStageError as e:
-            return GrowPhaseResult(
-                phase="pacing_gaps",
-                status="failed",
-                detail=str(e),
-            )
-
-        # Insert correction beats
-        report = self._validate_and_insert_gaps(  # type: ignore[attr-defined]
-            graph, result.gaps, path_nodes, valid_beat_ids, "phase4c"
-        )
-        if report.total_invalid > 0:
-            log.info(
-                "phase4c_invalid_gap_proposals",
-                invalid=report.total_invalid,
-                invalid_before=report.invalid_before_beat,
-                invalid_after=report.invalid_after_beat,
-                invalid_path=report.invalid_path_id,
-                invalid_order=report.invalid_beat_order,
-                not_in_sequence=report.beat_not_in_sequence,
-            )
-
-        return GrowPhaseResult(
-            phase="pacing_gaps",
-            status="completed",
-            detail=(
-                f"Found {len(issues)} pacing issues, inserted {report.inserted} correction beats"
-            ),
-            llm_calls=llm_calls,
-            tokens_used=tokens,
-        )
+    # NOTE: GROW Phase 4c (pacing_gaps) was MOVED to POLISH Phase 2 (extended)
+    # per the spec migration in PR #1366 / issue #1368 PR C. POLISH's
+    # ``_phase_2_pacing`` already detects 3+ consecutive same-scene_type
+    # runs and inserts correction beats; per spec R-2.7 those correction
+    # beats now carry ``is_gap_beat: True`` to distinguish their origin
+    # from regular micro-beats.
 
     # NOTE: GROW Phase 4d (atmospheric) was MOVED to POLISH Phase 5e
     # per the spec migration in PR #1366 / issue #1368 PR B. The
@@ -842,191 +670,13 @@ class _LLMPhaseMixin:
     # implementation lives in ``polish/llm_phases.py`` as
     # ``_phase_5f_path_thematic``.
 
-    @grow_phase(name="entity_arcs", depends_on=["interleave_beats"], priority=8)
-    async def _phase_4f_entity_arcs(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
-        """Phase 4f: Per-entity arc trajectories on each path.
+    # NOTE: GROW Phase 4f (entity_arcs) was MOVED to POLISH Phase 3 (extended)
+    # per the spec migration in PR #1366 / issue #1368 PR C. POLISH's
+    # ``_phase_3_character_arcs`` now also produces ``arcs_per_path`` per
+    # entity (per spec R-3.6), in the same LLM call that synthesizes
+    # start/pivots/end_per_path.
 
-        Runs post-interleave so beat topology (including cross-path predecessor
-        edges) is final. For each path, selects eligible entities
-        (deterministic), then asks the LLM to generate arc_line and pivot_beat
-        per entity.
-
-        Preconditions:
-        - Interleave complete, predecessor edges exist for path sequencing.
-        - Entity nodes have entity_type and concept fields.
-        - Path nodes have beat sequences via belongs_to + predecessor.
-
-        Postconditions:
-        - Each path annotated with entity_arcs list.
-        - Each entity arc has entity_id, arc_type, arc_line, pivot_beat.
-        - arc_type derived deterministically from entity category.
-
-        Invariants:
-        - One LLM call per path via batch_llm_calls.
-        - Only eligible entities (2+ beat appearances) included.
-        - Pivot beat on shared beat triggers a warning but is allowed.
-        """
-        from functools import partial as partial_fn
-
-        from questfoundry.graph.grow_algorithms import (
-            ARC_TYPE_BY_ENTITY_TYPE,
-            get_path_beat_sequence,
-            select_entities_for_arc,
-        )
-        from questfoundry.graph.grow_validators import validate_phase4f_output
-        from questfoundry.models.grow import Phase4fOutput
-
-        path_nodes = graph.get_nodes_by_type("path")
-        if not path_nodes:
-            return GrowPhaseResult(
-                phase="entity_arcs",
-                status="completed",
-                detail="No paths to annotate",
-            )
-
-        applied = 0
-
-        # Pre-compute context for each path
-        path_items: list[tuple[str, dict[str, str], set[str], set[str]]] = []
-        for pid in sorted(path_nodes.keys()):
-            pdata = path_nodes[pid]
-            dilemma_id = pdata.get("dilemma_id", "")
-            dilemma_node = graph.get_node(dilemma_id) if dilemma_id else None
-            dilemma_question = dilemma_node.get("question", "") if dilemma_node else ""
-
-            try:
-                beat_ids = get_path_beat_sequence(graph, pid)
-            except ValueError:
-                log.info("phase4f_cycle_in_path", path_id=pid)
-                continue
-
-            if not beat_ids:
-                log.info("phase4f_no_beats_for_path", path_id=pid)
-                continue
-
-            eligible = select_entities_for_arc(graph, pid, beat_ids)
-            if not eligible:
-                log.debug("phase4f_no_eligible_entities", path_id=pid)
-                continue
-
-            # Build beat sequence lines (same format as 4e)
-            beat_lines: list[str] = []
-            for i, bid in enumerate(beat_ids, 1):
-                bdata = graph.get_node(bid)
-                if not bdata:
-                    continue
-                summary = bdata.get("summary", "")
-                entities = bdata.get("entities", [])
-                entities_str = ", ".join(entities) if entities else "none"
-                beat_lines.append(f"{i}. {bid}: {summary} [entities: {entities_str}]")
-
-            # Build entity list with concept for context
-            entity_lines: list[str] = []
-            for eid in eligible:
-                edata = graph.get_node(eid)
-                concept = edata.get("concept", "") if edata else ""
-                etype = edata.get("entity_type", "character") if edata else "character"
-                entity_lines.append(f"- {eid} ({etype}): {concept}")
-
-            # Valid IDs section
-            valid_ids = (
-                f"### Entity IDs (generate arc for EACH)\n"
-                f"{chr(10).join(f'- `{eid}`' for eid in eligible)}\n\n"
-                f"### Path ID\n"
-                f"This path: `{pid}`\n\n"
-                f"### Beat IDs on This Path (use ONLY these for pivot_beat)\n"
-                f"{chr(10).join(f'- `{bid}`' for bid in beat_ids)}\n"
-                f"Total beats: {len(beat_ids)}"
-            )
-
-            context = {
-                "path_id": pid,
-                "dilemma_question": dilemma_question or "(no dilemma question)",
-                "beat_sequence": "\n".join(beat_lines) if beat_lines else "(no beats)",
-                "entity_list": "\n".join(entity_lines),
-                "entity_count": str(len(eligible)),
-                "valid_ids_section": valid_ids,
-            }
-            valid_entity_set = set(eligible)
-            valid_beat_set = set(beat_ids)
-            path_items.append((pid, context, valid_entity_set, valid_beat_set))
-
-        async def _arcs_for_path(
-            item: tuple[str, dict[str, str], set[str], set[str]],
-        ) -> tuple[tuple[str, Phase4fOutput], int, int]:
-            pid, ctx, valid_eids, valid_bids = item
-            validator = partial_fn(
-                validate_phase4f_output,
-                valid_entity_ids=valid_eids,
-                valid_beat_ids=valid_bids,
-            )
-            result, llm_calls, tokens = await self._grow_llm_call(  # type: ignore[attr-defined]
-                model=model,
-                template_name="grow_phase4f_entity_arcs",
-                context=ctx,
-                output_schema=Phase4fOutput,
-                semantic_validator=validator,
-            )
-            return (pid, result), llm_calls, tokens
-
-        results, total_llm_calls, total_tokens, errors = await batch_llm_calls(
-            path_items,
-            _arcs_for_path,
-            self._max_concurrency,  # type: ignore[attr-defined]
-            on_connectivity_error=self._on_connectivity_error,  # type: ignore[attr-defined]
-        )
-
-        for item in results:
-            if item is None:
-                continue
-            pid, result = item
-
-            # Build entity_arcs with computed arc_type
-            entity_arcs: list[dict[str, str]] = []
-            for arc in result.arcs:
-                edata = graph.get_node(arc.entity_id)
-                if edata is None:
-                    log.error("phase4f_missing_entity", entity_id=arc.entity_id, path_id=pid)
-                    continue
-                etype = edata.get("entity_type", "character")
-                arc_type = ARC_TYPE_BY_ENTITY_TYPE.get(etype, "transformation")
-
-                # Note if pivot is on a shared beat (belongs to multiple paths); arc still accepted
-                pivot_paths = graph.get_edges(from_id=arc.pivot_beat, edge_type="belongs_to")
-                if len(pivot_paths) > 1:
-                    log.info(
-                        "shared_pivot_beat",
-                        entity_id=arc.entity_id,
-                        pivot_beat=arc.pivot_beat,
-                        path_id=pid,
-                    )
-
-                entity_arcs.append(
-                    {
-                        "entity_id": arc.entity_id,
-                        "arc_type": arc_type,
-                        "arc_line": arc.arc_line,
-                        "pivot_beat": arc.pivot_beat,
-                    }
-                )
-
-            graph.update_node(pid, entity_arcs=entity_arcs)
-            applied += 1
-
-        if errors:
-            for idx, e in errors:
-                pid = path_items[idx][0]
-                log.warning("phase4f_llm_failed", path_id=pid, error=str(e))
-
-        return GrowPhaseResult(
-            phase="entity_arcs",
-            status="completed",
-            detail=f"Applied entity arcs to {applied}/{len(path_nodes)} paths",
-            llm_calls=total_llm_calls,
-            tokens_used=total_tokens,
-        )
-
-    @grow_phase(name="transition_gaps", depends_on=["entity_arcs"], priority=8)
+    @grow_phase(name="transition_gaps", depends_on=["interleave_beats"], priority=8)
     async def _phase_transition_gaps(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
         """Phase 4g: Insert transition beats at hard cross-dilemma seams.
 

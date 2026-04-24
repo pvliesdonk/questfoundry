@@ -231,13 +231,12 @@ class _PolishLLMPhaseMixin:
             )
 
         # Path → dilemma map for the prompt's Valid IDs section.
-        # Matches the helper used by GROW Phase 4b/4c (kept in grow llm_phases
-        # while pacing_gaps still lives there; will move with PR C).
-        from questfoundry.pipeline.stages.grow.llm_phases import (
-            _build_path_dilemma_context,
-        )
+        # Helper lives in graph/context.py (moved out of grow/llm_phases.py
+        # in PR C of issue #1368 since GROW no longer needs it after
+        # pacing_gaps moved to POLISH).
+        from questfoundry.graph.context import build_path_dilemma_context
 
-        path_dilemma_map_text, valid_dilemma_ids_text = _build_path_dilemma_context(
+        path_dilemma_map_text, valid_dilemma_ids_text = build_path_dilemma_context(
             graph, path_nodes
         )
 
@@ -1413,7 +1412,10 @@ def _insert_micro_beat(
             path_id = edge["to"]
             break
 
-    # Create the micro-beat node
+    # Create the micro-beat node.
+    # Per spec R-2.7 (PR #1366), correction beats inserted by POLISH Phase 2
+    # carry ``is_gap_beat: True`` so consumers can distinguish them from
+    # other micro-beats. ``role`` stays ``"micro_beat"`` per the spec.
     graph.create_node(
         micro_beat_id,
         {
@@ -1425,6 +1427,7 @@ def _insert_micro_beat(
             "dilemma_impacts": [],
             "entities": entity_ids,
             "created_by": "POLISH",
+            "is_gap_beat": True,
         },
     )
 

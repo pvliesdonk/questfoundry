@@ -372,7 +372,9 @@ async def phase_interleave_beats(
 
 @grow_phase(
     name="enumerate_arcs",
-    depends_on=["entity_arcs", "interleave_beats"],
+    # entity_arcs moved to POLISH Phase 3 (PR C of #1368); enumerate_arcs
+    # only needs interleave_beats now.
+    depends_on=["interleave_beats"],
     is_deterministic=True,
     priority=9,
 )
