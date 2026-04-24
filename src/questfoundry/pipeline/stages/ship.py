@@ -82,21 +82,29 @@ class ShipStage:
         # Load graph
         graph = Graph.load(self._project_path)
 
-        # Validate passages have prose
+        # SHIP entry contract validation (#1347). Replaces the previous
+        # ad-hoc "passages have prose" check, which was a FILL-contract
+        # concern incorrectly checked at the DRESS→SHIP seam.
+        #
+        # We run BOTH validators because DRESS may have been skipped
+        # entirely (DRESS Output-10): validate_dress_output is
+        # permissive in that case, so we still need validate_fill_output
+        # to confirm prose presence and Voice Document completeness for
+        # opt-out projects.
+        from questfoundry.graph.dress_output_validation import validate_dress_output
+        from questfoundry.graph.fill_output_validation import validate_fill_output
+
+        entry_errors: list[str] = []
+        entry_errors.extend(validate_fill_output(graph))
+        entry_errors.extend(validate_dress_output(graph))
+        if entry_errors:
+            raise ShipStageError(
+                f"Pre-SHIP contract validation failed ({len(entry_errors)} "
+                f"error(s)):\n" + "\n".join(f"  - {e}" for e in entry_errors)
+            )
         passages = graph.get_nodes_by_type("passage")
         if not passages:
             raise ShipStageError("Graph contains no passages — nothing to export.")
-
-        missing_prose = [
-            pid
-            for pid, data in passages.items()
-            if not data.get("prose") or not str(data["prose"]).strip()
-        ]
-        if missing_prose:
-            raise ShipStageError(
-                f"{len(missing_prose)} passage(s) missing prose. "
-                f"Run FILL stage first. Examples: {missing_prose[:3]}"
-            )
 
         # Get story title and language from config
         voice = graph.get_node("voice::voice")

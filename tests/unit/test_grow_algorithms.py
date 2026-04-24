@@ -2801,14 +2801,19 @@ class TestPhaseIntegrationEndToEnd:
         # validation so these tests exercise phase wiring rather than
         # contract compliance of the fixture graphs.
         #
-        # Two patches are needed:
+        # Three patches are needed:
         #  1. validate_grow_output — the exit-contract check in stage.execute()
-        #  2. run_all_checks — called by GROW's internal "validation" phase
+        #  2. validate_seed_output — the new entry-contract check (#1347)
+        #  3. run_all_checks — called by GROW's internal "validation" phase
         import questfoundry.pipeline.stages.grow.stage as grow_stage_mod
-        from questfoundry.graph import grow_validation as grow_validation
+        from questfoundry.graph import (
+            grow_validation,
+            seed_validation,
+        )
         from questfoundry.graph.grow_validation import ValidationCheck, ValidationReport
 
         monkeypatch.setattr(grow_stage_mod, "validate_grow_output", lambda _graph: [])
+        monkeypatch.setattr(seed_validation, "validate_seed_output", lambda _graph: [])
 
         def _mock_run_all_checks(_graph: Graph) -> ValidationReport:
             return ValidationReport(

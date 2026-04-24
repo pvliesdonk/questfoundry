@@ -51,6 +51,25 @@ def mock_model() -> MagicMock:
     return MagicMock()
 
 
+@pytest.fixture(autouse=True)
+def _bypass_seam_validators(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Bypass FILL's new POLISH-output entry validator (#1347) and the
+    FILL-output exit validator (#1348) for all tests in this file. The
+    test fixtures use minimal POLISH graphs that don't satisfy the full
+    contracts on either side; the contract-chaining integration is
+    exercised in test_contract_chaining.py instead.
+    """
+    from questfoundry.graph import (
+        fill_output_validation as _fov,
+    )
+    from questfoundry.graph import (
+        polish_validation as _pv,
+    )
+
+    monkeypatch.setattr(_pv, "validate_polish_output", lambda _g: [])
+    monkeypatch.setattr(_fov, "validate_fill_output", lambda _g: [])
+
+
 class TestFillStageInit:
     def test_default_gate(self) -> None:
         stage = FillStage()

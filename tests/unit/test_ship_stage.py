@@ -27,6 +27,22 @@ def _create_project_with_graph(project_path: Path, *, with_prose: bool = True) -
 
     # Build a graph with passages and choices
     g = Graph()
+    # Voice Document — FILL Output-1 (the SHIP entry validator now
+    # checks for it; older tests pre-dated that contract enforcement).
+    g.create_node(
+        "voice::voice",
+        {
+            "type": "voice",
+            "raw_id": "voice",
+            # No story_title — keeps the test_project_name_from_config
+            # path exercising the config-name fallback in ShipStage.execute.
+            "pov": "third_limited",
+            "tense": "past",
+            "voice_register": "literary",
+            "sentence_rhythm": "varied",
+            "tone_words": ["wry"],
+        },
+    )
     g.create_node(
         "passage::intro",
         {
@@ -186,7 +202,11 @@ class TestShipStage:
         project.mkdir(parents=True)
 
         stage = ShipStage(project)
-        with pytest.raises(ShipStageError, match="no passages"):
+        # The pre-SHIP entry contract surfaces this as a FILL Output-2
+        # violation (no passage means FILL didn't produce its required
+        # output) — same defensive intent as the previous "no passages"
+        # check, just attributed to the right contract.
+        with pytest.raises(ShipStageError, match=r"at least one Passage|no passages"):
             stage.execute()
 
     def test_missing_prose_raises(self, tmp_path: Path) -> None:
@@ -194,7 +214,7 @@ class TestShipStage:
         _create_project_with_graph(project, with_prose=False)
 
         stage = ShipStage(project)
-        with pytest.raises(ShipStageError, match="missing prose"):
+        with pytest.raises(ShipStageError, match=r"without prose|missing prose"):
             stage.execute()
 
     def test_empty_graph_raises(self, tmp_path: Path) -> None:
@@ -213,7 +233,7 @@ class TestShipStage:
         g.save(project / "graph.db")
 
         stage = ShipStage(project)
-        with pytest.raises(ShipStageError, match="no passages"):
+        with pytest.raises(ShipStageError, match=r"at least one Passage|no passages"):
             stage.execute()
 
     def test_unknown_format_raises(self, tmp_path: Path) -> None:
@@ -241,7 +261,7 @@ class TestShipStage:
         g.save(project / "graph.db")
 
         stage = ShipStage(project)
-        with pytest.raises(ShipStageError, match="missing prose"):
+        with pytest.raises(ShipStageError, match=r"without prose|missing prose"):
             stage.execute()
 
     def test_project_name_from_config(self, tmp_path: Path) -> None:
@@ -262,6 +282,20 @@ class TestShipStage:
         project.mkdir(parents=True, exist_ok=True)
 
         g = Graph()
+        # Voice Document satisfying FILL Output-1 (no story_title so the
+        # config-name fallback path is what's exercised).
+        g.create_node(
+            "voice::voice",
+            {
+                "type": "voice",
+                "raw_id": "voice",
+                "pov": "third_limited",
+                "tense": "past",
+                "voice_register": "literary",
+                "sentence_rhythm": "varied",
+                "tone_words": ["wry"],
+            },
+        )
         g.create_node("passage::intro", {"type": "passage", "raw_id": "intro", "prose": "Hello."})
         g.save(project / "graph.db")
 
@@ -278,12 +312,10 @@ class TestShipStage:
         project = tmp_path / "my-story"
         _create_project_with_graph(project)
 
-        # Add a voice node with a generated story title
+        # Replace the fixture's title-less voice node with one carrying
+        # a generated story_title so SHIP picks it up.
         g = Graph.load(project)
-        g.create_node(
-            "voice::voice",
-            {"type": "voice", "raw_id": "voice", "story_title": "The Hollow Crown"},
-        )
+        g.update_node("voice::voice", story_title="The Hollow Crown")
         g.save(project / "graph.db")
 
         stage = ShipStage(project)
@@ -299,9 +331,9 @@ class TestShipStage:
         project = tmp_path / "my-story"
         _create_project_with_graph(project)
 
-        # Voice node exists but without story_title
+        # Fixture already creates a voice node without story_title; SHIP
+        # falls back to the config name.
         g = Graph.load(project)
-        g.create_node("voice::voice", {"type": "voice", "raw_id": "voice"})
         g.save(project / "graph.db")
 
         stage = ShipStage(project)
@@ -318,7 +350,7 @@ class TestShipStage:
         _create_project_with_graph(project)
 
         g = Graph.load(project)
-        g.create_node("voice::voice", {"type": "voice", "raw_id": "voice", "story_title": None})
+        g.update_node("voice::voice", story_title=None)
         g.save(project / "graph.db")
 
         stage = ShipStage(project)

@@ -416,6 +416,18 @@ class FillStage:
                 log.info("rewinding_graph", stage="fill", mutations=n)
             save_snapshot(graph, resolved_path, "fill")
 
+        # POLISH Stage Output Contract — validate post-rewind so the
+        # check sees the base POLISH state, not stale FILL mutations
+        # from an earlier run (#1347).
+        from questfoundry.graph.polish_validation import validate_polish_output
+
+        entry_errors = validate_polish_output(graph)
+        if entry_errors:
+            raise FillStageError(
+                f"POLISH output validation failed ({len(entry_errors)} "
+                f"error(s)):\n" + "\n".join(f"  - {e}" for e in entry_errors)
+            )
+
         phase_results: list[FillPhaseResult] = []
         total_llm_calls = 0
         total_tokens = 0
@@ -462,6 +474,21 @@ class FillStage:
                 on_phase_progress(phase_name, result.status, result.detail)
 
         if completed_normally:
+            # FILL Stage Output Contract — validate before stamping
+            # last_stage so a malformed artifact is owned by FILL, not
+            # discovered downstream (#1348). Escalations checked
+            # separately below — those are LLM-failure escalations and
+            # share FillStageError to keep the caller-side handling
+            # uniform.
+            from questfoundry.graph.fill_output_validation import validate_fill_output
+
+            exit_errors = validate_fill_output(graph)
+            if exit_errors:
+                raise FillStageError(
+                    f"FILL output contract violated ({len(exit_errors)} "
+                    f"error(s)):\n" + "\n".join(f"  - {e}" for e in exit_errors)
+                )
+
             graph.set_last_stage("fill")
             graph.save(resolved_path / "graph.db")
 

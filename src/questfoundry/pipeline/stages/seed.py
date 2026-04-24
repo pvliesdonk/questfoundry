@@ -31,6 +31,7 @@ from questfoundry.agents import (
 )
 from questfoundry.export.i18n import get_output_language_instruction
 from questfoundry.graph import Graph
+from questfoundry.graph.brainstorm_validation import validate_brainstorm_output
 from questfoundry.graph.context import strip_scope_prefix
 from questfoundry.graph.mutations import format_semantic_errors_as_content
 from questfoundry.graph.seed_pruning import compute_arc_count, prune_to_arc_limit
@@ -287,6 +288,18 @@ class SeedStage:
 
         total_llm_calls = 0
         total_tokens = 0
+
+        # BRAINSTORM Stage Output Contract: validate the upstream artifact
+        # before SEED phases consume it. Catches missing entities,
+        # incomplete dilemmas, and other contract violations at the seam
+        # rather than at the downstream-failure site (#1347).
+        entry_graph = Graph.load(resolved_path)
+        entry_errors = validate_brainstorm_output(entry_graph)
+        if entry_errors:
+            raise SeedStageError(
+                f"BRAINSTORM output validation failed ({len(entry_errors)} "
+                f"error(s)):\n" + "\n".join(f"  - {e}" for e in entry_errors)
+            )
 
         # Load brainstorm context from graph
         brainstorm_context = self._get_brainstorm_context(resolved_path)
