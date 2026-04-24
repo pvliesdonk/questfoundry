@@ -65,9 +65,10 @@ class TestGraphSnapshotHash:
         assert h1 != h2
 
     def test_changed_title_changes_hash(self) -> None:
+        from dataclasses import replace
+
         ctx_a = _ctx()
-        ctx_b = _ctx()
-        ctx_b.title = "different"
+        ctx_b = replace(ctx_a, title="different")
         assert compute_graph_snapshot_hash(ctx_a) != compute_graph_snapshot_hash(ctx_b)
 
 

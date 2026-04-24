@@ -29,6 +29,7 @@ from questfoundry.export.base import (
     ExportPassage,
 )
 from questfoundry.export.html_exporter import HtmlExporter
+from questfoundry.export.i18n import get_ui_strings
 from questfoundry.export.json_exporter import JsonExporter
 from questfoundry.export.twee_exporter import TweeExporter
 
@@ -100,22 +101,37 @@ def _multi_format_context() -> ExportContext:
     )
 
 
-def _twee_passage_count(text: str) -> int:
+_SUGARCUBE_RESERVED = {
+    "StoryTitle",
+    "StoryData",
+    "StoryInit",
+    "StoryArtDirection",
+    "StoryMetadata",
+}
+
+
+def _twee_passage_count(text: str, language: str = "en") -> int:
     """Count `:: <name>` headers excluding SugarCube reserved infrastructure
-    and the Codex sidecar passage."""
-    reserved = {
-        "StoryTitle",
-        "StoryData",
-        "StoryInit",
-        "StoryArtDirection",
-        "StoryMetadata",
-        "Codex",
-    }
-    return sum(
-        1
-        for line in text.splitlines()
-        if (m := re.match(r"^::\s*(\S+)", line)) and m.group(1) not in reserved
-    )
+    and the localised Codex sidecar passage.
+
+    A naive ``\\S+`` would miscount a passage like ``:: my adventure`` as
+    ``my``. The Twee header grammar puts the optional ``[tag]`` block
+    AND the optional ``{position/size}`` block (used by StoryMetadata
+    et al.) after a whitespace separator, so capture everything up to
+    the first ``[`` or ``{`` preceded by whitespace. The codex name
+    is i18n'd (``Codex`` / ``Kodex`` / …) so resolve it via
+    ``get_ui_strings()`` rather than hardcoding English.
+    """
+    reserved = _SUGARCUBE_RESERVED | {get_ui_strings(language)["codex"]}
+    count = 0
+    for line in text.splitlines():
+        match = re.match(r"^::\s*(.+?)(?:\s+[\[\{].*)?$", line)
+        if not match:
+            continue
+        name = match.group(1).strip()
+        if name and name not in reserved:
+            count += 1
+    return count
 
 
 def _twee_choice_labels(text: str) -> set[str]:
@@ -139,6 +155,30 @@ def _html_choice_labels(text: str) -> set[str]:
             text,
         )
     }
+
+
+def test_twee_passage_count_handles_spaces_in_names() -> None:
+    """Pin the latent fix: the helper must capture full passage names
+    even when they contain spaces (the previous \\S+ pattern stopped
+    at the first whitespace and would have undercounted)."""
+    text = (
+        ":: StoryTitle\nT\n\n"
+        ":: my adventure\nProse.\n\n"
+        ":: another story\nMore.\n\n"
+        ':: StoryArtDirection {"position":"0,0"}\nfoo: bar\n'
+    )
+    # Two real passages, StoryTitle + StoryArtDirection are SugarCube reserved
+    assert _twee_passage_count(text) == 2
+
+
+def test_twee_passage_count_excludes_localised_codex() -> None:
+    """German uses 'Kodex' for the codex sidecar — the helper must
+    treat that as reserved when language='de'."""
+    text = ":: StoryTitle\nT\n\n:: Start [start]\nBeginn.\n\n:: Kodex\nReferenz.\n"
+    # 1 navigable passage; Kodex is the i18n codex sidecar
+    assert _twee_passage_count(text, language="de") == 1
+    # Same text under English would count Kodex as a regular passage
+    assert _twee_passage_count(text, language="en") == 2
 
 
 class TestCrossFormatConsistency:

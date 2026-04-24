@@ -84,18 +84,26 @@ class TestTweeExporter:
 
     def test_ifid_differs_for_different_titles(self, tmp_path: Path) -> None:
         """A different story title should produce a different IFID — the
-        IFID identifies the work."""
+        IFID identifies the work.
+
+        Construct ``ctx_b`` directly rather than mutating a copy of
+        ``_simple_context()``: ``ExportContext`` is a plain dataclass
+        today but mutation here would silently break if it ever became
+        ``frozen=True``, and the construction style mirrors the rest
+        of the suite.
+        """
+        import re
+        from dataclasses import replace
+
         ctx_a = _simple_context()
-        ctx_b = _simple_context()
-        ctx_b.title = "Different Story"
+        ctx_b = replace(ctx_a, title="Different Story")
         out_a = TweeExporter().export(ctx_a, tmp_path / "a").read_text()
         out_b = TweeExporter().export(ctx_b, tmp_path / "b").read_text()
 
-        import re
-
-        ifid_a = re.search(r'"ifid":\s*"([0-9A-F-]{36})"', out_a).group(1)  # type: ignore[union-attr]
-        ifid_b = re.search(r'"ifid":\s*"([0-9A-F-]{36})"', out_b).group(1)  # type: ignore[union-attr]
-        assert ifid_a != ifid_b
+        ifid_a = re.search(r'"ifid":\s*"([0-9A-F-]{36})"', out_a)
+        ifid_b = re.search(r'"ifid":\s*"([0-9A-F-]{36})"', out_b)
+        assert ifid_a is not None and ifid_b is not None
+        assert ifid_a.group(1) != ifid_b.group(1)
 
     def test_start_passage(self, tmp_path: Path) -> None:
         exporter = TweeExporter()
