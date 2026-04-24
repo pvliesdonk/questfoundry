@@ -24,6 +24,27 @@ if TYPE_CHECKING:
 
 log = get_logger(__name__)
 
+# R-1.7 playability threshold: gamebooks become unwieldy when the player
+# must track many codewords by hand. Spec phrases the bound as "typically
+# under 10," so projecting MORE than 10 (i.e. count > _CODEWORD_PLAYABILITY_THRESHOLD)
+# triggers a WARNING for human review.
+_CODEWORD_PLAYABILITY_THRESHOLD = 10
+
+# R-3.9 partial-DRESS check: art_direction nodes that are present but
+# missing core visual fields produce silently degraded exports (e.g.
+# illustrations rendered without a palette). These are the fields the
+# DRESS Pydantic model declares as required; when any are absent or
+# blank we warn so the user can re-run DRESS rather than ship the gap.
+# (R-3.8 covers DRESS *skipped entirely*; R-3.9 covers DRESS *partial*.)
+_REQUIRED_ART_DIRECTION_FIELDS = (
+    "style",
+    "medium",
+    "palette",
+    "composition_notes",
+    "negative_defaults",
+    "aspect_ratio",
+)
+
 
 def build_export_context(graph: Graph, project_name: str, *, language: str = "en") -> ExportContext:
     """Extract player-facing data from the story graph.
@@ -48,19 +69,45 @@ def build_export_context(graph: Graph, project_name: str, *, language: str = "en
     _mark_start_and_endings(passages, choices)
 
     illustrations, cover = _extract_illustrations(graph)
+    codewords = _extract_codewords(graph)
+    _warn_codeword_playability(codewords)
 
     return ExportContext(
         title=project_name,
         passages=passages,
         choices=choices,
         entities=_extract_entities(graph),
-        codewords=_extract_codewords(graph),
+        codewords=codewords,
         illustrations=illustrations,
         cover=cover,
         codex_entries=_extract_codex_entries(graph),
         art_direction=_extract_art_direction(graph),
         language=language,
     )
+
+
+def _warn_codeword_playability(codewords: list[ExportCodeword]) -> None:
+    """Emit a R-1.7 playability WARNING when codeword count exceeds the threshold.
+
+    A WARNING (not an error) so the export still proceeds; downstream
+    decision is human-driven (rework state flags, switch format, accept).
+    """
+    count = len(codewords)
+    if count > _CODEWORD_PLAYABILITY_THRESHOLD:
+        # ExportContext is built once and reused across formats, so we cannot
+        # tell here whether gamebook is the actual target. Phrase the warning
+        # conditionally to avoid alarming Twee/HTML/JSON-only authors.
+        log.warning(
+            "codeword_count_exceeds_threshold",
+            count=count,
+            threshold=_CODEWORD_PLAYABILITY_THRESHOLD,
+            detail=(
+                "Gamebook playability suffers above this threshold if that "
+                "format is targeted; consider reducing soft dilemmas or "
+                "routing more decisions through hard dilemmas (R-1.7). "
+                "Digital-only exports (Twee/HTML/JSON) are unaffected."
+            ),
+        )
 
 
 def _extract_passages(graph: Graph) -> list[ExportPassage]:
@@ -297,10 +344,36 @@ def _extract_codex_entries(graph: Graph) -> list[ExportCodexEntry]:
 
 
 def _extract_art_direction(graph: Graph) -> dict[str, Any] | None:
-    """Extract art direction node if DRESS stage was run."""
+    """Extract art direction node if DRESS stage was run.
+
+    R-3.9: graceful degradation when DRESS is partial. If the node
+    exists but is missing required visual fields (e.g. style present,
+    palette absent), warn so the user knows the export downstream will
+    have visual gaps. We still return the partial dict — degrading is
+    valid, but it should not be silent. (R-3.8 covers DRESS skipped
+    entirely; that branch is the ``return None`` above.)
+    """
     nodes = graph.get_nodes_by_type("art_direction")
     if not nodes:
         return None
     # There's typically one art_direction::main node
-    _node_id, data = next(iter(nodes.items()))
-    return {k: v for k, v in data.items() if k not in ("type", "raw_id")}
+    node_id, data = next(iter(nodes.items()))
+    extracted = {k: v for k, v in data.items() if k not in ("type", "raw_id")}
+
+    missing = [
+        field
+        for field in _REQUIRED_ART_DIRECTION_FIELDS
+        if not (value := extracted.get(field)) or (isinstance(value, str) and not value.strip())
+    ]
+    if missing:
+        log.warning(
+            "art_direction_partial",
+            node_id=node_id,
+            missing_fields=missing,
+            detail=(
+                "Art direction is present but missing required visual fields. "
+                "Illustrations and visual metadata will be partial; rerun DRESS "
+                "to fill the gaps (R-3.9)."
+            ),
+        )
+    return extracted
