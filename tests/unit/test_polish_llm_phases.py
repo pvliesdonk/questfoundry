@@ -373,7 +373,7 @@ class TestPolishPhase5eAtmospheric:
         assert result.status == "completed"
         assert "1/3" in result.detail
         # Confirm partial-coverage warning was emitted
-        assert any("phase5e_partial_coverage" in r.message for r in caplog.records)
+        assert any("atmospheric_partial_coverage" in r.message for r in caplog.records)
 
     @pytest.mark.asyncio
     async def test_phase_5e_invalid_beat_id_skipped(self) -> None:
@@ -479,3 +479,79 @@ class TestPolishPhase5fPathThematic:
         assert path is not None
         assert path.get("path_theme") == "trust transforms into reluctant alliance"
         assert path.get("path_mood") == "cautious-then-warming"
+
+    @pytest.mark.asyncio
+    async def test_phase_5f_per_path_llm_failure_warns(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """R-5f.3: per-path LLM failure logs WARNING and leaves fields unpopulated."""
+        graph = Graph.empty()
+        graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
+        _make_beat(graph, "beat::a", "Beat A")
+        _make_beat(graph, "beat::b", "Beat B")
+        graph.add_edge("belongs_to", "beat::a", "path::p1")
+        graph.add_edge("belongs_to", "beat::b", "path::p1")
+        graph.add_edge("predecessor", "beat::b", "beat::a")
+
+        async def mock_call(*_args: object, **_kwargs: object) -> tuple:
+            raise RuntimeError("LLM unavailable")
+
+        stage = PolishStage()
+        stage._polish_llm_call = mock_call  # type: ignore[method-assign]
+        with caplog.at_level("WARNING"):
+            result = await stage._phase_5f_path_thematic(graph, MagicMock())
+
+        assert result.status == "completed"
+        assert "0/1" in result.detail  # 0 annotated of 1 qualifying path
+        # Path fields stay unpopulated
+        path = graph.get_node("path::p1")
+        assert path is not None
+        assert path.get("path_theme") is None
+        assert path.get("path_mood") is None
+        # Per-path failure WARNING was emitted
+        assert any("path_thematic_llm_failed" in r.message for r in caplog.records)
+
+    @pytest.mark.asyncio
+    async def test_phase_5f_includes_atmospheric_in_context(self) -> None:
+        """Per CLAUDE.md §Context Enrichment, the 5f LLM call should receive
+        atmospheric_detail (populated by the preceding 5e phase) for each beat."""
+        from questfoundry.models.grow import PathMiniArc
+
+        graph = Graph.empty()
+        graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
+        _make_beat(graph, "beat::a", "Beat A", atmospheric_detail="dim torchlight on stone")
+        _make_beat(graph, "beat::b", "Beat B", atmospheric_detail="howling wind in the hall")
+        graph.add_edge("belongs_to", "beat::a", "path::p1")
+        graph.add_edge("belongs_to", "beat::b", "path::p1")
+        graph.add_edge("predecessor", "beat::b", "beat::a")
+
+        captured_contexts: list[dict] = []
+
+        async def mock_call(
+            *,
+            model: object,  # noqa: ARG001
+            template_name: str,  # noqa: ARG001
+            context: dict,
+            output_schema: type,  # noqa: ARG001
+            max_retries: int = 3,  # noqa: ARG001
+        ) -> tuple:
+            captured_contexts.append(context)
+            return (
+                PathMiniArc(
+                    path_id="path::p1",
+                    path_theme="resilience grows from torchlit isolation",
+                    path_mood="hushed-yet-resolute",
+                ),
+                1,
+                100,
+            )
+
+        stage = PolishStage()
+        stage._polish_llm_call = mock_call  # type: ignore[method-assign]
+        await stage._phase_5f_path_thematic(graph, MagicMock())
+
+        assert len(captured_contexts) == 1
+        beat_seq = captured_contexts[0]["beat_sequence"]
+        # atmospheric_detail must appear in the beat sequence for each beat
+        assert "dim torchlight on stone" in beat_seq
+        assert "howling wind in the hall" in beat_seq

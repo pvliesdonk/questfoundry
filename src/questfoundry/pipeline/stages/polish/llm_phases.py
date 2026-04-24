@@ -447,7 +447,7 @@ class _PolishLLMPhaseMixin:
 
         beat_nodes = graph.get_nodes_by_type("beat")
         if not beat_nodes:
-            log.info("phase5e_no_beats", detail="No beats to annotate")
+            log.info("atmospheric_no_beats", detail="No beats to annotate")
             return PhaseResult(
                 phase="atmospheric_annotation",
                 status="skipped",
@@ -487,7 +487,7 @@ class _PolishLLMPhaseMixin:
         applied = 0
         for detail in result.details:
             if detail.beat_id not in beat_nodes:
-                log.info("phase5e_invalid_beat_id", beat_id=detail.beat_id)
+                log.info("atmospheric_invalid_beat_id", beat_id=detail.beat_id)
                 continue
             graph.update_node(
                 detail.beat_id,
@@ -497,7 +497,7 @@ class _PolishLLMPhaseMixin:
 
         if applied < len(beat_nodes):
             log.warning(
-                "phase5e_partial_coverage",
+                "atmospheric_partial_coverage",
                 applied=applied,
                 total=len(beat_nodes),
                 missing=len(beat_nodes) - applied,
@@ -533,7 +533,7 @@ class _PolishLLMPhaseMixin:
 
         path_nodes = graph.get_nodes_by_type("path")
         if not path_nodes:
-            log.info("phase5f_no_paths", detail="No paths to annotate")
+            log.info("path_thematic_no_paths", detail="No paths to annotate")
             return PhaseResult(
                 phase="path_thematic_annotation",
                 status="skipped",
@@ -555,12 +555,12 @@ class _PolishLLMPhaseMixin:
             try:
                 beat_ids = get_path_beat_sequence(graph, pid)
             except ValueError:
-                log.info("phase5f_cycle_in_path", path_id=pid)
+                log.info("path_thematic_cycle_in_path", path_id=pid)
                 continue
 
             # R-5f.1: skip paths with <2 beats (no narrative arc to summarize)
             if len(beat_ids) < 2:
-                log.info("phase5f_skip_short_path", path_id=pid, beats=len(beat_ids))
+                log.info("path_thematic_skip_short", path_id=pid, beats=len(beat_ids))
                 continue
 
             beat_entity_ids: set[str] = set()
@@ -572,8 +572,14 @@ class _PolishLLMPhaseMixin:
                 summary = bdata.get("summary", "")
                 narrative_fn = bdata.get("narrative_function", "")
                 scene_type = bdata.get("scene_type", "")
+                # atmospheric_detail is populated by the preceding 5e phase
+                # (hard depends_on); include it so the thematic LLM call has
+                # the full sensory context per CLAUDE.md §Context Enrichment.
+                atmo = bdata.get("atmospheric_detail", "")
+                atmo_clause = f", atmospheric={atmo!r}" if atmo else ""
                 beat_lines.append(
-                    f"{i}. {bid}: {summary} [function={narrative_fn}, scene_type={scene_type}]"
+                    f"{i}. {bid}: {summary} "
+                    f"[function={narrative_fn}, scene_type={scene_type}{atmo_clause}]"
                 )
                 for eid in bdata.get("entities", []):
                     beat_entity_ids.add(eid)
@@ -650,7 +656,7 @@ class _PolishLLMPhaseMixin:
         if errors:
             for idx, e in errors:
                 pid = path_items[idx][0]
-                log.warning("phase5f_llm_failed", path_id=pid, error=str(e))
+                log.warning("path_thematic_llm_failed", path_id=pid, error=str(e))
 
         return PhaseResult(
             phase="path_thematic_annotation",
