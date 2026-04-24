@@ -4,13 +4,13 @@ Provides _LLMHelperMixin with _grow_llm_call() and error feedback
 formatting. GrowStage inherits this mixin so LLM phase methods can call
 ``self._grow_llm_call(...)`` directly.
 
-``GapInsertionReport`` and ``_validate_and_insert_gaps`` are re-exports
-of the free function ``validate_and_insert_gaps`` from
-``questfoundry.graph.gap_insertion``. The shared module is the home for
-gap-insertion logic now that the narrative_gaps phase has moved to
-POLISH (PR for issue #1368). The thin delegation here keeps existing
-test call sites (``stage._validate_and_insert_gaps(...)``) working
-without changes.
+Gap-insertion logic lives in ``questfoundry.graph.gap_insertion``. GROW
+no longer calls gap-insertion directly (narrative_gaps and pacing_gaps
+both moved to POLISH per issue #1368), but the
+``_validate_and_insert_gaps`` delegation is retained here so existing
+test call sites keep working without churn. ``GapInsertionReport`` is
+also re-exported here for back-compat with code that imports it via
+``grow.llm_helper``.
 """
 
 from __future__ import annotations
@@ -23,7 +23,6 @@ from pydantic import BaseModel, ValidationError
 from questfoundry.agents.serialize import extract_tokens
 from questfoundry.artifacts.validator import get_all_field_paths
 from questfoundry.graph.gap_insertion import GapInsertionReport, validate_and_insert_gaps
-from questfoundry.graph.graph import Graph  # noqa: TC001 - used at runtime
 from questfoundry.graph.mutations import GrowValidationError  # noqa: TC001 - used at runtime
 from questfoundry.observability.tracing import traceable
 from questfoundry.pipeline.stages.grow._helpers import (
@@ -43,6 +42,7 @@ if TYPE_CHECKING:
 
     from langchain_core.language_models import BaseChatModel
 
+    from questfoundry.graph.graph import Graph
     from questfoundry.models.grow import GapProposal
 
 # Re-exported for back-compat with existing imports.
@@ -234,5 +234,10 @@ class _LLMHelperMixin:
         valid_beat_ids: set[str] | dict[str, Any],
         phase_name: str,
     ) -> GapInsertionReport:
-        """Thin delegation to the shared free function (see module docstring)."""
+        """Thin delegation to ``graph.gap_insertion.validate_and_insert_gaps``.
+
+        Retained for back-compat with existing test call sites; GROW phase
+        code itself no longer calls this since gap-insertion phases moved
+        to POLISH (issue #1368).
+        """
         return validate_and_insert_gaps(graph, gaps, valid_path_ids, valid_beat_ids, phase_name)

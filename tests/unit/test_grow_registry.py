@@ -216,11 +216,11 @@ class TestGrowPhaseDecorator:
 class TestGlobalRegistry:
     """Tests for the global registry populated by actual GROW phases."""
 
-    def test_global_registry_has_15_phases(self) -> None:
-        """GROW phases (15 after narrative_gaps/atmospheric/path_arcs moved to POLISH per #1368)."""
+    def test_global_registry_has_13_phases(self) -> None:
+        """GROW phases (13 after PR A+B+C of issue #1368)."""
         registry = get_registry()
-        assert len(registry) == 15, (
-            f"Expected 15 phases, got {len(registry)}: {registry.phase_names}"
+        assert len(registry) == 13, (
+            f"Expected 13 phases, got {len(registry)}: {registry.phase_names}"
         )
 
     def test_global_registry_validates(self) -> None:
@@ -230,7 +230,7 @@ class TestGlobalRegistry:
         assert errors == [], f"Registry validation errors: {errors}"
 
     def test_global_registry_execution_order_matches_expected(self) -> None:
-        """Execution order matches the current phase structure (15 phases)."""
+        """Execution order matches the current phase structure (13 phases)."""
         expected = [
             "validate_dag",
             "intersections",
@@ -239,10 +239,10 @@ class TestGlobalRegistry:
             "interleave_beats",
             "scene_types",
             # narrative_gaps moved to POLISH Phase 1a (PR A of #1368)
-            "pacing_gaps",
+            # pacing_gaps moved to POLISH Phase 2 (PR C of #1368)
             # atmospheric moved to POLISH Phase 5e (PR B of #1368)
             # path_arcs moved to POLISH Phase 5f (PR B of #1368)
-            "entity_arcs",
+            # entity_arcs moved to POLISH Phase 3 (PR C of #1368)
             "transition_gaps",
             "enumerate_arcs",
             "divergence",

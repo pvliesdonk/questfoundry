@@ -231,13 +231,12 @@ class _PolishLLMPhaseMixin:
             )
 
         # Path → dilemma map for the prompt's Valid IDs section.
-        # Matches the helper used by GROW Phase 4b/4c (kept in grow llm_phases
-        # while pacing_gaps still lives there; will move with PR C).
-        from questfoundry.pipeline.stages.grow.llm_phases import (
-            _build_path_dilemma_context,
-        )
+        # Helper lives in graph/context.py (moved out of grow/llm_phases.py
+        # in PR C of issue #1368 since GROW no longer needs it after
+        # pacing_gaps moved to POLISH).
+        from questfoundry.graph.context import build_path_dilemma_context
 
-        path_dilemma_map_text, valid_dilemma_ids_text = _build_path_dilemma_context(
+        path_dilemma_map_text, valid_dilemma_ids_text = build_path_dilemma_context(
             graph, path_nodes
         )
 
@@ -317,6 +316,18 @@ class _PolishLLMPhaseMixin:
             output_schema=Phase2Output,
         )
 
+        # Build a lookup of which after_beat_id values come from a
+        # consecutive-run flag (R-2.6 pacing-run correction) vs. a
+        # pacing-flag micro-beat insertion (e.g. no_sequel_after_commit).
+        # Per spec R-2.7, only the former carry ``is_gap_beat: True`` —
+        # the flag distinguishes correction-beat origin from regular
+        # micro-beat origin so FILL can render them differently.
+        consecutive_run_beat_ids: set[str] = set()
+        for flag in pacing_flags:
+            issue_type = flag.get("issue_type", "")
+            if issue_type.startswith("consecutive_"):
+                consecutive_run_beat_ids.update(flag.get("beat_ids", []))
+
         # Apply micro-beats
         inserted = 0
         for mb in result.micro_beats:
@@ -328,7 +339,15 @@ class _PolishLLMPhaseMixin:
                 continue
 
             micro_beat_id = f"beat::micro_{inserted}_{mb.after_beat_id.split('::')[-1]}"
-            _insert_micro_beat(graph, micro_beat_id, mb.after_beat_id, mb.summary, mb.entity_ids)
+            is_correction = mb.after_beat_id in consecutive_run_beat_ids
+            _insert_micro_beat(
+                graph,
+                micro_beat_id,
+                mb.after_beat_id,
+                mb.summary,
+                mb.entity_ids,
+                is_correction_beat=is_correction,
+            )
             inserted += 1
 
         return PhaseResult(
@@ -1398,10 +1417,18 @@ def _insert_micro_beat(
     after_beat_id: str,
     summary: str,
     entity_ids: list[str],
+    *,
+    is_correction_beat: bool = False,
 ) -> None:
     """Insert a micro-beat node after the specified beat in the DAG.
 
     Updates predecessor edges to splice the micro-beat into the chain.
+
+    ``is_correction_beat`` (default False) controls whether the inserted
+    beat carries ``is_gap_beat: True`` — set True only for pacing-run
+    correction beats (R-2.7), False for regular pacing-flag micro-beats
+    (e.g. no_sequel_after_commit). The flag distinguishes origin so FILL
+    can render the two kinds differently.
     """
     beat_nodes = graph.get_nodes_by_type("beat")
 
@@ -1413,20 +1440,24 @@ def _insert_micro_beat(
             path_id = edge["to"]
             break
 
-    # Create the micro-beat node
-    graph.create_node(
-        micro_beat_id,
-        {
-            "type": "beat",
-            "raw_id": micro_beat_id.split("::")[-1],
-            "summary": summary,
-            "role": "micro_beat",
-            "scene_type": "micro_beat",
-            "dilemma_impacts": [],
-            "entities": entity_ids,
-            "created_by": "POLISH",
-        },
-    )
+    # Create the micro-beat node.
+    # Per spec R-2.7 (PR #1366), only correction beats — those that break
+    # a 3+ consecutive same-scene_type run — carry ``is_gap_beat: True``.
+    # Regular pacing-flag micro-beats (e.g. no_sequel_after_commit) carry
+    # ``is_gap_beat=False`` so FILL renders their summary normally.
+    node_data: dict[str, Any] = {
+        "type": "beat",
+        "raw_id": micro_beat_id.split("::")[-1],
+        "summary": summary,
+        "role": "micro_beat",
+        "scene_type": "micro_beat",
+        "dilemma_impacts": [],
+        "entities": entity_ids,
+        "created_by": "POLISH",
+    }
+    if is_correction_beat:
+        node_data["is_gap_beat"] = True
+    graph.create_node(micro_beat_id, node_data)
 
     # Add belongs_to edge
     if path_id:

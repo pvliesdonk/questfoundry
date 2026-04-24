@@ -17,6 +17,43 @@ if TYPE_CHECKING:
     from questfoundry.graph.graph import Graph
     from questfoundry.models.seed import Consequence, Path, SeedOutput
 
+
+def build_path_dilemma_context(
+    graph: Graph,
+    path_nodes: dict[str, Any],
+) -> tuple[str, str]:
+    """Build path-to-dilemma mapping text and valid dilemma ID text for LLM context.
+
+    Used by gap-insertion phases (POLISH Phase 1a, GROW Phase 4c historically)
+    to give the LLM the dilemma context it needs when proposing gap or
+    correction beats with `dilemma_impacts`.
+
+    Args:
+        graph: The graph store to query for dilemma nodes.
+        path_nodes: Dict of path_id → path data.
+
+    Returns:
+        A tuple of (path_dilemma_map_text, valid_dilemma_ids_text) ready for
+        injection into a prompt context dict.
+    """
+    dilemma_nodes = graph.get_nodes_by_type("dilemma")
+    valid_dilemma_ids = sorted(dilemma_nodes.keys())
+    path_dilemma_lines = []
+    for pid in sorted(path_nodes.keys()):
+        pdata = path_nodes[pid]
+        dilemma_id = pdata.get("dilemma_id", "")
+        if dilemma_id and not dilemma_id.startswith("dilemma::"):
+            dilemma_id = f"dilemma::{dilemma_id}"
+        question = ""
+        if dilemma_id and dilemma_id in dilemma_nodes:
+            question = dilemma_nodes[dilemma_id].get("question", "")
+        suffix = f' ("{question}")' if question else ""
+        path_dilemma_lines.append(f"  {pid} → {dilemma_id or '(none)'}{suffix}")
+    path_dilemma_map_text = "\n".join(path_dilemma_lines) or "(no paths with dilemmas)"
+    valid_dilemma_ids_text = ", ".join(valid_dilemma_ids) or "(none)"
+    return path_dilemma_map_text, valid_dilemma_ids_text
+
+
 # Entity categories - used as scope prefixes for entity IDs
 # Format: category::name (e.g., character::pim, location::manor)
 ENTITY_CATEGORIES = frozenset(["character", "location", "object", "faction"])
