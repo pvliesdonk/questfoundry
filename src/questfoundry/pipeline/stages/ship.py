@@ -50,6 +50,7 @@ class ShipStage:
         output_dir: Path | None = None,
         *,
         embed_assets: bool = False,
+        timestamp: str | None = None,
     ) -> Path:
         """Export the story graph to a playable format.
 
@@ -59,6 +60,11 @@ class ShipStage:
                 ``{project}/exports/{format}/``.
             embed_assets: Embed illustration assets as base64 data URLs
                 in HTML output. Ignored for non-HTML formats.
+            timestamp: Optional ISO 8601 string for the R-3.6 metadata
+                ``generation_timestamp``. Production runs leave this
+                ``None`` so the exporter stamps ``datetime.now(UTC)``
+                itself; tests pin a fixed value to assert R-2.4
+                byte-identical determinism without timestamp drift.
 
         Returns:
             Path to the main output file.
@@ -150,7 +156,7 @@ class ShipStage:
 
         # Export
         target_dir = output_dir or (self._project_path / "exports" / export_format)
-        output_file = exporter.export(context, target_dir)
+        output_file = exporter.export(context, target_dir, timestamp=timestamp)
 
         # Bundle illustration assets (non-fatal — export is valid without them)
         if context.illustrations and not (embed_assets and export_format == "html"):
