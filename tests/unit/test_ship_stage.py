@@ -328,3 +328,48 @@ class TestShipStage:
 
         data = json.loads(result.read_text())
         assert data["title"] == "test-story"
+
+
+class TestShipPhase4Validation:
+    """R-4.1 through R-4.4: SHIP halts with ERROR before delivering a
+    bundle that fails per-format validation. The validator failure
+    message must be embedded in the raised ShipStageError so the user
+    can see exactly what's broken without spelunking through logs.
+    """
+
+    def test_validation_failure_halts_ship(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A validator that raises must surface as ShipStageError, not a
+        silently-delivered broken file (R-4.2).
+        """
+        from questfoundry.export.validation import ExportValidationError
+
+        project = tmp_path / "my-story"
+        _create_project_with_graph(project)
+
+        def _always_fail(_path: Path) -> None:
+            msg = "synthetic broken target: passage::ghost"
+            raise ExportValidationError(msg)
+
+        # Patch the dispatcher's table for the json validator
+        from questfoundry.export import validation as validation_module
+
+        monkeypatch.setitem(validation_module.VALIDATORS, "json", _always_fail)
+
+        stage = ShipStage(project)
+        with pytest.raises(ShipStageError, match="passage::ghost"):
+            stage.execute(export_format="json")
+
+    def test_valid_export_passes_phase_4(self, tmp_path: Path) -> None:
+        """End-to-end: a clean run from the test fixture must satisfy
+        Phase 4 validation without monkey-patching anything.
+        """
+        project = tmp_path / "my-story"
+        _create_project_with_graph(project)
+
+        stage = ShipStage(project)
+        # No exception = Phase 4 passed
+        stage.execute(export_format="twee")
+        stage.execute(export_format="json")
+        stage.execute(export_format="html")
