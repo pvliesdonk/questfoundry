@@ -33,6 +33,15 @@ log = get_logger(__name__)
 # document shape changes (new passage type, removed field, etc.).
 TWEE_FORMAT_VERSION = "1.0.0"
 
+# Fixed UUID5 namespace for deriving Twee IFIDs deterministically from the
+# story title. R-2.4 mandates byte-identical exports for the same graph
+# state, so the IFID — which the IF Technology Foundation defines as a
+# stable identifier for the WORK, not the FILE — must not change between
+# runs. uuid.uuid4() (random) was the original choice and produced a
+# different identifier on every export. Generated once with uuid.uuid4()
+# and pasted here so the namespace itself is stable across machines.
+_QF_TWEE_IFID_NAMESPACE = uuid.UUID("4f0c8c5f-2e1c-4f44-8d1c-7a9c2f3d4e5f")
+
 
 class TweeExporter:
     """Export story as Twee 3 / SugarCube 2 format."""
@@ -137,7 +146,11 @@ def _story_header(
     language: str = "en",
 ) -> list[str]:
     """Generate Twee 3 story header passages."""
-    ifid = str(uuid.uuid4()).upper()
+    # Derive the IFID deterministically from the story title via
+    # uuid.uuid5(). Same title → same IFID across runs; required by
+    # R-2.4 byte-identical determinism and aligned with the IFTF
+    # convention that an IFID identifies the work, not the file.
+    ifid = str(uuid.uuid5(_QF_TWEE_IFID_NAMESPACE, title)).upper()
     header = [
         f":: StoryTitle\n{title}",
         "",

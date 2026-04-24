@@ -65,9 +65,10 @@ class TestGraphSnapshotHash:
         assert h1 != h2
 
     def test_changed_title_changes_hash(self) -> None:
+        from dataclasses import replace
+
         ctx_a = _ctx()
-        ctx_b = _ctx()
-        ctx_b.title = "different"
+        ctx_b = replace(ctx_a, title="different")
         assert compute_graph_snapshot_hash(ctx_a) != compute_graph_snapshot_hash(ctx_b)
 
 
@@ -139,28 +140,12 @@ class TestTweeExporterMetadata:
         assert "pipeline_version:" in text
 
     def test_byte_identical_with_fixed_timestamp(self, tmp_path: Path) -> None:
-        # Twee header includes a random IFID, so we cannot expect full byte
-        # equality. But the metadata block itself MUST be deterministic.
+        # The IFID is now derived deterministically from the title
+        # (uuid.uuid5), so Twee meets the same byte-identical bar as
+        # JSON and HTML when the timestamp is pinned (R-2.4).
         out1 = TweeExporter().export(_ctx(), tmp_path / "a", timestamp=_FIXED_TS)
         out2 = TweeExporter().export(_ctx(), tmp_path / "b", timestamp=_FIXED_TS)
-
-        def _metadata_block(text: str) -> str:
-            """Extract the StoryMetadata block.
-
-            Read until the next Twee passage header (``::``) or a blank
-            line, instead of slicing a fixed line count — adding a fifth
-            metadata field would otherwise silently truncate the assertion.
-            """
-            lines = text.splitlines()
-            start = next(i for i, line in enumerate(lines) if ":: StoryMetadata" in line)
-            block = [lines[start]]
-            for line in lines[start + 1 :]:
-                if not line.strip() or line.startswith("::"):
-                    break
-                block.append(line)
-            return "\n".join(block)
-
-        assert _metadata_block(out1.read_text()) == _metadata_block(out2.read_text())
+        assert out1.read_bytes() == out2.read_bytes()
 
 
 class TestHtmlExporterMetadata:

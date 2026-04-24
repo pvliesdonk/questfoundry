@@ -64,6 +64,47 @@ class TestTweeExporter:
         assert ":: StoryData" in content
         assert '"format": "SugarCube"' in content
 
+    def test_ifid_is_deterministic_per_title(self, tmp_path: Path) -> None:
+        """R-2.4: same story title → same IFID across runs.
+
+        Catches regression to ``uuid.uuid4()`` (which generated a fresh
+        IFID on every export and broke byte-identical determinism).
+        """
+        out1 = TweeExporter().export(_simple_context(), tmp_path / "a")
+        out2 = TweeExporter().export(_simple_context(), tmp_path / "b")
+        # Pull the IFID line from each output
+        import re
+
+        def _ifid(text: str) -> str:
+            m = re.search(r'"ifid":\s*"([0-9A-F-]{36})"', text)
+            assert m is not None, "IFID not found in StoryData"
+            return m.group(1)
+
+        assert _ifid(out1.read_text()) == _ifid(out2.read_text())
+
+    def test_ifid_differs_for_different_titles(self, tmp_path: Path) -> None:
+        """A different story title should produce a different IFID — the
+        IFID identifies the work.
+
+        Construct ``ctx_b`` directly rather than mutating a copy of
+        ``_simple_context()``: ``ExportContext`` is a plain dataclass
+        today but mutation here would silently break if it ever became
+        ``frozen=True``, and the construction style mirrors the rest
+        of the suite.
+        """
+        import re
+        from dataclasses import replace
+
+        ctx_a = _simple_context()
+        ctx_b = replace(ctx_a, title="Different Story")
+        out_a = TweeExporter().export(ctx_a, tmp_path / "a").read_text()
+        out_b = TweeExporter().export(ctx_b, tmp_path / "b").read_text()
+
+        ifid_a = re.search(r'"ifid":\s*"([0-9A-F-]{36})"', out_a)
+        ifid_b = re.search(r'"ifid":\s*"([0-9A-F-]{36})"', out_b)
+        assert ifid_a is not None and ifid_b is not None
+        assert ifid_a.group(1) != ifid_b.group(1)
+
     def test_start_passage(self, tmp_path: Path) -> None:
         exporter = TweeExporter()
         result = exporter.export(_simple_context(), tmp_path / "out")
@@ -362,3 +403,70 @@ class TestTweeExporter:
 
         # German uses "Kodex"
         assert ":: Kodex" in content
+
+
+class TestTweeChoiceLabelVerbatim:
+    """R-3.2: Twee export preserves choice labels verbatim from POLISH.
+
+    The exporter does no escaping or rewriting of label text — both
+    the simple ``[[label->target]]`` form and the macro
+    ``<<link "label">>`` form must contain the label byte-for-byte
+    as it appeared in the ExportContext, including special characters
+    like em dashes, smart quotes, and apostrophes.
+    """
+
+    @staticmethod
+    def _ctx_with_label(label: str, *, with_grant: bool = False) -> ExportContext:
+        """Single-choice context where the choice carries ``label``.
+
+        ``with_grant=True`` forces the macro form (<<link>>) so we can
+        exercise the verbatim guarantee on both link-rendering paths.
+        """
+        return ExportContext(
+            title="Verbatim Test",
+            passages=[
+                ExportPassage(id="passage::start", prose="Start.", is_start=True),
+                ExportPassage(id="passage::end", prose="End.", is_ending=True),
+            ],
+            choices=[
+                ExportChoice(
+                    from_passage="passage::start",
+                    to_passage="passage::end",
+                    label=label,
+                    grants=["codeword::flag"] if with_grant else [],
+                ),
+            ],
+        )
+
+    def test_em_dash_preserved_in_simple_link_form(self, tmp_path: Path) -> None:
+        label = "Trust the mentor\u2014say nothing"
+        ctx = self._ctx_with_label(label)
+        out = TweeExporter().export(ctx, tmp_path / "out")
+        content = out.read_text()
+        # Simple form: [[label->target]]
+        assert f"[[{label}->end]]" in content
+
+    def test_em_dash_preserved_in_macro_link_form(self, tmp_path: Path) -> None:
+        label = "Trust the mentor\u2014say nothing"
+        ctx = self._ctx_with_label(label, with_grant=True)
+        out = TweeExporter().export(ctx, tmp_path / "out")
+        content = out.read_text()
+        # Macro form: <<link "label">>
+        assert f'<<link "{label}">>' in content
+
+    def test_smart_quotes_and_apostrophe_preserved(self, tmp_path: Path) -> None:
+        label = "It\u2019s the mentor\u2019s call \u201cnow\u201d"
+        ctx = self._ctx_with_label(label)
+        out = TweeExporter().export(ctx, tmp_path / "out")
+        assert label in out.read_text()
+
+    def test_label_bytes_preserved_exactly(self, tmp_path: Path) -> None:
+        """Catch-all: the entire label string must round-trip verbatim.
+        Pins R-3.2 against any future "helpful" cleanup (e.g. dash
+        normalisation, smart-quote folding).
+        """
+        label = "A \u2014 B \u2018C\u2019 D \u201cE\u201d F"
+        ctx = self._ctx_with_label(label)
+        out = TweeExporter().export(ctx, tmp_path / "out")
+        text = out.read_text(encoding="utf-8")
+        assert label in text, f"label round-trip failed: expected exactly {label!r} in output"

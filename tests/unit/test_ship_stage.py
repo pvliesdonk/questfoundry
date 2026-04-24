@@ -373,3 +373,52 @@ class TestShipPhase4Validation:
         stage.execute(export_format="twee")
         stage.execute(export_format="json")
         stage.execute(export_format="html")
+
+
+class TestShipDeterminism:
+    """R-2.4: SHIP must not mutate the graph; running it twice on the
+    same graph must produce byte-identical output (modulo the metadata
+    generation_timestamp, which the test seam pins).
+    """
+
+    _FIXED_TS = "2026-04-24T00:00:00+00:00"
+
+    @pytest.mark.parametrize("export_format", ["twee", "json", "html"])
+    def test_two_runs_produce_byte_identical_output(
+        self, tmp_path: Path, export_format: str
+    ) -> None:
+        """Same project + same fixed timestamp → identical bytes.
+
+        Confirms SHIP itself is deterministic (no in-memory iteration
+        order leaking into output, no hidden randomness, no graph
+        mutation between runs).
+        """
+        project = tmp_path / "story"
+        _create_project_with_graph(project)
+
+        stage = ShipStage(project)
+        out1 = stage.execute(
+            export_format=export_format,
+            output_dir=tmp_path / f"{export_format}-1",
+            timestamp=self._FIXED_TS,
+        )
+        out2 = stage.execute(
+            export_format=export_format,
+            output_dir=tmp_path / f"{export_format}-2",
+            timestamp=self._FIXED_TS,
+        )
+        assert out1.read_bytes() == out2.read_bytes()
+
+    def test_graph_unchanged_after_ship(self, tmp_path: Path) -> None:
+        """SHIP is read-only: the graph file must be byte-identical
+        before and after a run.
+        """
+        project = tmp_path / "story"
+        _create_project_with_graph(project)
+        graph_path = project / "graph.db"
+        before = graph_path.read_bytes()
+
+        ShipStage(project).execute(export_format="json", timestamp=self._FIXED_TS)
+
+        after = graph_path.read_bytes()
+        assert before == after, "SHIP mutated graph.db (R-2.4 violation)"
