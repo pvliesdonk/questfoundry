@@ -12,6 +12,7 @@ import json
 from typing import TYPE_CHECKING
 
 from questfoundry.export.i18n import get_ui_strings
+from questfoundry.export.metadata import ExportMetadata, build_export_metadata
 from questfoundry.observability.logging import get_logger
 
 if TYPE_CHECKING:
@@ -27,18 +28,31 @@ if TYPE_CHECKING:
 
 log = get_logger(__name__)
 
+# Backward-compatible additive changes only; bump on shape changes
+# (new <head> meta block, breaking layout reshuffle, etc.).
+HTML_FORMAT_VERSION = "1.0.0"
+
 
 class HtmlExporter:
     """Export story as a standalone HTML file."""
 
     format_name = "html"
+    format_version = HTML_FORMAT_VERSION
 
-    def export(self, context: ExportContext, output_dir: Path) -> Path:
+    def export(
+        self,
+        context: ExportContext,
+        output_dir: Path,
+        *,
+        timestamp: str | None = None,
+    ) -> Path:
         """Write story as a single playable HTML file.
 
         Args:
             context: Extracted story data.
             output_dir: Directory to write output files.
+            timestamp: Optional override for the metadata generation
+                timestamp (test seam for deterministic assertions).
 
         Returns:
             Path to the generated HTML file.
@@ -88,6 +102,10 @@ class HtmlExporter:
             alt_attr = "" if cap else html.escape(ui["cover_alt"])
             cover_html = f'<figure class="cover">\n  <img src="{html.escape(context.cover.asset_path)}" alt="{alt_attr}">{caption_tag}\n</figure>'
 
+        # R-3.6 metadata block — emitted as <meta name="qf-..."> tags
+        # in <head> for in-band provenance without affecting the page body.
+        metadata = build_export_metadata(context, HTML_FORMAT_VERSION, timestamp=timestamp)
+
         # Build the complete HTML document
         content = _build_html_document(
             title=context.title,
@@ -95,6 +113,7 @@ class HtmlExporter:
             start_id=_safe_id(start_id),
             codex_html=codex_html,
             art_direction_meta=art_direction_meta,
+            metadata=metadata,
             cover_html=cover_html,
             language=context.language,
             ui=ui,
@@ -117,6 +136,18 @@ class HtmlExporter:
 def _safe_id(passage_id: str) -> str:
     """Convert a passage ID to a safe HTML id attribute."""
     return passage_id.replace("::", "--").replace(" ", "_")
+
+
+def _render_metadata_meta_tags(metadata: ExportMetadata) -> str:
+    """Render the R-3.6 metadata block as HTML <meta> tags.
+
+    One tag per field, prefixed with ``qf-`` so they don't collide
+    with any spec-defined name attributes.
+    """
+    return "\n".join(
+        f'<meta name="qf-{key.replace("_", "-")}" content="{html.escape(value)}">'
+        for key, value in sorted(metadata.to_dict().items())
+    )
 
 
 def _render_passage_div(
@@ -200,14 +231,24 @@ def _build_html_document(
     title: str,
     passages_html: str,
     start_id: str,
+    metadata: ExportMetadata,
     codex_html: str = "",
     art_direction_meta: str = "",
     cover_html: str = "",
     language: str = "en",
     ui: dict[str, str] | None = None,
 ) -> str:
-    """Build the complete HTML document."""
-    extra_meta = f"\n{art_direction_meta}" if art_direction_meta else ""
+    """Build the complete HTML document.
+
+    ``metadata`` is required: R-3.6 mandates a metadata header on every
+    export, so an HTML build without it would silently violate the spec.
+    Make the parameter mandatory rather than defaulting to ``None`` so a
+    forgotten argument fails at call time, not at audit time.
+    """
+    extra_meta_parts = [_render_metadata_meta_tags(metadata)]
+    if art_direction_meta:
+        extra_meta_parts.append(art_direction_meta)
+    extra_meta = "\n" + "\n".join(extra_meta_parts)
     codex_label = html.escape((ui or {}).get("codex", "Codex"))
     codex_button = (
         f'<button class="codex-toggle" id="codex-toggle">{codex_label}</button>'

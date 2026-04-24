@@ -14,9 +14,9 @@ from questfoundry.export.base import (
     ExportIllustration,
     ExportPassage,
 )
+from questfoundry.export.pagination import compute_passage_numbering as _build_passage_numbering
 from questfoundry.export.pdf_exporter import (
     PdfExporter,
-    _build_passage_numbering,
     _format_codeword_name,
     _render_codeword_checklist,
     _render_codex,
@@ -131,16 +131,20 @@ class TestPassageNumbering:
         assert numbering == {"only": 1}
 
     def test_no_start_passage_uses_first(self) -> None:
-        """When no passage has is_start=True, first passage gets number 1."""
+        """When no passage has is_start=True, the first passage in list order
+        (NOT alphabetically first) gets number 1.
+        """
+        # Pass passages in non-alphabetical order so this test actually
+        # discriminates list-order behavior from sorted-order behavior.
         passages = [
+            ExportPassage(id="passage::gamma", prose="Gamma."),
             ExportPassage(id="passage::alpha", prose="Alpha."),
             ExportPassage(id="passage::beta", prose="Beta."),
-            ExportPassage(id="passage::gamma", prose="Gamma."),
         ]
         numbering = _build_passage_numbering(passages)
 
-        # First passage (alphabetically sorted) should be 1
-        assert numbering["passage::alpha"] == 1
+        # First in list order, NOT alphabetically first
+        assert numbering["passage::gamma"] == 1
         # All passages should have unique numbers
         assert len(set(numbering.values())) == 3
 
@@ -521,3 +525,34 @@ class TestPdfExporter:
         exporter = PdfExporter()
         with pytest.raises(ImportError, match="WeasyPrint is required"):
             exporter.export(_simple_context(), tmp_path / "out")
+
+    @pytest.mark.skipif(
+        not _weasyprint_available(),
+        reason="WeasyPrint not installed (optional dependency)",
+    )
+    def test_writes_sidecar_map_with_metadata_and_pages(self, tmp_path: Path) -> None:
+        """R-3.6 + #1336: PDF run drops a story.pdf.map.json sidecar."""
+        import json
+
+        exporter = PdfExporter()
+        out = exporter.export(
+            _simple_context(), tmp_path / "out", timestamp="2026-04-24T00:00:00+00:00"
+        )
+
+        sidecar = out.with_suffix(".pdf.map.json")
+        assert sidecar.exists(), "PDF sidecar missing — #1336"
+
+        data = json.loads(sidecar.read_text())
+        assert "_metadata" in data
+        meta = data["_metadata"]
+        assert meta["format_version"] == PdfExporter.format_version
+        assert meta["generation_timestamp"] == "2026-04-24T00:00:00+00:00"
+        assert len(meta["graph_snapshot_hash"]) == 64
+
+        page_map = data["page_map"]
+        assert isinstance(page_map, dict)
+        # Every passage in the simple context appears in the map
+        for passage in _simple_context().passages:
+            assert passage.id in page_map
+        # Map values are 1-based ints
+        assert all(isinstance(v, int) and v >= 1 for v in page_map.values())
