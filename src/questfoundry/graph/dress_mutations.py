@@ -228,6 +228,40 @@ def apply_dress_illustration(
 # ---------------------------------------------------------------------------
 
 
+def validate_entity_visual_coverage(graph: Graph) -> list[str]:
+    """Validate per-entity visual coverage post-Phase 0 (R-1.3, R-1.4).
+
+    For every entity with at least one ``appears`` edge (entity → passage),
+    confirm the entity has an EntityVisual with a non-empty
+    ``reference_prompt_fragment``. Without this, FILL/SHIP will reference
+    the entity in prose but image generation has no reference image
+    fragment to inject — illustrations end up inconsistent.
+
+    Returns a list of human-readable errors (empty if compliant). Caller
+    decides whether to halt or fall back.
+    """
+    errors: list[str] = []
+    appears_edges = graph.get_edges(edge_type="appears")
+    appearing_entity_ids: set[str] = {e["from"] for e in appears_edges}
+    for entity_id in sorted(appearing_entity_ids):
+        raw_id = strip_scope_prefix(entity_id)
+        ev_node_id = f"entity_visual::{raw_id}"
+        ev = graph.get_node(ev_node_id)
+        if ev is None:
+            errors.append(
+                f"R-1.3: entity {entity_id!r} has appears edges but no "
+                f"EntityVisual node ({ev_node_id!r} missing)"
+            )
+            continue
+        fragment = (ev.get("reference_prompt_fragment") or "").strip()
+        if not fragment:
+            errors.append(
+                f"R-1.4: entity {entity_id!r} has EntityVisual but its "
+                f"reference_prompt_fragment is empty"
+            )
+    return errors
+
+
 def validate_dress_codex_entries(
     graph: Graph,
     entity_id: str,
@@ -260,6 +294,18 @@ def validate_dress_codex_entries(
         errors.append(f"Entity {entity_id}: some codex entries missing required 'rank' field")
     if 1 not in ranks:
         errors.append(f"Entity {entity_id}: missing rank=1 base tier (always visible)")
+    else:
+        # R-3.2: the rank=1 entry MUST be unconditional (visible_when == []).
+        # A rank-1 entry with a state-flag gate would silently hide what's
+        # supposed to be the always-visible tier — fail loud.
+        rank_one_entries = [e for e in entries if e.get("rank") == 1]
+        for entry in rank_one_entries:
+            visible_when = entry.get("visible_when", [])
+            if visible_when:
+                errors.append(
+                    f"Entity {entity_id}: rank=1 entry must have empty "
+                    f"visible_when (R-3.2), got {visible_when!r}"
+                )
 
     rank_counts: dict[int, int] = {}
     for r in ranks:
