@@ -42,6 +42,7 @@ from questfoundry.graph.dress_context import (
     format_all_entity_visuals,
     format_art_direction_context,
     format_entities_batch_for_codex,
+    format_entity_for_codex,
     format_passages_batch_for_briefs,
     format_vision_and_entities,
 )
@@ -61,7 +62,9 @@ from questfoundry.models.dress import (
     BatchedBriefOutput,
     BatchedCodexOutput,
     DressPhase0Output,
+    DressPhase2Output,
     DressPhaseResult,
+    SpoilerCheckResult,
 )
 from questfoundry.observability.logging import get_logger
 from questfoundry.observability.tracing import traceable
@@ -107,6 +110,12 @@ _VALID_ASPECT_RATIOS = {"1:1", "16:9", "9:16", "3:2", "2:3"}
 # reprioritization. Spec calls this `priority: skip` (string); see
 # tracking note in map_score_to_priority for the drift.
 _BRIEF_SKIP_PRIORITY = 99
+
+# Per-entity codex regeneration cap per spec R-3.6: at most 2 retries after
+# the original batch attempt for any one entity whose entries leak content
+# gated behind a higher tier. After exhaustion, fall back to a minimal
+# rank-1-only entry with WARNING (no silent gap).
+_CODEX_SPOILER_RETRIES = 2
 
 
 def _parse_aspect_ratio(raw: str) -> str:
@@ -913,12 +922,40 @@ class DressStage:
             on_connectivity_error=self._on_connectivity_error,
         )
 
+        spoiler_retries = 0
+        spoiler_fallbacks = 0
+
         for batch_result in results:
             if batch_result is None:
                 log.warning("codex_batch_failed", detail="batch returned no results")
                 continue
             for entity_id, entry_dicts in batch_result:
-                errs = validate_dress_codex_entries(graph, entity_id, entry_dicts)
+                # R-3.6: per-entity spoiler-direction check. If a lower tier
+                # leaks higher-tier content, regenerate this entity's entries
+                # alone (max _CODEX_SPOILER_RETRIES). On exhaustion, fall back
+                # to a minimal rank-1-only codex with a WARNING — never ship
+                # silently leaking spoilers.
+                (
+                    final_entries,
+                    retries,
+                    fallback,
+                    retry_calls,
+                    retry_tokens,
+                ) = await self._enforce_codex_spoiler_safety(
+                    graph,
+                    model,
+                    entity_id,
+                    entry_dicts,
+                    vision_ctx=vision_ctx,
+                    state_flag_list=state_flag_list,
+                )
+                spoiler_retries += retries
+                if fallback:
+                    spoiler_fallbacks += 1
+                total_llm_calls += retry_calls
+                total_tokens += retry_tokens
+
+                errs = validate_dress_codex_entries(graph, entity_id, final_entries)
                 if errs:
                     validation_warnings += 1
                     log.warning(
@@ -926,14 +963,16 @@ class DressStage:
                         entity_id=entity_id,
                         errors=errs,
                     )
-                apply_dress_codex(graph, entity_id, entry_dicts)
-                codex_created += len(entry_dicts)
+                apply_dress_codex(graph, entity_id, final_entries)
+                codex_created += len(final_entries)
 
         log.info(
             "codex_phase_complete",
             entries_created=codex_created,
             entities=len(entities),
             warnings=validation_warnings,
+            spoiler_retries=spoiler_retries,
+            spoiler_fallbacks=spoiler_fallbacks,
         )
 
         return DressPhaseResult(
@@ -943,6 +982,132 @@ class DressStage:
             llm_calls=total_llm_calls,
             tokens_used=total_tokens,
         )
+
+    # -------------------------------------------------------------------------
+    # Phase 2 helpers: spoiler-direction enforcement (R-3.6)
+    # -------------------------------------------------------------------------
+
+    async def _enforce_codex_spoiler_safety(
+        self,
+        graph: Graph,
+        model: BaseChatModel,
+        entity_id: str,
+        entries: list[dict[str, Any]],
+        *,
+        vision_ctx: str,
+        state_flag_list: str,
+    ) -> tuple[list[dict[str, Any]], int, bool, int, int]:
+        """Enforce R-3.6 spoiler-direction safety on one entity's entries.
+
+        Runs an LLM spoiler check; on detected leak, regenerates the
+        entity's entries alone (max ``_CODEX_SPOILER_RETRIES``).  If
+        every retry still leaks, returns a minimal rank-1-only fallback
+        with WARNING logged.
+
+        Returns:
+            ``(final_entries, retries_used, used_fallback, llm_calls, tokens)``.
+        """
+        current = entries
+        retries_used = 0
+        total_calls = 0
+        total_tokens = 0
+
+        for attempt in range(_CODEX_SPOILER_RETRIES + 1):
+            check, calls, tokens = await self._spoiler_check(model, entity_id, current)
+            total_calls += calls
+            total_tokens += tokens
+            if not check.has_leak:
+                return current, retries_used, False, total_calls, total_tokens
+
+            log.warning(
+                "codex_spoiler_leak_detected",
+                entity_id=entity_id,
+                attempt=attempt + 1,
+                leaks=[leak.model_dump() for leak in check.leaks],
+                reason=check.reason,
+            )
+
+            if attempt == _CODEX_SPOILER_RETRIES:
+                break
+
+            retries_used += 1
+            regen_entries, regen_calls, regen_tokens = await self._regenerate_codex_for_entity(
+                graph,
+                model,
+                entity_id,
+                vision_ctx=vision_ctx,
+                state_flag_list=state_flag_list,
+                prior_leak=check,
+            )
+            total_calls += regen_calls
+            total_tokens += regen_tokens
+            current = regen_entries
+
+        # Retries exhausted; spec mandates a rank-1-only fallback with WARNING
+        # rather than a silent gap.
+        fallback = _minimal_rank_one_codex(graph, entity_id)
+        log.warning(
+            "codex_spoiler_retry_exhausted",
+            entity_id=entity_id,
+            retries=_CODEX_SPOILER_RETRIES,
+            fallback_entries=len(fallback),
+        )
+        return fallback, retries_used, True, total_calls, total_tokens
+
+    async def _spoiler_check(
+        self,
+        model: BaseChatModel,
+        entity_id: str,
+        entries: list[dict[str, Any]],
+    ) -> tuple[SpoilerCheckResult, int, int]:
+        """Ask the LLM whether any lower-ranked entry leaks higher-rank content."""
+        entries_block = _format_entries_for_spoiler_check(entries)
+        context = {
+            "entity_id": entity_id,
+            "entries_block": entries_block,
+        }
+        return await self._dress_llm_call(
+            model,
+            "dress_codex_spoiler_check",
+            context,
+            SpoilerCheckResult,
+        )
+
+    async def _regenerate_codex_for_entity(
+        self,
+        graph: Graph,
+        model: BaseChatModel,
+        entity_id: str,
+        *,
+        vision_ctx: str,
+        state_flag_list: str,
+        prior_leak: SpoilerCheckResult,
+    ) -> tuple[list[dict[str, Any]], int, int]:
+        """Regenerate one entity's codex after a detected spoiler leak."""
+        entity_details = format_entity_for_codex(graph, entity_id)
+        leak_summary = (
+            "\n".join(
+                f"- rank {leak.lower_rank} leaked content gated behind rank "
+                f"{leak.higher_rank}: {leak.leaked_content}"
+                for leak in prior_leak.leaks
+            )
+            or "Prior attempt leaked higher-tier content."
+        )
+        # Append the prior-leak description to entity details so the model
+        # has the concrete failure mode to avoid this round.
+        entity_details_with_warning = (
+            f"{entity_details}\n\n## Prior attempt leaked spoilers — DO NOT REPEAT\n{leak_summary}"
+        )
+        context = {
+            "vision_context": vision_ctx or "No creative vision available.",
+            "entity_details": entity_details_with_warning,
+            "codewords": state_flag_list or "No codewords defined.",
+            "output_language_instruction": self._lang_instruction,
+        }
+        output, calls, tokens = await self._dress_llm_call(
+            model, "dress_codex", context, DressPhase2Output
+        )
+        return [e.model_dump() for e in output.entries], calls, tokens
 
     # -------------------------------------------------------------------------
     # Phase 3: Human Review Gate
@@ -1409,6 +1574,58 @@ class DressStage:
             status="completed",
             detail=f"{generated} images generated, {failed} failed",
         )
+
+
+# -------------------------------------------------------------------------
+# Codex spoiler-check helpers
+# -------------------------------------------------------------------------
+
+
+def _format_entries_for_spoiler_check(entries: list[dict[str, Any]]) -> str:
+    """Render codex entries as a numbered, rank-ordered block for the LLM.
+
+    The spoiler-check prompt needs human-readable entries (per CLAUDE.md
+    §Prompt Context Formatting). Sort by rank ascending so the model
+    audits low → high in the same direction the player would unlock them.
+    """
+    sorted_entries = sorted(entries, key=lambda e: e.get("rank", 0))
+    lines: list[str] = []
+    for entry in sorted_entries:
+        rank = entry.get("rank", "?")
+        title = entry.get("title", "(no title)")
+        gates = entry.get("visible_when") or []
+        gate_text = (
+            "always visible"
+            if not gates
+            else "gated by " + ", ".join(f"`{strip_scope_prefix(g)}`" for g in gates)
+        )
+        content = (entry.get("content") or "").strip() or "(no content)"
+        lines.append(f"### Rank {rank} — {title} ({gate_text})\n{content}")
+    return "\n\n".join(lines)
+
+
+def _minimal_rank_one_codex(graph: Graph, entity_id: str) -> list[dict[str, Any]]:
+    """Build a deliberately vague rank-1-only fallback codex entry.
+
+    Used when spoiler retries are exhausted. Per spec, retry exhaustion
+    must produce a minimal codex with WARNING — never a silent gap.
+    The fallback uses the entity's display name and a generic
+    description so the entry exists, validates, and reveals nothing the
+    player has not already encountered.
+    """
+    raw_id = strip_scope_prefix(entity_id)
+    entity_node = graph.get_node(entity_id) or {}
+    title = entity_node.get("name") or entity_node.get("title") or raw_id
+    return [
+        {
+            "title": title,
+            "rank": 1,
+            "visible_when": [],
+            "content": (
+                f"{title} — a figure encountered in the story. Further details are not yet known."
+            ),
+        }
+    ]
 
 
 # -------------------------------------------------------------------------

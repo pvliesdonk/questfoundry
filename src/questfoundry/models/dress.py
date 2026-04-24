@@ -233,6 +233,39 @@ class BatchedCodexOutput(BaseModel):
     entities: list[BatchedCodexItem] = Field(min_length=1)
 
 
+class SpoilerLeak(BaseModel):
+    """One spoiler-direction violation between two ranks of one entity."""
+
+    lower_rank: int = Field(
+        ge=1,
+        description="Rank of the entry that prematurely discloses information",
+    )
+    higher_rank: int = Field(
+        ge=2,
+        description="Rank of the entry whose reveal was leaked",
+    )
+    leaked_content: str = Field(
+        min_length=1,
+        description="Short quote or paraphrase of the leaked information",
+    )
+
+
+class SpoilerCheckResult(BaseModel):
+    """Result of an LLM spoiler check on one entity's codex entries (R-3.6)."""
+
+    has_leak: bool = Field(
+        description="True if any lower-ranked entry leaks higher-ranked content",
+    )
+    leaks: list[SpoilerLeak] = Field(
+        default_factory=list,
+        description="Detected spoiler violations (empty if has_leak is False)",
+    )
+    reason: str = Field(
+        default="",
+        description="Brief LLM explanation; populated when has_leak is True",
+    )
+
+
 # ---------------------------------------------------------------------------
 # Stage result
 # ---------------------------------------------------------------------------
