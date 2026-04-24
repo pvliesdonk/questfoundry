@@ -59,11 +59,19 @@ _TWEE_RESERVED_HEADERS = {
 
 
 def validate_twee(path: Path) -> None:
-    """Verify Twee link reachability — every choice link target exists.
+    """Verify Twee link reachability — every link target exists AND
+    every passage is reachable from ``Start`` via choice links.
+
+    The spec (Phase 4 Operations) requires both: ``Parse the Twee
+    file; verify every :: passage_id is reachable via choice links;
+    verify no broken links``. Codex/StoryArtDirection/StoryMetadata
+    passages are intentionally unlinked metadata sidecars (R-3.6 +
+    DRESS) and are exempt from the reachability check.
 
     Raises:
         ExportValidationError: If a link references an undefined passage,
-            or if the file lacks a ``Start`` passage.
+            if the file lacks a ``Start`` passage, or if a navigable
+            passage is defined but never reached from ``Start``.
     """
     text = path.read_text(encoding="utf-8")
     passage_names: set[str] = set()
@@ -79,14 +87,14 @@ def validate_twee(path: Path) -> None:
         msg = f"Twee export {path.name} is missing a `:: Start` passage"
         raise ExportValidationError(msg)
 
-    referenced: set[str] = set()
-    for match in _TWEE_LINK_RE.finditer(text):
-        # [[label->target]]: group(2) is target. [[target]]: group(2) is None.
-        target = match.group(2) or match.group(1)
-        referenced.add(target.strip())
-    for match in _TWEE_GOTO_RE.finditer(text):
-        referenced.add(match.group(1).strip())
+    # Build per-passage outbound link sets, scanning each passage body
+    # (everything between its `::` header and the next `::` header).
+    outlinks = _twee_outlinks_per_passage(text)
 
+    # Broken-target check: every referenced name must exist.
+    referenced: set[str] = set()
+    for targets in outlinks.values():
+        referenced.update(targets)
     broken = sorted(
         ref for ref in referenced if ref not in passage_names and ref not in _TWEE_RESERVED_HEADERS
     )
@@ -98,6 +106,63 @@ def validate_twee(path: Path) -> None:
             f"Each target must match a `:: <name>` header earlier in the file."
         )
         raise ExportValidationError(msg)
+
+    # Reachability BFS from Start. Passages defined as metadata
+    # sidecars (codex, art direction, story metadata) are intentionally
+    # unlinked — exclude them from the reachable-set requirement.
+    reachable = _bfs_reachable("Start", outlinks)
+    must_reach = {
+        name for name in passage_names if name not in _TWEE_RESERVED_HEADERS and name != "Codex"
+    }
+    orphans = sorted(must_reach - reachable)
+    if orphans:
+        msg = (
+            f"Twee export {path.name} has {len(orphans)} passage(s) defined but "
+            f"unreachable from `:: Start`: "
+            f"{', '.join(repr(o) for o in orphans[:5])}"
+            f"{' …' if len(orphans) > 5 else ''}. "
+            f"Every navigable passage must be reachable via choice links."
+        )
+        raise ExportValidationError(msg)
+
+
+def _twee_outlinks_per_passage(text: str) -> dict[str, set[str]]:
+    """Map each passage name to the set of names it links to.
+
+    Splits the file at `::` headers and scans each body for both link
+    forms ([[…]] and <<goto "…">>).
+    """
+    lines = text.splitlines()
+    headers: list[tuple[int, str]] = []  # (line index, name)
+    for i, line in enumerate(lines):
+        match = _TWEE_HEADER_RE.match(line)
+        if match:
+            headers.append((i, match.group(1)))
+
+    outlinks: dict[str, set[str]] = {}
+    for idx, (line_no, name) in enumerate(headers):
+        end = headers[idx + 1][0] if idx + 1 < len(headers) else len(lines)
+        body = "\n".join(lines[line_no + 1 : end])
+        targets: set[str] = set()
+        for match in _TWEE_LINK_RE.finditer(body):
+            targets.add((match.group(2) or match.group(1)).strip())
+        for match in _TWEE_GOTO_RE.finditer(body):
+            targets.add(match.group(1).strip())
+        outlinks[name] = targets
+    return outlinks
+
+
+def _bfs_reachable(start: str, outlinks: dict[str, set[str]]) -> set[str]:
+    """Standard BFS over the link graph starting at ``start``."""
+    seen: set[str] = {start}
+    frontier: list[str] = [start]
+    while frontier:
+        node = frontier.pop()
+        for target in outlinks.get(node, ()):
+            if target not in seen:
+                seen.add(target)
+                frontier.append(target)
+    return seen
 
 
 # ---------------------------------------------------------------------------
@@ -189,10 +254,9 @@ class _HtmlChoiceCollector(HTMLParser):
             self.has_body = True
         if tag == "div":
             attr_dict = dict(attrs)
-            if attr_dict.get("class") == "passage" and attr_dict.get("id"):
-                pid = attr_dict["id"]
-                if pid is not None:
-                    self.passage_ids.add(pid)
+            pid = attr_dict.get("id")
+            if attr_dict.get("class") == "passage" and pid:
+                self.passage_ids.add(pid)
         if tag == "a":
             attr_dict = dict(attrs)
             classes = (attr_dict.get("class") or "").split()
@@ -254,7 +318,9 @@ def validate_pdf(path: Path) -> None:
         ExportValidationError: Sidecar missing, malformed, or carrying
             an out-of-range page number.
     """
-    sidecar = path.with_suffix(".pdf.map.json")
+    # with_name (not with_suffix) — multi-dot suffix warns under Python 3.12
+    # and raises under 3.13. Mirror the construction in pdf_exporter._write_pdf_sidecar.
+    sidecar = path.with_name(path.name + ".map.json")
     if not sidecar.exists():
         msg = (
             f"PDF export {path.name} is missing its sidecar {sidecar.name} "
@@ -273,8 +339,13 @@ def validate_pdf(path: Path) -> None:
         msg = f"PDF sidecar {sidecar.name} `page_map` is missing or empty"
         raise ExportValidationError(msg)
 
+    # Valid range is 1..N where N is the total number of passages
+    # (entries in page_map). A bijective gamebook maps every passage
+    # to a distinct page number in that range; using len(set(values))
+    # would shrink N in the presence of duplicates and produce a
+    # confusing out-of-range message instead of the duplicate one.
     pages = list(page_map.values())
-    n_pages = len(set(pages))
+    n_pages = len(page_map)
     out_of_range = sorted(
         f"{pid} → {pg}"
         for pid, pg in page_map.items()
@@ -288,10 +359,10 @@ def validate_pdf(path: Path) -> None:
             f"{' …' if len(out_of_range) > 5 else ''}."
         )
         raise ExportValidationError(msg)
-    if len(pages) != n_pages:
+    if len(pages) != len(set(pages)):
         msg = (
             f"PDF sidecar {sidecar.name} has duplicate page numbers — "
-            f"{len(pages)} entries, only {n_pages} distinct pages."
+            f"{len(pages)} entries, only {len(set(pages))} distinct pages."
         )
         raise ExportValidationError(msg)
 

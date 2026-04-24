@@ -344,7 +344,9 @@ def _write_pdf_sidecar(
         "_metadata": metadata.to_dict(),
         "page_map": dict(sorted(numbering.items())),
     }
-    sidecar_file = pdf_path.with_suffix(".pdf.map.json")
+    # Append the sidecar suffix via with_name; Path.with_suffix(".pdf.map.json")
+    # would warn under 3.12 and raise under 3.13 because of the multi-dot suffix.
+    sidecar_file = pdf_path.with_name(pdf_path.name + ".map.json")
     sidecar_file.write_text(
         json.dumps(sidecar, indent=2, ensure_ascii=False),
         encoding="utf-8",

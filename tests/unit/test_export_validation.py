@@ -95,6 +95,41 @@ class TestValidateTwee:
         with pytest.raises(ExportValidationError, match="missing_target"):
             validate_twee(twee)
 
+    def test_goto_macro_to_valid_target_passes(self, tmp_path: Path) -> None:
+        """Symmetric to test_goto_macro_form_validated: a <<goto>> targeting
+        a real passage must NOT trip the validator."""
+        twee = tmp_path / "story.twee"
+        twee.write_text(
+            ':: Start [start]\nHello.\n<<link "Go">><<goto "end">><</link>>\n\n:: end\nDone.\n',
+            encoding="utf-8",
+        )
+        validate_twee(twee)
+
+    def test_orphan_passage_unreachable_from_start_raises(self, tmp_path: Path) -> None:
+        """Spec: every passage must be reachable from Start via choice
+        links. A defined-but-unlinked passage is invalid even though
+        every link target exists.
+        """
+        twee = tmp_path / "story.twee"
+        twee.write_text(
+            ":: Start [start]\nHello.\n[[Continue->reachable]]\n\n"
+            ":: reachable\nFound.\n\n"
+            ":: orphan\nNobody links here.\n",
+            encoding="utf-8",
+        )
+        with pytest.raises(ExportValidationError, match="orphan"):
+            validate_twee(twee)
+
+    def test_codex_unlinked_passage_does_not_trip_reachability(self, tmp_path: Path) -> None:
+        """Codex is a metadata sidecar; SugarCube doesn't navigate to it
+        via choice links so it's exempt from the reachable-set check."""
+        twee = tmp_path / "story.twee"
+        twee.write_text(
+            ":: Start [start]\nHello.\n\n:: Codex\nReference info.\n",
+            encoding="utf-8",
+        )
+        validate_twee(twee)
+
     def test_reserved_headers_dont_count_as_broken(self, tmp_path: Path) -> None:
         """A link to e.g. `StoryTitle` shouldn't be flagged — but no
         real export does that. We test that referencing a reserved
