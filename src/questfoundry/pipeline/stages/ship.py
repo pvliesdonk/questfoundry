@@ -13,6 +13,10 @@ from typing import TYPE_CHECKING
 from questfoundry.export import build_export_context, get_exporter
 from questfoundry.export.assets import bundle_assets
 from questfoundry.export.assets import embed_assets as embed_assets_data_urls
+from questfoundry.export.validation import (
+    ExportValidationError,
+    validate_export,
+)
 from questfoundry.graph.graph import Graph
 from questfoundry.observability.logging import get_logger
 from questfoundry.pipeline.config import ProjectConfigError, load_project_config
@@ -154,6 +158,30 @@ class ShipStage:
                 bundle_assets(context.illustrations, self._project_path, target_dir)
             except OSError as e:
                 log.warning("asset_bundling_failed", error=str(e))
+
+        # Phase 4: per-format validation (R-4.1 through R-4.4). Halt with ERROR
+        # before delivery if the file is broken — never present a
+        # half-exported bundle as final.
+        try:
+            validate_export(export_format, output_file)
+        except ExportValidationError as e:
+            log.error(
+                "ship_validation_failed",
+                format=export_format,
+                output=str(output_file),
+                error=str(e),
+            )
+            msg = (
+                f"SHIP Phase 4 validation failed for {export_format} export: {e} "
+                f"(R-4.2: validation failure halts SHIP — bundle not delivered)."
+            )
+            raise ShipStageError(msg) from e
+
+        log.info(
+            "ship_validation_passed",
+            format=export_format,
+            output=str(output_file),
+        )
 
         log.info(
             "ship_complete",
