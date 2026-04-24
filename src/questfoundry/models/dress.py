@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from questfoundry.models.pipeline import PhaseResult
 
@@ -231,6 +231,54 @@ class BatchedCodexOutput(BaseModel):
     """Phase 2 batched output: codex entries for multiple entities."""
 
     entities: list[BatchedCodexItem] = Field(min_length=1)
+
+
+class SpoilerLeak(BaseModel):
+    """One spoiler-direction violation between two ranks of one entity."""
+
+    lower_rank: int = Field(
+        ge=1,
+        description="Rank of the entry that prematurely discloses information",
+    )
+    higher_rank: int = Field(
+        ge=2,
+        description="Rank of the entry whose reveal was leaked",
+    )
+    leaked_content: str = Field(
+        min_length=1,
+        description="Short quote or paraphrase of the leaked information",
+    )
+
+    @model_validator(mode="after")
+    def _check_rank_ordering(self) -> SpoilerLeak:
+        # R-3.6's spoiler direction is strictly low → high. An LLM that
+        # returns lower_rank ≥ higher_rank has either inverted the
+        # arguments or invented a self-referential leak; either way the
+        # downstream retry feedback would be nonsensical, so reject at
+        # validation time so the LLM repair loop fixes it.
+        if self.lower_rank >= self.higher_rank:
+            msg = (
+                f"SpoilerLeak: lower_rank ({self.lower_rank}) must be "
+                f"strictly less than higher_rank ({self.higher_rank})"
+            )
+            raise ValueError(msg)
+        return self
+
+
+class SpoilerCheckResult(BaseModel):
+    """Result of an LLM spoiler check on one entity's codex entries (R-3.6)."""
+
+    has_leak: bool = Field(
+        description="True if any lower-ranked entry leaks higher-ranked content",
+    )
+    leaks: list[SpoilerLeak] = Field(
+        default_factory=list,
+        description="Detected spoiler violations (empty if has_leak is False)",
+    )
+    reason: str = Field(
+        default="",
+        description="Brief LLM explanation; populated when has_leak is True",
+    )
 
 
 # ---------------------------------------------------------------------------

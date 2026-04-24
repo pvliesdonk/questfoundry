@@ -43,6 +43,8 @@ from questfoundry.models.dress import (
     Illustration,
     IllustrationBrief,
     IllustrationCategory,
+    SpoilerCheckResult,
+    SpoilerLeak,
 )
 from questfoundry.models.fill import (
     BatchedExpandOutput,
@@ -246,6 +248,8 @@ __all__ = [
     "Scope",
     "SeedOutput",
     "SharedBeatsSection",
+    "SpoilerCheckResult",
+    "SpoilerLeak",
     "SpokeLabelUpdate",
     "StateFlag",
     "TemporalHint",
