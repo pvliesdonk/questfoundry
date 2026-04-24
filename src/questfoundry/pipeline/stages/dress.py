@@ -1604,26 +1604,36 @@ def _format_entries_for_spoiler_check(entries: list[dict[str, Any]]) -> str:
     return "\n\n".join(lines)
 
 
+_FALLBACK_DESCRIPTORS: dict[str, str] = {
+    "character": "a figure encountered in the story",
+    "location": "a place encountered in the story",
+    "object": "an object encountered in the story",
+    "item": "an object encountered in the story",
+    "faction": "a group encountered in the story",
+}
+_FALLBACK_DESCRIPTOR_DEFAULT = "an element of the story"
+
+
 def _minimal_rank_one_codex(graph: Graph, entity_id: str) -> list[dict[str, Any]]:
     """Build a deliberately vague rank-1-only fallback codex entry.
 
     Used when spoiler retries are exhausted. Per spec, retry exhaustion
     must produce a minimal codex with WARNING — never a silent gap.
-    The fallback uses the entity's display name and a generic
-    description so the entry exists, validates, and reveals nothing the
-    player has not already encountered.
+    The fallback uses the entity's display name and an entity-type
+    appropriate descriptor so the entry stays diegetic (R-3.4) for
+    locations, items, and factions as well as characters.
     """
     raw_id = strip_scope_prefix(entity_id)
     entity_node = graph.get_node(entity_id) or {}
     title = entity_node.get("name") or entity_node.get("title") or raw_id
+    entity_type = entity_node.get("entity_type", "character")
+    descriptor = _FALLBACK_DESCRIPTORS.get(entity_type, _FALLBACK_DESCRIPTOR_DEFAULT)
     return [
         {
             "title": title,
             "rank": 1,
             "visible_when": [],
-            "content": (
-                f"{title} — a figure encountered in the story. Further details are not yet known."
-            ),
+            "content": f"{title} — {descriptor}. Further details are not yet known.",
         }
     ]
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -1537,8 +1538,6 @@ class TestPhase2Codex:
             # dress_codex_batch
             batch_calls.append(_context)
             # Parse entity IDs from batch context (each starts with "## Entity: <raw_id>")
-            import re
-
             raw_ids = re.findall(r"## Entity: (\S+)", _context["entities_batch"])
             eids = [f"entity::{raw_id}" for raw_id in raw_ids]
             return (_make_batch_output(eids), 1, 100)
@@ -1786,6 +1785,136 @@ class TestPhase2CodexSpoilerEnforcement:
         assert "The Wandering Scholar" in rank1["title"]
         assert rank1["visible_when"] == []
 
+    @pytest.mark.asyncio()
+    async def test_mixed_outcomes_within_one_batch(self) -> None:
+        """One batch with three entities: clean, retry-then-clean, exhausted.
+
+        Exercises the per-entity sequencing inside a single batch and
+        confirms the three outcomes coexist without cross-contamination.
+        """
+        g = Graph()
+        for raw_id in ("alpha", "beta", "gamma"):
+            g.create_node(
+                f"entity::{raw_id}",
+                {
+                    "type": "entity",
+                    "raw_id": raw_id,
+                    "entity_type": "character",
+                    "name": raw_id.capitalize(),
+                },
+            )
+        stage = DressStage()
+
+        batch = BatchedCodexOutput(
+            entities=[
+                BatchedCodexItem(
+                    entity_id=f"entity::{raw_id}",
+                    entries=[
+                        CodexEntry(
+                            title=raw_id, rank=1, visible_when=[], content="Original rank 1."
+                        ),
+                        CodexEntry(
+                            title=f"{raw_id} Secret",
+                            rank=2,
+                            visible_when=["state_flag::known"],
+                            content="Original rank 2.",
+                        ),
+                    ],
+                )
+                for raw_id in ("alpha", "beta", "gamma")
+            ]
+        )
+        clean_retry = DressPhase2Output(
+            entries=[
+                CodexEntry(
+                    title="Beta",
+                    rank=1,
+                    visible_when=[],
+                    content="Replaced rank 1 — vague.",
+                ),
+                CodexEntry(
+                    title="Beta Secret",
+                    rank=2,
+                    visible_when=["state_flag::known"],
+                    content="Replaced rank 2.",
+                ),
+            ]
+        )
+        leaky_retry = DressPhase2Output(
+            entries=[
+                CodexEntry(
+                    title="Gamma",
+                    rank=1,
+                    visible_when=[],
+                    content="Still leaks.",
+                ),
+                CodexEntry(
+                    title="Gamma Secret",
+                    rank=2,
+                    visible_when=["state_flag::known"],
+                    content="Persistent leak.",
+                ),
+            ]
+        )
+        clean = SpoilerCheckResult(has_leak=False, leaks=[], reason="")
+        leak = SpoilerCheckResult(
+            has_leak=True,
+            leaks=[SpoilerLeak(lower_rank=1, higher_rank=2, leaked_content="leak")],
+            reason="leak",
+        )
+        # alpha: clean
+        # beta: leak → retry → clean (3 spoiler checks total: alpha clean, beta leak, beta clean,
+        #   then gamma block follows)
+        # gamma: leak → retry → leak → retry → leak (3 spoiler checks for gamma)
+        # Sequence: alpha-check(clean), beta-check(leak), beta-recheck(clean),
+        #           gamma-check(leak), gamma-recheck(leak), gamma-recheck(leak)
+        spoiler_sequence = [clean, leak, clean, leak, leak, leak]
+
+        async def _dispatch(
+            _model: Any,
+            template_name: str,
+            context: dict[str, Any],
+            _schema: type,
+            **_kwargs: Any,
+        ) -> tuple:
+            if template_name == "dress_codex_batch":
+                return (batch, 1, 50)
+            if template_name == "dress_codex":
+                # Pick the right per-entity retry output by inspecting the
+                # injected entity_details (which contains the raw id).
+                if "beta" in context.get("entity_details", ""):
+                    return (clean_retry, 1, 50)
+                return (leaky_retry, 1, 50)
+            if template_name == "dress_codex_spoiler_check":
+                return (spoiler_sequence.pop(0), 1, 25)
+            msg = f"Unexpected template: {template_name}"
+            raise AssertionError(msg)
+
+        with patch.object(stage, "_dress_llm_call", side_effect=_dispatch):
+            result = await stage._phase_2_codex(g, MagicMock())
+
+        assert result.status == "completed"
+
+        # alpha: original entries kept (rank 1 + rank 2)
+        alpha_r1 = g.get_node("codex::alpha_rank1")
+        assert alpha_r1 is not None
+        assert alpha_r1["content"] == "Original rank 1."
+        assert g.get_node("codex::alpha_rank2") is not None
+
+        # beta: retry replaced both ranks
+        beta_r1 = g.get_node("codex::beta_rank1")
+        assert beta_r1 is not None
+        assert "Replaced rank 1" in beta_r1["content"]
+        assert g.get_node("codex::beta_rank2") is not None
+
+        # gamma: rank-1-only fallback (rank 2 dropped)
+        gamma_r1 = g.get_node("codex::gamma_rank1")
+        assert gamma_r1 is not None
+        assert "Further details are not yet known" in gamma_r1["content"]
+        assert g.get_node("codex::gamma_rank2") is None
+        # Sequence fully consumed: 6 spoiler checks issued
+        assert spoiler_sequence == []
+
 
 def test_format_entries_for_spoiler_check_orders_by_rank() -> None:
     from questfoundry.pipeline.stages.dress import _format_entries_for_spoiler_check
@@ -1823,6 +1952,52 @@ def test_minimal_rank_one_codex_falls_back_to_raw_id() -> None:
     fallback = _minimal_rank_one_codex(g, "entity::missing")
     # No node, no name → use raw id as title
     assert fallback[0]["title"] == "missing"
+
+
+def test_minimal_rank_one_codex_uses_entity_type_descriptor() -> None:
+    """Fallback content is diegetic for non-character entities (R-3.4)."""
+    from questfoundry.pipeline.stages.dress import _minimal_rank_one_codex
+
+    g = Graph()
+    g.create_node(
+        "entity::cliff_pass",
+        {"type": "entity", "raw_id": "cliff_pass", "name": "Cliff Pass", "entity_type": "location"},
+    )
+    g.create_node(
+        "entity::sword",
+        {"type": "entity", "raw_id": "sword", "name": "Old Sword", "entity_type": "object"},
+    )
+    g.create_node(
+        "entity::guild",
+        {"type": "entity", "raw_id": "guild", "name": "The Guild", "entity_type": "faction"},
+    )
+    g.create_node(
+        "entity::weird",
+        {"type": "entity", "raw_id": "weird", "name": "Weirdness", "entity_type": "concept"},
+    )
+
+    assert "a place encountered" in _minimal_rank_one_codex(g, "entity::cliff_pass")[0]["content"]
+    assert "an object encountered" in _minimal_rank_one_codex(g, "entity::sword")[0]["content"]
+    assert "a group encountered" in _minimal_rank_one_codex(g, "entity::guild")[0]["content"]
+    # Unknown entity_type falls back to the generic descriptor
+    assert "an element of the story" in _minimal_rank_one_codex(g, "entity::weird")[0]["content"]
+
+
+def test_spoiler_leak_rejects_inverted_rank_ordering() -> None:
+    """Pydantic must reject lower_rank ≥ higher_rank — direction matters in R-3.6."""
+    from pydantic import ValidationError
+
+    # lower == higher
+    with pytest.raises(ValidationError, match=r"lower_rank.*must be strictly less than"):
+        SpoilerLeak(lower_rank=2, higher_rank=2, leaked_content="x")
+
+    # lower > higher
+    with pytest.raises(ValidationError, match=r"lower_rank.*must be strictly less than"):
+        SpoilerLeak(lower_rank=3, higher_rank=2, leaked_content="x")
+
+    # Valid case still works
+    leak = SpoilerLeak(lower_rank=1, higher_rank=2, leaked_content="x")
+    assert leak.lower_rank == 1
 
 
 # ---------------------------------------------------------------------------

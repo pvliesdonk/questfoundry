@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from questfoundry.models.pipeline import PhaseResult
 
@@ -248,6 +248,21 @@ class SpoilerLeak(BaseModel):
         min_length=1,
         description="Short quote or paraphrase of the leaked information",
     )
+
+    @model_validator(mode="after")
+    def _check_rank_ordering(self) -> SpoilerLeak:
+        # R-3.6's spoiler direction is strictly low → high. An LLM that
+        # returns lower_rank ≥ higher_rank has either inverted the
+        # arguments or invented a self-referential leak; either way the
+        # downstream retry feedback would be nonsensical, so reject at
+        # validation time so the LLM repair loop fixes it.
+        if self.lower_rank >= self.higher_rank:
+            msg = (
+                f"SpoilerLeak: lower_rank ({self.lower_rank}) must be "
+                f"strictly less than higher_rank ({self.higher_rank})"
+            )
+            raise ValueError(msg)
+        return self
 
 
 class SpoilerCheckResult(BaseModel):
