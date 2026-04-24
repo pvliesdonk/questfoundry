@@ -13,6 +13,7 @@ import uuid
 from typing import TYPE_CHECKING, Any
 
 from questfoundry.export.i18n import get_ui_strings
+from questfoundry.export.metadata import ExportMetadata, build_export_metadata
 from questfoundry.observability.logging import get_logger
 
 if TYPE_CHECKING:
@@ -28,18 +29,31 @@ if TYPE_CHECKING:
 
 log = get_logger(__name__)
 
+# Backward-compatible additive changes only; bump only when the Twee
+# document shape changes (new passage type, removed field, etc.).
+TWEE_FORMAT_VERSION = "1.0.0"
+
 
 class TweeExporter:
     """Export story as Twee 3 / SugarCube 2 format."""
 
     format_name = "twee"
+    format_version = TWEE_FORMAT_VERSION
 
-    def export(self, context: ExportContext, output_dir: Path) -> Path:
+    def export(
+        self,
+        context: ExportContext,
+        output_dir: Path,
+        *,
+        timestamp: str | None = None,
+    ) -> Path:
         """Write story as a .twee file.
 
         Args:
             context: Extracted story data.
             output_dir: Directory to write output files.
+            timestamp: Optional override for the metadata generation
+                timestamp (test seam for deterministic assertions).
 
         Returns:
             Path to the generated .twee file.
@@ -94,6 +108,13 @@ class TweeExporter:
         if context.art_direction:
             lines.extend(_render_art_direction_passage(context.art_direction))
             lines.append("")
+
+        # R-3.6 deterministic metadata block. SugarCube ignores unlinked
+        # passages, so this is safe sidecar storage of pipeline version,
+        # snapshot hash, format version, and timestamp.
+        metadata = build_export_metadata(context, TWEE_FORMAT_VERSION, timestamp=timestamp)
+        lines.extend(_render_metadata_passage(metadata))
+        lines.append("")
 
         content = "\n".join(lines)
         output_file.write_text(content, encoding="utf-8")
@@ -255,5 +276,15 @@ def _render_art_direction_passage(art_direction: dict[str, Any]) -> list[str]:
     for key, value in sorted(art_direction.items()):
         safe_key = _escape_sugarcube(str(key))
         safe_value = _escape_sugarcube(str(value))
+        lines.append(f"{safe_key}: {safe_value}")
+    return lines
+
+
+def _render_metadata_passage(metadata: ExportMetadata) -> list[str]:
+    """Render R-3.6 metadata header as an unlinked Twee passage."""
+    lines = [':: StoryMetadata {"position":"100,0","size":"100,100"}']
+    for key, value in sorted(metadata.to_dict().items()):
+        safe_key = _escape_sugarcube(key)
+        safe_value = _escape_sugarcube(value)
         lines.append(f"{safe_key}: {safe_value}")
     return lines

@@ -9,12 +9,13 @@ Requires the optional `pdf` dependency: `uv pip install questfoundry[pdf]`
 
 from __future__ import annotations
 
-import hashlib
 import html
-import random
+import json
 from typing import TYPE_CHECKING
 
 from questfoundry.export.i18n import get_ui_strings
+from questfoundry.export.metadata import build_export_metadata
+from questfoundry.export.pagination import compute_passage_numbering
 from questfoundry.observability.logging import get_logger
 
 if TYPE_CHECKING:
@@ -240,17 +241,35 @@ h1 {
 """
 
 
+PDF_FORMAT_VERSION = "1.0.0"
+
+
 class PdfExporter:
     """Export story as a gamebook-style PDF."""
 
     format_name = "pdf"
+    format_version = PDF_FORMAT_VERSION
 
-    def export(self, context: ExportContext, output_dir: Path) -> Path:
+    def export(
+        self,
+        context: ExportContext,
+        output_dir: Path,
+        *,
+        timestamp: str | None = None,
+    ) -> Path:
         """Write story as a gamebook PDF with numbered passages.
+
+        Also writes ``story.pdf.map.json`` next to the PDF: a sidecar
+        carrying both the R-3.6 metadata header and the R-3.5
+        ``passage_id → page_number`` map (#1336). The map lets authors
+        trace which passage became which page after a bug report; the
+        sidecar avoids forcing PDF readers to parse embedded JSON.
 
         Args:
             context: Extracted story data.
             output_dir: Directory to write output files.
+            timestamp: Optional override for the metadata generation
+                timestamp (test seam for deterministic assertions).
 
         Returns:
             Path to the generated PDF file.
@@ -268,7 +287,7 @@ class PdfExporter:
         output_file = output_dir / "story.pdf"
 
         # Build passage number mapping (randomized for spoiler prevention)
-        numbering = _build_passage_numbering(context.passages)
+        numbering = compute_passage_numbering(context.passages)
 
         # Build data structures
         choices_by_passage: dict[str, list[ExportChoice]] = {}
@@ -292,56 +311,28 @@ class PdfExporter:
         html_doc = HTML(string=html_content, base_url=str(project_root))
         html_doc.write_pdf(output_file)
 
+        # R-3.6 + #1336 sidecar: pipeline metadata + the page-number map
+        # next to the PDF for debugging and provenance.
+        metadata = build_export_metadata(context, PDF_FORMAT_VERSION, timestamp=timestamp)
+        sidecar = {
+            "_metadata": metadata.to_dict(),
+            "page_map": dict(sorted(numbering.items())),
+        }
+        sidecar_file = output_file.with_suffix(".pdf.map.json")
+        sidecar_file.write_text(
+            json.dumps(sidecar, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+
         log.info(
             "pdf_export_complete",
             passages=len(context.passages),
             codewords=len(context.codewords),
             output=str(output_file),
+            sidecar=str(sidecar_file),
         )
 
         return output_file
-
-
-def _build_passage_numbering(passages: list[ExportPassage]) -> dict[str, int]:
-    """Map passage IDs to randomized section numbers.
-
-    Uses sorted IDs as seed for reproducible shuffling.
-    Same story = same numbers across exports.
-
-    Start passage always gets number 1 for reader convenience.
-
-    Args:
-        passages: List of passages to number.
-
-    Returns:
-        Mapping from passage ID to section number.
-    """
-    if not passages:
-        return {}
-
-    # Find start passage
-    start_id = next((p.id for p in passages if p.is_start), passages[0].id)
-
-    # Get other passage IDs (excluding start)
-    other_ids = sorted(p.id for p in passages if p.id != start_id)
-
-    # Create reproducible random seed from passage IDs using hashlib for cross-session determinism
-    # (Python's hash() is randomized per process via PYTHONHASHSEED)
-    all_ids = sorted(p.id for p in passages)
-    id_string = "|".join(all_ids)
-    seed = int(hashlib.md5(id_string.encode()).hexdigest(), 16) % (2**32)
-    rng = random.Random(seed)
-
-    # Assign numbers 2..N to other passages randomly
-    numbers = list(range(2, len(passages) + 1))
-    rng.shuffle(numbers)
-
-    # Build mapping: start=1, others=randomized
-    numbering: dict[str, int] = {start_id: 1}
-    for pid, num in zip(other_ids, numbers, strict=True):
-        numbering[pid] = num
-
-    return numbering
 
 
 def _render_html(
