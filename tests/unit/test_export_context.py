@@ -360,3 +360,143 @@ class TestBuildExportContext:
         ctx = build_export_context(g, "test", language="nl")
 
         assert ctx.language == "nl"
+
+
+class TestCodewordPlayabilityWarning:
+    """R-1.7: codeword count > 10 must trigger a WARNING."""
+
+    @staticmethod
+    def _add_soft_dilemma_with_n_flags(g: Graph, n: int) -> None:
+        g.create_node(
+            "dilemma::wide",
+            {"type": "dilemma", "raw_id": "wide", "dilemma_role": "soft"},
+        )
+        for i in range(n):
+            g.create_node(
+                f"state_flag::flag_{i}",
+                {
+                    "type": "state_flag",
+                    "raw_id": f"flag_{i}",
+                    "dilemma_id": "dilemma::wide",
+                    "codeword_type": "granted",
+                },
+            )
+
+    def test_at_threshold_no_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Exactly 10 codewords sits at the limit — no warning yet."""
+        import logging
+
+        g = _minimal_graph()
+        self._add_soft_dilemma_with_n_flags(g, 10)
+
+        with caplog.at_level(logging.WARNING, logger="questfoundry.export.context"):
+            ctx = build_export_context(g, "test")
+
+        assert len(ctx.codewords) == 10
+        assert "codeword_count_exceeds_threshold" not in caplog.text
+
+    def test_above_threshold_warns(self, caplog: pytest.LogCaptureFixture) -> None:
+        """11 codewords exceeds the playability threshold — must warn (R-1.7)."""
+        import logging
+
+        g = _minimal_graph()
+        self._add_soft_dilemma_with_n_flags(g, 11)
+
+        with caplog.at_level(logging.WARNING, logger="questfoundry.export.context"):
+            ctx = build_export_context(g, "test")
+
+        assert len(ctx.codewords) == 11
+        assert "codeword_count_exceeds_threshold" in caplog.text
+        assert "'count': 11" in caplog.text
+
+    def test_zero_codewords_no_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        import logging
+
+        g = _minimal_graph()
+        with caplog.at_level(logging.WARNING, logger="questfoundry.export.context"):
+            ctx = build_export_context(g, "test")
+        assert ctx.codewords == []
+        assert "codeword_count_exceeds_threshold" not in caplog.text
+
+
+class TestPartialDressWarning:
+    """R-3.8: art_direction missing required fields must warn (graceful, not silent)."""
+
+    def test_complete_art_direction_no_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        import logging
+
+        g = _minimal_graph()
+        g.create_node(
+            "art_direction::main",
+            {
+                "type": "art_direction",
+                "style": "watercolor",
+                "medium": "digital painting",
+                "palette": ["blue", "gold"],
+                "composition_notes": "wide framing",
+                "negative_defaults": "no text overlays",
+                "aspect_ratio": "16:9",
+            },
+        )
+        with caplog.at_level(logging.WARNING, logger="questfoundry.export.context"):
+            ctx = build_export_context(g, "test")
+
+        assert ctx.art_direction is not None
+        assert "art_direction_partial" not in caplog.text
+
+    def test_missing_palette_warns(self, caplog: pytest.LogCaptureFixture) -> None:
+        import logging
+
+        g = _minimal_graph()
+        g.create_node(
+            "art_direction::main",
+            {
+                "type": "art_direction",
+                "style": "watercolor",
+                "medium": "digital painting",
+                # palette omitted
+                "composition_notes": "wide framing",
+                "negative_defaults": "no text overlays",
+                "aspect_ratio": "16:9",
+            },
+        )
+        with caplog.at_level(logging.WARNING, logger="questfoundry.export.context"):
+            ctx = build_export_context(g, "test")
+
+        # Partial data still propagates (graceful degradation)
+        assert ctx.art_direction is not None
+        assert "art_direction_partial" in caplog.text
+        assert "palette" in caplog.text
+
+    def test_blank_string_field_counts_as_missing(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Whitespace-only style is as bad as missing — both warn."""
+        import logging
+
+        g = _minimal_graph()
+        g.create_node(
+            "art_direction::main",
+            {
+                "type": "art_direction",
+                "style": "   ",
+                "medium": "digital painting",
+                "palette": ["blue"],
+                "composition_notes": "wide framing",
+                "negative_defaults": "no text overlays",
+                "aspect_ratio": "16:9",
+            },
+        )
+        with caplog.at_level(logging.WARNING, logger="questfoundry.export.context"):
+            build_export_context(g, "test")
+
+        assert "art_direction_partial" in caplog.text
+        assert "style" in caplog.text
+
+    def test_no_art_direction_node_no_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        """DRESS skipped entirely → art_direction=None, no partial warning."""
+        import logging
+
+        g = _minimal_graph()
+        with caplog.at_level(logging.WARNING, logger="questfoundry.export.context"):
+            ctx = build_export_context(g, "test")
+        assert ctx.art_direction is None
+        assert "art_direction_partial" not in caplog.text
