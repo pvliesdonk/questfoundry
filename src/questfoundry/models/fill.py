@@ -249,17 +249,23 @@ class FillEscalation(BaseModel):
     ``FillContractError`` at stage exit if any were recorded.
     """
 
-    kind: Literal["missing_entity", "unresolved_review_flags"] = Field(
-        description="What kind of escalation this is."
-    )
+    kind: Literal[
+        "missing_entity",
+        "unresolved_review_flags",
+        "voice_research_failed",
+        "blueprint_validation_failed",
+        "entity_extract_failed",
+    ] = Field(description="What kind of escalation this is.")
     passage_id: str = Field(
         description="Passage where the escalation was raised. Empty string if not passage-scoped."
     )
     detail: str = Field(
         description="Human-readable description of the specific violation.",
     )
-    upstream_stage: Literal["SEED", "GROW", "POLISH"] = Field(
-        description="Which upstream stage owns the fix.",
+    upstream_stage: Literal["SEED", "GROW", "POLISH", "FILL"] = Field(
+        description="Which stage owns the fix. ``FILL`` for self-owned failures "
+        "(LLM call failures during voice research, blueprint validation, or "
+        "entity extraction — rerun FILL or adjust provider settings).",
     )
 
 

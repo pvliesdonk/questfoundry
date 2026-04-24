@@ -51,12 +51,12 @@ def assert_predecessor_dag_acyclic(graph: Graph, phase_name: str) -> None:
 
     beat_ids = list(beat_nodes.keys())
 
+    # topological_sort_beats raises PipelineInvariantError on cycle detection.
+    # Wrap to attribute the failure to the specific phase that introduced it.
     try:
         topological_sort_beats(graph, beat_ids)
-    except ValueError as exc:
-        # topological_sort_beats raises ValueError on cycle detection
-        raise PipelineInvariantError(
-            f"Cycle detected in predecessor DAG after phase '{phase_name}': {exc}"
-        ) from exc
+    except PipelineInvariantError as exc:
+        msg = f"Cycle detected in predecessor DAG after phase '{phase_name}': {exc}"
+        raise PipelineInvariantError(msg) from exc
 
     log.debug("predecessor_dag_acyclic", phase=phase_name, beats=len(beat_ids))

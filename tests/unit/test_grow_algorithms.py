@@ -272,14 +272,23 @@ class TestTopologicalSortBeats:
         # No direct edge between a and c in subset, so alphabetical
         assert result == ["beat::a", "beat::c"]
 
-    def test_cycle_raises_value_error(self) -> None:
+    def test_cycle_raises_pipeline_invariant_error(self) -> None:
+        """Cycle in the beat DAG raises PipelineInvariantError (#1344).
+
+        Was previously a bare ``ValueError`` — promoted to
+        ``PipelineInvariantError`` so the two topo-sort implementations
+        raise the same exception type and any phase runner that
+        catches "cycle in beat DAG" only needs one ``except`` clause.
+        """
+        from questfoundry.graph.invariants import PipelineInvariantError
+
         graph = Graph.empty()
         graph.create_node("beat::a", {"type": "beat"})
         graph.create_node("beat::b", {"type": "beat"})
         graph.add_edge("predecessor", "beat::b", "beat::a")
         graph.add_edge("predecessor", "beat::a", "beat::b")
 
-        with pytest.raises(ValueError, match="Cycle detected"):
+        with pytest.raises(PipelineInvariantError, match="cycle detected"):
             topological_sort_beats(graph, ["beat::a", "beat::b"])
 
     def test_branching_structure(self) -> None:
@@ -908,6 +917,37 @@ class TestEnumerateArcs:
         # Different arcs should have different final beats (ending differentiation)
         final_beats = {arc.sequence[-1] for arc in arcs}
         assert len(final_beats) > 1, f"All arcs share the same final beat: {final_beats}"
+
+
+class TestEnumerateArcsCyclePropagation:
+    """#1344 follow-up: enumerate_arcs used to swallow cycle errors with
+    `except ValueError: pass` (global beat set) and
+    `except ValueError: sequence = sorted(beat_set)` (per-arc beat set).
+    Both fallbacks were removed; the underlying topo-sort exception
+    must propagate so the GROW phase runner halts.
+    """
+
+    def test_cycle_in_global_beat_set_propagates(self) -> None:
+        """A cycle spanning beats reachable from multiple paths must
+        raise PipelineInvariantError out of enumerate_arcs."""
+        from questfoundry.graph.grow_algorithms import enumerate_arcs
+        from questfoundry.graph.invariants import PipelineInvariantError
+
+        graph = Graph.empty()
+        graph.create_node(
+            "dilemma::d1", {"type": "dilemma", "raw_id": "d1", "answers": [{"id": "a"}]}
+        )
+        graph.create_node("path::p1", {"type": "path", "raw_id": "p1", "dilemma_id": "dilemma::d1"})
+        graph.create_node("beat::a", {"type": "beat", "summary": "A"})
+        graph.create_node("beat::b", {"type": "beat", "summary": "B"})
+        graph.add_edge("belongs_to", "beat::a", "path::p1")
+        graph.add_edge("belongs_to", "beat::b", "path::p1")
+        # Cycle in the per-arc beat set: a → b → a
+        graph.add_edge("predecessor", "beat::a", "beat::b")
+        graph.add_edge("predecessor", "beat::b", "beat::a")
+
+        with pytest.raises(PipelineInvariantError, match="cycle detected"):
+            enumerate_arcs(graph)
 
 
 # ---------------------------------------------------------------------------
@@ -2948,9 +2988,17 @@ class TestGetPathBeatSequence:
             "beat::mentor_commits_alt",
         ]
 
-    def test_cycle_raises_value_error(self) -> None:
-        """Cycle in path beat dependencies raises ValueError."""
+    def test_cycle_raises_pipeline_invariant_error(self) -> None:
+        """Cycle in path beat dependencies raises PipelineInvariantError (#1344).
+
+        Was a bare ``ValueError`` and the fallback in
+        ``_get_path_beats_ordered`` swallowed it into a sorted-by-id
+        result. The fallback was removed and the type was promoted to
+        ``PipelineInvariantError`` for consistency with
+        ``_topological_sort_subset``.
+        """
         from questfoundry.graph.grow_algorithms import get_path_beat_sequence
+        from questfoundry.graph.invariants import PipelineInvariantError
 
         graph = Graph.empty()
         graph.create_node("path::t1", {"type": "path", "raw_id": "t1"})
@@ -2962,7 +3010,7 @@ class TestGetPathBeatSequence:
         graph.add_edge("predecessor", "beat::a", "beat::b")
         graph.add_edge("predecessor", "beat::b", "beat::a")
 
-        with pytest.raises(ValueError, match="Cycle detected"):
+        with pytest.raises(PipelineInvariantError, match="cycle detected"):
             get_path_beat_sequence(graph, "path::t1")
 
 

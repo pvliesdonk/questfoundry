@@ -870,7 +870,12 @@ class FillStage:
         total_llm_calls = 0
         total_tokens = 0
 
-        # Phase 0a: Research voice guidance (graceful degradation on failure)
+        # Phase 0a: Research voice guidance.
+        # Voice research is degradation, not corruption: prose is still
+        # generatable without the research notes. We escalate (option 2 of
+        # the audit recommendation, #1345) rather than raising so the
+        # whole stage's failure picture surfaces at exit; FillContractError
+        # then halts SHIP with the full set of issues.
         research_notes = ""
         try:
             research_notes, research_calls, research_tokens = await self._phase_0a_voice_research(
@@ -878,8 +883,20 @@ class FillStage:
             )
             total_llm_calls += research_calls
             total_tokens += research_tokens
-        except Exception:
-            log.warning("voice_research_failed", exc_info=True)
+        except Exception as exc:
+            log.error("voice_research_failed", exc_info=True)
+            self._escalations.append(
+                FillEscalation(
+                    kind="voice_research_failed",
+                    passage_id="",
+                    detail=(
+                        f"Voice research LLM call failed: {exc!r}. FILL will exit "
+                        f"with FillContractError at stage end; rerun FILL or fix "
+                        f"the provider configuration to proceed."
+                    ),
+                    upstream_stage="FILL",
+                )
+            )
 
         context = {
             "dream_vision": format_dream_vision(graph),
@@ -1174,13 +1191,29 @@ class FillStage:
                 full_pid = f"passage::{clean_id}"
                 if not graph.has_node(full_pid):
                     continue
-                # Validate blueprint before persisting
+                # Validate blueprint before persisting. Failure is per-passage
+                # and bounded — escalate (option 2 of audit recommendation,
+                # #1345) so the full set surfaces at stage exit instead of
+                # the user discovering each broken passage one-by-one in
+                # downstream phases.
                 try:
                     validated = ExpandBlueprint.model_validate(bp_dict)
                     graph.update_node(full_pid, blueprint=validated.model_dump())
                     blueprints_created += 1
-                except Exception:
-                    log.warning("blueprint_validation_failed", passage_id=full_pid)
+                except Exception as exc:
+                    log.error("blueprint_validation_failed", passage_id=full_pid, exc_info=True)
+                    self._escalations.append(
+                        FillEscalation(
+                            kind="blueprint_validation_failed",
+                            passage_id=full_pid,
+                            detail=(
+                                f"ExpandBlueprint validation failed: {exc!r}. "
+                                f"Passage will fall back to default expansion — "
+                                f"likely produces lower-quality prose."
+                            ),
+                            upstream_stage="FILL",
+                        )
+                    )
                     continue
 
         log.info(
@@ -1377,11 +1410,32 @@ class FillStage:
                         total_llm_calls += ex_calls
                         total_tokens += ex_tokens
                         entity_updates = extract_out.entity_updates
-                    except (ValidationError, ValueError, RuntimeError):
-                        log.warning(
+                    except Exception as exc:
+                        # Catch broadly (matching the voice-research and
+                        # blueprint-validation sites above): transport-level
+                        # failures (httpx.TimeoutException, asyncio.TimeoutError,
+                        # provider-specific exceptions) must escalate too, not
+                        # propagate unhandled and crash the per-passage loop.
+                        # Per-passage and bounded — escalate (option 2 of audit
+                        # recommendation, #1345). Without entity updates the
+                        # entity state diverges from the generated prose; the
+                        # user must see this at stage exit, not silently.
+                        log.error(
                             "entity_extract_failed",
                             passage_id=passage_id,
                             exc_info=True,
+                        )
+                        self._escalations.append(
+                            FillEscalation(
+                                kind="entity_extract_failed",
+                                passage_id=passage_id,
+                                detail=(
+                                    f"Two-step entity extraction failed: {exc!r}. "
+                                    f"Entity state diverges from generated prose "
+                                    f"for this passage."
+                                ),
+                                upstream_stage="FILL",
+                            )
                         )
             else:
                 entity_updates = passage_output.entity_updates

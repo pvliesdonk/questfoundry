@@ -1907,6 +1907,74 @@ class TestEntityUpdateEscalation:
             await stage.execute(mock_model, "", interactive=False)
 
 
+class TestFillSilentDegradationEscalations:
+    """#1345: LLM failures inside FILL must escalate, not log-and-shrug.
+
+    The previous code caught broad ``Exception`` at three sites
+    (voice research / blueprint validation / entity extraction) and
+    logged WARNING — the stage reported success with degraded output.
+    Each failure mode now collects a FillEscalation so FillContractError
+    surfaces at stage exit (R-2.14, R-5.2).
+    """
+
+    def test_voice_research_failed_kind_accepted(self) -> None:
+        from questfoundry.models.fill import FillEscalation
+
+        e = FillEscalation(
+            kind="voice_research_failed",
+            passage_id="",
+            detail="LLM call timed out",
+            upstream_stage="FILL",
+        )
+        assert e.kind == "voice_research_failed"
+        assert e.upstream_stage == "FILL"
+
+    def test_blueprint_validation_failed_kind_accepted(self) -> None:
+        from questfoundry.models.fill import FillEscalation
+
+        e = FillEscalation(
+            kind="blueprint_validation_failed",
+            passage_id="passage::intro",
+            detail="ExpandBlueprint validation failed: ValidationError(...)",
+            upstream_stage="FILL",
+        )
+        assert e.kind == "blueprint_validation_failed"
+
+    def test_entity_extract_failed_kind_accepted(self) -> None:
+        from questfoundry.models.fill import FillEscalation
+
+        e = FillEscalation(
+            kind="entity_extract_failed",
+            passage_id="passage::trial",
+            detail="Two-step extraction failed: RuntimeError(...)",
+            upstream_stage="FILL",
+        )
+        assert e.kind == "entity_extract_failed"
+
+    def test_self_owned_FILL_upstream_stage_accepted(self) -> None:
+        """FillEscalation.upstream_stage now accepts ``FILL`` for
+        self-owned failures (LLM call drops, schema bugs)."""
+        from pydantic import ValidationError as PydanticValidationError
+
+        from questfoundry.models.fill import FillEscalation
+
+        # Sanity: FILL is allowed
+        FillEscalation(
+            kind="voice_research_failed",
+            passage_id="",
+            detail="x",
+            upstream_stage="FILL",
+        )
+        # And a junk value still rejected
+        with pytest.raises(PydanticValidationError):
+            FillEscalation(
+                kind="voice_research_failed",
+                passage_id="",
+                detail="x",
+                upstream_stage="DREAM",  # type: ignore[arg-type]
+            )
+
+
 class TestReviewCycleEscalation:
     """R-5.2: unresolved review flags after the final cycle become escalations."""
 

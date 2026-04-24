@@ -748,8 +748,13 @@ class TestComputeArcTraversalsDilemmaIdNormalization:
         assert result == {"p1": ["beat::b1"]}
 
 
-class TestComputeArcTraversalsCycleFallback:
-    """Tests for cycle detection fallback in _topological_sort_subset."""
+class TestComputeArcTraversalsCyclicBeatsExcluded:
+    """Cyclic beats are unreachable from roots and the walk-based
+    ``compute_arc_traversals`` simply doesn't visit them — so the
+    fact that ``_topological_sort_subset`` would now raise on a
+    cyclic subset (#1344) doesn't fire here. GROW validates the
+    DAG is acyclic, so cycles should not occur in production at all.
+    """
 
     def test_cyclic_predecessors_excluded_from_walk(self) -> None:
         """Beats in a cycle have no root entry point and are not reached by the walk.
@@ -773,6 +778,34 @@ class TestComputeArcTraversalsCycleFallback:
         result = compute_arc_traversals(graph)
         # Cyclic beats are unreachable — empty traversal
         assert result == {"p1": []}
+
+
+class TestTopologicalSortSubsetRaisesOnCycle:
+    """Direct cycle in the subset must raise PipelineInvariantError (#1344).
+
+    Production callers filter to reachable beats before calling, so this
+    raise primarily catches programmer error in future callers — but the
+    behaviour must be loud either way per CLAUDE.md §Anti-Patterns.
+    """
+
+    def test_cyclic_subset_raises(self) -> None:
+        from questfoundry.graph.algorithms import _topological_sort_subset
+        from questfoundry.graph.invariants import PipelineInvariantError
+
+        # 3-node cycle a → b → c → a, all in subset
+        beat_set = {"a", "b", "c"}
+        successors = {"a": ["b"], "b": ["c"], "c": ["a"]}
+        with pytest.raises(PipelineInvariantError, match="cycle detected"):
+            _topological_sort_subset(beat_set, successors)
+
+    def test_acyclic_subset_returns_topo_order(self) -> None:
+        """Sanity: clean subset still produces a valid topological order."""
+        from questfoundry.graph.algorithms import _topological_sort_subset
+
+        beat_set = {"a", "b", "c"}
+        successors = {"a": ["b"], "b": ["c"], "c": []}
+        result = _topological_sort_subset(beat_set, successors)
+        assert result.index("a") < result.index("b") < result.index("c")
 
 
 # ---------------------------------------------------------------------------
