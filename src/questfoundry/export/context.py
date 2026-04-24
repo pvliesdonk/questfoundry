@@ -82,6 +82,7 @@ def build_export_context(graph: Graph, project_name: str, *, language: str = "en
         cover=cover,
         codex_entries=_extract_codex_entries(graph),
         art_direction=_extract_art_direction(graph),
+        voice=_extract_voice(graph),
         language=language,
     )
 
@@ -341,6 +342,21 @@ def _extract_codex_entries(graph: Graph) -> list[ExportCodexEntry]:
                 )
             )
     return result
+
+
+def _extract_voice(graph: Graph) -> dict[str, Any] | None:
+    """Extract the FILL voice document for downstream presentation use.
+
+    Returns ``None`` when FILL has not produced a voice document yet
+    (R-3.3 styling falls back to defaults). When present, the dict
+    carries the VoiceDocument fields verbatim — exporters cherry-pick
+    what they need (HTML uses ``voice_register`` and ``sentence_rhythm``
+    for CSS class selection; other formats may ignore it entirely).
+    """
+    node = graph.get_node("voice::voice")
+    if not node:
+        return None
+    return {k: v for k, v in node.items() if k not in ("type", "raw_id")}
 
 
 def _extract_art_direction(graph: Graph) -> dict[str, Any] | None:
