@@ -22,6 +22,7 @@ Phases:
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypeVar
 
@@ -50,6 +51,7 @@ from questfoundry.graph.dress_mutations import (
     apply_dress_codex,
     apply_dress_illustration,
     validate_dress_codex_entries,
+    validate_entity_visual_coverage,
 )
 from questfoundry.graph.fill_context import format_dream_vision
 from questfoundry.graph.graph import Graph
@@ -98,6 +100,13 @@ log = get_logger(__name__)
 
 # Aspect ratios supported by all image providers.
 _VALID_ASPECT_RATIOS = {"1:1", "16:9", "9:16", "3:2", "2:3"}
+
+# Sentinel priority stored on briefs whose computed score would otherwise be 0
+# (skipped). Sits above any practical Gate 2 cutoff (1=must, 2=important,
+# 3=nice-to-have) so they never auto-render but remain visible for human
+# reprioritization. Spec calls this `priority: skip` (string); see
+# tracking note in map_score_to_priority for the drift.
+_BRIEF_SKIP_PRIORITY = 99
 
 
 def _parse_aspect_ratio(raw: str) -> str:
@@ -505,8 +514,6 @@ class DressStage:
         # this, image generation has no per-entity prompt fragment to inject
         # and illustrations drift across passages.  Halt loudly so the gap
         # is fixed in the prompt or upstream rather than silently shipped.
-        from questfoundry.graph.dress_mutations import validate_entity_visual_coverage
-
         coverage_errors = validate_entity_visual_coverage(graph)
         if coverage_errors:
             log.error(
@@ -776,10 +783,8 @@ class DressStage:
         # from before their wave started; updates accumulate sequentially here.
         # R-2.1: every passage with prose gets a brief — including ones whose
         # computed priority is 0 (would-be-skipped).  Those briefs land with
-        # priority=_SKIP_PRIORITY (a sentinel above any practical cutoff) so
-        # Gate 2 can surface them for human reprioritization but they won't be
-        # rendered automatically.
-        _SKIP_PRIORITY = 99
+        # priority=_BRIEF_SKIP_PRIORITY so Gate 2 can surface them for human
+        # reprioritization but they won't be rendered automatically.
         for batch_result in results:
             if batch_result is None:
                 log.warning("brief_batch_failed", detail="batch returned no results")
@@ -793,9 +798,9 @@ class DressStage:
                         passage_id=passage_id,
                         base_score=score,
                         llm_adj=llm_adjustment,
-                        stored_as=_SKIP_PRIORITY,
+                        stored_as=_BRIEF_SKIP_PRIORITY,
                     )
-                    final_priority = _SKIP_PRIORITY
+                    final_priority = _BRIEF_SKIP_PRIORITY
 
                 brief_dict["priority"] = final_priority
                 apply_dress_brief(graph, passage_id, brief_dict, final_priority)
@@ -954,16 +959,14 @@ class DressStage:
         the approval (mode + timestamp + budget) is recorded so
         downstream stages have an audit trail.
 
-        - ``--no-interactive`` mode: auto-approve every brief whose
-          priority is ≤ ``self._min_priority`` and stamp the budget as
-          ``priority_cutoff=self._min_priority``.
-        - Interactive mode: same default as above for now (an in-loop
-          interactive selection prompt is a separate UX concern tracked
-          in #1328's recommendation; the stamp records ``approval_mode``
-          either way so the decision is auditable).
+        Selection today is purely automatic in both ``--no-interactive``
+        and interactive modes: every brief at or above
+        ``self._min_priority`` is approved.  No human prompt is wired up
+        yet (tracked separately as the in-loop selection UX), so
+        ``approval_mode="auto"`` is recorded for both modes — claiming
+        ``"interactive"`` when the human never actually chose would
+        misrepresent the audit trail.
         """
-        from datetime import UTC, datetime
-
         briefs = graph.get_nodes_by_type("illustration_brief")
         if not briefs:
             return DressPhaseResult(
@@ -972,23 +975,28 @@ class DressStage:
                 detail="no briefs to review",
             )
 
-        # Sort by priority (1=must-have first)
+        # Sort by priority (1=must-have first; missing/skip → end)
         sorted_briefs = sorted(
             briefs.items(),
-            key=lambda item: item[1].get("priority", 99),
+            key=lambda item: item[1].get("priority", _BRIEF_SKIP_PRIORITY),
         )
 
         # R-4.1: pick a budget. Selection rule today: include every brief
-        # at or above the configured min_priority cutoff. Interactive
+        # at or above the configured min_priority cutoff.  No interactive
         # budget refinement (e.g. an in-loop prompt to pick a different
-        # cutoff) is the spec's eventual goal but is left to a future
-        # change; the recorded approval_mode lets the user see what was
-        # actually applied.
+        # cutoff) is wired up yet — that is the spec's eventual goal but
+        # is left to a future change.
         selected_ids = [
-            bid for bid, bdata in sorted_briefs if bdata.get("priority", 99) <= self._min_priority
+            bid
+            for bid, bdata in sorted_briefs
+            if bdata.get("priority", _BRIEF_SKIP_PRIORITY) <= self._min_priority
         ]
 
-        approval_mode = "interactive" if self._interactive else "no_interactive"
+        # No human prompt runs in either mode today, so record "auto"
+        # for both rather than claiming "interactive" when nothing was
+        # interactively chosen.  When an in-loop selection UX lands,
+        # this should switch back to "interactive" for that branch.
+        approval_mode = "auto"
 
         # R-4.4: stamp approval metadata on the dress_meta::selection node
         # so SHIP and the CLI report can confirm Gate 2 actually happened
@@ -1653,6 +1661,14 @@ def map_score_to_priority(score: int) -> int:
     Returns:
         Priority: 1 (must-have), 2 (important), 3 (nice-to-have),
         or 0 for skip.
+
+    Note:
+        The DRESS spec models "skip" as the string ``priority: skip``,
+        but the graph stores priority as an integer everywhere else, so
+        the code uses ``0`` from this function and ``_BRIEF_SKIP_PRIORITY``
+        (a high integer sentinel) when actually persisting the brief.
+        Callers that need the persisted skip value should use the
+        sentinel rather than ``0`` so sorts and cutoffs behave correctly.
     """
     if score >= 5:
         return 1

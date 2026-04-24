@@ -558,7 +558,7 @@ class TestValidateEntityVisualCoverage:
         from questfoundry.graph.dress_mutations import validate_entity_visual_coverage
 
         g = Graph.empty()
-        entity_id = self._seed_appearing_entity(g)
+        self._seed_appearing_entity(g)
         g.create_node(
             "entity_visual::mentor",
             {
@@ -568,7 +568,6 @@ class TestValidateEntityVisualCoverage:
         )
         errors = validate_entity_visual_coverage(g)
         assert errors == [], f"Expected clean run, got: {errors}"
-        assert entity_id  # silence unused
 
     def test_appearing_entity_without_visual_errors(self) -> None:
         from questfoundry.graph.dress_mutations import validate_entity_visual_coverage

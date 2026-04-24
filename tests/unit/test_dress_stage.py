@@ -345,8 +345,11 @@ class TestPhase0ArtDirection:
         )
 
         stage = DressStage(project_path=tmp_path)
-        # The phase reads two execute()-set attrs we'd otherwise miss when
-        # calling the phase directly. Set them to no-op defaults.
+        # _unload_after_discuss / _unload_after_summarize are normally
+        # bound by execute() (model lifecycle hooks). When invoking the
+        # phase directly we bypass execute(), so set them to no-op
+        # defaults to satisfy the attribute access. Brittle if those
+        # attrs ever get renamed; rename them here too if so.
         stage._unload_after_discuss = None  # type: ignore[attr-defined]
         stage._unload_after_summarize = None  # type: ignore[attr-defined]
         with (
@@ -529,12 +532,17 @@ class TestPhase3Review:
         sel = g.get_node("dress_meta::selection")
         assert sel is not None
         assert sel.get("approved_at"), "approved_at timestamp must be set"
-        assert sel.get("approval_mode") == "no_interactive"
+        # Selection runs without a human prompt in either mode today, so
+        # we record "auto" rather than claiming the user picked a budget.
+        assert sel.get("approval_mode") == "auto"
         assert sel.get("budget", {}).get("rule") == "priority_cutoff"
         assert sel.get("budget", {}).get("priority_cutoff") == stage._min_priority
 
     @pytest.mark.asyncio()
-    async def test_review_records_interactive_mode_when_set(self) -> None:
+    async def test_review_records_auto_mode_even_when_interactive_flag_set(self) -> None:
+        """Until an in-loop selection prompt exists, even ``--interactive``
+        runs are auto-selections; the audit trail must reflect that.
+        """
         g = Graph()
         g.create_node(
             "illustration_brief::a",
@@ -544,7 +552,8 @@ class TestPhase3Review:
         stage._interactive = True
         await stage._phase_3_review(g, MagicMock())
         sel = g.get_node("dress_meta::selection")
-        assert sel.get("approval_mode") == "interactive"
+        assert sel is not None
+        assert sel.get("approval_mode") == "auto"
 
 
 # ---------------------------------------------------------------------------
