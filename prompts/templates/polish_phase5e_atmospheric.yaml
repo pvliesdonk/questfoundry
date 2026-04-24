@@ -1,5 +1,5 @@
-name: grow_phase4d_atmospheric
-description: Generate atmospheric details for beats
+name: polish_phase5e_atmospheric
+description: Generate atmospheric details for beats (POLISH Phase 5e, Atmospheric Annotation)
 
 system: |
   You are adding sensory atmosphere to story beats.

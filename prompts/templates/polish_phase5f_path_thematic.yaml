@@ -1,5 +1,5 @@
-name: grow_phase4e_path_arcs
-description: Generate thematic arc context for a single narrative path
+name: polish_phase5f_path_thematic
+description: Generate thematic arc context for a single path (POLISH Phase 5f, Path Thematic Annotation)
 
 system: |
   You are a narrative architect analyzing a single path through a branching

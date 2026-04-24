@@ -215,10 +215,10 @@ class TestGrowStageExecute:
 
 class TestGrowStagePhaseOrder:
     def test_phase_order_returns_correct_count(self) -> None:
-        """17 phases after narrative_gaps moved to POLISH (PR for #1368)."""
+        """15 phases after narrative_gaps/atmospheric/path_arcs moved to POLISH (#1368 PR A+B)."""
         stage = GrowStage()
         phases = stage._phase_order()
-        assert len(phases) == 17
+        assert len(phases) == 15
 
     def test_phase_order_names(self) -> None:
         stage = GrowStage()
@@ -230,10 +230,10 @@ class TestGrowStagePhaseOrder:
             "resolve_temporal_hints",
             "interleave_beats",
             "scene_types",
-            # narrative_gaps moved to POLISH Phase 1a per PR #1366 / issue #1368
+            # narrative_gaps moved to POLISH Phase 1a (PR A of #1368)
             "pacing_gaps",
-            "atmospheric",
-            "path_arcs",
+            # atmospheric moved to POLISH Phase 5e (PR B of #1368)
+            # path_arcs moved to POLISH Phase 5f (PR B of #1368)
             "entity_arcs",
             "transition_gaps",
             "enumerate_arcs",
