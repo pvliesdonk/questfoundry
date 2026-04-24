@@ -49,7 +49,7 @@ FILL does NOT create, reorder, split, or merge beats or passages; does NOT add p
 
 R-1.1. Exactly one Voice Document node is created. Retries replace the previous node, not duplicate it.
 
-R-1.2. Voice Document fields include `pov`, `tense`, `register`, `sentence_rhythm`, `tone_words`, `avoid_words`, `avoid_patterns`, and optionally `pov_character` and `exemplar_passages`.
+R-1.2. Voice Document fields include `pov`, `tense`, `voice_register`, `sentence_rhythm`, `tone_words`, `avoid_words`, `avoid_patterns`, and optionally `pov_character` and `exemplar_passages`.
 
 R-1.3. `pov` ∈ {`first_person`, `second_person`, `third_person_limited`, `third_person_omniscient`}. When `pov` is limited, `pov_character` names the POV entity.
 
@@ -336,7 +336,7 @@ R-5.3. The cap is configurable but defaults to 2.
 ## Rule Index
 
 R-1.1: Exactly one Voice Document node; retries replace.
-R-1.2: Voice Document has required fields: pov, tense, register, rhythm, tone_words, avoid_words, avoid_patterns.
+R-1.2: Voice Document has required fields: pov, tense, voice_register, sentence_rhythm, tone_words, avoid_words, avoid_patterns.
 R-1.3: `pov` in permitted set; `pov_character` if limited.
 R-1.4: `tense` ∈ {past, present}.
 R-1.5: Voice Document has no graph edges.

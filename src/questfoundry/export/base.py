@@ -92,6 +92,7 @@ class ExportContext:
     cover: ExportIllustration | None = None
     codex_entries: list[ExportCodexEntry] = field(default_factory=list)
     art_direction: dict[str, Any] | None = None
+    voice: dict[str, Any] | None = None
     language: str = "en"
 
 

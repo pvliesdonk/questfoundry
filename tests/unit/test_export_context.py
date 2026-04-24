@@ -518,3 +518,37 @@ class TestPartialDressWarning:
             ctx = build_export_context(g, "test")
         assert ctx.art_direction is None
         assert not _has_event(caplog, "art_direction_partial")
+
+
+class TestVoiceExtraction:
+    """R-3.3 prep: ExportContext exposes the FILL voice document so the
+    HTML exporter (and future format-specific styling) can react to it.
+    """
+
+    def test_voice_node_extracted(self) -> None:
+        g = _minimal_graph()
+        g.create_node(
+            "voice::voice",
+            {
+                "type": "voice",
+                "raw_id": "voice",
+                "story_title": "The Test",
+                "pov": "third_limited",
+                "tense": "past",
+                "voice_register": "literary",
+                "sentence_rhythm": "flowing",
+                "tone_words": ["wry"],
+            },
+        )
+        ctx = build_export_context(g, "test")
+        assert ctx.voice is not None
+        assert ctx.voice["voice_register"] == "literary"
+        assert ctx.voice["sentence_rhythm"] == "flowing"
+        # Internal-only fields stripped
+        assert "type" not in ctx.voice
+        assert "raw_id" not in ctx.voice
+
+    def test_no_voice_node_returns_none(self) -> None:
+        g = _minimal_graph()
+        ctx = build_export_context(g, "test")
+        assert ctx.voice is None
