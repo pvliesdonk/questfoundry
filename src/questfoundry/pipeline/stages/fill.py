@@ -890,8 +890,9 @@ class FillStage:
                     kind="voice_research_failed",
                     passage_id="",
                     detail=(
-                        f"Voice research LLM call failed: {exc!r}. Prose generation "
-                        f"will proceed with no research notes — quality may degrade."
+                        f"Voice research LLM call failed: {exc!r}. FILL will exit "
+                        f"with FillContractError at stage end; rerun FILL or fix "
+                        f"the provider configuration to proceed."
                     ),
                     upstream_stage="FILL",
                 )
@@ -1409,7 +1410,12 @@ class FillStage:
                         total_llm_calls += ex_calls
                         total_tokens += ex_tokens
                         entity_updates = extract_out.entity_updates
-                    except (ValidationError, ValueError, RuntimeError) as exc:
+                    except Exception as exc:
+                        # Catch broadly (matching the voice-research and
+                        # blueprint-validation sites above): transport-level
+                        # failures (httpx.TimeoutException, asyncio.TimeoutError,
+                        # provider-specific exceptions) must escalate too, not
+                        # propagate unhandled and crash the per-passage loop.
                         # Per-passage and bounded — escalate (option 2 of audit
                         # recommendation, #1345). Without entity updates the
                         # entity state diverges from the generated prose; the

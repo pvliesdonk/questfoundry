@@ -309,8 +309,17 @@ def topological_sort_beats(
         queue = sorted(queue + new_ready, key=_sort_key)
 
     if len(result) != len(beat_set):
-        remaining = beat_set - set(result)
-        raise ValueError(f"Cycle detected in beat subset: {sorted(remaining)}")
+        from questfoundry.graph.invariants import PipelineInvariantError
+
+        remaining = sorted(beat_set - set(result))
+        msg = (
+            f"Beat DAG cycle detected during topological sort: "
+            f"{len(remaining)} beat(s) could not be ordered: "
+            f"{', '.join(repr(b) for b in remaining[:5])}"
+            f"{' …' if len(remaining) > 5 else ''}. "
+            f"This is a structural invariant violation — fix the cycle upstream."
+        )
+        raise PipelineInvariantError(msg)
 
     return result
 

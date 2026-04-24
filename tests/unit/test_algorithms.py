@@ -748,8 +748,13 @@ class TestComputeArcTraversalsDilemmaIdNormalization:
         assert result == {"p1": ["beat::b1"]}
 
 
-class TestComputeArcTraversalsCycleFallback:
-    """Tests for cycle detection fallback in _topological_sort_subset."""
+class TestComputeArcTraversalsCyclicBeatsExcluded:
+    """Cyclic beats are unreachable from roots and the walk-based
+    ``compute_arc_traversals`` simply doesn't visit them — so the
+    fact that ``_topological_sort_subset`` would now raise on a
+    cyclic subset (#1344) doesn't fire here. GROW validates the
+    DAG is acyclic, so cycles should not occur in production at all.
+    """
 
     def test_cyclic_predecessors_excluded_from_walk(self) -> None:
         """Beats in a cycle have no root entry point and are not reached by the walk.

@@ -12,6 +12,7 @@ from itertools import product
 from typing import TYPE_CHECKING, Any
 
 from questfoundry.graph.context import normalize_scoped_id
+from questfoundry.graph.invariants import PipelineInvariantError
 from questfoundry.observability.logging import get_logger
 
 if TYPE_CHECKING:
@@ -371,8 +372,6 @@ def _topological_sort_subset(
                     bisect.insort(queue_sorted, child)
 
     if len(result) < len(beat_set):
-        from questfoundry.graph.invariants import PipelineInvariantError
-
         unprocessed = sorted(beat_set - set(result))
         msg = (
             f"Beat DAG cycle detected in topological sort: "
