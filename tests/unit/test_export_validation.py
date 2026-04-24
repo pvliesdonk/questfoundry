@@ -249,7 +249,7 @@ class TestValidateHtml:
 
 class TestValidatePdf:
     def _write_sidecar(self, pdf_path: Path, page_map: dict[str, int]) -> None:
-        sidecar = pdf_path.with_suffix(".pdf.map.json")
+        sidecar = pdf_path.with_name(pdf_path.name + ".map.json")
         sidecar.write_text(
             json.dumps(
                 {
@@ -279,7 +279,7 @@ class TestValidatePdf:
     def test_unparseable_sidecar_raises(self, tmp_path: Path) -> None:
         pdf = tmp_path / "story.pdf"
         pdf.touch()
-        pdf.with_suffix(".pdf.map.json").write_text("{nope")
+        pdf.with_name(pdf.name + ".map.json").write_text("{nope")
         with pytest.raises(ExportValidationError, match="could not be parsed"):
             validate_pdf(pdf)
 

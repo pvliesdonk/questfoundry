@@ -103,7 +103,7 @@ def validate_twee(path: Path) -> None:
             f"Twee export {path.name} has {len(broken)} broken link target(s): "
             f"{', '.join(repr(b) for b in broken[:5])}"
             f"{' …' if len(broken) > 5 else ''}. "
-            f"Each target must match a `:: <name>` header earlier in the file."
+            f"Each target must match a `:: <name>` header in the file."
         )
         raise ExportValidationError(msg)
 
