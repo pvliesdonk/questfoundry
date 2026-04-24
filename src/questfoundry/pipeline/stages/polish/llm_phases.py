@@ -423,9 +423,21 @@ class _PolishLLMPhaseMixin:
             total_tokens += tokens
 
             # Derive arc_type for this entity from its category (R-3.7).
+            # An unknown category is a graph-validation gap upstream — log
+            # a WARNING rather than silently emitting "transformation"
+            # (CLAUDE.md §Anti-Patterns: silent fallbacks are bugs).
             entity_data = entity_nodes.get(entity_id, {})
             category = entity_data.get("entity_category", "character")
-            derived_arc_type = arc_type_by_category.get(category, "transformation")
+            if category not in arc_type_by_category:
+                log.warning(
+                    "phase3_unknown_entity_category",
+                    entity_id=entity_id,
+                    category=category,
+                    fallback="transformation",
+                )
+                derived_arc_type = "transformation"
+            else:
+                derived_arc_type = arc_type_by_category[category]
 
             # Store arc metadata as an annotation on the Entity node (R-3.3).
             for arc in result.character_arcs:
@@ -445,6 +457,11 @@ class _PolishLLMPhaseMixin:
                 # Build arcs_per_path with R-3.7 arc_type override + R-3.8
                 # pivot consistency check. Entries that disagree with the
                 # entity-scoped pivot map are logged and dropped.
+                # Note R-3.8's "for each path_id present in BOTH" framing —
+                # an arcs_per_path entry for a path the entity has no pivot
+                # on is allowed (some paths have a trajectory line without a
+                # distinct turning point), so we only enforce equality when
+                # both maps reference the path.
                 arcs_per_path: list[dict[str, str]] = []
                 for entry in arc.arcs_per_path:
                     expected_pivot = pivots_by_path.get(entry.path_id)
@@ -472,6 +489,23 @@ class _PolishLLMPhaseMixin:
                             "arc_line": entry.arc_line,
                             "pivot_beat": entry.pivot_beat,
                         }
+                    )
+
+                # R-3.6 partial coverage: every path on which the entity is
+                # arc-worthy (i.e., has a pivot) should also have an
+                # arcs_per_path entry. Missing entries log a WARNING per the
+                # polish.md violation table; partial coverage is accepted but
+                # surfaced.
+                paths_with_pivot = set(pivots_by_path.keys())
+                covered_paths = {e["path_id"] for e in arcs_per_path}
+                missing_paths = paths_with_pivot - covered_paths
+                if missing_paths:
+                    log.warning(
+                        "phase3_arcs_per_path_partial_coverage",
+                        entity_id=entity_id,
+                        missing_paths=sorted(missing_paths),
+                        covered=len(covered_paths),
+                        total=len(paths_with_pivot),
                     )
 
                 graph.update_node(

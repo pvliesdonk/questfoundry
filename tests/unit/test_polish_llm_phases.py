@@ -897,3 +897,129 @@ class TestPolishPhase3ArcsPerPath:
         assert ca is not None
         # R-3.7: arc_type was overridden to category-derived "transformation"
         assert ca["arcs_per_path"][0]["arc_type"] == "transformation"
+
+    @pytest.mark.asyncio
+    async def test_phase_3_partial_coverage_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        """R-3.6 violation table: missing arcs_per_path entries for paths
+        the entity has a pivot on log a partial-coverage WARNING."""
+        from questfoundry.models.polish import (
+            ArcPivot,
+            CharacterArcMetadata,
+            PerPathArc,
+            Phase3Output,
+        )
+
+        graph = self._make_two_path_graph()
+
+        async def mock_call(*_args: object, **_kwargs: object) -> tuple:
+            # LLM returns pivots for both paths but arcs_per_path for only one
+            return (
+                Phase3Output(
+                    character_arcs=[
+                        CharacterArcMetadata(
+                            entity_id="entity::mentor",
+                            start="A wise authority",
+                            pivots=[
+                                ArcPivot(
+                                    path_id="path::trust",
+                                    beat_id="beat::trust_pivot",
+                                    description="Pivot on trust",
+                                ),
+                                ArcPivot(
+                                    path_id="path::doubt",
+                                    beat_id="beat::doubt_pivot",
+                                    description="Pivot on doubt",
+                                ),
+                            ],
+                            end_per_path={
+                                "path::trust": "Ally",
+                                "path::doubt": "Estranged",
+                            },
+                            arcs_per_path=[
+                                # Only the trust path; doubt is missing
+                                PerPathArc(
+                                    path_id="path::trust",
+                                    arc_type="_set_by_code",
+                                    arc_line="A → B → C",
+                                    pivot_beat="beat::trust_pivot",
+                                ),
+                            ],
+                        )
+                    ]
+                ),
+                1,
+                500,
+            )
+
+        stage = PolishStage()
+        stage._polish_llm_call = mock_call  # type: ignore[method-assign]
+        with caplog.at_level("WARNING"):
+            await stage._phase_3_character_arcs(graph, MagicMock())
+
+        # The single covered entry was stored
+        mentor = graph.get_node("entity::mentor")
+        assert mentor is not None
+        ca = mentor.get("character_arc")
+        assert len(ca["arcs_per_path"]) == 1
+        # Partial-coverage WARNING was emitted
+        assert any("phase3_arcs_per_path_partial_coverage" in r.message for r in caplog.records)
+
+    @pytest.mark.asyncio
+    async def test_phase_3_unknown_entity_category_warns(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """An entity with an unknown category logs a WARNING and falls back
+        to the default arc_type rather than silently mis-tagging."""
+        from questfoundry.models.polish import (
+            ArcPivot,
+            CharacterArcMetadata,
+            PerPathArc,
+            Phase3Output,
+        )
+
+        graph = self._make_two_path_graph()
+        # Override the entity's category to something unrecognised
+        graph.update_node("entity::mentor", entity_category="cryptid")
+
+        async def mock_call(*_args: object, **_kwargs: object) -> tuple:
+            return (
+                Phase3Output(
+                    character_arcs=[
+                        CharacterArcMetadata(
+                            entity_id="entity::mentor",
+                            start="A wise authority",
+                            pivots=[
+                                ArcPivot(
+                                    path_id="path::trust",
+                                    beat_id="beat::trust_pivot",
+                                    description="Pivot",
+                                )
+                            ],
+                            end_per_path={"path::trust": "Ally"},
+                            arcs_per_path=[
+                                PerPathArc(
+                                    path_id="path::trust",
+                                    arc_type="_set_by_code",
+                                    arc_line="A → B → C",
+                                    pivot_beat="beat::trust_pivot",
+                                )
+                            ],
+                        )
+                    ]
+                ),
+                1,
+                500,
+            )
+
+        stage = PolishStage()
+        stage._polish_llm_call = mock_call  # type: ignore[method-assign]
+        with caplog.at_level("WARNING"):
+            await stage._phase_3_character_arcs(graph, MagicMock())
+
+        mentor = graph.get_node("entity::mentor")
+        assert mentor is not None
+        ca = mentor.get("character_arc")
+        # Fallback arc_type was used
+        assert ca["arcs_per_path"][0]["arc_type"] == "transformation"
+        # WARNING was emitted (no silent fallback)
+        assert any("phase3_unknown_entity_category" in r.message for r in caplog.records)

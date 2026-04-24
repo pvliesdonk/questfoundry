@@ -126,7 +126,13 @@ class PerPathArc(BaseModel):
     path_id: str = Field(min_length=1, description="Path this entry describes")
     arc_type: str = Field(
         min_length=1,
-        description="Entity-category-derived arc type (transformation/atmosphere/significance/relationship)",
+        description=(
+            "Entity-category-derived arc type. The LLM emits the placeholder "
+            '``"_set_by_code"`` (or any value); POLISH overwrites this with '
+            "the value derived from the entity's category per R-3.7 — "
+            "character → transformation, location → atmosphere, "
+            "object → significance, faction → relationship."
+        ),
     )
     arc_line: str = Field(
         min_length=1,
