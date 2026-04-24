@@ -46,5 +46,12 @@ jobs:
           # in the job's GitHub Step Summary.
           track_progress: true
           display_report: true
+          # The action's safety check refuses bot-initiated runs by default.
+          # claude[bot] pushes commits when a `[Fix this →]` link is clicked
+          # from a previous review comment — those pushes trigger a
+          # `pull_request` synchronize event with `actor=claude[bot]`, which
+          # we DO want reviewed. Explicit allowlist so future fix-link cycles
+          # keep flowing through review without manual re-runs.
+          allowed_bots: 'claude'
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://code.claude.com/docs/en/cli-reference for available options
