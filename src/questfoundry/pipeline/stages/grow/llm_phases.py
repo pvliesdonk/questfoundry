@@ -670,11 +670,14 @@ class _LLMPhaseMixin:
     # implementation lives in ``polish/llm_phases.py`` as
     # ``_phase_5f_path_thematic``.
 
-    # NOTE: GROW Phase 4f (entity_arcs) was MOVED to POLISH Phase 3 (extended)
-    # per the spec migration in PR #1366 / issue #1368 PR C. POLISH's
-    # ``_phase_3_character_arcs`` now also produces ``arcs_per_path`` per
-    # entity (per spec R-3.6), in the same LLM call that synthesizes
-    # start/pivots/end_per_path.
+    # NOTE: GROW Phase 4f (entity_arcs) was REMOVED in issue #1368 PR C.
+    # The spec (PR #1366) assigns the equivalent work to POLISH Phase 3
+    # (extended) per R-3.6 — ``arcs_per_path`` should be produced in the
+    # same LLM call that synthesizes ``start``/``pivots``/``end_per_path``.
+    # The Phase 3 schema extension is DEFERRED to a follow-up PR; for
+    # now POLISH ``_phase_3_character_arcs`` still produces only
+    # start/pivots/end_per_path. The GROW phase is removed regardless to
+    # avoid running stale code; ``arcs_per_path`` will land separately.
 
     @grow_phase(name="transition_gaps", depends_on=["interleave_beats"], priority=8)
     async def _phase_transition_gaps(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:

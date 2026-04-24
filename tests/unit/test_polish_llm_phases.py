@@ -555,3 +555,117 @@ class TestPolishPhase5fPathThematic:
         # atmospheric_detail must appear in the beat sequence for each beat
         assert "dim torchlight on stone" in beat_seq
         assert "howling wind in the hall" in beat_seq
+
+
+# ---------------------------------------------------------------------------
+# Phase 2 R-2.7 gap-beat tagging (PR C of #1368)
+# ---------------------------------------------------------------------------
+
+
+class TestPolishPhase2GapBeatTagging:
+    """Spec R-2.7: only correction beats (3+ consecutive-run breakers) carry
+    ``is_gap_beat: True``; regular pacing-flag micro-beats do not.
+
+    The flag distinguishes their origin so FILL renders the two kinds
+    differently — a correction beat is a structural pacing intrusion
+    (rendered as ``[gap]``), while a pacing-flag micro-beat carries actual
+    narrative content that should appear in prose.
+    """
+
+    @pytest.mark.asyncio
+    async def test_correction_beat_for_consecutive_run_carries_is_gap_beat_true(self) -> None:
+        """Beat inserted after a consecutive-run flag → is_gap_beat=True."""
+        from questfoundry.models.polish import MicroBeatProposal, Phase2Output
+
+        graph = Graph.empty()
+        graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
+        # 3 consecutive scenes — triggers consecutive_scene flag
+        for i in range(1, 4):
+            _make_beat(graph, f"beat::s{i}", f"Scene {i}", scene_type="scene")
+            graph.add_edge("belongs_to", f"beat::s{i}", "path::p1")
+        for i in range(2, 4):
+            graph.add_edge("predecessor", f"beat::s{i}", f"beat::s{i - 1}")
+
+        # LLM proposes a sequel after beat::s2 (the middle of the run)
+        async def mock_call(*_args: object, **_kwargs: object) -> tuple:
+            return (
+                Phase2Output(
+                    micro_beats=[
+                        MicroBeatProposal(
+                            after_beat_id="beat::s2",
+                            summary="Quiet pause to break the action chain",
+                            entity_ids=[],
+                        ),
+                    ]
+                ),
+                1,
+                100,
+            )
+
+        stage = PolishStage()
+        stage._polish_llm_call = mock_call  # type: ignore[method-assign]
+        result = await stage._phase_2_pacing(graph, MagicMock())
+
+        assert result.status == "completed"
+        # Find the inserted micro-beat and assert R-2.7 fields
+        beats = graph.get_nodes_by_type("beat")
+        micro_beats = [b for bid, b in beats.items() if "micro_" in bid]
+        assert len(micro_beats) == 1
+        mb = micro_beats[0]
+        assert mb.get("is_gap_beat") is True, "consecutive-run correction must carry is_gap_beat"
+        assert mb.get("role") == "micro_beat"
+        assert mb.get("dilemma_impacts") == []
+        assert mb.get("created_by") == "POLISH"
+
+    @pytest.mark.asyncio
+    async def test_micro_beat_for_post_commit_no_sequel_does_not_carry_is_gap_beat(self) -> None:
+        """Beat inserted for the ``no_sequel_after_commit`` flag must NOT
+        carry is_gap_beat (R-2.7 distinguishes correction vs pacing-flag origin)."""
+        from questfoundry.models.polish import MicroBeatProposal, Phase2Output
+
+        graph = Graph.empty()
+        graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
+        # Setup: a commit beat with no sequel after — triggers no_sequel_after_commit
+        _make_beat(
+            graph,
+            "beat::commit",
+            "Commit beat",
+            scene_type="scene",
+            dilemma_impacts=[{"effect": "commits", "dilemma_id": "d1"}],
+        )
+        graph.add_edge("belongs_to", "beat::commit", "path::p1")
+        # Followed directly by another scene (no sequel)
+        _make_beat(graph, "beat::after", "After commit", scene_type="scene")
+        graph.add_edge("belongs_to", "beat::after", "path::p1")
+        graph.add_edge("predecessor", "beat::after", "beat::commit")
+
+        async def mock_call(*_args: object, **_kwargs: object) -> tuple:
+            return (
+                Phase2Output(
+                    micro_beats=[
+                        MicroBeatProposal(
+                            after_beat_id="beat::commit",
+                            summary="Brief reflection on the choice just made",
+                            entity_ids=[],
+                        ),
+                    ]
+                ),
+                1,
+                100,
+            )
+
+        stage = PolishStage()
+        stage._polish_llm_call = mock_call  # type: ignore[method-assign]
+        result = await stage._phase_2_pacing(graph, MagicMock())
+
+        assert result.status == "completed"
+        beats = graph.get_nodes_by_type("beat")
+        micro_beats = [b for bid, b in beats.items() if "micro_" in bid]
+        assert len(micro_beats) == 1
+        mb = micro_beats[0]
+        # R-2.7: pacing-flag micro-beats (not consecutive-run correction) must
+        # NOT carry is_gap_beat — FILL needs the summary to render normally.
+        assert mb.get("is_gap_beat") is None or mb.get("is_gap_beat") is False, (
+            "no_sequel_after_commit micro-beat must NOT carry is_gap_beat"
+        )
+        assert mb.get("role") == "micro_beat"

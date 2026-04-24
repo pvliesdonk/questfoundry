@@ -1133,8 +1133,10 @@ class TestValidateAndInsertGaps:
 
 # NOTE: TestPhase4cPacingGaps was REMOVED when GROW pacing_gaps moved to POLISH
 # Phase 2 (extended) per PR #1366 / issue #1368 PR C. POLISH _phase_2_pacing
-# already covers the same behavior; per spec R-2.7 the inserted micro-beats now
-# carry is_gap_beat=True (verified in tests/unit/test_polish_phases.py).
+# already covers the same behavior; per spec R-2.7, only correction beats
+# (those breaking 3+ same-scene_type runs) carry is_gap_beat=True — regular
+# pacing-flag micro-beats do not. R-2.7 compliance is exercised by
+# TestPolishPhase2GapBeatTagging in tests/unit/test_polish_llm_phases.py.
 
 
 class TestPhase8cOverlays:
