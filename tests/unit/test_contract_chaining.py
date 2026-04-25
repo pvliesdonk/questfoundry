@@ -105,7 +105,9 @@ class TestValidateDressOutput:
         g = Graph.empty()
         g.create_node("art_direction::main", {"type": "art_direction"})
         g.create_node("entity::mentor", {"type": "entity", "raw_id": "mentor"})
-        # Add brief so Output-3 passes
+        # No passages → Output-3 is vacuously satisfied (no passages →
+        # no missing-brief check fires), so this assertion isolates the
+        # Output-5 (missing CodexEntry) error.
         errors = validate_dress_output(g)
         assert any("without a CodexEntry" in e for e in errors)
 

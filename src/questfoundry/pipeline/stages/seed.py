@@ -188,11 +188,15 @@ class SeedStage:
         """
         self.project_path = project_path
 
-    def _get_brainstorm_context(self, project_path: Path) -> str:
+    def _get_brainstorm_context(self, project_path: Path, *, graph: Graph | None = None) -> str:
         """Load and format brainstorm from graph.
 
         Args:
             project_path: Path to project directory.
+            graph: Pre-loaded graph to reuse. If None, loads from
+                ``project_path``. The keyword exists so ``execute()``
+                can avoid a second I/O round-trip when the graph is
+                already in hand from the entry-validation step.
 
         Returns:
             Formatted brainstorm context string.
@@ -200,7 +204,8 @@ class SeedStage:
         Raises:
             SeedStageError: If brainstorm not found in graph.
         """
-        graph = Graph.load(project_path)
+        if graph is None:
+            graph = Graph.load(project_path)
 
         # Check for entities (indicates brainstorm completed)
         # Get dilemma nodes from graph
@@ -289,20 +294,25 @@ class SeedStage:
         total_llm_calls = 0
         total_tokens = 0
 
+        # Load the graph once and reuse it for both the entry validation
+        # and the brainstorm-context build. The serialize-time graph load
+        # below is intentionally separate — it happens after a long
+        # discuss/summarize loop and may need to see fresh on-disk state.
+        graph = Graph.load(resolved_path)
+
         # BRAINSTORM Stage Output Contract: validate the upstream artifact
         # before SEED phases consume it. Catches missing entities,
         # incomplete dilemmas, and other contract violations at the seam
         # rather than at the downstream-failure site (#1347).
-        entry_graph = Graph.load(resolved_path)
-        entry_errors = validate_brainstorm_output(entry_graph)
+        entry_errors = validate_brainstorm_output(graph)
         if entry_errors:
             raise SeedStageError(
                 f"BRAINSTORM output validation failed ({len(entry_errors)} "
                 f"error(s)):\n" + "\n".join(f"  - {e}" for e in entry_errors)
             )
 
-        # Load brainstorm context from graph
-        brainstorm_context = self._get_brainstorm_context(resolved_path)
+        # Load brainstorm context from the same graph instance.
+        brainstorm_context = self._get_brainstorm_context(resolved_path, graph=graph)
         log.debug("seed_brainstorm_loaded", context_length=len(brainstorm_context))
 
         # Get language instruction (empty string for English)
@@ -350,8 +360,11 @@ class SeedStage:
         if unload_after_discuss is not None:
             await unload_after_discuss()
 
-        # Load graph once for summarize manifest and serialize validation
-        graph = Graph.load(resolved_path)
+        # Reuse the graph loaded for entry validation. Discuss runs LLM
+        # calls with research-only tools (corpus search, etc.) and does
+        # not mutate the graph, so the same in-memory instance is fresh
+        # enough for the summarize manifest and serialize validation
+        # that follow.
 
         # Outer loop: conversation-level retry for semantic errors
         # Each iteration runs summarize -> serialize; on semantic errors,

@@ -83,13 +83,12 @@ class TestGrowStageExecute:
     async def test_execute_runs_all_phases(
         self, tmp_project: Path, mock_model: MagicMock, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        import questfoundry.graph.seed_validation as seed_val_mod
         import questfoundry.pipeline.stages.grow.stage as grow_stage_mod
 
+        # SEED entry validator already bypassed by the autouse
+        # _bypass_seed_entry_validator fixture; only the GROW exit
+        # validator needs per-test patching here.
         monkeypatch.setattr(grow_stage_mod, "validate_grow_output", lambda _g: [])
-        # Bypass the SEED-output entry validator (#1347) the same way:
-        # tmp_project's empty SEED graph won't satisfy the contract.
-        monkeypatch.setattr(seed_val_mod, "validate_seed_output", lambda _g: [])
         stage = GrowStage(project_path=tmp_project)
         result_dict, llm_calls, tokens = await stage.execute(model=mock_model, user_prompt="")
         assert llm_calls == 0

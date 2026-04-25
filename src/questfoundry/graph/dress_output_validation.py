@@ -11,6 +11,12 @@ Implements the DRESS §Stage Output Contract checks (from
 5. Every Entity has ≥1 CodexEntry with ``HasEntry`` edge.
 6. CodexEntry rank 1 is always visible (``visible_when == []``).
 
+Output-4 (brief field completeness + diegetic captions) is enforced
+inline during Phase 1 by ``apply_dress_brief()`` validation against
+the Pydantic ``IllustrationBrief`` model — re-checking it here would
+duplicate the per-brief checks that already raised at creation time.
+The numbering gap above is intentional, not an oversight.
+
 DRESS may be skipped entirely (Output-10), so an empty graph (no
 art_direction node) is treated as a *skipped* DRESS, not a contract
 violation. The validator returns no errors for skipped DRESS.
