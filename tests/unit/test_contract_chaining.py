@@ -44,7 +44,7 @@ class TestValidateFillOutput:
                 "type": "voice",
                 "raw_id": "voice",
                 # tense omitted
-                "pov": "third_limited",
+                "pov": "third_person_limited",
                 "voice_register": "literary",
                 "sentence_rhythm": "varied",
                 "tone_words": ["wry"],
@@ -221,7 +221,7 @@ def _add_minimal_voice(g: Graph) -> None:
         {
             "type": "voice",
             "raw_id": "voice",
-            "pov": "third_limited",
+            "pov": "third_person_limited",
             "tense": "past",
             "voice_register": "literary",
             "sentence_rhythm": "varied",

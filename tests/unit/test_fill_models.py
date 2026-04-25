@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 import pytest
 from pydantic import ValidationError
 
@@ -29,26 +31,26 @@ from questfoundry.models.pipeline import PhaseResult
 class TestVoiceDocument:
     def test_minimal_creation(self) -> None:
         doc = VoiceDocument(
-            pov="third_limited",
-            pov_character="",  # Required but can be empty for omniscient
+            pov="third_person_limited",
+            pov_character="kay",  # Required for first_person and third_person_limited per R-1.3
             tense="past",
             voice_register="literary",
             sentence_rhythm="varied",
             tone_words=["atmospheric"],
         )
-        assert doc.pov == "third_limited"
+        assert doc.pov == "third_person_limited"
         assert doc.tense == "past"
         assert doc.voice_register == "literary"
         assert doc.sentence_rhythm == "varied"
         assert doc.tone_words == ["atmospheric"]
-        assert doc.pov_character == ""
+        assert doc.pov_character == "kay"
         assert doc.avoid_words == []
         assert doc.avoid_patterns == []
 
     def test_pov_character_defaults_to_empty(self) -> None:
         """pov_character defaults to empty string when not provided."""
         doc = VoiceDocument(
-            pov="third_omniscient",
+            pov="third_person_omniscient",
             tense="past",
             voice_register="literary",
             sentence_rhythm="varied",
@@ -60,7 +62,7 @@ class TestVoiceDocument:
 
     def test_full_creation(self) -> None:
         doc = VoiceDocument(
-            pov="first",
+            pov="first_person",
             pov_character="kay",
             tense="present",
             voice_register="conversational",
@@ -73,16 +75,107 @@ class TestVoiceDocument:
         assert len(doc.avoid_words) == 2
 
     def test_all_pov_values(self) -> None:
-        for pov in ("first", "second", "third_limited", "third_omniscient"):
+        # Per fill.md R-1.3: pov_character required for first_person and third_person_limited;
+        # empty for second_person and third_person_omniscient.
+        cases: list[
+            tuple[
+                Literal[
+                    "first_person",
+                    "second_person",
+                    "third_person_limited",
+                    "third_person_omniscient",
+                ],
+                str,
+            ]
+        ] = [
+            ("first_person", "kay"),
+            ("second_person", ""),
+            ("third_person_limited", "kay"),
+            ("third_person_omniscient", ""),
+        ]
+        for pov, pov_character in cases:
             doc = VoiceDocument(
                 pov=pov,
-                pov_character="",  # Required
+                pov_character=pov_character,
                 tense="past",
                 voice_register="literary",
                 sentence_rhythm="varied",
                 tone_words=["dark"],
             )
             assert doc.pov == pov
+
+    def test_first_person_requires_pov_character(self) -> None:
+        # Per fill.md R-1.3: pov_character is required for first_person.
+        with pytest.raises(ValidationError, match="pov_character is required"):
+            VoiceDocument(
+                pov="first_person",
+                pov_character="",
+                tense="past",
+                voice_register="literary",
+                sentence_rhythm="varied",
+                tone_words=["dark"],
+            )
+
+    def test_third_person_limited_requires_pov_character(self) -> None:
+        # Per fill.md R-1.3: pov_character is required for third_person_limited.
+        with pytest.raises(ValidationError, match="pov_character is required"):
+            VoiceDocument(
+                pov="third_person_limited",
+                pov_character="",
+                tense="past",
+                voice_register="literary",
+                sentence_rhythm="varied",
+                tone_words=["dark"],
+            )
+
+    def test_whitespace_pov_character_rejected_for_attached_pov(self) -> None:
+        # A whitespace-only pov_character is treated as empty per R-1.3.
+        with pytest.raises(ValidationError, match="pov_character is required"):
+            VoiceDocument(
+                pov="first_person",
+                pov_character="   ",
+                tense="past",
+                voice_register="literary",
+                sentence_rhythm="varied",
+                tone_words=["dark"],
+            )
+
+    def test_pov_character_padding_is_stripped(self) -> None:
+        # Whitespace around a real ID is stripped on construction so downstream
+        # consumers never see "  kay  " in the stored value.
+        doc = VoiceDocument(
+            pov="first_person",
+            pov_character="  kay  ",
+            tense="past",
+            voice_register="literary",
+            sentence_rhythm="varied",
+            tone_words=["dark"],
+        )
+        assert doc.pov_character == "kay"
+
+    def test_second_person_rejects_non_empty_pov_character(self) -> None:
+        # Per fill.md R-1.3: pov_character must be empty for second_person.
+        with pytest.raises(ValidationError, match="pov_character must be empty"):
+            VoiceDocument(
+                pov="second_person",
+                pov_character="kay",
+                tense="past",
+                voice_register="literary",
+                sentence_rhythm="varied",
+                tone_words=["dark"],
+            )
+
+    def test_third_person_omniscient_rejects_non_empty_pov_character(self) -> None:
+        # Per fill.md R-1.3: pov_character must be empty for third_person_omniscient.
+        with pytest.raises(ValidationError, match="pov_character must be empty"):
+            VoiceDocument(
+                pov="third_person_omniscient",
+                pov_character="kay",
+                tense="past",
+                voice_register="literary",
+                sentence_rhythm="varied",
+                tone_words=["dark"],
+            )
 
     def test_invalid_pov_rejected(self) -> None:
         with pytest.raises(ValidationError):
@@ -98,8 +191,8 @@ class TestVoiceDocument:
     def test_invalid_tense_rejected(self) -> None:
         with pytest.raises(ValidationError):
             VoiceDocument(
-                pov="first",
-                pov_character="",
+                pov="first_person",
+                pov_character="kay",
                 tense="future",  # type: ignore[arg-type]
                 voice_register="literary",
                 sentence_rhythm="varied",
@@ -109,8 +202,8 @@ class TestVoiceDocument:
     def test_empty_tone_words_rejected(self) -> None:
         with pytest.raises(ValidationError):
             VoiceDocument(
-                pov="first",
-                pov_character="",
+                pov="first_person",
+                pov_character="kay",
                 tense="past",
                 voice_register="literary",
                 sentence_rhythm="varied",
@@ -120,8 +213,8 @@ class TestVoiceDocument:
     def test_all_register_values(self) -> None:
         for reg in ("formal", "conversational", "literary", "sparse"):
             doc = VoiceDocument(
-                pov="first",
-                pov_character="",
+                pov="first_person",
+                pov_character="kay",
                 tense="past",
                 voice_register=reg,
                 sentence_rhythm="varied",
@@ -132,8 +225,8 @@ class TestVoiceDocument:
     def test_all_rhythm_values(self) -> None:
         for rhythm in ("varied", "punchy", "flowing"):
             doc = VoiceDocument(
-                pov="first",
-                pov_character="",
+                pov="first_person",
+                pov_character="kay",
                 tense="past",
                 voice_register="literary",
                 sentence_rhythm=rhythm,
@@ -268,21 +361,21 @@ class TestReviewFlag:
 class TestFillPhase0Output:
     def test_wraps_voice_document(self) -> None:
         voice = VoiceDocument(
-            pov="third_limited",
-            pov_character="",
+            pov="third_person_limited",
+            pov_character="kay",
             tense="past",
             voice_register="literary",
             sentence_rhythm="varied",
             tone_words=["atmospheric"],
         )
         output = FillPhase0Output(voice=voice, story_title="The Hollow Crown")
-        assert output.voice.pov == "third_limited"
+        assert output.voice.pov == "third_person_limited"
         assert output.story_title == "The Hollow Crown"
 
     def test_empty_title_rejected(self) -> None:
         voice = VoiceDocument(
-            pov="first",
-            pov_character="",
+            pov="first_person",
+            pov_character="kay",
             tense="past",
             voice_register="sparse",
             sentence_rhythm="punchy",
@@ -293,8 +386,8 @@ class TestFillPhase0Output:
 
     def test_whitespace_only_title_rejected(self) -> None:
         voice = VoiceDocument(
-            pov="first",
-            pov_character="",
+            pov="first_person",
+            pov_character="kay",
             tense="past",
             voice_register="sparse",
             sentence_rhythm="punchy",

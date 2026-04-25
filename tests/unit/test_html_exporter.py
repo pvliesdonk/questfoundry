@@ -330,7 +330,7 @@ class TestHtmlExporter:
 
 def _voice(register: str = "literary", rhythm: str = "flowing") -> dict[str, object]:
     return {
-        "pov": "third_limited",
+        "pov": "third_person_limited",
         "tense": "past",
         "voice_register": register,
         "sentence_rhythm": rhythm,

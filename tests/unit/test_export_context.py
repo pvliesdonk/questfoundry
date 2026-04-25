@@ -533,7 +533,7 @@ class TestVoiceExtraction:
                 "type": "voice",
                 "raw_id": "voice",
                 "story_title": "The Test",
-                "pov": "third_limited",
+                "pov": "third_person_limited",
                 "tense": "past",
                 "voice_register": "literary",
                 "sentence_rhythm": "flowing",

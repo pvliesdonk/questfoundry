@@ -36,7 +36,7 @@ def _create_project_with_graph(project_path: Path, *, with_prose: bool = True) -
             "raw_id": "voice",
             # No story_title — keeps the test_project_name_from_config
             # path exercising the config-name fallback in ShipStage.execute.
-            "pov": "third_limited",
+            "pov": "third_person_limited",
             "tense": "past",
             "voice_register": "literary",
             "sentence_rhythm": "varied",
@@ -289,7 +289,7 @@ class TestShipStage:
             {
                 "type": "voice",
                 "raw_id": "voice",
-                "pov": "third_limited",
+                "pov": "third_person_limited",
                 "tense": "past",
                 "voice_register": "literary",
                 "sentence_rhythm": "varied",

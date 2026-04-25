@@ -100,7 +100,7 @@ def _mock_implemented_phases(stage: FillStage) -> None:
             {
                 "type": "voice",
                 "raw_id": "voice",
-                "pov": "third_limited",
+                "pov": "third_person_limited",
                 "tense": "past",
                 "voice_register": "literary",
                 "sentence_rhythm": "varied",
@@ -216,7 +216,7 @@ class TestFillStageExecute:
         g.set_last_stage(last_stage)
         g.create_node(
             "voice::voice",
-            {"type": "voice", "raw_id": "voice", "pov": "third_limited", "tense": "past"},
+            {"type": "voice", "raw_id": "voice", "pov": "third_person_limited", "tense": "past"},
         )
         g.create_node("arc::spine", {"type": "arc", "raw_id": "spine", "arc_type": "spine"})
         g.save(tmp_path / "graph.db")
@@ -247,7 +247,7 @@ class TestFillStageExecute:
         with g.mutation_context(stage="fill", phase="voice"):
             g.create_node(
                 "voice::voice",
-                {"type": "voice", "raw_id": "voice", "pov": "first", "tense": "present"},
+                {"type": "voice", "raw_id": "voice", "pov": "first_person", "tense": "present"},
             )
         g.set_last_stage("fill")
         g.save(tmp_path / "graph.db")
@@ -430,7 +430,8 @@ def _make_voice_output() -> FillPhase0Output:
     """Create a valid FillPhase0Output for mocking."""
     return FillPhase0Output(
         voice=VoiceDocument(
-            pov="third_limited",
+            pov="third_person_limited",
+            pov_character="kay",
             tense="past",
             voice_register="literary",
             sentence_rhythm="varied",
@@ -476,7 +477,7 @@ class TestPhase0Voice:
         # Voice node should be created in graph with story_title
         voice_node = graph.get_node("voice::voice")
         assert voice_node is not None
-        assert voice_node["pov"] == "third_limited"
+        assert voice_node["pov"] == "third_person_limited"
         assert voice_node["tense"] == "past"
         assert voice_node["voice_register"] == "literary"
         assert voice_node["story_title"] == "The Hollow Crown"
@@ -503,7 +504,7 @@ class TestPhase0Voice:
                 stage,
                 "_phase_0a_voice_research",
                 new_callable=AsyncMock,
-                return_value=("Use third_limited past for fantasy.", 2, 300),
+                return_value=("Use third_person_limited past for fantasy.", 2, 300),
             ),
             patch.object(stage, "_fill_llm_call", mock_llm_call),
         ):
@@ -516,7 +517,7 @@ class TestPhase0Voice:
         assert "grow_summary" in context
         assert "scene_types_summary" in context
         assert "research_notes" in context
-        assert "Use third_limited past for fantasy." in context["research_notes"]
+        assert "Use third_person_limited past for fantasy." in context["research_notes"]
 
     @pytest.mark.asyncio
     async def test_includes_research_metrics(self) -> None:
@@ -629,12 +630,12 @@ class TestPhase0aVoiceResearch:
             patch(
                 "questfoundry.agents.summarize_discussion",
                 new_callable=AsyncMock,
-                return_value=("Use third_limited past for dark fantasy.", 200),
+                return_value=("Use third_person_limited past for dark fantasy.", 200),
             ),
         ):
             brief, calls, tokens = await stage._phase_0a_voice_research(graph, MagicMock())
 
-        assert brief == "Use third_limited past for dark fantasy."
+        assert brief == "Use third_person_limited past for dark fantasy."
         assert calls == 4  # 3 discuss + 1 summarize
         assert tokens == 800  # 600 + 200
 
@@ -663,7 +664,7 @@ def _make_prose_graph() -> Graph:
         {
             "type": "voice",
             "raw_id": "voice",
-            "pov": "third_limited",
+            "pov": "third_person_limited",
             "tense": "past",
             "voice_register": "literary",
             # R-1.7 stamp — Phase 1a's entry assertion requires this. Tests
@@ -1432,7 +1433,7 @@ class TestTwoStepFill:
             {
                 "type": "voice",
                 "raw_id": "voice",
-                "pov": "third_limited",
+                "pov": "third_person_limited",
                 "tense": "past",
                 "voice_register": "literary",
             },
@@ -1817,7 +1818,7 @@ class TestVoiceApprovalStamp:
             {
                 "type": "voice",
                 "raw_id": "voice",
-                "pov": "third_limited",
+                "pov": "third_person_limited",
                 "tense": "past",
             },
         )
