@@ -130,6 +130,76 @@ _STRUCTURAL_ERROR_TYPES = frozenset(
 )
 
 
+def _get_literal_values_at_path(
+    model_cls: type[BaseModel], field_path: str
+) -> tuple[Any, ...] | None:
+    """Walk a Pydantic model by dotted path and return the Literal values for that field.
+
+    Used by ``_build_error_feedback`` to echo allowed enum values on retry so
+    a small model that emits an out-of-set value (e.g. ``pov: "third person
+    limited"`` for the ``Literal["first_person", "second_person", ...]``
+    field) sees the valid set in the next attempt.
+
+    Args:
+        model_cls: The top-level Pydantic schema (e.g. FillPhase0Output).
+        field_path: Dotted path from `_classify_validation_error` (e.g.
+            ``"voice.pov"``).
+
+    Returns:
+        Tuple of allowed literal values if the field's annotation is a
+        ``Literal[...]`` (or a union containing one), else ``None``.
+    """
+    import types
+    import typing
+
+    # Strip list-index segments produced by Pydantic for list-typed errors
+    # (e.g. "passages.0.entity_updates.1.entity_id" -> "passages.entity_updates.entity_id"
+    # for schema traversal). Numeric segments map to "the item type", so we
+    # skip them and continue with the next named field.
+    parts = [p for p in field_path.split(".") if p and not p.isdigit()]
+
+    current_cls: type[BaseModel] | None = model_cls
+    annotation: Any = None
+    for i, part in enumerate(parts):
+        if current_cls is None:
+            return None
+        field_info = current_cls.model_fields.get(part)
+        if field_info is None:
+            return None
+        annotation = field_info.annotation
+
+        # Step into a nested BaseModel for the next segment, or into the item
+        # type of a list[BaseModel].
+        if i < len(parts) - 1:
+            inner: type[BaseModel] | None = None
+            args = getattr(annotation, "__args__", ())
+            if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+                inner = annotation
+            else:
+                for arg in args:
+                    if isinstance(arg, type) and issubclass(arg, BaseModel):
+                        inner = arg
+                        break
+            current_cls = inner
+
+    if annotation is None:
+        return None
+
+    # Direct Literal[...]
+    if typing.get_origin(annotation) is typing.Literal:
+        return typing.get_args(annotation)
+    # Optional[Literal[...]] / Literal[...] | None
+    candidates: tuple[Any, ...] = ()
+    if hasattr(annotation, "__origin__"):
+        candidates = getattr(annotation, "__args__", ())
+    elif isinstance(annotation, types.UnionType):
+        candidates = annotation.__args__
+    for arg in candidates:
+        if typing.get_origin(arg) is typing.Literal:
+            return typing.get_args(arg)
+    return None
+
+
 def _classify_validation_error(
     error: Exception,
 ) -> tuple[str, list[str], list[str]]:
@@ -644,7 +714,9 @@ class FillStage:
                 )
 
                 if attempt < max_retries - 1:
-                    error_msg = self._build_error_feedback(e, output_schema, failure_type)
+                    error_msg = self._build_error_feedback(
+                        e, output_schema, failure_type, invalid_fields=invalid
+                    )
                     messages = list(base_messages)
                     messages.append(HumanMessage(content=error_msg))
 
@@ -658,6 +730,7 @@ class FillStage:
         error: Exception,
         output_schema: type[BaseModel],
         failure_type: str = "unknown",
+        invalid_fields: list[str] | None = None,
     ) -> str:
         """Build structured error feedback for LLM retry.
 
@@ -666,10 +739,19 @@ class FillStage:
         and fix only the structural issue. This prevents the model from
         rewriting good prose into something safer/shorter during retries.
 
+        For content failures on Literal fields (e.g.,
+        ``VoiceDocument.pov``), the feedback also echoes the allowed values
+        per CLAUDE.md §repair-loop quality. Without this, a 4B model that
+        outputs ``pov: "third person limited"`` sees only "value is not a
+        valid enumeration member" with no list of what IS valid — repair-loop
+        blindness, the murder1 failure shape generalised to FILL.
+
         Args:
             error: The validation error.
             output_schema: The expected schema.
             failure_type: Classification from _classify_validation_error.
+            invalid_fields: Dotted field paths flagged as content failures by
+                _classify_validation_error. Used to look up Literal values.
 
         Returns:
             Formatted error feedback string.
@@ -687,6 +769,19 @@ class FillStage:
             )
         else:
             parts.append("\nPlease fix the errors and try again.")
+
+        # Per CLAUDE.md §6 / §repair-loop quality: echo allowed Literal values
+        # for any invalid Literal-typed field so the model can self-correct
+        # instead of guessing again.
+        if invalid_fields:
+            literal_hints: list[str] = []
+            for field_path in invalid_fields:
+                values = _get_literal_values_at_path(output_schema, field_path)
+                if values is not None:
+                    formatted = ", ".join(repr(v) for v in values)
+                    literal_hints.append(f"Allowed values for `{field_path}`: {formatted}")
+            if literal_hints:
+                parts.append("\n" + "\n".join(literal_hints))
 
         return "\n".join(parts)
 

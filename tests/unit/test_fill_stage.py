@@ -7,6 +7,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from pydantic import ValidationError
 
 from questfoundry.graph.graph import Graph
 from questfoundry.models.fill import (
@@ -1321,6 +1322,113 @@ class TestBuildErrorFeedback:
         feedback = FillStage._build_error_feedback(error, FillPhase1Output, "content")
         assert "fix the errors" in feedback.lower()
         assert "keep" not in feedback.lower() or "prose" not in feedback.lower()
+
+    def test_literal_field_failure_lists_allowed_pov_values(self) -> None:
+        """A `voice.pov` content failure must echo the four valid Literal values
+        so a 4B model can self-correct on retry. Closes the FILL repair-gap
+        finding from the 2026-04-25 prompt-vs-spec audit."""
+        from questfoundry.models.fill import FillPhase0Output
+
+        try:
+            FillPhase0Output.model_validate(
+                {
+                    "voice": {
+                        "pov": "third person limited",  # bad — has spaces
+                        "pov_character": "kay",
+                        "tense": "past",
+                        "voice_register": "literary",
+                        "sentence_rhythm": "varied",
+                        "tone_words": ["dark"],
+                    },
+                    "story_title": "The Tower",
+                }
+            )
+            raise AssertionError("expected ValidationError")
+        except ValidationError as exc:
+            feedback = FillStage._build_error_feedback(
+                exc, FillPhase0Output, "content", invalid_fields=["voice.pov"]
+            )
+
+        assert "Allowed values for `voice.pov`:" in feedback
+        for v in (
+            "first_person",
+            "second_person",
+            "third_person_limited",
+            "third_person_omniscient",
+        ):
+            assert f"'{v}'" in feedback
+
+    def test_literal_field_failure_lists_allowed_voice_register_values(self) -> None:
+        from questfoundry.models.fill import FillPhase0Output
+
+        try:
+            FillPhase0Output.model_validate(
+                {
+                    "voice": {
+                        "pov": "third_person_omniscient",
+                        "pov_character": "",
+                        "tense": "past",
+                        "voice_register": "terse",  # bad
+                        "sentence_rhythm": "varied",
+                        "tone_words": ["dark"],
+                    },
+                    "story_title": "T",
+                }
+            )
+            raise AssertionError("expected ValidationError")
+        except ValidationError as exc:
+            feedback = FillStage._build_error_feedback(
+                exc,
+                FillPhase0Output,
+                "content",
+                invalid_fields=["voice.voice_register"],
+            )
+
+        assert "Allowed values for `voice.voice_register`:" in feedback
+        for v in ("formal", "conversational", "literary", "sparse"):
+            assert f"'{v}'" in feedback
+
+    def test_structural_failure_does_not_invoke_literal_lookup(self) -> None:
+        """Missing-field structural failures should not trigger Literal echoing —
+        the model needs to add the field, not pick a value for it."""
+        error = ValueError("missing field")
+        feedback = FillStage._build_error_feedback(
+            error,
+            FillPhase1Output,
+            "structural",
+            invalid_fields=None,
+        )
+        assert "Allowed values for" not in feedback
+
+    def test_non_literal_content_failure_omits_literal_hint(self) -> None:
+        """A `min_length=1` violation on a non-Literal field must not crash and
+        must not append a spurious Allowed-values line."""
+        from questfoundry.models.fill import FillPhase0Output
+
+        try:
+            FillPhase0Output.model_validate(
+                {
+                    "voice": {
+                        "pov": "third_person_omniscient",
+                        "pov_character": "",
+                        "tense": "past",
+                        "voice_register": "literary",
+                        "sentence_rhythm": "varied",
+                        "tone_words": [],  # bad — min_length=1
+                    },
+                    "story_title": "T",
+                }
+            )
+            raise AssertionError("expected ValidationError")
+        except ValidationError as exc:
+            feedback = FillStage._build_error_feedback(
+                exc,
+                FillPhase0Output,
+                "content",
+                invalid_fields=["voice.tone_words"],
+            )
+
+        assert "Allowed values for" not in feedback
 
 
 class TestTwoStepFill:
