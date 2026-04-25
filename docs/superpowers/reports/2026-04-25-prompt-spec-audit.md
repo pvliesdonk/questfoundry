@@ -40,7 +40,7 @@ sections land.)
 | SEED | 5 | 8 | 16 | 5 | 1 | drift |
 | GROW | 8 | 3 | 8 | 5 | 0 | drift |
 | POLISH | 12 | 4 | 22 | 7 | 1 | drift |
-| FILL | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ | pending |
+| FILL | 8 | 3 | 9 | 5 | 2 | drift |
 | DRESS | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ | pending |
 | SHIP | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ | pending |
 
@@ -1196,7 +1196,231 @@ POLISH is the largest prompt set (12 files covering 9 distinct phases/sub-phases
 
 ## FILL
 
-(Pending — Task 11.)
+### `prompts/templates/fill_phase0_discuss.yaml`
+
+**Verdict:** mixed
+
+**Findings:**
+
+- **[info] [terminology]** — Pipeline stage counter says "5 of 6: DREAM → BRAINSTORM → SEED → GROW → FILL → SHIP"; the pipeline has 8 stages and POLISH (which precedes FILL) is omitted from the chain.
+  - Where: system block, line 10
+  - Spec citation: `CLAUDE.md §Architecture` (six stages listed as DREAM → BRAINSTORM → SEED → GROW → FILL → SHIP, but POLISH and DRESS are authoritative stages per `docs/design/procedures/`); `fill.md §Stage Input Contract` ("Must match POLISH §Stage Output Contract exactly")
+  - Recommended fix: Update to "Stage: FILL (6 of 8: DREAM → BRAINSTORM → SEED → GROW → POLISH → FILL → DRESS → SHIP)"
+
+- **[soft] [schema-skew]** — POV option labels use the short forms `first, second, third_limited, third_omniscient` (matching `VoiceDocument.pov` Pydantic Literal) but the spec uses the long forms `first_person, second_person, third_person_limited, third_person_omniscient` (fill.md R-1.3) — and the downstream `fill_phase0_voice.yaml` also uses the short forms. This creates an inconsistency that will confuse anyone reading spec vs. prompt, and it means the spec violation goes undetected because the Pydantic model itself uses the short forms.
+  - Where: system block, line 51 ("1. **POV**: first, second, third_limited, or third_omniscient?")
+  - Spec citation: `fill.md §R-1.3` (`pov` ∈ {`first_person`, `second_person`, `third_person_limited`, `third_person_omniscient`}); `story-graph-ontology.md §Part 9` ("Voice Document | FILL | No | Prose contract: POV, tense, register, rhythm")
+  - Recommended fix: Either (a) update `VoiceDocument.pov` in `fill.py` to use the canonical long-form Literals matching `dream.py` and fill.md R-1.3, then update both FILL prompts accordingly, **or** (b) update `fill.md` R-1.3 to reflect the short-form values the model actually validates. Per CLAUDE.md §Design Doc Authority, the spec wins — the Pydantic model should be updated. Note: `dream.py` already uses long forms (`first_person`, etc.) which confirms the canonical choice.
+
+- **[info] [sm-fragile]** — The `search_corpus` requirement is stated twice in slightly different ways (lines 59-74 and later in "Craft Corpus Research (REQUIRED)"), which is good sandwich repetition, but the two calls to `search_corpus` lack explicit topic examples tailored to the stage. The corpus search instruction ("at least ONE of these topics") could be strengthened by requiring all three rather than one.
+  - Where: system block, lines 63-75
+  - Spec citation: `fill.md §Implementation Constraints §Small Model Prompt Bias`; `CLAUDE.md §10`
+  - Recommended fix: Minor — change "at least ONE of these topics" to "at least two of these topics" or restructure into a numbered sequence. Low priority.
+
+---
+
+### `prompts/templates/fill_phase0_voice.yaml`
+
+**Verdict:** mixed
+
+**Findings:**
+
+- **[hard] [schema-skew]** — POV Literal values in the schema description (`first, second, third_limited, third_omniscient`) diverge from the authoritative spec (`first_person, second_person, third_person_limited, third_person_omniscient` per `fill.md §R-1.3`). The model currently validates against the Pydantic model's short forms, so this is only `hard` if the Pydantic model is corrected per the spec (which it should be per CLAUDE.md §Design Doc Authority). If the spec value is corrected in the Pydantic model first, this prompt will produce values that fail validation against the updated model.
+  - Where: system block, line 28 (`- **pov**: Point of view. One of: first, second, third_limited, third_omniscient`) and line 77 (`- Match POV/tense to genre conventions (fantasy → third_limited past; horror → second present)`)
+  - Spec citation: `fill.md §R-1.3` (`pov` ∈ {`first_person`, `second_person`, `third_person_limited`, `third_person_omniscient`})
+  - Recommended fix: Once `VoiceDocument.pov` is corrected in the model, update line 28 to:
+    ```
+    - **pov**: Point of view. One of: first_person, second_person, third_person_limited, third_person_omniscient
+    ```
+    And update line 77's examples accordingly: `fantasy → third_person_limited past; horror → second_person present`.
+
+- **[soft] [spec-gap]** — `pov_character` description says "required for first/third_limited, empty for omniscient/second." The spec (fill.md R-1.3) says "When `pov` is limited, `pov_character` names the POV entity" — which implies first-person also needs it (the POV character IS the first-person narrator). The description is ambiguous: does "first" (first-person) require it or not?
+  - Where: system block, line 29
+  - Spec citation: `fill.md §R-1.3`
+  - Recommended fix: Update the spec to be explicit: "When `pov` is `first_person` or `third_person_limited`, `pov_character` names the POV character." Then update the prompt: "required for first_person and third_person_limited; empty string for second_person and third_person_omniscient."
+
+- **[soft] [repair-gap]** — The repair loop (`_build_error_feedback`) that fires on `VoiceDocument` validation failure sends a generic "validation error" message plus the expected field paths, but does NOT echo the valid enum values for `pov` or `voice_register` or `sentence_rhythm`. A 4B model that outputs `pov: "third person limited"` or `voice_register: "terse"` will see "voice.pov: value is not a valid enumeration member" with no list of what IS valid.
+  - Where: `src/questfoundry/pipeline/stages/fill.py` lines 678–689 (`_build_error_feedback`)
+  - Spec citation: `CLAUDE.md §Repair-loop quality` ("repair feedback must be self-contained"); role file §Repair-loop blindness
+  - Recommended fix: In `_build_error_feedback`, when `failure_type == "content"` and the field is an enum, include the allowed values. Example for a content retry message targeting `pov`:
+    ```
+    Field `voice.pov` has an invalid value.
+    Valid values are: first_person, second_person, third_person_limited, third_person_omniscient
+    ```
+    Either enhance `_build_error_feedback` generically using Pydantic's JSON schema for Literal fields, or add a post-validation check that echoes allowed values for enum violations.
+
+- **[info] [schema-skew]** — The worked example in `fill.md` line 451 shows `register 'atmospheric-terse'`, which is not a valid `voice_register` Literal (`formal | conversational | literary | sparse`). This is a spec inconsistency, not a prompt issue — the prompt correctly lists the Pydantic values. Flag for spec cleanup.
+  - Where: `fill.md` Worked Example §Phase 1
+  - Spec citation: `src/questfoundry/models/fill.py` line 44 (`voice_register: Literal["formal", "conversational", "literary", "sparse"]`)
+  - Recommended fix: Update the worked example to use a valid value, e.g. `register: literary`.
+
+---
+
+### `prompts/templates/fill_phase1_expand.yaml`
+
+**Verdict:** clean
+
+**Findings:**
+
+- **[info] [sm-fragile]** — `{craft_constraint_instruction}` is a variable injected at runtime for rule 5, which is good — but the user-message recap at lines 48–52 hard-codes "craft_constraint (copy from the passage details above, or empty string)" without echoing what constraint is active. For a small model, by the time it reads the user turn, the constraint was in rule 5 of the system turn (which may be far back in context).
+  - Where: user block, line 51
+  - Spec citation: `CLAUDE.md §10 §Small Model Prompt Bias`; role file §Required reading §Constraint-to-value mapping loss
+  - Recommended fix: Change the user-turn reminder to: "craft_constraint: use the constraint from Rule 5 above (or empty string if none specified)" — this keeps the instruction forward-pointing without needing to re-echo the full constraint.
+
+---
+
+### `prompts/templates/fill_phase1_extract.yaml`
+
+**Verdict:** clean
+
+**Findings:**
+
+- **[info] [sm-fragile]** — The distinction between universal and path-dependent details is explained in prose ("Only extract UNIVERSAL details — things true regardless of which path the player takes") with one good/bad example pair. A second concrete example contrasting a universal vs path-dependent edge case (e.g., physical injury vs injury on a specific path) would reduce false-positives on path-dependent extraction.
+  - Where: system block, lines 23–26
+  - Spec citation: `fill.md §R-2.12 / R-2.13` (micro-details must be universal; FILL cannot modify overlays); `CLAUDE.md §7 Defensive Prompt Patterns`
+  - Recommended fix: Add one more GOOD/BAD pair:
+    ```
+    GOOD: "walks with a limp" (physical trait, arc-independent)
+    BAD: "lost their weapon in the ambush" (event from a specific path)
+    ```
+
+---
+
+### `prompts/templates/fill_phase1_prose.yaml`
+
+**Verdict:** mixed
+
+**Findings:**
+
+- **[soft] [sm-fragile]** — "## Narrative Function Guidance" lists all five guidance entries (introduce/develop/complicate/confront/resolve) as static text, but the current passage's `narrative_function` is never explicitly injected as a variable. The model must infer which guidance applies from the `{beat_summary}` content. Small models often apply all five entries superficially or default to the first. The narrative function value is computed at runtime (`beat.get("narrative_function", "develop")`) but is not in the context dict passed to the template.
+  - Where: system block, lines 37–48; context dict in `fill.py` lines 1345–1382 (no `narrative_function` key)
+  - Spec citation: `fill.md §R-2.7` ("FILL generates prose per scene-type guidance: `scene` / `sequel` / `micro_beat`") — spec also references narrative function implicitly via ontology; `story-graph-ontology.md §Beat Annotations §Narrative function` ("Consumed by FILL for prose pacing")
+  - Recommended fix: Add `narrative_function` to the context dict and inject it at the point of use:
+    ```yaml
+    ## Narrative Function: {narrative_function}
+    ```
+    Place this immediately after "**Scene Type:** {scene_type}" so both values are co-located. The full Narrative Function Guidance section remains below but the model now knows which entry applies.
+
+- **[soft] [sm-fragile]** — The `{shadow_context}` placeholder is present (line 70), but the phrase "shadows (non-chosen answers)" is used in the spec Implementation Constraints without any setup in the prompt explaining what shadows are. If the context is non-empty, the model may not understand why it's receiving "shadow" content.
+  - Where: system block, line 70 (`{shadow_context}`)
+  - Spec citation: `fill.md §Implementation Constraints §Context Enrichment` ("shadows (non-chosen answers)")
+  - Recommended fix: Add a header line before the placeholder:
+    ```yaml
+    ## Shadows (Non-Chosen Alternatives)
+    {shadow_context}
+    ```
+    And format the shadow context with a brief header explaining "These are the paths the player did NOT take — use as subtext, not explicit content."
+
+- **[info] [schema-skew]** — The output format description (lines 127–133) describes `spoke_labels` items as having `choice_id` and `label` with a note "(may omit 'choice::' prefix)". The `SpokeLabelUpdate` Pydantic model has `max_length=80` for `label` but the prompt says "3-60 characters". The documentation says 3-60 but the model allows up to 80.
+  - Where: system block, lines 131–133
+  - Spec citation: `src/questfoundry/models/fill.py` lines 85–89 (`SpokeLabelUpdate.label max_length=80`, description "3-60 chars")
+  - Recommended fix: The Pydantic model's description already says "3-60 chars (e.g., 'Examine the sketch')" but `max_length=80` is the validator. Either tighten the validator to 60, or update the prompt description to say "3-80 characters (aim for 3-60)". The discrepancy is benign but misleading.
+
+---
+
+### `prompts/templates/fill_phase1_prose_only.yaml`
+
+**Verdict:** mixed
+
+**Findings:**
+
+- **[hard] [spec-gap]** — `{shadow_context}` is completely absent from this template. The spec Implementation Constraints require shadows as mandatory context for prose generation: "shadows (non-chosen answers)" must be included. In two-step mode (`_two_step=True`), `fill_phase1_prose_only` is used and shadows are silently omitted even though they are in the context dict.
+  - Where: entire template — no `{shadow_context}` placeholder
+  - Spec citation: `fill.md §Implementation Constraints §Context Enrichment` ("shadows (non-chosen answers)" listed as mandatory); `fill.md §R-2.4` ("each LLM call receives full entity details — not just names but … active overlay state")
+  - Recommended fix: Add the shadow section (matching `fill_phase1_prose.yaml` line 70):
+    ```yaml
+    ## Shadows (Non-Chosen Alternatives)
+    {shadow_context}
+    ```
+    Place it after `## Path Arcs` and before the output section.
+
+- **[soft] [sm-fragile]** — `fill_phase1_prose_only.yaml` lacks the "Narrative Function Guidance" section entirely (compare to `fill_phase1_prose.yaml` lines 37–48). Since two-step mode is used for prose generation (arguably the more demanding task), the model gets less structural guidance about dramatic purpose.
+  - Where: entire template — compare with `fill_phase1_prose.yaml` lines 37–48
+  - Spec citation: `story-graph-ontology.md §Beat Annotations §Narrative function` ("Consumed by FILL for prose pacing")
+  - Recommended fix: Add the Narrative Function Guidance section (same content as `fill_phase1_prose.yaml`) and inject `{narrative_function}` as a variable pointing to the current passage's function value.
+
+- **[soft] [sm-fragile]** — The user-message CRITICAL REMINDERS section says "Return ONLY the prose text. No JSON, no commentary, no preamble." but does not repeat the voice document constraints. The `fill_phase1_prose.yaml` user turn repeats "Follow the voice document EXACTLY — POV, tense, register, rhythm, tone." The prose-only variant omits this critical reminder, increasing voice drift risk.
+  - Where: user block, lines 92–96
+  - Spec citation: `fill.md §R-2.3` ("Each LLM call receives the Voice Document as mandatory context"); `CLAUDE.md §10 §Small Model Prompt Bias`
+  - Recommended fix: Add to the user CRITICAL REMINDERS:
+    ```
+    - Follow the voice document EXACTLY — POV, tense, register, rhythm, tone
+    - Match scene type guidance for structure and length
+    - Cover beat summary content — do NOT invent major plot points
+    ```
+
+---
+
+### `prompts/templates/fill_phase2_review.yaml`
+
+**Verdict:** mixed
+
+**Findings:**
+
+- **[info] [schema-skew]** — The user-message reminder lists 7 valid `issue_type` values but the `ReviewFlag.issue_type` Pydantic Literal has 10 values (adding `near_duplicate`, `opening_trigram`, `low_vocabulary`). This is intentional — the three additional types are generated by the deterministic quality gate phase, not by this LLM prompt. However, if the deterministic flags ever flow through the LLM review path (e.g., combined batch), the model would not know these types exist.
+  - Where: user block, line 47–48
+  - Spec citation: `src/questfoundry/models/fill.py` lines 178–190 (`ReviewFlag.issue_type` Literal)
+  - Recommended fix: Add a comment in the prompt: "Note: `near_duplicate`, `opening_trigram`, and `low_vocabulary` are assigned by automated checks — do not use them in LLM review output." This prevents accidental usage if the prompt is ever repurposed.
+
+- **[soft] [sm-fragile]** — The review prompt receives `{passages_batch}` and `{voice_document}` but no passage summaries or beat context. A small model reviewing for `summary_deviation` needs the beat summary to compare against the prose — without it, the model can only detect gross deviations (e.g., completely wrong characters). The review is less actionable without the ground truth.
+  - Where: system block, lines 7–9; missing beat summary context
+  - Spec citation: `fill.md §R-3.2` ("Flags name specific issues: … summary deviation"); `fill.md §Implementation Constraints §Context Enrichment`
+  - Recommended fix: The `{passages_batch}` context (built by `format_passages_batch`) should include the beat summary alongside the prose. Check `fill_context.py`'s `format_passages_batch` implementation to verify whether beat summaries are included; if not, add them.
+
+- **[info] [sm-fragile]** — The review criteria table (lines 18–28) has no GOOD/BAD examples for what a flag's `issue` description should look like. A model might write vague flags like "voice issues noted" which violates R-3.2 ("flags name specific issues"). The user prompt asks for a "clear description of the problem" but doesn't model what that looks like.
+  - Where: system block, lines 30–33 ("Guidelines"); user block, line 42
+  - Spec citation: `fill.md §R-3.2`; `CLAUDE.md §7 Defensive Prompt Patterns`
+  - Recommended fix: Add to Guidelines:
+    ```
+    BAD: issue: "voice issues noted"
+    GOOD: issue: "Register shifts to conversational ('gonna', 'yeah') while voice document specifies literary"
+    ```
+
+---
+
+### `prompts/templates/fill_phase3_revision.yaml`
+
+**Verdict:** mixed
+
+**Findings:**
+
+- **[hard] [schema-skew]** — The revision prompt's output format includes `entity_updates` in the `passage` field, but the context dict injected at runtime (fill.py lines 1879–1891) contains no `entity_states` or `valid_entity_ids`. The model must generate entity update IDs from memory of the passage's prose, with no valid entity ID list. This violates CLAUDE.md §6 (Valid ID Injection) and creates phantom ID risk — the escalation handler at fill.py lines 1951–1963 escalates phantom IDs at stage exit, but the phantom ID was preventable.
+  - Where: system block, lines 62–66 (output format shows `entity_updates`); `fill.py` lines 1879–1891 (context dict missing `entity_states`, `valid_entity_ids`)
+  - Spec citation: `CLAUDE.md §6 Valid ID Injection Principle` ("Always provide an explicit Valid IDs section listing every ID the model is allowed to use. Never assume the model will correctly infer IDs from prose."); `fill.md §R-2.12` ("entity updates are additive only"); `fill.md §R-2.15` ("Micro-detail updates must not contradict existing Entity state")
+  - Recommended fix: Add `entity_states` and `valid_entity_ids` to the revision context dict (reuse the same `format_entity_states` call used in the prose context) and add a `{valid_entity_ids}` section in the template:
+    ```yaml
+    ## Valid Entity IDs (use ONLY these for entity_updates)
+    {valid_entity_ids}
+    ```
+
+- **[soft] [sm-fragile]** — The revision prompt has no sandwich repetition for the voice document constraint. The system block starts with "Follow the voice document exactly" (line 4) but the user-message CRITICAL REMINDERS (lines 70–75) say "Follow the voice document EXACTLY" — good, but omit the specific constraint echoing (POV, tense, register) that would anchor a 4B model after reading a long system prompt.
+  - Where: user block, lines 70–75
+  - Spec citation: `CLAUDE.md §10 §Small Model Prompt Bias`; `fill.md §R-4.1` ("Revision uses the same rules as Phase 2 generation plus the issue description")
+  - Recommended fix: Extend the user-message reminder:
+    ```
+    - Follow the voice document EXACTLY — POV: {pov_hint}, tense: {tense_hint}, register: {register_hint}
+    ```
+    Or at minimum: "Follow the voice document EXACTLY — POV, tense, register, rhythm, tone are binding."
+
+- **[soft] [repair-gap]** — The `issues_list` format is `"{i+1}. [{issue_type}] {issue_text}"` (fill.py line 1874). The revision guidance section maps each `issue_type` to a fix strategy, which is excellent. However, the feedback does not echo the specific passage's beat summary, which is needed for `summary_deviation` fixes. The model must infer what the summary said from its context window.
+  - Where: fill.py lines 1873–1877 (issues_list construction); template line 7–10 (`{issues_list}`)
+  - Spec citation: `fill.md §R-4.1` ("Revision uses Phase 2 rules plus the issue description"); `fill.md §Phase 3: Revision §Operations §What` ("extended context: Voice Document, issue description, extended sliding window, and relevant lookahead/continuity passages")
+  - Recommended fix: Add `beat_summary` to the revision context dict and inject it in the template:
+    ```yaml
+    ## Beat Summary (Reference for summary_deviation fixes)
+    {beat_summary}
+    ```
+    This is already known at call time (from the passage node) and makes the revision self-contained for the `summary_deviation` case.
+
+---
+
+### Stage summary: FILL
+
+- Prompts audited: 8
+- Hard findings: 3 (POV schema gap latent in `fill_phase0_voice.yaml` triggered on spec fix; shadow omission in `fill_phase1_prose_only.yaml`; missing Valid Entity IDs in `fill_phase3_revision.yaml`)
+- Soft findings: 9
+- Spec gaps surfaced: 2 (`pov_character` applicability for first-person unclear in spec; `fill.md` worked example uses invalid `voice_register` value)
+- Recommended PR split: Two clusters — (1) POV Literal alignment (`fill.py` model + both phase0 prompts + fill.md spec fix, one PR), (2) context enrichment fixes (`fill_phase1_prose.yaml` + `fill_phase1_prose_only.yaml` shadow + narrative_function, revision context) as a second PR. The Valid Entity IDs fix in `fill_phase3_revision.yaml` is one-line and can go in either cluster.
 
 ---
 
