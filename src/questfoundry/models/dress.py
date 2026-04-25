@@ -79,7 +79,10 @@ class CodexEntry(BaseModel):
     """Player-facing encyclopedia entry for an entity.
 
     Multiple entries per entity enable spoiler graduation: players see
-    more as they unlock codewords. Linked to entity via HasEntry edge.
+    more as they accumulate state flags through gameplay. Linked to
+    entity via HasEntry edge. (SHIP later projects a subset of state
+    flags as player-visible "codewords" for the gamebook export, but
+    DRESS gates internally on state flag IDs — see dress.md R-3.7.)
     """
 
     title: str = Field(
@@ -89,7 +92,7 @@ class CodexEntry(BaseModel):
     rank: int = Field(ge=1, description="Display order (1 = base knowledge, higher = deeper)")
     visible_when: list[str] = Field(
         default_factory=list,
-        description="Codeword IDs that must all be present to unlock this tier",
+        description="State flag IDs that must all be present to unlock this tier (see dress.md R-3.7)",
     )
     content: str = Field(min_length=1, description="Diegetic content — in-world voice, no spoilers")
 
