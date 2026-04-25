@@ -22,7 +22,7 @@ import re
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any, Literal, TypeVar, get_args, get_origin
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, ValidationError
@@ -140,18 +140,20 @@ def _get_literal_values_at_path(
     limited"`` for the ``Literal["first_person", "second_person", ...]``
     field) sees the valid set in the next attempt.
 
+    Only direct ``Literal[...]`` fields are recognised. ``Optional[Literal[...]]``
+    is intentionally not supported — no current FILL field uses that shape and
+    YAGNI per CLAUDE.md (don't add code for hypothetical future requirements).
+    Add a test case alongside any future field that needs the union form.
+
     Args:
         model_cls: The top-level Pydantic schema (e.g. FillPhase0Output).
         field_path: Dotted path from `_classify_validation_error` (e.g.
             ``"voice.pov"``).
 
     Returns:
-        Tuple of allowed literal values if the field's annotation is a
-        ``Literal[...]`` (or a union containing one), else ``None``.
+        Tuple of allowed literal values if the field's annotation is a direct
+        ``Literal[...]``, else ``None``.
     """
-    import types
-    import typing
-
     # Strip list-index segments produced by Pydantic for list-typed errors
     # (e.g. "passages.0.entity_updates.1.entity_id" -> "passages.entity_updates.entity_id"
     # for schema traversal). Numeric segments map to "the item type", so we
@@ -182,22 +184,9 @@ def _get_literal_values_at_path(
                         break
             current_cls = inner
 
-    if annotation is None:
+    if annotation is None or get_origin(annotation) is not Literal:
         return None
-
-    # Direct Literal[...]
-    if typing.get_origin(annotation) is typing.Literal:
-        return typing.get_args(annotation)
-    # Optional[Literal[...]] / Literal[...] | None
-    candidates: tuple[Any, ...] = ()
-    if hasattr(annotation, "__origin__"):
-        candidates = getattr(annotation, "__args__", ())
-    elif isinstance(annotation, types.UnionType):
-        candidates = annotation.__args__
-    for arg in candidates:
-        if typing.get_origin(arg) is typing.Literal:
-            return typing.get_args(arg)
-    return None
+    return get_args(annotation)
 
 
 def _classify_validation_error(
@@ -772,8 +761,11 @@ class FillStage:
 
         # Per CLAUDE.md §6 / §repair-loop quality: echo allowed Literal values
         # for any invalid Literal-typed field so the model can self-correct
-        # instead of guessing again.
-        if invalid_fields:
+        # instead of guessing again. Skipped on structural failures because
+        # those carry the "fix ONLY the structural issue" instruction above —
+        # appending enum hints alongside that would contradict it for the
+        # mixed missing-field-AND-bad-Literal case.
+        if invalid_fields and failure_type != "structural":
             literal_hints: list[str] = []
             for field_path in invalid_fields:
                 values = _get_literal_values_at_path(output_schema, field_path)

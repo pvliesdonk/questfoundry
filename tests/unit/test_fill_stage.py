@@ -1388,17 +1388,92 @@ class TestBuildErrorFeedback:
         for v in ("formal", "conversational", "literary", "sparse"):
             assert f"`{v}`" in feedback
 
-    def test_structural_failure_does_not_invoke_literal_lookup(self) -> None:
-        """Missing-field structural failures should not trigger Literal echoing —
-        the model needs to add the field, not pick a value for it."""
+    def test_literal_field_failure_lists_allowed_sentence_rhythm_values(self) -> None:
+        """`voice.sentence_rhythm` content failure echoes the three valid rhythms."""
+        from questfoundry.models.fill import FillPhase0Output
+
+        try:
+            FillPhase0Output.model_validate(
+                {
+                    "voice": {
+                        "pov": "third_person_omniscient",
+                        "pov_character": "",
+                        "tense": "past",
+                        "voice_register": "literary",
+                        "sentence_rhythm": "syncopated",  # bad
+                        "tone_words": ["dark"],
+                    },
+                    "story_title": "T",
+                }
+            )
+            raise AssertionError("expected ValidationError")
+        except ValidationError as exc:
+            feedback = FillStage._build_error_feedback(
+                exc,
+                FillPhase0Output,
+                "content",
+                invalid_fields=["voice.sentence_rhythm"],
+            )
+
+        assert "Allowed values for `voice.sentence_rhythm`:" in feedback
+        for v in ("varied", "punchy", "flowing"):
+            assert f"`{v}`" in feedback
+
+    def test_structural_failure_skips_literal_hints_even_with_invalid_fields(self) -> None:
+        """When `_classify_validation_error` returns ('structural', missing, invalid)
+        with a non-empty `invalid` list (mixed missing-field-AND-bad-Literal case),
+        `_build_error_feedback` must NOT emit Allowed-values hints — they would
+        contradict the "fix ONLY the structural issue" instruction. Closes the
+        ambiguity flagged in the #1399 review."""
         error = ValueError("missing field")
         feedback = FillStage._build_error_feedback(
             error,
             FillPhase1Output,
             "structural",
+            invalid_fields=["passage.passage_id"],  # non-empty even on structural
+        )
+        assert "Allowed values for" not in feedback
+        assert "fix only" in feedback.lower()
+
+    def test_none_invalid_fields_omits_literal_hints(self) -> None:
+        """Legacy callers that omit `invalid_fields` (the parameter default) get
+        identical pre-PR feedback output — no Allowed-values block appended."""
+        error = ValueError("min_length")
+        feedback = FillStage._build_error_feedback(
+            error,
+            FillPhase1Output,
+            "content",
             invalid_fields=None,
         )
         assert "Allowed values for" not in feedback
+
+    def test_get_literal_values_at_path_strips_list_index_segments(self) -> None:
+        """The helper must skip numeric segments produced by Pydantic for
+        list-typed validation errors (e.g. `passages.0.entity_updates.1.entity_id`).
+        Without index-stripping the schema walk would bail at "0" and miss the
+        nested Literal lookup entirely."""
+        from questfoundry.models.fill import FillPhase0Output
+        from questfoundry.pipeline.stages.fill import _get_literal_values_at_path
+
+        # voice.pov is Literal — accessed via the bare path
+        direct = _get_literal_values_at_path(FillPhase0Output, "voice.pov")
+        assert direct is not None
+        assert "first_person" in direct
+
+        # Same field with an interleaved spurious numeric segment must resolve
+        # identically (no Pydantic field is named "0" / "1" so the strip is
+        # the only thing keeping the walk alive).
+        with_indices = _get_literal_values_at_path(FillPhase0Output, "voice.0.pov")
+        assert with_indices == direct
+
+    def test_get_literal_values_at_path_returns_none_for_missing_field(self) -> None:
+        """A path that doesn't resolve in the schema returns None silently —
+        downstream code already handles the None branch as 'no hint to append'."""
+        from questfoundry.models.fill import FillPhase0Output
+        from questfoundry.pipeline.stages.fill import _get_literal_values_at_path
+
+        assert _get_literal_values_at_path(FillPhase0Output, "voice.no_such_field") is None
+        assert _get_literal_values_at_path(FillPhase0Output, "no_such_root") is None
 
     def test_non_literal_content_failure_omits_literal_hint(self) -> None:
         """A `min_length=1` violation on a non-Literal field must not crash and
