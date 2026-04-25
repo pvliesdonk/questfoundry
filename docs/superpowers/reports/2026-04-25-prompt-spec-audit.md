@@ -39,13 +39,13 @@ hypothesis that prompts were postponed during the doc/code overhaul.
 |---|---|---|---|---|---|---|
 | DREAM | 3 | 9 | 7 | 4 | 0 | drift |
 | BRAINSTORM | 3 | 9 | 9 | 4 | 1 | drift |
-| SEED | 5 | 10 | 16 | 5 | 0 | drift |
+| SEED | 5 | 10 | 16 | 5 | 1 | drift |
 | GROW | 8 | 3 | 8 | 5 | 0 | drift |
 | POLISH | 12 | 5 | 33 | 13 | 1 | drift |
 | FILL | 8 | 3 | 10 | 8 | 2 | drift |
 | DRESS | 8 | 10 | 17 | 5 | 0 | drift |
 | SHIP | 0 | 0 | 0 | 0 | 0 | n/a (deterministic) |
-| **Total** | **47** | **49** | **100** | **44** | **4** | — |
+| **Total** | **47** | **49** | **100** | **44** | **5** | — |
 
 *Counts are mechanically derived from the per-stage finding bullets in this report (one `- **[severity]` line = one finding). Per-stage summary blocks inside each section may show slightly different totals because their authoring subagents grouped related issues into single "headline" findings; the table above is the authoritative tally.*
 
@@ -99,7 +99,7 @@ review and regression cost.
    `{passages_batch}` as flat or unheaded blocks. Every CLAUDE.md §6
    /§7 /§8 review noted that small-model output quality drops sharply
    when the model cannot tell what a context block is for or which
-   constraints apply. Across all stages this accounts for ~40 of the 81
+   constraints apply. Across all stages this accounts for ~40 of the 100
    soft findings.
 
 ### Recommended PR clusters (Phase 3)
