@@ -1281,7 +1281,7 @@ POLISH is the largest prompt set (12 files covering 9 distinct phases/sub-phases
 - Info findings: 7
 - Spec gaps surfaced: 1 (`polish.md §Phase 5f` missing transition guidance sub-task — recommend spec edit before PR)
 - Recommended PR split: PR-A (hard findings: `phase1a` dilemma_impacts removal + phase identity fix + `phase5a` Valid IDs injection); PR-B (Phase 5 context enrichment: schema stubs for `{residue_details}`, `{candidate_details}`, `{variant_details}`, `{beat_summaries}` + repair-loop slots); PR-C (soft/info: GOOD/BAD examples, sandwich repetitions, R-5.12 false-branch constraint, pacing-run R-2.6 clarification after code investigation)
-- Status: DONE
+- Status: drift
 
 ---
 
@@ -1513,6 +1513,7 @@ POLISH is the largest prompt set (12 files covering 9 distinct phases/sub-phases
 - Info findings: 8
 - Spec gaps surfaced: 2 (`pov_character` applicability for first-person unclear in spec; `fill.md` worked example uses invalid `voice_register` value)
 - Recommended PR split: Two clusters — (1) POV Literal alignment (`fill.py` model + both phase0 prompts + fill.md spec fix, one PR), (2) context enrichment fixes (`fill_phase1_prose.yaml` + `fill_phase1_prose_only.yaml` shadow + narrative_function, revision context) as a second PR. The Valid Entity IDs fix in `fill_phase3_revision.yaml` is one-line and can go in either cluster.
+- Status: drift
 
 ---
 
@@ -1776,6 +1777,7 @@ POLISH is the largest prompt set (12 files covering 9 distinct phases/sub-phases
 - Info findings: 5
 - Spec gaps surfaced: 0
 - Recommended PR split: see Cross-cutting issues below — terminology fix (codeword → state_flag) is one narrow PR; repair-feedback enrichment, entity-overlay enrichment, and spoiler-direction additions can each be their own follow-up.
+- Status: drift
 
 **Cross-cutting issues:**
 
