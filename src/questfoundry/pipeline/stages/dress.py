@@ -315,6 +315,18 @@ class DressStage:
                 log.info("rewinding_graph", stage="dress", mutations=n)
             save_snapshot(graph, resolved_path, "dress")
 
+        # FILL Stage Output Contract — validate post-rewind so the
+        # check sees the base FILL state, not stale DRESS mutations
+        # from an earlier run (#1347).
+        from questfoundry.graph.fill_output_validation import validate_fill_output
+
+        entry_errors = validate_fill_output(graph)
+        if entry_errors:
+            raise DressStageError(
+                f"FILL output validation failed ({len(entry_errors)} "
+                f"error(s)):\n" + "\n".join(f"  - {e}" for e in entry_errors)
+            )
+
         phase_results: list[DressPhaseResult] = []
         total_llm_calls = 0
         total_tokens = 0
@@ -358,6 +370,18 @@ class DressStage:
             graph.save(resolved_path / "graph.db")
 
         if completed_normally:
+            # DRESS Stage Output Contract — validate before stamping
+            # last_stage so a malformed artifact is owned by DRESS,
+            # not discovered downstream at SHIP (#1348).
+            from questfoundry.graph.dress_output_validation import validate_dress_output
+
+            exit_errors = validate_dress_output(graph)
+            if exit_errors:
+                raise DressStageError(
+                    f"DRESS output contract violated ({len(exit_errors)} "
+                    f"error(s)):\n" + "\n".join(f"  - {e}" for e in exit_errors)
+                )
+
             graph.set_last_stage("dress")
             graph.save(resolved_path / "graph.db")
 

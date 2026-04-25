@@ -31,6 +31,20 @@ def tmp_project(tmp_path: Path) -> Path:
     return tmp_path
 
 
+@pytest.fixture(autouse=True)
+def _bypass_seed_entry_validator(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Bypass GROW's new SEED-output entry validator for all tests in this
+    file. ``tmp_project`` deliberately ships an empty SEED graph (no
+    paths/beats/entities) so the new contract enforcement at the
+    BRAINSTORM→SEED→GROW seam (#1347) would reject every test. The
+    integration of validate_seed_output is exercised in dedicated
+    tests in ``test_contract_chaining.py`` instead.
+    """
+    from questfoundry.graph import seed_validation as _sv
+
+    monkeypatch.setattr(_sv, "validate_seed_output", lambda _g: [])
+
+
 @pytest.fixture
 def mock_model() -> MagicMock:
     """Create a mock LLM model (unused by GROW but required by protocol)."""
@@ -71,6 +85,9 @@ class TestGrowStageExecute:
     ) -> None:
         import questfoundry.pipeline.stages.grow.stage as grow_stage_mod
 
+        # SEED entry validator already bypassed by the autouse
+        # _bypass_seed_entry_validator fixture; only the GROW exit
+        # validator needs per-test patching here.
         monkeypatch.setattr(grow_stage_mod, "validate_grow_output", lambda _g: [])
         stage = GrowStage(project_path=tmp_project)
         result_dict, llm_calls, tokens = await stage.execute(model=mock_model, user_prompt="")

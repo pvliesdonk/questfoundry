@@ -43,6 +43,21 @@ def test_seed_stage_name() -> None:
 # --- Execute Tests ---
 
 
+@pytest.fixture(autouse=True)
+def _bypass_brainstorm_entry_validator(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Bypass SEED's BRAINSTORM-output entry validator (#1347) for all
+    tests in this file. Test fixtures use thin mock graphs that don't
+    satisfy the full BRAINSTORM contract; the seam-validation
+    integration is exercised in test_contract_chaining.py instead.
+
+    Patches the source module so the deferred local import inside
+    ``SeedStage.execute()`` picks up the bypassed version at call time.
+    """
+    from questfoundry.graph import brainstorm_validation as _bv
+
+    monkeypatch.setattr(_bv, "validate_brainstorm_output", lambda _g: [])
+
+
 @pytest.mark.asyncio
 async def test_execute_requires_project_path() -> None:
     """Execute raises error when project_path is not provided."""
@@ -68,7 +83,13 @@ async def test_execute_requires_brainstorm_in_graph() -> None:
     ):
         MockGraph.load.return_value = mock_graph
 
-        with pytest.raises(SeedStageError, match="SEED requires BRAINSTORM"):
+        # Now caught by the BRAINSTORM-output entry validator (#1347)
+        # rather than the legacy "SEED requires BRAINSTORM" sentinel,
+        # but the upshot is identical: SEED refuses to run on an empty
+        # graph.
+        with pytest.raises(
+            SeedStageError, match=r"BRAINSTORM output validation failed|SEED requires BRAINSTORM"
+        ):
             await stage.execute(
                 model=mock_model,
                 user_prompt="test",
@@ -94,6 +115,8 @@ async def test_execute_calls_all_three_phases() -> None:
 
     with (
         patch("questfoundry.pipeline.stages.seed.Graph") as MockGraph,
+        # BRAINSTORM-output entry validator bypass is provided by the
+        # autouse _bypass_brainstorm_entry_validator fixture above.
         patch("questfoundry.pipeline.stages.seed.run_discuss_phase") as mock_discuss,
         patch("questfoundry.pipeline.stages.seed.summarize_seed_chunked") as mock_summarize,
         patch("questfoundry.pipeline.stages.seed.serialize_seed_as_function") as mock_serialize,
@@ -185,6 +208,8 @@ async def test_execute_emits_phase_progress() -> None:
 
     with (
         patch("questfoundry.pipeline.stages.seed.Graph") as MockGraph,
+        # BRAINSTORM-output entry validator bypass is provided by the
+        # autouse _bypass_brainstorm_entry_validator fixture above.
         patch("questfoundry.pipeline.stages.seed.run_discuss_phase") as mock_discuss,
         patch("questfoundry.pipeline.stages.seed.summarize_seed_chunked") as mock_summarize,
         patch("questfoundry.pipeline.stages.seed.serialize_seed_as_function") as mock_serialize,
@@ -235,6 +260,8 @@ async def test_execute_passes_brainstorm_context_to_discuss() -> None:
 
     with (
         patch("questfoundry.pipeline.stages.seed.Graph") as MockGraph,
+        # BRAINSTORM-output entry validator bypass is provided by the
+        # autouse _bypass_brainstorm_entry_validator fixture above.
         patch("questfoundry.pipeline.stages.seed.run_discuss_phase") as mock_discuss,
         patch("questfoundry.pipeline.stages.seed.summarize_seed_chunked") as mock_summarize,
         patch("questfoundry.pipeline.stages.seed.serialize_seed_as_function") as mock_serialize,
@@ -280,6 +307,8 @@ async def test_execute_uses_iterative_serialization() -> None:
 
     with (
         patch("questfoundry.pipeline.stages.seed.Graph") as MockGraph,
+        # BRAINSTORM-output entry validator bypass is provided by the
+        # autouse _bypass_brainstorm_entry_validator fixture above.
         patch("questfoundry.pipeline.stages.seed.run_discuss_phase") as mock_discuss,
         patch("questfoundry.pipeline.stages.seed.summarize_seed_chunked") as mock_summarize,
         patch("questfoundry.pipeline.stages.seed.serialize_seed_as_function") as mock_serialize,
@@ -320,6 +349,8 @@ async def test_execute_passes_graph_to_chunked_summarize() -> None:
 
     with (
         patch("questfoundry.pipeline.stages.seed.Graph") as MockGraph,
+        # BRAINSTORM-output entry validator bypass is provided by the
+        # autouse _bypass_brainstorm_entry_validator fixture above.
         patch("questfoundry.pipeline.stages.seed.run_discuss_phase") as mock_discuss,
         patch("questfoundry.pipeline.stages.seed.summarize_seed_chunked") as mock_summarize,
         patch("questfoundry.pipeline.stages.seed.serialize_seed_as_function") as mock_serialize,
@@ -362,6 +393,8 @@ async def test_execute_returns_artifact_as_dict() -> None:
 
     with (
         patch("questfoundry.pipeline.stages.seed.Graph") as MockGraph,
+        # BRAINSTORM-output entry validator bypass is provided by the
+        # autouse _bypass_brainstorm_entry_validator fixture above.
         patch("questfoundry.pipeline.stages.seed.run_discuss_phase") as mock_discuss,
         patch("questfoundry.pipeline.stages.seed.summarize_seed_chunked") as mock_summarize,
         patch("questfoundry.pipeline.stages.seed.serialize_seed_as_function") as mock_serialize,
@@ -580,6 +613,8 @@ async def test_outer_loop_retries_on_semantic_errors() -> None:
 
     with (
         patch("questfoundry.pipeline.stages.seed.Graph") as MockGraph,
+        # BRAINSTORM-output entry validator bypass is provided by the
+        # autouse _bypass_brainstorm_entry_validator fixture above.
         patch("questfoundry.pipeline.stages.seed.run_discuss_phase") as mock_discuss,
         patch("questfoundry.pipeline.stages.seed.summarize_seed_chunked") as mock_summarize,
         patch("questfoundry.pipeline.stages.seed.serialize_seed_as_function") as mock_serialize,
@@ -648,6 +683,8 @@ async def test_outer_loop_appends_feedback_to_messages() -> None:
 
     with (
         patch("questfoundry.pipeline.stages.seed.Graph") as MockGraph,
+        # BRAINSTORM-output entry validator bypass is provided by the
+        # autouse _bypass_brainstorm_entry_validator fixture above.
         patch("questfoundry.pipeline.stages.seed.run_discuss_phase") as mock_discuss,
         patch("questfoundry.pipeline.stages.seed.summarize_seed_chunked") as mock_summarize,
         patch("questfoundry.pipeline.stages.seed.serialize_seed_as_function") as mock_serialize,
@@ -711,6 +748,8 @@ async def test_outer_loop_respects_max_retries() -> None:
 
     with (
         patch("questfoundry.pipeline.stages.seed.Graph") as MockGraph,
+        # BRAINSTORM-output entry validator bypass is provided by the
+        # autouse _bypass_brainstorm_entry_validator fixture above.
         patch("questfoundry.pipeline.stages.seed.run_discuss_phase") as mock_discuss,
         patch("questfoundry.pipeline.stages.seed.summarize_seed_chunked") as mock_summarize,
         patch("questfoundry.pipeline.stages.seed.serialize_seed_as_function") as mock_serialize,
@@ -767,6 +806,8 @@ async def test_outer_loop_exhaustion_skips_convergence_analysis() -> None:
 
     with (
         patch("questfoundry.pipeline.stages.seed.Graph") as MockGraph,
+        # BRAINSTORM-output entry validator bypass is provided by the
+        # autouse _bypass_brainstorm_entry_validator fixture above.
         patch("questfoundry.pipeline.stages.seed.run_discuss_phase") as mock_discuss,
         patch("questfoundry.pipeline.stages.seed.summarize_seed_chunked") as mock_summarize,
         patch("questfoundry.pipeline.stages.seed.serialize_seed_as_function") as mock_serialize,
@@ -810,6 +851,8 @@ async def test_outer_loop_success_on_first_try() -> None:
 
     with (
         patch("questfoundry.pipeline.stages.seed.Graph") as MockGraph,
+        # BRAINSTORM-output entry validator bypass is provided by the
+        # autouse _bypass_brainstorm_entry_validator fixture above.
         patch("questfoundry.pipeline.stages.seed.run_discuss_phase") as mock_discuss,
         patch("questfoundry.pipeline.stages.seed.summarize_seed_chunked") as mock_summarize,
         patch("questfoundry.pipeline.stages.seed.serialize_seed_as_function") as mock_serialize,
@@ -859,6 +902,8 @@ async def test_low_arc_count_raises_seed_stage_error() -> None:
 
     with (
         patch("questfoundry.pipeline.stages.seed.Graph") as MockGraph,
+        # BRAINSTORM-output entry validator bypass is provided by the
+        # autouse _bypass_brainstorm_entry_validator fixture above.
         patch("questfoundry.pipeline.stages.seed.run_discuss_phase") as mock_discuss,
         patch("questfoundry.pipeline.stages.seed.summarize_seed_chunked") as mock_summarize,
         patch("questfoundry.pipeline.stages.seed.serialize_seed_as_function") as mock_serialize,
@@ -911,6 +956,8 @@ async def _run_seed_execute(stage: SeedStage, mock_artifact: SeedOutput, **execu
     mock_graph = _build_mock_graph_with_data()
     with (
         patch("questfoundry.pipeline.stages.seed.Graph") as MockGraph,
+        # BRAINSTORM-output entry validator bypass is provided by the
+        # autouse _bypass_brainstorm_entry_validator fixture above.
         patch("questfoundry.pipeline.stages.seed.run_discuss_phase") as mock_discuss,
         patch("questfoundry.pipeline.stages.seed.summarize_seed_chunked") as mock_summarize,
         patch("questfoundry.pipeline.stages.seed.serialize_seed_as_function") as mock_serialize,

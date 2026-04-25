@@ -123,6 +123,25 @@ def mock_phase0_output() -> DressPhase0Output:
     )
 
 
+@pytest.fixture(autouse=True)
+def _bypass_seam_validators(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Bypass DRESS's new FILL-output entry validator (#1347) and the
+    DRESS-output exit validator (#1348) for all tests in this file.
+    Test fixtures use minimal FILL graphs that don't satisfy the full
+    contracts; the seam-validation integration is exercised in
+    test_contract_chaining.py instead.
+    """
+    from questfoundry.graph import (
+        dress_output_validation as _dov,
+    )
+    from questfoundry.graph import (
+        fill_output_validation as _fov,
+    )
+
+    monkeypatch.setattr(_fov, "validate_fill_output", lambda _g: [])
+    monkeypatch.setattr(_dov, "validate_dress_output", lambda _g: [])
+
+
 # ---------------------------------------------------------------------------
 # Stage basics
 # ---------------------------------------------------------------------------

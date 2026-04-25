@@ -308,6 +308,18 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
                 log.info("rewinding_graph", stage="grow", mutations=n)
             save_snapshot(graph, resolved_path, "grow")
 
+        # SEED Stage Output Contract — validate post-rewind so we
+        # check the base SEED state, not stale GROW mutations from a
+        # previous run (#1347).
+        from questfoundry.graph.seed_validation import validate_seed_output
+
+        entry_errors = validate_seed_output(graph)
+        if entry_errors:
+            raise GrowStageError(
+                f"SEED output validation failed ({len(entry_errors)} "
+                f"error(s)):\n" + "\n".join(f"  - {e}" for e in entry_errors)
+            )
+
         phase_results: list[GrowPhaseResult] = []
         total_llm_calls = 0
         total_tokens = 0
