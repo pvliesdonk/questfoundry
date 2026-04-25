@@ -208,6 +208,7 @@ async def serialize_to_artifact(
     semantic_validator: SemanticValidator | None = None,
     semantic_error_class: type[SemanticErrorFormatter] | None = None,
     stage: str = "unknown",
+    extra_repair_hints: list[str] | None = None,
 ) -> tuple[T, int]:
     """Serialize a brief into a structured artifact.
 
@@ -230,6 +231,13 @@ async def serialize_to_artifact(
             for formatting semantic validation errors. Required if semantic_validator
             is provided.
         stage: Pipeline stage name for tracing metadata (e.g., "dream", "seed").
+        extra_repair_hints: Optional caller-supplied reminder strings appended to
+            the validation-failure feedback message on every retry attempt. Used
+            to echo expected values for constraint-to-value mappings the model
+            loses across long context (e.g. SEED shared-beats `also_belongs_to`
+            sibling path id). Per CLAUDE.md §10, the model does not re-read the
+            system prompt on retry — only the new user-message — so the hint
+            must be self-contained.
 
     Returns:
         Tuple of (validated_artifact, tokens_used).
@@ -378,7 +386,7 @@ async def serialize_to_artifact(
 
                 # Add error feedback for retry
                 if attempt < max_retries:
-                    error_feedback = _build_error_feedback(last_errors)
+                    error_feedback = _build_error_feedback(last_errors, extra_repair_hints)
                     messages.append(HumanMessage(content=error_feedback))
 
             except (KeyboardInterrupt, asyncio.CancelledError):
@@ -475,22 +483,31 @@ def _format_validation_errors(error: ValidationError) -> list[str]:
     return errors
 
 
-def _build_error_feedback(errors: list[str]) -> str:
+def _build_error_feedback(errors: list[str], extra_hints: list[str] | None = None) -> str:
     """Build error feedback message for retry.
 
     Args:
         errors: List of validation error messages.
+        extra_hints: Optional caller-supplied hints appended after the
+            generic feedback. Used to echo expected values for
+            constraint-to-value mappings the model loses across long
+            context (e.g. SEED shared-beats `also_belongs_to` value
+            template — see CLAUDE.md §10 small-model repair-loop
+            blindness).
 
     Returns:
         Formatted feedback message for the model.
     """
     error_list = "\n".join(f"  - {e}" for e in errors)
-    return (
+    base = (
         "The output had validation errors:\n"
         f"{error_list}\n\n"
         "Please fix these issues and try again. "
         "Ensure all required fields are present and have valid values."
     )
+    if extra_hints:
+        return base + "\n\n" + "\n\n".join(extra_hints)
+    return base
 
 
 # Required prompt keys for SEED section serialization
@@ -1211,6 +1228,21 @@ async def _serialize_shared_beats_for_dilemma(
         sibling_path_id=sibling_path_id,
     )
 
+    # Per-attempt repair hint — the validator's `also_belongs_to`-missing
+    # error names the field but doesn't echo the value, and small models
+    # (qwen3:4b production default) lose the constraint-to-value mapping
+    # across retry attempts (CLAUDE.md §10 small-model repair-loop
+    # blindness — the model doesn't re-read the system prompt on retry).
+    # The hint is dilemma-specific so it always applies to this call.
+    also_belongs_to_hint = (
+        f"REMINDER for shared pre-commit beats of dilemma `{prefixed_dilemma_id}`:\n"
+        f"  - `path_id` MUST be `{primary_path_id}`\n"
+        f"  - `also_belongs_to` MUST be `{sibling_path_id}`\n"
+        f'Add `also_belongs_to: "{sibling_path_id}"` to EVERY beat in this output. '
+        f"Without it the beat is rejected by the Y-shape guard rail "
+        f"(Story Graph Ontology Part 8)."
+    )
+
     result, tokens = await serialize_to_artifact(
         model=model,
         brief=brief,
@@ -1220,6 +1252,7 @@ async def _serialize_shared_beats_for_dilemma(
         system_prompt=prompt,
         callbacks=callbacks,
         stage="seed",
+        extra_repair_hints=[also_belongs_to_hint],
     )
 
     beats = result.model_dump().get("initial_beats", [])
