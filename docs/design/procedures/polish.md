@@ -460,9 +460,14 @@ R-5e.3. Phase 5e runs after Beat DAG Freeze, so transition beats inserted by GRO
 | Beat without `atmospheric_detail` and no WARNING | Partial coverage detection skipped | R-5e.1 |
 | Transition beat without `atmospheric_detail` | Phase 5e ran before transition-beat creation, OR transition beats excluded from coverage | R-5e.3 |
 
-#### 5f — Path Thematic Annotation
+#### 5f — Path Thematic Annotation and Transition Guidance
 
-**What:** For each path, produce a `path_theme` (10–200 characters) and `path_mood` (2–50 characters) summarizing the path's emotional through-line and tonal palette. One LLM call per path; the LLM consumes the full beat sequence with their summaries, scene types, narrative functions, and exit moods. Absorbed from old GROW 4e per audit Q1: per-path narrative identity is prose-prep, not structural.
+**What:** Phase 5f covers two related per-path concerns that both feed FILL prose generation:
+
+1. **Path thematic annotation.** For each path, produce a `path_theme` (10–200 characters) and `path_mood` (2–50 characters) summarizing the path's emotional through-line and tonal palette. One LLM call per path; the LLM consumes the full beat sequence with their summaries, scene types, narrative functions, and exit moods. Absorbed from old GROW 4e per audit Q1: per-path narrative identity is prose-prep, not structural.
+2. **Transition guidance for collapsed passages.** For each collapsed passage (one passage covering multiple consecutive beats — see Phase 4a), generate a brief transition instruction per beat boundary so the FILL writer knows how to bridge from one beat to the next within a single scene. Driven by `polish_phase5f_transitions.yaml`.
+
+The two sub-tasks share Phase 5f because both produce per-path / per-passage prose-prep metadata that FILL consumes; both are non-structural; and both run after Beat DAG Freeze when the final passage layout is known.
 
 **Rules:**
 
@@ -470,7 +475,11 @@ R-5f.1. Every path with 2+ beats receives `path_theme` and `path_mood`. Paths wi
 
 R-5f.2. `path_theme` is the path's emotional through-line / "controlling idea" (McKee). `path_mood` is its tonal palette. Both are LLM-generated free-form strings; the spec does not enforce specific vocabularies.
 
-R-5f.3. Per-path LLM failures MUST log at WARNING and leave the path's fields unpopulated. FILL and DRESS handle missing fields by falling back to path description / dilemma question text.
+R-5f.3. Per-path LLM failures for thematic annotation MUST log at WARNING and leave the path's fields unpopulated. FILL and DRESS handle missing fields by falling back to path description / dilemma question text.
+
+R-5f.4. Every collapsed passage (>1 beat) receives one transition instruction per beat boundary (N beats → N-1 transitions). Single-beat passages are skipped (no boundary to bridge).
+
+R-5f.5. Transition instructions are LLM-generated free-form prose hints for FILL; the spec does not enforce specific vocabularies. Per-passage failures MUST log at WARNING and leave the passage's transition list empty; FILL falls back to bridging without explicit guidance.
 
 **Violations:**
 
@@ -478,6 +487,8 @@ R-5f.3. Per-path LLM failures MUST log at WARNING and leave the path's fields un
 |---------|-----------|-------------|
 | Multi-beat path without `path_theme` and no WARNING | Per-path failure detection skipped | R-5f.3 |
 | `path_mood` exceeds 50 characters | Schema length not enforced | R-5f.2 |
+| Collapsed 4-beat passage with 4 transition instructions | Off-by-one — should be N-1 | R-5f.4 |
+| Collapsed passage missing transitions and no WARNING | Per-passage failure detection skipped | R-5f.5 |
 
 ### Output Contract
 
@@ -487,6 +498,7 @@ R-5f.3. Per-path LLM failures MUST log at WARNING and leave the path's fields un
 4. All VariantSpecs have summaries.
 5. Every beat has `atmospheric_detail` populated (or a WARNING logged for partial coverage).
 6. Every multi-beat path has `path_theme` and `path_mood` populated (or a WARNING logged for per-path failure).
+7. Every collapsed passage (>1 beat) has N-1 transition instructions populated (or a WARNING logged for per-passage failure).
 
 ---
 
@@ -699,6 +711,8 @@ R-5e.3: Phase 5e runs after Beat DAG Freeze; transition beats receive `atmospher
 R-5f.1: Multi-beat paths receive `path_theme` and `path_mood`; <2-beat paths skipped.
 R-5f.2: `path_theme` (controlling idea) and `path_mood` (tonal palette) are free-form LLM strings.
 R-5f.3: Per-path LLM failure → WARNING + leave unpopulated; consumers fall back.
+R-5f.4: Collapsed passages (>1 beat) receive N-1 transition instructions per beat boundary; single-beat passages skipped.
+R-5f.5: Transition instructions are free-form LLM hints; per-passage failure → WARNING + empty list; FILL falls back to bridging without guidance.
 R-6.1: Phase 6 runs in a single transaction.
 R-6.2: Application order: passages → variants → residue beats → residue passages → choices → false branches.
 R-6.3: Any step failure rolls back.
@@ -825,7 +839,7 @@ User reviews. Approves.
 - False branch decision: `diamond` pattern for the opening stretch.
 - Variant summary for the climax passage: two versions.
 - **5e:** atmospheric_detail populated for all 14 beats (including the gap and micro beats from Phases 1a/2 and the transition beat from GROW 4c).
-- **5f:** path_theme and path_mood populated for both `mentor_trust` paths and the `archive_nature` canonical path.
+- **5f:** path_theme and path_mood populated for both `mentor_trust` paths and the `archive_nature` canonical path. Transition instructions populated for the multi-beat collapsed passages (the maximal-linear-collapse run from Phase 4a produces several 2- and 3-beat passages, each receiving N-1 transitions); single-beat passages are skipped.
 
 ### Phase 6
 

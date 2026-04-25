@@ -34,7 +34,7 @@ BRAINSTORM is the expansive creative stage: it turns an approved Vision into raw
 
 **Rules:**
 
-R-1.1. Discussion aims for abundance. Err toward inclusion — typical targets are 15–25 entities and 4–8 dilemmas for a short story. SEED will cut; do not pre-triage here.
+R-1.1. Discussion aims for abundance. Err toward inclusion — entity and dilemma targets come from the active Size Preset (one of `micro`, `short`, `medium`, `long`), with ranges from 5–10 entities and 2–3 dilemmas (`micro`) up to 20–35 entities and 5–10 dilemmas (`long`); intermediate `short` and `medium` values come from the same preset configuration. SEED will cut; do not pre-triage here.
 
 R-1.2. Discussion writes nothing to the graph. It produces prose notes only. The graph remains empty of BRAINSTORM artifacts through the end of this phase.
 
@@ -46,7 +46,7 @@ R-1.4. The LLM is generative; the human guides. The human redirects unproductive
 
 | Symptom | Root cause | Broken rule |
 |---------|-----------|-------------|
-| Discussion ends with 4 entities and 1 dilemma for a short-scope story | Pre-triaging — self-censored during BRAINSTORM | R-1.1 |
+| Discussion ends below the size preset's `entities_min` / `dilemmas_min` | Pre-triaging — self-censored during BRAINSTORM | R-1.1 |
 | Entity node exists in the graph after Phase 1 | Graph write happened during discussion | R-1.2 |
 | Discussion proposes a slapstick comic-relief character in a gritty noir | Vision's tone not enforced; contradiction accepted | R-1.3 |
 
