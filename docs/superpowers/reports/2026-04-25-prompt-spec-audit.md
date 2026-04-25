@@ -41,7 +41,7 @@ sections land.)
 | GROW | 8 | 3 | 8 | 5 | 0 | drift |
 | POLISH | 12 | 4 | 22 | 7 | 1 | drift |
 | FILL | 8 | 3 | 9 | 5 | 2 | drift |
-| DRESS | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ | pending |
+| DRESS | 8 | 9 | 12 | 4 | 0 | drift |
 | SHIP | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ | pending |
 
 ---
@@ -1426,7 +1426,264 @@ POLISH is the largest prompt set (12 files covering 9 distinct phases/sub-phases
 
 ## DRESS
 
-(Pending — Task 12.)
+### `prompts/templates/dress_discuss.yaml`
+
+**Verdict:** mixed
+
+**Findings:**
+
+- **[soft] [schema-skew]** — `entity_list` injected via code uses Python f-string interpolation of raw entity dict values; small models see `entity_visual::kael_vex: character — ` with the scoped prefix in the template, while `dress_serialize` later expects raw IDs without prefix. The entity category prefix is visible in the list (e.g., `entity::mentor`) but the discuss prompt's `{entity_list}` block is built in the stage code (line 442–445) with the full scoped node ID, while the Guidelines section tells the model to think in terms of appearance but never tells it which ID format to use in output. This creates constraint-to-value mapping ambiguity when the model begins proposing visual IDs.
+  - Where: `dress_discuss.yaml` lines 27–29 (`{entity_list}` variable); `dress.py` lines 442–445 (builder code)
+  - Spec citation: `CLAUDE.md §6` (Valid ID Injection); `CLAUDE.md §9` (never interpolate Python objects)
+  - Recommended fix: In the prompt, add an explicit instruction: "Entity IDs to use: see `{entity_list}` above. Use the **raw ID** (without `entity::` prefix) in all visual references." The builder code should also strip the scope prefix for the entity list shown in discuss, matching what `dress_serialize` accepts.
+
+- **[soft] [sm-fragile]** — The `reference_prompt_fragment` constraint (appearance only, no camera angles/poses/actions) is stated in the Guidelines section but not reinforced at the bottom of the prompt (no sandwich). For a 4B model in a long multi-turn discussion, this rule will be forgotten before the model finalizes its entity profile proposals.
+  - Where: `dress_discuss.yaml` lines 35–36 (first and only occurrence)
+  - Spec citation: `CLAUDE.md §10` (small-model bias); role file §Required reading #1 (constraint-to-value mapping loss)
+  - Recommended fix: Add a closing reminder after `{mode_section}`:
+    ```
+    REMINDER: reference_prompt_fragment describes APPEARANCE ONLY — clothing, colors, build,
+    distinguishing features. No camera angles, poses, or actions.
+    ```
+
+- **[soft] [sm-fragile]** — The `non_interactive_section` instructs the model to "make confident visual decisions" but provides no completeness checklist. A model that produces visual profiles for only 3 of 8 entities will have its discuss output forwarded to summarize with gaps. The summarize prompt does check for missed entities ("flag any that were missed") but the model generates this warning to itself — no gate catches a missing entity before serialization.
+  - Where: `dress_discuss.yaml` lines 88–93 (`non_interactive_section`)
+  - Spec citation: `dress.md §R-1.3` (every entity with `appears` edge gets EntityVisual); `CLAUDE.md §10`
+  - Recommended fix: Add an entity completeness check to the non_interactive_section:
+    ```
+    Before concluding, verify you have proposed a visual profile for EVERY entity in the
+    Entities Requiring Visual Profiles section above. Missing entities will cause validation failure.
+    ```
+
+- **[info] [drift]** — The `research_tools_section` lists `web_search` and `web_fetch` as available tools. These are valid for interactive mode but `get_all_research_tools()` in the stage code conditionally includes them only when the tool list is non-empty. No issue — the section is only injected when tools exist — but the tool names appear in the prompt without a check against what tools are actually wired. If the tool list changes, the prompt's enumeration becomes stale.
+  - Where: `dress_discuss.yaml` lines 73–76 (tool list)
+  - Spec citation: `CLAUDE.md §7` (defensive prompt patterns)
+  - Recommended fix: Consider abstracting tool availability into the injected `{research_tools_section}` variable so the prompt never hardcodes tool names.
+
+---
+
+### `prompts/templates/dress_summarize.yaml`
+
+**Verdict:** mixed
+
+**Findings:**
+
+- **[hard] [repair-gap]** — The `NO DELEGATION` section forbids the model from saying "consider using…" but there is no mention of what to do when an entity's visual profile was not discussed at all. The summarize prompt checks for gaps ("flag any that were missed") but only logs them as "not specified" — it doesn't trigger a re-discuss loop or fail. The stage code (`summarize_discussion()` → `serialize_to_artifact()`) accepts whatever summary is produced; if the summary says "Aldric: not specified" the serialize phase will receive that as an entity visual description. The Pydantic model requires `min_length=1` on `description` and `reference_prompt_fragment`, so serialization will fail, but by then the feedback loop is entirely gone — no repair prompt is generated for summarize phase output failures.
+  - Where: `dress_summarize.yaml` lines 36–37 ("If something wasn't discussed, note it as 'not specified'"); `dress.py` lines 528–560 (serialize path — no retry if summarize emits a gap)
+  - Spec citation: `dress.md §R-1.3` and §R-1.4 (every entity must have EntityVisual with non-empty `reference_prompt_fragment`); `CLAUDE.md §repair-loop quality`
+  - Recommended fix: Change the "not specified" fallback to a hard instruction: "If an entity's visual profile is incomplete, you MUST invent plausible visual details consistent with the story's genre and tone — do NOT write 'not specified'. Every entity requires a complete visual profile." This moves the gap-filling responsibility to summarize rather than silently propagating None into serialize.
+
+- **[soft] [sm-fragile]** — No output structure is prescribed for the per-entity sections. The summarize prompt says "provide a structured summary with a global art direction section and per-entity visual sections" but gives no heading template. The serialize phase uses `{art_brief}` as a free-text input; if the model arranges entity sections inconsistently the serialize phase's ability to extract each entity's data degrades on small models.
+  - Where: `dress_summarize.yaml` lines 39–41 (Output Format section)
+  - Spec citation: `CLAUDE.md §7` (GOOD/BAD examples); `CLAUDE.md §10`
+  - Recommended fix: Add a minimal heading template for the per-entity section:
+    ```
+    ### Entity: {entity_raw_id}
+    - Description: ...
+    - Distinguishing features: ...
+    - Color associations: ...
+    - Reference prompt fragment: ...
+    ```
+
+- **[soft] [sm-fragile]** — The `reference_prompt_fragment` constraint (appearance only, no camera angles) is mentioned only in line 18, and that occurrence is in a prose list item. Small models summarizing a long discussion will default to the last thing that was said about an entity and may include camera/pose language in the fragment if it appeared late in the discuss conversation.
+  - Where: `dress_summarize.yaml` line 18
+  - Spec citation: `CLAUDE.md §10`; `dress.md §R-1.4`
+  - Recommended fix: Repeat the constraint explicitly in the per-entity section template (see above fix), e.g., "Reference prompt fragment: [appearance only — clothing, colors, build, features. NO camera angles, poses, or actions]".
+
+---
+
+### `prompts/templates/dress_serialize.yaml`
+
+**Verdict:** mixed
+
+**Findings:**
+
+- **[hard] [schema-skew]** — `palette` is described as `list of dominant color names` — correct — but the `entity_visuals` schema block says `color_associations: Colors tied to this entity (can be empty)`. The Pydantic model has `color_associations: list[str] = Field(default_factory=list)` — so "can be empty" is correct. However, `distinguishing_features` is described as "List of key visual identifiers" with no `min_length` hint. The Pydantic model has `min_length=1` on that field, so an empty list will fail validation. The prompt provides no GOOD/BAD example to prevent an empty list.
+  - Where: `dress_serialize.yaml` lines 27–29 (entity_visuals schema block)
+  - Spec citation: `src/questfoundry/models/dress.py` line 111–113 (`distinguishing_features: list[str] = Field(min_length=1)`); `CLAUDE.md §7`
+  - Recommended fix: Add a constraint note: "distinguishing_features: List of key visual identifiers — MUST have at least one item. GOOD: `['scar across left cheek', 'silver hair']`. BAD: `[]`."
+
+- **[hard] [repair-gap]** — The repair loop in `_dress_llm_call` (dress.py lines 682–689) emits: `"Your response failed validation:\n{e}\n\nExpected fields: {', '.join(expected)}\nPlease fix the errors and try again."` This is the generic repair message for ALL DRESS templates, including `dress_serialize`. For serialization failures this message echoes the field names but not the valid entity IDs — so a "entity_id not in valid list" Pydantic error will be sent back to the model without repeating the valid IDs, allowing the model to invent a different wrong ID on retry.
+  - Where: `dress.py` lines 682–689 (generic repair message); `dress_serialize.yaml` lines 42 (`CRITICAL: Use ONLY entity IDs from the valid list`)
+  - Spec citation: `CLAUDE.md §6` (Valid ID Injection Principle); `CLAUDE.md §repair-loop quality` (repair feedback must echo the expected value)
+  - Recommended fix: The generic repair message should re-inject the valid entity IDs on retry for `dress_serialize` calls, e.g., append: `"Valid entity IDs: {entity_ids}\n"`. Alternatively, the template's user turn (which already has the CRITICAL reminder) should be preserved in the messages list so it's present when the error feedback is appended.
+
+- **[soft] [schema-skew]** — The prompt describes `entity_id` as "Must be one of the valid entity IDs listed above (raw ID without scope prefix)". The `entity_ids` variable injected into the template (dress.py line 519–521) is built from `edata.get('raw_id', strip_scope_prefix(eid))` — correct. However, `EntityVisualWithId.entity_id` has `min_length=1` but no further validation that the value matches an existing entity — so the Pydantic model accepts any non-empty string. The only cross-reference check is the template's instruction. If the model produces a scope-prefixed ID (e.g., `entity::aldric` instead of `aldric`), Pydantic passes but the graph lookup will fail silently.
+  - Where: `dress_serialize.yaml` line 25; `src/questfoundry/models/dress.py` line 131
+  - Spec citation: `dress.md §R-1.3`; `CLAUDE.md §6`
+  - Recommended fix: Add a defensive GOOD/BAD example: "GOOD: `aldric`, BAD: `entity::aldric`". The mutations layer should also strip prefix before lookup.
+
+- **[info] [schema-skew]** — The prompt's `art_direction` section lists `aspect_ratio` but says `Default ratio (e.g. "16:9")`. The stage code in `_parse_aspect_ratio()` tolerates freeform strings like `"16:9 (story panels), 4:5 (character plates)"` and extracts the first valid ratio. The prompt's example is clean, but a small model that produces `"16:9 for action, 4:3 for portraits"` will have its output silently reduced to `"16:9"`. This is handled gracefully in code; the prompt could add: "Use only one ratio string."
+  - Where: `dress_serialize.yaml` line 22; `dress.py` lines 121–135
+  - Spec citation: `dress.md §R-1.2`
+  - Recommended fix: Add: `aspect_ratio: Exactly one ratio (e.g. "16:9"). Do NOT include multiple ratios or explanatory text.`
+
+---
+
+### `prompts/templates/dress_brief.yaml`
+
+**Verdict:** mixed
+
+**Findings:**
+
+- **[hard] [schema-skew]** — The `category` field lists `"scene", "portrait", "vista", "item_detail"` (4 values) but the Pydantic `IllustrationCategory` Literal includes `"cover"` as a fifth value. The prompt never mentions `"cover"` so models can never produce it intentionally for a cover-image brief.
+  - Where: `dress_brief.yaml` line 43 (`category: One of "scene", "portrait", "vista", "item_detail"`)
+  - Spec citation: `src/questfoundry/models/dress.py` line 22 (`IllustrationCategory = Literal["scene", "portrait", "vista", "item_detail", "cover"]`)
+  - Recommended fix: Update the line to: `category: One of "scene", "portrait", "vista", "item_detail", "cover"`. The same fix applies to `dress_brief_batch.yaml` (identical omission at line 39).
+
+- **[soft] [sm-fragile]** — `{entity_visuals}` is listed in the system template but its content (from `format_all_entity_visuals()`) only includes entities that have an `entity_visual` node — i.e., entities for which Phase 0 created a visual profile. If Phase 0 produced EntityVisuals for 6 of 8 entities, the brief prompt silently omits the other 2. The model has no signal that some entities lack a visual fragment and may generate references to them anyway, producing inconsistent illustration specs.
+  - Where: `dress_brief.yaml` line 12 (`{entity_visuals}`); `dress_context.py` lines 379–408 (`format_all_entity_visuals`)
+  - Spec citation: `dress.md §R-2.6` (LLM receives EntityVisuals for every appearing entity); `CLAUDE.md §8` (context enrichment)
+  - Recommended fix: The context builder should note missing EntityVisuals explicitly: "Note: the following entities appear in passages but have no visual profile yet and should not be depicted with specific features: `aldric`, `archive`." Without this signal the model has no way to adapt.
+
+- **[soft] [repair-gap]** — The repair loop for brief failures (same generic `_dress_llm_call` path) does not distinguish between a `priority` out-of-range failure and a missing `caption`. The error message echoes field names but not the valid range for `priority` (1–3) or the caption format. A 4B model receiving "priority: validation error" on retry has no guidance on what value to use.
+  - Where: `dress.py` lines 682–689 (generic repair message)
+  - Spec citation: `CLAUDE.md §repair-loop quality`
+  - Recommended fix: The repair message for brief templates should echo: "priority must be 1, 2, or 3 — not 0, not 4, not a string. caption must be 10-60 characters in format '[Subject] [action/state]'." This is prompt-level guidance that should appear in the repair feedback.
+
+- **[soft] [sm-fragile]** — The `{priority_context}` variable appears in the system template but is NOT present in `dress_brief_batch.yaml`. The batch version receives per-passage context in the user message via `format_passages_batch_for_briefs()` which calls `describe_priority_context()` per passage and appends it inline. This asymmetry means the single-passage prompt has priority context in the system (shared, reusable) while the batch has it per-passage in the user turn. No immediate bug, but the two prompts diverge in how structural score is communicated, making future changes error-prone.
+  - Where: `dress_brief.yaml` line 18 (`{priority_context}`) vs `dress_brief_batch.yaml` (no `priority_context` variable)
+  - Spec citation: `dress.md §R-2.5` (priority scoring rules)
+  - Recommended fix: This is a design note rather than a bug. Document the intentional difference in a code comment in `_phase_1_briefs`.
+
+- **[info] [drift]** — `{output_language_instruction}` is present but appears at a mid-point in the schema block (line 58), sandwiched between the schema description and the guidelines. For small models this placement may cause the language instruction to be treated as part of the schema. Move it to after all guidelines, immediately before the user turn.
+  - Where: `dress_brief.yaml` line 58
+  - Spec citation: `CLAUDE.md §9`
+  - Recommended fix: Move `{output_language_instruction}` to the last line of the system block, after all Guidelines content.
+
+---
+
+### `prompts/templates/dress_brief_batch.yaml`
+
+**Verdict:** mixed
+
+**Findings:**
+
+- **[hard] [schema-skew]** — Same `category` omission as `dress_brief.yaml`: lists only 4 values, missing `"cover"`.
+  - Where: `dress_brief_batch.yaml` line 39
+  - Spec citation: `src/questfoundry/models/dress.py` line 22
+  - Recommended fix: Add `"cover"` to the category options list.
+
+- **[soft] [sm-fragile]** — The batch version's `{entity_visuals}` section at line 9 receives ALL entity visuals for the batch (not per-passage), so a 5-passage batch covering different locations and characters gets one combined visual reference block. If 3 of 5 passages share characters and 2 do not, the model may incorrectly assign entity references. The prompt gives no instruction to use `entities` field matching.
+  - Where: `dress_brief_batch.yaml` line 9 (`{entity_visuals}`); `dress_context.py` lines 379–408
+  - Spec citation: `dress.md §R-2.6`; `CLAUDE.md §8`
+  - Recommended fix: In the batch user message (the `passages_batch` block), each passage's section already lists "Entities present:" (from `format_passage_for_brief`). Add a note in the system prompt: "Only include entity visual references in a brief's `entities` field if that entity appears in THAT passage's 'Entities present' list."
+
+- **[soft] [sm-fragile]** — The batch user turn repeats the passage count in three places (`{passage_count}` appears twice in `user:` and once as a count in the header). For a small model, this is effective emphasis. However, the user turn has no per-passage ID reminder — it relies on the passage section headers from `format_passages_batch_for_briefs()`. If the passage raw_id contains characters that make it visually ambiguous (e.g., `passage::intro_a` vs `passage::intro_b`), the model may mix up which `passage_id` belongs to which brief.
+  - Where: `dress_brief_batch.yaml` lines 83–89
+  - Spec citation: `dress.md §R-2.1`
+  - Recommended fix: Confirm the brief batch response validator checks `passage_id` in the returned briefs against the expected set and logs WARNING for mismatches.
+
+- **[info] [drift]** — Same `{output_language_instruction}` placement issue as `dress_brief.yaml` — appears mid-schema at line 54. Low priority given the batch context is already long.
+  - Where: `dress_brief_batch.yaml` line 54
+  - Spec citation: `CLAUDE.md §9`
+  - Recommended fix: Move to end of system block.
+
+---
+
+### `prompts/templates/dress_codex.yaml`
+
+**Verdict:** broken
+
+**Findings:**
+
+- **[hard] [terminology]** — The prompt uses "codewords" throughout (`## Available Codewords`, `visible_when: List of codeword IDs`, `Codeword IDs in visible_when MUST be from the available codewords list`) but the authoritative spec says DRESS gates internally via **state flag** IDs, not codewords. R-3.7 is explicit: "CodexEntry gating uses state flag IDs, not codewords. SHIP projects a subset of state flags as player-facing codewords; DRESS gates internally via state flags." The `CodexEntry.visible_when` Pydantic model's docstring says "Codeword IDs that must all be present to unlock this tier" — which is itself a terminology error matching this prompt.
+  - Where: `dress_codex.yaml` lines 14, 18, 24, 33, 34, 41 (all "codeword" occurrences); `src/questfoundry/models/dress.py` line 91 (docstring)
+  - Spec citation: `dress.md §R-3.7`; `story-graph-ontology.md §Part 8: Codewords ≠ State Flags`
+  - Recommended fix: Replace all occurrences of "codeword" / "Codewords" with "state flag" / "State Flags" in this template. Update the Pydantic model docstring too. The `{codewords}` variable injected from the stage code (dress.py line 919) is built from `state_flag` nodes — the data is correct, only the label is wrong.
+
+- **[hard] [repair-gap]** — The `dress_codex` template is used during single-entity regeneration after spoiler detection (`_regenerate_codex_for_entity`). The repair context appended to `entity_details` (dress.py line 1122–1123) echoes the specific leaked content. However, the codex template's system prompt does NOT mention spoiler-direction rules at all — only the repair context injected into `entity_details_with_warning` carries this constraint. A 4B model on retry may follow the regeneration prompt without understanding WHY rank-1 must be vague: the system prompt gives no rule about "lower tier must not disclose what higher tier reveals."
+  - Where: `dress_codex.yaml` lines 28–34 (Rules section — no mention of spoiler direction); `dress.py` lines 1112–1128 (repair injection)
+  - Spec citation: `dress.md §R-3.6`; `CLAUDE.md §repair-loop quality`
+  - Recommended fix: Add to the Rules section:
+    ```
+    - Spoiler direction: rank 1 must NOT disclose content whose reveal is gated in rank 2+.
+      GOOD rank 1: "A traveling scholar who offers guidance to weary travelers."
+      BAD rank 1: "A mysterious scholar who secretly knows your true identity." (leaks rank 2 content)
+    ```
+
+- **[soft] [sm-fragile]** — The `{entity_details}` variable is populated by `format_entity_for_codex()`, which does include concept, entity type, visual profile, and related state flags. However, the base entity's overlay descriptions are NOT included — only the base `concept` field. The spec (R-3.8) requires "full Entity description (base + overlays)". For entities with path-specific overlays (e.g., mentor_aligned overlay vs mentor_hostile overlay), the model generates codex entries without knowing the full entity arc.
+  - Where: `dress_context.py` lines 186–252 (`format_entity_for_codex` — no overlay retrieval); `dress_codex.yaml` line 15 (`{entity_details}`)
+  - Spec citation: `dress.md §R-3.8`
+  - Recommended fix: `format_entity_for_codex()` should also retrieve and format entity overlays (nodes connected to the entity by overlay edges), providing the full entity arc that the codex is supposed to reflect.
+
+- **[soft] [schema-skew]** — The `{codewords}` variable is formatted by the stage code as: `- \`{sf_raw}\`: {trigger}` (dress.py line 897). The `trigger` field on a state_flag node is the narrative trigger (e.g., "when player chooses to trust the mentor"). This is the right field for communicating what the state flag means, but the format does not include the full `state_flag_id` that `visible_when` must use. Since `sf_raw` IS the raw ID (it's what gets stored in `visible_when`), the mapping is correct. However, the prompt says "Codeword IDs in visible_when MUST be from the available codewords list" — if the model copies `trigger` text instead of `sf_raw` into `visible_when`, validation will fail with no hint about which IDs are valid.
+  - Where: `dress_codex.yaml` lines 24, 34; `dress.py` lines 896–899
+  - Spec citation: `CLAUDE.md §6`
+  - Recommended fix: After fixing the codeword→state_flag terminology: "The ID to use in `visible_when` is the backtick-wrapped value at the start of each line, e.g., `met_aldric`. Do NOT use the description text as an ID."
+
+---
+
+### `prompts/templates/dress_codex_batch.yaml`
+
+**Verdict:** broken
+
+**Findings:**
+
+- **[hard] [terminology]** — Same codeword vs state flag terminology error as `dress_codex.yaml`. The batch version uses "codewords" in the same positions: `## Available Codewords`, `visible_when: List of codeword IDs`, `Codeword IDs in visible_when MUST be from the available codewords list`.
+  - Where: `dress_codex_batch.yaml` lines 12, 22, 29, 33, 41
+  - Spec citation: `dress.md §R-3.7`; `story-graph-ontology.md §Part 8: Codewords ≠ State Flags`
+  - Recommended fix: Same as `dress_codex.yaml`: replace all "codeword" → "state flag" throughout.
+
+- **[hard] [repair-gap]** — The batch template omits the spoiler-direction rule entirely (same gap as `dress_codex.yaml`). The batch version also has no per-entity spoiler instruction, meaning the first-pass batch generation for all entities has NO guidance about rank-1 spoiler avoidance. The spoiler check is a separate post-hoc LLM call — it catches violations after generation — but the generation prompt gives the model no reason to avoid the violation in the first place.
+  - Where: `dress_codex_batch.yaml` lines 28–35 (Rules — missing spoiler-direction rule)
+  - Spec citation: `dress.md §R-3.6`; `CLAUDE.md §sm-fragile`
+  - Recommended fix: Add to Rules:
+    ```
+    - Spoiler direction: rank 1 must NOT disclose content whose reveal is gated in rank 2+.
+      GOOD rank 1: "A traveling scholar who offers guidance."
+      BAD rank 1: "A mysterious scholar who secretly knows your true identity." (leaks rank 2)
+    ```
+    This reduces spoiler-check retry load.
+
+- **[soft] [sm-fragile]** — No per-entity entity detail in system prompt; the `{entities_batch}` is injected in the user message. For a batch of 4 entities (default `_CODEX_BATCH_SIZE = 4`), the model must maintain separate codex tiers for 4 different entities simultaneously. The user message's entity sections are produced by `format_entities_batch_for_codex()` → `format_entity_for_codex()` per entity, which includes concept, type, and related state flags. This is adequate, but the model has no summary of how many entries are expected per entity and no guidance on tier count. Models routinely produce only 1 tier per entity in batch mode.
+  - Where: `dress_codex_batch.yaml` lines 15–24 (output schema — no tier count guidance)
+  - Spec citation: `dress.md §Phase 3: Codex Generation` (Plan tier structure)
+  - Recommended fix: Add: "Aim for 2-3 tiers per entity when multiple relevant state flags exist; 1 tier when no state flags are related. Do not produce only 1 tier for an entity that has multiple related state flags — that wastes the codex system's spoiler-graduation capability."
+
+- **[soft] [sm-fragile]** — Same overlay enrichment gap as `dress_codex.yaml`: entity details passed to the batch prompt do not include overlay descriptions (R-3.8 violation at the context builder level).
+  - Where: `dress_context.py` lines 411–427 (`format_entities_batch_for_codex`) → `format_entity_for_codex` (no overlays)
+  - Spec citation: `dress.md §R-3.8`
+  - Recommended fix: Same as `dress_codex.yaml` — fix `format_entity_for_codex()` to include overlays; the batch function inherits the fix.
+
+---
+
+### `prompts/templates/dress_codex_spoiler_check.yaml`
+
+**Verdict:** mixed
+
+**Findings:**
+
+- **[hard] [terminology]** — The template's description says "gated by state flags" (line 10) but the examples section (lines 22–28) uses `gated by \`met_aldric\`` without clarifying whether `met_aldric` is a state flag ID or a codeword. Given the ambiguity in the sibling codex templates, a model that has generated entries using codeword IDs (due to the `dress_codex` terminology bug) will be checked by a spoiler-check prompt that accepts those IDs as natural. The spoiler-check prompt should assert that `visible_when` values are state flag IDs to be consistent when the codex templates are fixed.
+  - Where: `dress_codex_spoiler_check.yaml` line 10 ("gated by state flags") vs rest of prompt
+  - Spec citation: `dress.md §R-3.7`
+  - Recommended fix: Minor — add one line to clarify: "State flags are the IDs listed in `visible_when` (e.g., `met_aldric`, `chose_betrayal`)." This is a low-risk clarification since the spoiler-check prompt doesn't generate `visible_when` values itself.
+
+- **[soft] [repair-gap]** — The spoiler-check prompt is clean about its detection task but the `reason` field is the only feedback mechanism for the downstream regeneration. The `_regenerate_codex_for_entity` function formats the leak list as: `"rank {lower} leaked content gated behind rank {higher}: {leaked_content}"`. The regeneration then calls `dress_codex` (single-entity template) with this appended to `entity_details`. If the spoiler-check's `leaked_content` field is terse or inaccurate (e.g., "scholar knows secret"), the regeneration prompt may not identify WHICH sentence in rank 1 to remove. The spoiler check prompt doesn't instruct the model to quote the problematic phrase verbatim.
+  - Where: `dress_codex_spoiler_check.yaml` lines 33–38 (output schema for `leaked_content`); `dress.py` lines 1112–1123 (repair injection)
+  - Spec citation: `CLAUDE.md §repair-loop quality`
+  - Recommended fix: In the schema description for `leaked_content`, change: "short paraphrase of what was leaked" → "exact quote or close paraphrase of the specific phrase in the lower-ranked entry that prematurely reveals the higher-tier content (this will be shown to the author for revision)". This guides the model to produce a more precise quote that makes repair feedback actionable.
+
+- **[soft] [sm-fragile]** — The `{entries_block}` user-turn variable is formatted by `_format_entries_for_spoiler_check()` (stage code). The check is: does a LOWER rank entry disclose what a HIGHER rank was meant to reveal? The prompt's "No leak" example is well-chosen and correct (lines 29–31). However, there's no GOOD/BAD example for the output JSON itself — a 4B model may produce `has_leak: true` with an empty `leaks` list (contradictory), or produce `has_leak: false` with a non-empty `leaks` list. The Pydantic model does not validate this consistency.
+  - Where: `dress_codex_spoiler_check.yaml` lines 32–39 (output schema — no consistency example)
+  - Spec citation: `CLAUDE.md §7` (GOOD/BAD examples); `src/questfoundry/models/dress.py` lines 268–277 (`SpoilerCheckResult`)
+  - Recommended fix: Add a schema note: "`has_leak` and `leaks` must be consistent: if `has_leak: true` then `leaks` must be non-empty; if `has_leak: false` then `leaks` must be empty." Add the same invariant as a `model_validator` in `SpoilerCheckResult` to catch it at validation time.
+
+- **[info] [schema-skew]** — The prompt schema describes `lower_rank (int ≥ 1)` and `higher_rank (int ≥ 2)`. The Pydantic model has `lower_rank: int = Field(ge=1)` and `higher_rank: int = Field(ge=2)` and a `model_validator` that enforces `lower_rank < higher_rank`. The prompt does NOT mention the ordering constraint (`lower_rank must be strictly less than higher_rank`). This is caught at validation time but would reduce retries if stated explicitly.
+  - Where: `dress_codex_spoiler_check.yaml` lines 34–36
+  - Spec citation: `src/questfoundry/models/dress.py` lines 258–264
+  - Recommended fix: Add: "`lower_rank` must be strictly less than `higher_rank` (e.g., lower_rank=1, higher_rank=2 is valid; lower_rank=2, higher_rank=1 is not)."
+
+---
+
+### Stage summary: DRESS
+
+**Cross-cutting issues:**
+
+1. **codeword vs state_flag terminology** (`dress_codex.yaml`, `dress_codex_batch.yaml`, model docstring) — the single largest drift in the DRESS stage. Two templates consistently instruct the model to reference "codeword IDs" in `visible_when` but R-3.7 requires state flag IDs. The stage code correctly reads `state_flag` nodes; only the prompt labels are wrong.
+2. **Generic repair message** (`_dress_llm_call`) — all DRESS templates share one repair message that echoes field names but not valid ID lists or field value constraints. For `dress_serialize`, `dress_brief`, and `dress_codex`, this causes blind retries.
+3. **Entity overlay enrichment missing** (`format_entity_for_codex()`) — both codex templates receive entity context without overlays, violating R-3.8.
+4. **Spoiler-direction rule absent from generation prompts** — `dress_codex.yaml` and `dress_codex_batch.yaml` have no R-3.6 instruction; spoiler avoidance is entirely reactive (post-hoc check) rather than proactive (instruction at generation time).
 
 ---
 
