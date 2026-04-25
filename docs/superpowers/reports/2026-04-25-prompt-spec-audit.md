@@ -38,7 +38,7 @@ sections land.)
 | DREAM | 3 | 7 | 5 | 3 | 0 | drift |
 | BRAINSTORM | 3 | 8 | 9 | 3 | 1 | drift |
 | SEED | 5 | 8 | 16 | 5 | 1 | drift |
-| GROW | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ | pending |
+| GROW | 8 | 3 | 8 | 5 | 0 | drift |
 | POLISH | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ | pending |
 | FILL | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ | pending |
 | DRESS | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ | pending |
@@ -575,7 +575,131 @@ The SEED stage has the most complex prompt set in the pipeline (5 files, 8+ sect
 
 ## GROW
 
-(Pending — Task 9.)
+### `grow_phase3_intersections.yaml`
+
+**Verdict:** mixed
+
+**Findings:**
+
+- **[soft] [schema-skew]** — `resolved_location` is `str | None` in `IntersectionProposal` but prompt says "NEVER output null"; schema-prompt contradiction. Code also guards against literal `"null"` string.
+  - Recommended fix: Change `IntersectionProposal.resolved_location` to `str = Field(min_length=1, ...)`.
+
+- **[soft] [sm-fragile]** — `valid_beat_ids` injected as flat comma-separated string (hundreds of tokens for large stories). Small models lose track.
+  - Spec citation: `CLAUDE.md §6 Valid ID Injection`.
+  - Recommended fix: Group by dilemma in Valid IDs section: `dilemma::mentor_trust → beat::a, beat::b | dilemma::archive → beat::c`.
+
+- **[info] [drift]** — Spec calls this GROW Phase **2** (Intersection Detection); prompt filename and code label say "Phase 3" (pre-migration numbering).
+  - Recommended fix: Rename template to `grow_phase2_intersections.yaml` (cosmetic, low priority).
+
+---
+
+### `grow_phase4a_scene_types.yaml`
+
+**Verdict:** mixed
+
+**Findings:**
+
+- **[soft] [terminology]** — Template named `phase4a` but spec calls Scene Types Phase **4b** (4a is now Interleave, deterministic). Pydantic class is `Phase4aOutput` for scene types and `Phase4bOutput` for migrated gap proposals — both contradict spec.
+  - Spec citation: `grow.md §Phase 4 / 4b — Scene Types Annotation`.
+  - Recommended fix: Rename template + Pydantic class; rename old `Phase4bOutput` to reflect migrated status.
+
+- **[soft] [sm-fragile]** — `beat_summaries` and `valid_beat_ids` flat-listed; large stories cause position-bias errors in small models.
+  - Recommended fix: Add `## Path Groups` subsection grouping beats by path/dilemma. Context-builder change.
+
+- **[info] [schema-skew]** — `exit_mood` constraints align with prompt description. Clean.
+
+---
+
+### `grow_phase4b_narrative_gaps.yaml`
+
+**Verdict:** drift (DEAD CODE)
+
+**Findings:**
+
+- **[hard] [drift]** — File corresponds to work **migrated to POLISH Phase 1a** in epic #1368 PR #1366. Per `llm_phases.py:651-654` comment: "GROW Phase 4b (narrative_gaps) was MOVED to POLISH Phase 1a." Method `_phase_4b_narrative_gaps` does NOT exist; phase `"narrative_gaps"` registered in `_METHOD_PHASES`/`_PREDECESSOR_PHASES` but unreachable from `_phase_order()` (no `@grow_phase` decorator). **Prompt file is dead code AND `_METHOD_PHASES` has dangling entries that would AttributeError if accidentally routed**.
+  - Spec citation: `grow.md §Phase 4` (no narrative_gaps sub-phase); `CLAUDE.md §Refactoring & removal discipline`.
+  - Recommended fix: Delete prompt file. Remove `"narrative_gaps"` from `_METHOD_PHASES` and `_PREDECESSOR_PHASES`. Track with issue.
+
+---
+
+### `grow_phase4c_pacing_gaps.yaml`
+
+**Verdict:** drift (DEAD CODE)
+
+**Findings:**
+
+- **[hard] [drift]** — Same situation: **migrated to POLISH Phase 2 (extended)** per `llm_phases.py:656-661`. Method `_phase_4c_pacing_gaps` doesn't exist; registry entry unreachable.
+  - Recommended fix: Delete prompt file. Remove `"pacing_gaps"` from `_METHOD_PHASES`/`_PREDECESSOR_PHASES`. Track.
+
+---
+
+### `grow_phase4f_entity_arcs.yaml`
+
+**Verdict:** drift (DEAD CODE)
+
+**Findings:**
+
+- **[hard] [drift]** — File corresponds to work **REMOVED in epic #1368 PR C**. Per `llm_phases.py:673-678`: "GROW Phase 4f (entity_arcs) was REMOVED in issue #1368 PR C." Equivalent moved to POLISH Phase 3 (`arcs_per_path`).
+  - Spec citation: `grow.md §Stage Output Contract item 12` ("No … character arc metadata exists"); `story-graph-ontology.md §Character Arc Metadata` (POLISH Phase 3, not GROW).
+  - Recommended fix: Delete prompt file. Remove `"entity_arcs"` from `_METHOD_PHASES`. Confirm POLISH `arcs_per_path` follow-up tracking issue exists.
+
+---
+
+### `grow_phase4g_transition_gaps.yaml`
+
+**Verdict:** mixed
+
+**Findings:**
+
+- **[soft] [sm-fragile]** — No `## Valid IDs` section. Output uses `transition_id` composite strings (`"beat::a|beat::b"`); small models may invent or corrupt these.
+  - Spec citation: `CLAUDE.md §6`.
+  - Recommended fix: Add `## Valid IDs` section listing valid `{transition_ids}` injected from code.
+
+- **[soft] [repair-gap]** — No repair-loop / retry instruction. Code passes `semantic_validator` but prompt has no `{transition_feedback}` slot.
+  - Recommended fix: Add `{transition_feedback}` template variable (default empty) for structured retry feedback.
+
+- **[info] [drift]** — Spec calls this Phase **4c** (Transition Beat Insertion); template uses `4g` (pre-migration).
+  - Recommended fix: Rename to `grow_phase4c_transition_gaps.yaml`.
+
+---
+
+### `grow_phase8c_overlays.yaml`
+
+**Verdict:** mixed
+
+**Findings:**
+
+- **[soft] [schema-skew]** — Prompt uses `details: list[{key, value}]` (matching `OverlayProposal`); but graph-storage `EntityOverlay.details: dict[str, str]`. The `_phase_8c_overlays` docstring says "details: {...}" referring to dict form (wrong for the LLM model).
+  - Recommended fix: Update docstring to match LLM schema; add test for `details_as_dict()` conversion.
+
+- **[soft] [sm-fragile]** — `valid_entity_ids` and `valid_state_flag_ids` flat comma-separated strings. Consequence context block IS grouped by dilemma — Valid IDs should mirror that grouping.
+  - Recommended fix: Group entity IDs by category, state flags by dilemma in Valid IDs section.
+
+- **[info] [terminology]** — `state_flag::` prefix used correctly throughout; no codeword/state_flag drift. Clean.
+
+---
+
+### `grow_phase_temporal_resolution.yaml`
+
+**Verdict:** clean
+
+- **[info] [sm-fragile]** — Synthetic example IDs clearly marked "do not use." `{swap_pairs_context}` injection format depends on context-builder; if it mirrors example, prompt is robust. Monitor on first real run.
+
+---
+
+### Stage summary: GROW
+
+The GROW audit surfaces **three dead-code prompt files** corresponding to phases migrated to POLISH or removed in epic #1368 (`narrative_gaps`, `pacing_gaps`, `entity_arcs`). These files are unreachable at runtime (registry has no entries) but their `_METHOD_PHASES` registrations point to nonexistent methods that would `AttributeError` if accidentally routed. Each is hard severity because the dangling code is a latent bug.
+
+Live prompts (`phase3_intersections`, `phase4a_scene_types`, `phase8c_overlays`, `phase4g_transition_gaps`) have soft findings concentrated around Valid IDs formatting (unstructured flat lists vs grouped) and the repair-loop gap in `transition_gaps`. Cosmetic naming drift across multiple files where the spec's current 4a/4b/4c numbering is not reflected in template filenames.
+
+- Prompts audited: 8
+- Hard findings: 3 (all dead-code prompt files for migrated/removed phases)
+- Soft findings: 8 (live-prompt quality findings)
+- Info findings: 5 (numbering drift × 3 + minor)
+- Spec gaps surfaced: 0
+- Recommended PR split: PR-A (delete 3 dead-code prompt files + clean up `_METHOD_PHASES`/`_PREDECESSOR_PHASES`); PR-B (live-prompt soft findings: Valid IDs grouping, `transition_gaps` repair slot, `IntersectionProposal.resolved_location` type fix, template renames)
+- Status: drift
 
 ---
 
