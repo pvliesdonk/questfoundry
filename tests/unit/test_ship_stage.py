@@ -206,7 +206,7 @@ class TestShipStage:
         # violation (no passage means FILL didn't produce its required
         # output) — same defensive intent as the previous "no passages"
         # check, just attributed to the right contract.
-        with pytest.raises(ShipStageError, match=r"at least one Passage|no passages"):
+        with pytest.raises(ShipStageError, match="at least one Passage"):
             stage.execute()
 
     def test_missing_prose_raises(self, tmp_path: Path) -> None:
@@ -233,7 +233,7 @@ class TestShipStage:
         g.save(project / "graph.db")
 
         stage = ShipStage(project)
-        with pytest.raises(ShipStageError, match=r"at least one Passage|no passages"):
+        with pytest.raises(ShipStageError, match="at least one Passage"):
             stage.execute()
 
     def test_unknown_format_raises(self, tmp_path: Path) -> None:

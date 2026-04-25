@@ -102,9 +102,6 @@ class ShipStage:
                 f"Pre-SHIP contract validation failed ({len(entry_errors)} "
                 f"error(s)):\n" + "\n".join(f"  - {e}" for e in entry_errors)
             )
-        passages = graph.get_nodes_by_type("passage")
-        if not passages:
-            raise ShipStageError("Graph contains no passages — nothing to export.")
 
         # Get story title and language from config
         voice = graph.get_node("voice::voice")

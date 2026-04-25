@@ -31,7 +31,6 @@ from questfoundry.agents import (
 )
 from questfoundry.export.i18n import get_output_language_instruction
 from questfoundry.graph import Graph
-from questfoundry.graph.brainstorm_validation import validate_brainstorm_output
 from questfoundry.graph.context import strip_scope_prefix
 from questfoundry.graph.mutations import format_semantic_errors_as_content
 from questfoundry.graph.seed_pruning import compute_arc_count, prune_to_arc_limit
@@ -295,15 +294,17 @@ class SeedStage:
         total_tokens = 0
 
         # Load the graph once and reuse it for both the entry validation
-        # and the brainstorm-context build. The serialize-time graph load
-        # below is intentionally separate — it happens after a long
-        # discuss/summarize loop and may need to see fresh on-disk state.
+        # and the brainstorm-context build.
         graph = Graph.load(resolved_path)
 
         # BRAINSTORM Stage Output Contract: validate the upstream artifact
         # before SEED phases consume it. Catches missing entities,
         # incomplete dilemmas, and other contract violations at the seam
-        # rather than at the downstream-failure site (#1347).
+        # rather than at the downstream-failure site (#1347). The deferred
+        # local import matches the pattern used by GROW/FILL/DRESS/SHIP
+        # entry validators so test bypass uses an autouse fixture.
+        from questfoundry.graph.brainstorm_validation import validate_brainstorm_output
+
         entry_errors = validate_brainstorm_output(graph)
         if entry_errors:
             raise SeedStageError(
