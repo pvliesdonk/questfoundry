@@ -140,6 +140,19 @@ class TestVoiceDocument:
                 tone_words=["dark"],
             )
 
+    def test_pov_character_padding_is_stripped(self) -> None:
+        # Whitespace around a real ID is stripped on construction so downstream
+        # consumers never see "  kay  " in the stored value.
+        doc = VoiceDocument(
+            pov="first_person",
+            pov_character="  kay  ",
+            tense="past",
+            voice_register="literary",
+            sentence_rhythm="varied",
+            tone_words=["dark"],
+        )
+        assert doc.pov_character == "kay"
+
     def test_second_person_rejects_non_empty_pov_character(self) -> None:
         # Per fill.md R-1.3: pov_character must be empty for second_person.
         with pytest.raises(ValidationError, match="pov_character must be empty"):

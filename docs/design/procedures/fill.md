@@ -51,7 +51,7 @@ R-1.1. Exactly one Voice Document node is created. Retries replace the previous 
 
 R-1.2. Voice Document fields include `pov`, `tense`, `voice_register`, `sentence_rhythm`, `tone_words`, `avoid_words`, `avoid_patterns`, and optionally `pov_character` and `exemplar_passages`.
 
-R-1.3. `pov` ∈ {`first_person`, `second_person`, `third_person_limited`, `third_person_omniscient`}. `pov_character` names the POV entity and is required when `pov` is `first_person` or `third_person_limited` (both attach narration to a single character's perspective). For `second_person` and `third_person_omniscient` the field is omitted or empty.
+R-1.3. `pov` ∈ {`first_person`, `second_person`, `third_person_limited`, `third_person_omniscient`}. `pov_character` names the POV entity by its raw character ID (e.g. `kay`, not the scoped form `character::kay` and not the display name `Kay`) and is required when `pov` is `first_person` or `third_person_limited` (both attach narration to a single character's perspective). For `second_person` and `third_person_omniscient` the field is omitted or empty.
 
 R-1.4. `tense` ∈ {`past`, `present`}.
 

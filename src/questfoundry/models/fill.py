@@ -40,6 +40,7 @@ class VoiceDocument(BaseModel):
             "POV character (required for first_person and third_person_limited; "
             "empty for second_person and third_person_omniscient). See fill.md R-1.3."
         ),
+        json_schema_extra={"strip_whitespace": True},
     )
     tense: Literal["past", "present"] = Field(description="Narrative tense")
     voice_register: Literal["formal", "conversational", "literary", "sparse"] = Field(
@@ -59,15 +60,25 @@ class VoiceDocument(BaseModel):
         description="Patterns to avoid (e.g. adverb-heavy, said-bookisms)",
     )
 
+    @model_validator(mode="before")
+    @classmethod
+    def _strip_pov_character_whitespace(cls, data: Any) -> Any:
+        """Strip whitespace from pov_character before the bidirectional check."""
+        if isinstance(data, dict) and isinstance(data.get("pov_character"), str):
+            data["pov_character"] = data["pov_character"].strip()
+        return data
+
     @model_validator(mode="after")
     def _check_pov_character(self) -> VoiceDocument:
-        if self.pov in ("first_person", "third_person_limited") and not self.pov_character.strip():
+        # `pov_character` has already been whitespace-stripped by the before-validator,
+        # so a truthiness check suffices here.
+        if self.pov in ("first_person", "third_person_limited") and not self.pov_character:
             raise ValueError(
                 f"pov_character is required when pov is {self.pov!r}; "
                 "set it to the raw character ID whose perspective the prose follows. "
                 "See fill.md R-1.3."
             )
-        if self.pov in ("second_person", "third_person_omniscient") and self.pov_character.strip():
+        if self.pov in ("second_person", "third_person_omniscient") and self.pov_character:
             raise ValueError(
                 f"pov_character must be empty when pov is {self.pov!r}; "
                 "narration is not attached to a single character. See fill.md R-1.3."
