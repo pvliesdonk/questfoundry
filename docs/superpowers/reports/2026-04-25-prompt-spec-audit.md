@@ -139,7 +139,7 @@ then the prompt fixes follow.
 
 ## DREAM
 
-### `dream.yaml` — dead-code notice
+### `prompts/templates/dream.yaml` — dead-code notice
 
 **Verdict:** mixed (file is a dead artifact; findings below apply if it is ever wired in)
 
@@ -172,7 +172,7 @@ then the prompt fixes follow.
 
 ---
 
-### `discuss.yaml` — DREAM-specific audit
+### `prompts/templates/discuss.yaml` — DREAM-specific audit
 
 **Verdict:** mixed
 
@@ -241,7 +241,7 @@ then the prompt fixes follow.
 
 ---
 
-### `summarize.yaml` — DREAM-specific audit
+### `prompts/templates/summarize.yaml` — DREAM-specific audit
 
 **Verdict:** mixed
 
@@ -271,7 +271,7 @@ then the prompt fixes follow.
 
 ---
 
-### `serialize.yaml` — DREAM-specific audit
+### `prompts/templates/serialize.yaml` — DREAM-specific audit
 
 **Verdict:** mixed
 
@@ -357,19 +357,19 @@ DREAM's three active prompts (`discuss.yaml`, `summarize.yaml`, `serialize.yaml`
 
 `dream.yaml` is dead code (not loaded by any active code path). Its `pov_style` display labels, Jinja2 variable syntax, and `content_notes` flat-list description are all wrong, but they have no runtime impact today. The file should be deleted or reconciled under a dedicated issue.
 
-- **Prompts audited:** 3 (`discuss.yaml`, `summarize.yaml`, `serialize.yaml`; `dream.yaml` is dead code — not counted)
-- **Hard findings:** 7
-- **Soft findings:** 5
-- **Info findings:** 3
-- **Spec gaps surfaced:** 0
-- **Recommended PR split:** per-cluster split — one PR for the `vignette`/`standard` → `micro`/`medium` rename across all three files (low-risk, mechanical); one PR for the `content_notes` structure + `pov_style` explicit listing in `serialize.yaml` (schema-completeness cluster); one PR for the discuss-phase R-1.2/R-1.3 instruction additions; one issue (not PR) to delete or reconcile `dream.yaml`.
-- **Status:** drift
+- Prompts audited: 3 (`discuss.yaml`, `summarize.yaml`, `serialize.yaml`; `dream.yaml` is dead code — not counted)
+- Hard findings: 7
+- Soft findings: 5
+- Info findings: 3
+- Spec gaps surfaced: 0
+- Recommended PR split: per-cluster split — one PR for the `vignette`/`standard` → `micro`/`medium` rename across all three files (low-risk, mechanical); one PR for the `content_notes` structure + `pov_style` explicit listing in `serialize.yaml` (schema-completeness cluster); one PR for the discuss-phase R-1.2/R-1.3 instruction additions; one issue (not PR) to delete or reconcile `dream.yaml`.
+- Status: drift
 
 ---
 
 ## BRAINSTORM
 
-### `discuss_brainstorm.yaml`
+### `prompts/templates/discuss_brainstorm.yaml`
 
 **Verdict:** mixed
 
@@ -415,7 +415,7 @@ DREAM's three active prompts (`discuss.yaml`, `summarize.yaml`, `serialize.yaml`
 
 ---
 
-### `summarize_brainstorm.yaml`
+### `prompts/templates/summarize_brainstorm.yaml`
 
 **Verdict:** mixed
 
@@ -445,7 +445,7 @@ DREAM's three active prompts (`discuss.yaml`, `summarize.yaml`, `serialize.yaml`
 
 ---
 
-### `serialize_brainstorm.yaml`
+### `prompts/templates/serialize_brainstorm.yaml`
 
 **Verdict:** mixed
 
@@ -502,7 +502,7 @@ The `Entity.name` required/optional contradiction between serialize prompt ("lea
 
 ## SEED
 
-### `discuss_seed.yaml`
+### `prompts/templates/discuss_seed.yaml`
 
 **Verdict:** mixed
 
@@ -534,7 +534,7 @@ The `Entity.name` required/optional contradiction between serialize prompt ("lea
 
 ---
 
-### `summarize_seed.yaml`
+### `prompts/templates/summarize_seed.yaml`
 
 **Verdict:** mixed
 
@@ -560,7 +560,7 @@ The `Entity.name` required/optional contradiction between serialize prompt ("lea
 
 ---
 
-### `summarize_seed_sections.yaml`
+### `prompts/templates/summarize_seed_sections.yaml`
 
 **Verdict:** mixed
 
@@ -588,7 +588,7 @@ The `Entity.name` required/optional contradiction between serialize prompt ("lea
 
 ---
 
-### `serialize_seed.yaml`
+### `prompts/templates/serialize_seed.yaml`
 
 **Verdict:** mixed
 
@@ -611,7 +611,7 @@ The `Entity.name` required/optional contradiction between serialize prompt ("lea
 
 ---
 
-### `serialize_seed_sections.yaml`
+### `prompts/templates/serialize_seed_sections.yaml`
 
 **Verdict:** mixed
 
@@ -666,7 +666,7 @@ The SEED stage has the most complex prompt set in the pipeline (5 files, 8+ sect
 
 ## GROW
 
-### `grow_phase3_intersections.yaml`
+### `prompts/templates/grow_phase3_intersections.yaml`
 
 **Verdict:** mixed
 
@@ -684,7 +684,7 @@ The SEED stage has the most complex prompt set in the pipeline (5 files, 8+ sect
 
 ---
 
-### `grow_phase4a_scene_types.yaml`
+### `prompts/templates/grow_phase4a_scene_types.yaml`
 
 **Verdict:** mixed
 
@@ -701,7 +701,7 @@ The SEED stage has the most complex prompt set in the pipeline (5 files, 8+ sect
 
 ---
 
-### `grow_phase4b_narrative_gaps.yaml`
+### `prompts/templates/grow_phase4b_narrative_gaps.yaml`
 
 **Verdict:** drift (DEAD CODE)
 
@@ -713,7 +713,7 @@ The SEED stage has the most complex prompt set in the pipeline (5 files, 8+ sect
 
 ---
 
-### `grow_phase4c_pacing_gaps.yaml`
+### `prompts/templates/grow_phase4c_pacing_gaps.yaml`
 
 **Verdict:** drift (DEAD CODE)
 
@@ -724,7 +724,7 @@ The SEED stage has the most complex prompt set in the pipeline (5 files, 8+ sect
 
 ---
 
-### `grow_phase4f_entity_arcs.yaml`
+### `prompts/templates/grow_phase4f_entity_arcs.yaml`
 
 **Verdict:** drift (DEAD CODE)
 
@@ -736,7 +736,7 @@ The SEED stage has the most complex prompt set in the pipeline (5 files, 8+ sect
 
 ---
 
-### `grow_phase4g_transition_gaps.yaml`
+### `prompts/templates/grow_phase4g_transition_gaps.yaml`
 
 **Verdict:** mixed
 
@@ -754,7 +754,7 @@ The SEED stage has the most complex prompt set in the pipeline (5 files, 8+ sect
 
 ---
 
-### `grow_phase8c_overlays.yaml`
+### `prompts/templates/grow_phase8c_overlays.yaml`
 
 **Verdict:** mixed
 
@@ -770,7 +770,7 @@ The SEED stage has the most complex prompt set in the pipeline (5 files, 8+ sect
 
 ---
 
-### `grow_phase_temporal_resolution.yaml`
+### `prompts/templates/grow_phase_temporal_resolution.yaml`
 
 **Verdict:** clean
 
@@ -796,7 +796,7 @@ Live prompts (`phase3_intersections`, `phase4a_scene_types`, `phase8c_overlays`,
 
 ## POLISH
 
-### `polish_phase1_reorder.yaml`
+### `prompts/templates/polish_phase1_reorder.yaml`
 
 **Verdict:** mixed
 
@@ -837,7 +837,7 @@ Live prompts (`phase3_intersections`, `phase4a_scene_types`, `phase8c_overlays`,
 
 ---
 
-### `polish_phase1a_narrative_gaps.yaml`
+### `prompts/templates/polish_phase1a_narrative_gaps.yaml`
 
 **Verdict:** mixed
 
@@ -894,7 +894,7 @@ Live prompts (`phase3_intersections`, `phase4a_scene_types`, `phase8c_overlays`,
 
 ---
 
-### `polish_phase2_pacing.yaml`
+### `prompts/templates/polish_phase2_pacing.yaml`
 
 **Verdict:** mixed
 
@@ -938,7 +938,7 @@ Live prompts (`phase3_intersections`, `phase4a_scene_types`, `phase8c_overlays`,
 
 ---
 
-### `polish_phase3_arcs.yaml`
+### `prompts/templates/polish_phase3_arcs.yaml`
 
 **Verdict:** mixed
 
@@ -982,7 +982,7 @@ Live prompts (`phase3_intersections`, `phase4a_scene_types`, `phase8c_overlays`,
 
 ---
 
-### `polish_phase5a_choice_labels.yaml`
+### `prompts/templates/polish_phase5a_choice_labels.yaml`
 
 **Verdict:** mixed
 
@@ -1030,7 +1030,7 @@ Live prompts (`phase3_intersections`, `phase4a_scene_types`, `phase8c_overlays`,
 
 ---
 
-### `polish_phase5b_residue.yaml`
+### `prompts/templates/polish_phase5b_residue.yaml`
 
 **Verdict:** mixed
 
@@ -1068,7 +1068,7 @@ Live prompts (`phase3_intersections`, `phase4a_scene_types`, `phase8c_overlays`,
 
 ---
 
-### `polish_phase5c_false_branches.yaml`
+### `prompts/templates/polish_phase5c_false_branches.yaml`
 
 **Verdict:** mixed
 
@@ -1111,7 +1111,7 @@ Live prompts (`phase3_intersections`, `phase4a_scene_types`, `phase8c_overlays`,
 
 ---
 
-### `polish_phase5d_variants.yaml`
+### `prompts/templates/polish_phase5d_variants.yaml`
 
 **Verdict:** clean
 
@@ -1134,7 +1134,7 @@ Live prompts (`phase3_intersections`, `phase4a_scene_types`, `phase8c_overlays`,
 
 ---
 
-### `polish_phase5e_atmospheric.yaml`
+### `prompts/templates/polish_phase5e_atmospheric.yaml`
 
 **Verdict:** mixed
 
@@ -1165,7 +1165,7 @@ Live prompts (`phase3_intersections`, `phase4a_scene_types`, `phase8c_overlays`,
 
 ---
 
-### `polish_phase5e_feasibility.yaml`
+### `prompts/templates/polish_phase5e_feasibility.yaml`
 
 **Verdict:** clean
 
@@ -1196,7 +1196,7 @@ Live prompts (`phase3_intersections`, `phase4a_scene_types`, `phase8c_overlays`,
 
 ---
 
-### `polish_phase5f_path_thematic.yaml`
+### `prompts/templates/polish_phase5f_path_thematic.yaml`
 
 **Verdict:** mixed
 
@@ -1221,7 +1221,7 @@ Live prompts (`phase3_intersections`, `phase4a_scene_types`, `phase8c_overlays`,
 
 ---
 
-### `polish_phase5f_transitions.yaml`
+### `prompts/templates/polish_phase5f_transitions.yaml`
 
 **Verdict:** mixed
 
