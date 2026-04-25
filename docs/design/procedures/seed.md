@@ -455,7 +455,7 @@ R-7.5. If the LLM call fails, defaults are applied (role: soft, weight: light, s
 
 R-8.1. Valid relationships: `wraps` (A wraps B when A introduces before B and B resolves before A), `concurrent` (both active at once, no nesting), `serial` (A fully resolves before B introduces).
 
-R-8.2. Relationships are declared only for relevant pairs — those sharing entities, with causal dependencies, or with explicit authorial ordering intent. Exhaustive O(n²) declaration is forbidden.
+R-8.2. Relationships are declared only for relevant pairs — those sharing entities, with causal dependencies, or with explicit authorial ordering intent. Exhaustive O(n²) declaration is wasteful but not forbidden; including pairs whose relationship is the default `concurrent` (no shared entities, no causal dependency) for completeness is acceptable when it removes ambiguity for GROW. Exhaustive declarations on every run, however, signal that the LLM is over-applying the pattern and should be discouraged in the prompt.
 
 R-8.3. `concurrent` is symmetric. The edge is stored once, with the lexicographically smaller Dilemma ID as `dilemma_a`. → ontology §Part 2: Pairwise Relationships.
 
@@ -467,7 +467,7 @@ R-8.5. If the LLM call fails, no relationships are declared — the graph is lef
 
 | Symptom | Root cause | Broken rule |
 |---------|-----------|-------------|
-| n×(n-1)/2 ordering edges declared for n Dilemmas | Exhaustive O(n²) declaration instead of sparse | R-8.2 |
+| n×(n-1)/2 ordering edges declared for n Dilemmas on every run | Exhaustive O(n²) declaration as the default — should be the exception | R-8.2 |
 | `concurrent` edge with `dilemma_a: dilemma::mentor_trust` and `dilemma_b: dilemma::archive_nature` | Non-lex order — `archive_nature` precedes `mentor_trust` alphabetically, so it should be `dilemma_a`. Normalization rule not applied | R-8.3 |
 | `shared_entity` edge exists in graph | Declared as an edge instead of derived | R-8.4 |
 | `concurrent` edge duplicated (A→B and B→A) | Symmetric edge stored twice | R-8.3 |
