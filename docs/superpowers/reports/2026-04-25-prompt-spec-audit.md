@@ -37,15 +37,17 @@ hypothesis that prompts were postponed during the doc/code overhaul.
 
 | Stage | Prompts | Hard | Soft | Info | Spec gaps | Status |
 |---|---|---|---|---|---|---|
-| DREAM | 3 | 7 | 5 | 3 | 0 | drift |
-| BRAINSTORM | 3 | 8 | 9 | 3 | 1 | drift |
-| SEED | 5 | 8 | 16 | 5 | 1 | drift |
+| DREAM | 3 | 9 | 7 | 4 | 0 | drift |
+| BRAINSTORM | 3 | 9 | 9 | 4 | 1 | drift |
+| SEED | 5 | 10 | 16 | 5 | 0 | drift |
 | GROW | 8 | 3 | 8 | 5 | 0 | drift |
-| POLISH | 12 | 4 | 22 | 7 | 1 | drift |
-| FILL | 8 | 3 | 9 | 5 | 2 | drift |
-| DRESS | 8 | 9 | 12 | 4 | 0 | drift |
+| POLISH | 12 | 5 | 33 | 13 | 1 | drift |
+| FILL | 8 | 3 | 10 | 8 | 2 | drift |
+| DRESS | 8 | 10 | 17 | 5 | 0 | drift |
 | SHIP | 0 | 0 | 0 | 0 | 0 | n/a (deterministic) |
-| **Total** | **47** | **42** | **81** | **32** | **5** | — |
+| **Total** | **47** | **49** | **100** | **44** | **4** | — |
+
+*Counts are mechanically derived from the per-stage finding bullets in this report (one `- **[severity]` line = one finding). Per-stage summary blocks inside each section may show slightly different totals because their authoring subagents grouped related issues into single "headline" findings; the table above is the authoritative tally.*
 
 ### Cross-cutting themes
 
@@ -1507,7 +1509,8 @@ POLISH is the largest prompt set (12 files covering 9 distinct phases/sub-phases
 
 - Prompts audited: 8
 - Hard findings: 3 (POV schema gap latent in `fill_phase0_voice.yaml` triggered on spec fix; shadow omission in `fill_phase1_prose_only.yaml`; missing Valid Entity IDs in `fill_phase3_revision.yaml`)
-- Soft findings: 9
+- Soft findings: 10
+- Info findings: 8
 - Spec gaps surfaced: 2 (`pov_character` applicability for first-person unclear in spec; `fill.md` worked example uses invalid `voice_register` value)
 - Recommended PR split: Two clusters — (1) POV Literal alignment (`fill.py` model + both phase0 prompts + fill.md spec fix, one PR), (2) context enrichment fixes (`fill_phase1_prose.yaml` + `fill_phase1_prose_only.yaml` shadow + narrative_function, revision context) as a second PR. The Valid Entity IDs fix in `fill_phase3_revision.yaml` is one-line and can go in either cluster.
 
@@ -1766,6 +1769,13 @@ POLISH is the largest prompt set (12 files covering 9 distinct phases/sub-phases
 ---
 
 ### Stage summary: DRESS
+
+- Prompts audited: 8
+- Hard findings: 10
+- Soft findings: 17
+- Info findings: 5
+- Spec gaps surfaced: 0
+- Recommended PR split: see Cross-cutting issues below — terminology fix (codeword → state_flag) is one narrow PR; repair-feedback enrichment, entity-overlay enrichment, and spoiler-direction additions can each be their own follow-up.
 
 **Cross-cutting issues:**
 
