@@ -24,9 +24,16 @@ def build_path_dilemma_context(
 ) -> tuple[str, str]:
     """Build path-to-dilemma mapping text and valid dilemma ID text for LLM context.
 
-    Used by gap-insertion phases (POLISH Phase 1a, GROW Phase 4c historically)
-    to give the LLM the dilemma context it needs when proposing gap or
-    correction beats with `dilemma_impacts`.
+    Two callers, two uses:
+
+    - POLISH Phase 1a (narrative gap insertion) consumes the
+      `path_dilemma_map_text` return value as **reference-only context** so
+      the LLM can recognise which dilemmas a path explores while reading
+      the sequence. Per polish.md R-1a.2 gap beats are structural and do
+      NOT carry `dilemma_impacts`, so Phase 1a discards the
+      `valid_dilemma_ids_text` element.
+    - GROW Phase 4c (historically) used both elements to help the LLM
+      propose correction beats that DO carry `dilemma_impacts`.
 
     Args:
         graph: The graph store to query for dilemma nodes.

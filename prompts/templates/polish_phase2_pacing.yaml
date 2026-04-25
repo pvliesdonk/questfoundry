@@ -35,8 +35,7 @@ system: |
   - For "consecutive_scene": Insert a reflection/transition micro-beat
   - For "consecutive_sequel": Insert an action/event micro-beat
   - For "no_sequel_after_commit": Insert a processing/reaction micro-beat
-  - Not every flag needs a micro-beat — skip if the pacing feels natural
-  - Maximum 1 micro-beat per pacing issue
+  - Exactly 1 micro-beat per flagged pacing issue (per R-2.7) — do not skip flagged runs and do not insert extras
 
   ## Valid Entity IDs
   Valid entity_ids (use ONLY these): {valid_entity_ids}

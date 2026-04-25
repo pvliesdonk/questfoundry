@@ -43,12 +43,30 @@ class TestFormatChoiceLabelContext:
         assert "choice_details" in ctx
         assert "Start" in ctx["choice_details"]
         assert "End" in ctx["choice_details"]
+        # valid_passage_ids must be populated for the prompt's Valid IDs section
+        # (CLAUDE.md §6) — sorted, comma-joined union of from/to passage IDs.
+        assert ctx["valid_passage_ids"] == "p1, p2"
 
     def test_empty_choices(self) -> None:
         graph = Graph.empty()
         ctx = format_choice_label_context(graph, [], [])
         assert ctx["choice_count"] == "0"
         assert ctx["choice_details"] == ""
+        # Empty input → empty Valid IDs string (still present so the template
+        # placeholder always renders).
+        assert ctx["valid_passage_ids"] == ""
+
+    def test_valid_passage_ids_dedups_and_sorts(self) -> None:
+        # Same passage appearing as both `from` and `to` across multiple choices
+        # should be deduplicated; output is sorted for determinism.
+        graph = Graph.empty()
+        choice_specs = [
+            {"from_passage": "p2", "to_passage": "p3"},
+            {"from_passage": "p1", "to_passage": "p2"},
+            {"from_passage": "p2", "to_passage": "p3"},
+        ]
+        ctx = format_choice_label_context(graph, choice_specs, [])
+        assert ctx["valid_passage_ids"] == "p1, p2, p3"
 
     def test_story_context_from_dream(self) -> None:
         graph = Graph.empty()
