@@ -39,7 +39,7 @@ sections land.)
 | BRAINSTORM | 3 | 8 | 9 | 3 | 1 | drift |
 | SEED | 5 | 8 | 16 | 5 | 1 | drift |
 | GROW | 8 | 3 | 8 | 5 | 0 | drift |
-| POLISH | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ | pending |
+| POLISH | 12 | 4 | 22 | 7 | 1 | drift |
 | FILL | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ | pending |
 | DRESS | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ | pending |
 | SHIP | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ | pending |
@@ -705,7 +705,492 @@ Live prompts (`phase3_intersections`, `phase4a_scene_types`, `phase8c_overlays`,
 
 ## POLISH
 
-(Pending — Task 10.)
+### `polish_phase1_reorder.yaml`
+
+**Verdict:** mixed
+
+**Findings:**
+
+- **[soft] [sm-fragile]** — No GOOD/BAD examples for beat ordering rationale. The prompt has excellent rules, but small models producing a rationale string for `ReorderedSection.rationale` may emit vague text ("moved beats around") that doesn't help validation. The CLAUDE.md §7 defensive pattern requires concrete examples for every constrained field.
+  - Where: lines 8–18 (Goals + Constraints) — no inline example pair for `rationale`
+  - Spec citation: `CLAUDE.md §7`; `polish.md §R-1.4` (invalid proposals must log WARNING — the rationale is what reviewers inspect)
+  - Recommended fix: Add:
+    ```
+    GOOD rationale: "Moved reflection beat before discovery to follow scene-sequel rhythm — action scene then processing beat"
+    BAD rationale: "Better order" (too vague to diagnose if WARNING fires)
+    ```
+
+- **[soft] [sm-fragile]** — Valid IDs injected as flat comma-separated string `{valid_beat_ids}`. For sections with 8–15 beats, small models lose track of which IDs are legal and may introduce beat IDs from adjacent sections seen earlier in the prompt assembly. The CLAUDE.md §6 Valid ID Injection principle requires this be unambiguous.
+  - Where: line 31 (`Valid beat_ids (use ONLY these, in any order): {valid_beat_ids}`)
+  - Spec citation: `CLAUDE.md §6`; `polish.md §R-1.2` (reordered list MUST be same set as input)
+  - Recommended fix: Inject as one-per-line bullet list:
+    ```
+    Valid beat_ids (use ONLY these, in any order):
+    {valid_beat_ids_bulleted}
+    ```
+    and have the context builder format the list with leading `  - ` per ID.
+
+- **[soft] [sm-fragile]** — `{before_context}` and `{after_context}` context blocks have no headers explaining their purpose; a 4B model may treat them as beats to include in the reordering list.
+  - Where: lines 22–23 (`{before_context}`, `{after_context}`)
+  - Spec citation: `CLAUDE.md §8 Context Enrichment` (every block must have a header explaining WHAT the data is and WHY it's provided)
+  - Recommended fix: Wrap in labeled headers:
+    ```
+    ### Preceding context (NOT part of this section — do not include in output):
+    {before_context}
+
+    ### Following context (NOT part of this section — do not include in output):
+    {after_context}
+    ```
+
+- **[info] [schema-skew]** — Prompt returns `reordered_sections` array with zero or one entry per call (since one section is passed per call), which aligns with `Phase1Output.reordered_sections: list[ReorderedSection]`. Clean match. No action.
+
+---
+
+### `polish_phase1a_narrative_gaps.yaml`
+
+**Verdict:** mixed
+
+**Findings:**
+
+- **[hard] [drift]** — Gap beats are instructed to carry `dilemma_impacts` including effects `advances / reveals / commits / complicates`. This directly contradicts R-1a.2: **gap beats carry zero `dilemma_impacts`**. The schema example even demonstrates a gap beat with a `dilemma_impacts` entry. A model following this prompt produces structural-beat invariant violations on every non-empty gap-beat proposal.
+  - Where: lines 62–84 (output schema describing `dilemma_impacts` field; example at lines 71–84 showing a gap beat with `dilemma_impacts`)
+  - Spec citation: `polish.md §R-1a.2` ("Gap beats carry zero `dilemma_impacts`. They are structural transition beats; they MUST NOT advance any dilemma."); `story-graph-ontology.md §Part 1 Structural Beats`
+  - Recommended fix: Remove the `dilemma_impacts` field from the output schema and the example entirely. Replace with an explicit prohibition:
+    ```
+    ## CRITICAL
+    Gap beats are STRUCTURAL beats. They MUST have:
+      dilemma_impacts: []   ← always empty; NEVER add dilemma impacts
+    BAD: {{"dilemma_impacts": [{{"dilemma_id": "...", "effect": "advances"}}]}}
+    GOOD: {{"dilemma_impacts": []}}
+    ```
+
+- **[hard] [drift]** — Phase identifier mismatch: the `description` field says "POLISH Phase 1a" which is correct, but the system prompt never identifies itself as POLISH — only as a tool "analyzing path beat sequences." An LLM receiving this in a chain may not apply POLISH-specific constraints (e.g., may apply GROW reasoning about dilemma impacts). This is absorbed-from-GROW work and the identity drift matters.
+  - Where: line 1 (`description`), lines 3–4 (system header — no POLISH attribution)
+  - Spec citation: `polish.md §Phase 1a: Narrative Gap Insertion` ("Absorbed from old GROW 4b per audit Q1 resolution")
+  - Recommended fix: Change system opener to: "You are the POLISH stage (Phase 1a: Narrative Gap Insertion), analyzing path beat sequences to find narrative gaps. This is prose-craft work, NOT structural dilemma construction."
+
+- **[hard] [schema-skew]** — The output schema omits R-1a.1's required gap-beat annotation fields: `is_gap_beat: True`, `role: "gap_beat"`, and `created_by: "POLISH"`. These are set by code post-validation, but the LLM schema should not carry fields that contradict the spec (specifically `dilemma_impacts` — see above) while silently omitting the ones that ARE required. At minimum the prompt should note what the code adds.
+  - Where: lines 54–84 (output format section)
+  - Spec citation: `polish.md §R-1a.1`; `story-graph-ontology.md §Part 1 Gap beat`
+  - Recommended fix: Add a note block after the output format:
+    ```
+    Note: Code automatically adds `is_gap_beat: true`, `role: "gap_beat"`, `created_by: "POLISH"`.
+    You do NOT need to include these — but you MUST NOT include `dilemma_impacts`.
+    ```
+
+- **[soft] [sm-fragile]** — Valid IDs injected as flat comma-separated strings for all three ID types (`valid_path_ids`, `valid_beat_ids`, `valid_dilemma_ids`). Three separate flat lists that reference each other create high cross-list confusion risk for small models.
+  - Where: lines 48–51 (Valid IDs section)
+  - Spec citation: `CLAUDE.md §6`
+  - Recommended fix: Group beat IDs by path and list dilemma IDs separately; makes the path→beat relationship explicit:
+    ```
+    Valid path_ids and their beats:
+      path::dilemma_a__answer_x → beat::ax1, beat::ax2, beat::ax3
+      path::dilemma_b__answer_y → beat::by1, beat::by2
+    Valid dilemma_ids (for path→dilemma mapping ONLY):
+      dilemma::a, dilemma::b
+    ```
+
+- **[soft] [sm-fragile]** — Per-path cap R-1a.4 (max 2 gap beats per path) is mentioned in the checklist (line 31: "Maximum 2 gap beats per path") and in the user turn reminder (line 91: "Maximum 2 gap beats per path"), but there is no GOOD/BAD example showing what happens when 3 are proposed. The CLAUDE.md §7 defensive pattern requires an inline example pair for every hard constraint.
+  - Where: line 31 and line 91
+  - Spec citation: `polish.md §R-1a.4`; `CLAUDE.md §7`
+  - Recommended fix: Add:
+    ```
+    GOOD (within cap): Two gap beats on path::dilemma__answer — one bridging setup→escalation, one bridging escalation→climax
+    BAD (exceeds cap): Three gap beats on the same path — reduce to 2 most impactful
+    ```
+
+- **[info] [schema-skew]** — `scene_type` field in output schema allows `"micro_beat"` as a value. The ontology defines `scene_type ∈ {scene, sequel, micro_beat}` for annotation purposes (Part 1: Beat Annotations), but gap beats created by Phase 1a should have `scene_type` set to `scene` or `sequel` — the spec notes "default to sequel type for gap beats." The prompt's checklist (line 28) says the same. The schema allowing `micro_beat` is marginally confusing but not a functional problem. No action required beyond noting.
+
+---
+
+### `polish_phase2_pacing.yaml`
+
+**Verdict:** mixed
+
+**Findings:**
+
+- **[hard] [drift]** — Pacing-run detection (R-2.6/R-2.7) is entirely absent from this prompt. The spec (R-2.6) requires Phase 2 to "detect runs of 3+ consecutive same-`scene_type` beats per path and insert correction beats of the opposite type." The prompt only handles pacing-flags (consecutive_scene, consecutive_sequel, no_sequel_after_commit) as injected detected issues — it does not instruct the LLM about run detection at all. If run detection is expected to happen in this LLM call, the prompt will not produce it.
+  - Where: lines 22–31 (Guidelines section — no mention of R-2.6 run detection or R-2.7 correction-beat `is_gap_beat: True`)
+  - Spec citation: `polish.md §R-2.6`; `polish.md §R-2.7`; `polish.md §Phase 2 §Pacing-Run Detection`
+  - Recommended fix (pending clarification): If run detection is deterministic (code-side detection, not LLM) and only the correction beat *content* is LLM-generated via the same call, the `{pacing_issues}` context should include `type: "pacing_run"` entries alongside `consecutive_scene` entries, and the Guidelines should add: "For `pacing_run`: insert a correction beat of the OPPOSITE `scene_type` to break the run." If run detection is entirely code-side and content is not LLM-generated, the prompt is fine as-is (info only). Clarify which path is intended, then update accordingly.
+
+- **[soft] [sm-fragile]** — `{pacing_issues}` placeholder has no schema description — the LLM receives injected text with unknown structure. Small models that receive an unexpected pacing issue format will mis-classify or ignore entries.
+  - Where: line 20 (`## Pacing Issues Detected` section — only `{pacing_issues}` with no schema example)
+  - Spec citation: `CLAUDE.md §8`; `CLAUDE.md §9` (every context block must have a header explaining what the data is)
+  - Recommended fix: Add a schema note:
+    ```
+    Each issue follows this format:
+    - type: consecutive_scene | consecutive_sequel | no_sequel_after_commit
+    - after_beat: <beat_id after which to insert the micro-beat>
+    - context: <brief description of surrounding beats>
+    ```
+
+- **[soft] [sm-fragile]** — No GOOD/BAD examples for the `summary` field of micro-beats. The prompt provides three illustrative examples (lines 11–14) but they are under the `## What Are Micro-beats?` header, not under a GOOD/BAD label. Small models conflate illustrative text with rules. The CLAUDE.md §7 pattern requires explicit GOOD/BAD labeling.
+  - Where: lines 11–14 (example micro-beats)
+  - Spec citation: `CLAUDE.md §7`
+  - Recommended fix: Relabel as:
+    ```
+    GOOD (environment-focused, one sentence):
+    - "A moment of silence falls over the study"
+    - "The sound of distant thunder rolls across the valley"
+    BAD (advances dilemma or adds characters):
+    - "Mentor reveals they have been watching protagonist all along" (plot advancement)
+    - "A stranger enters the room and speaks" (new entity — not from surrounding beats)
+    ```
+
+- **[soft] [repair-gap]** — No repair-loop slot. Phase 2 can produce micro-beats with invalid `entity_ids` (not in `valid_entity_ids`). There is no `{pacing_feedback}` template variable for retry error messages. A failed validation on retry will only have the generic system prompt as context, which is suboptimal for small models.
+  - Where: entire file — no `{pacing_feedback}` variable
+  - Spec citation: `CLAUDE.md §5 Repair-loop blindness` (repair feedback must be self-contained); `CLAUDE.md §Validation & Repair Loop`
+  - Recommended fix: Add `{pacing_feedback}` slot to the user turn: "If this is a retry, correction needed: `{pacing_feedback}`". Default to empty string when no retry.
+
+- **[info] [schema-skew]** — Pydantic `MicroBeatProposal` has no `scene_type` field, only `after_beat_id`, `summary`, `entity_ids`. The prompt also omits `scene_type` from the output. This is internally consistent. No action.
+
+---
+
+### `polish_phase3_arcs.yaml`
+
+**Verdict:** mixed
+
+**Findings:**
+
+- **[soft] [sm-fragile]** — `{anchored_dilemmas}` and `{overlay_data}` context variables are interpolated with no structural schema hint. Per CLAUDE.md §9, every injected variable must be explicitly formatted; per §8, every context block must explain what the data is and why it is provided. A Python list repr or dataclass repr leaking here would silently harm context quality.
+  - Where: lines 12–15 (`Entity` section, `{anchored_dilemmas}` and `{overlay_data}`)
+  - Spec citation: `CLAUDE.md §8`, `CLAUDE.md §9`
+  - Recommended fix: Add inline schema stubs:
+    ```
+    Central to dilemmas (format: "dilemma_id: question"):
+    {anchored_dilemmas}
+
+    Entity overlays (format: "when [flag_id]: [property changes]"):
+    {overlay_data}
+    ```
+    and confirm the context builder emits human-readable text in these shapes.
+
+- **[soft] [sm-fragile]** — `{path_ids}` listed as a bare variable with the label "## Paths in This Story" — no context explaining what paths ARE relative to this entity. Small models receiving a list of path IDs without knowing which paths this entity appears on may write arcs for all paths even when the entity is absent from some.
+  - Where: line 22 (`{path_ids}`)
+  - Spec citation: `CLAUDE.md §8 Context Enrichment` (include all ontologically relevant fields)
+  - Recommended fix: Have the context builder filter to paths where the entity has beat appearances, and label them:
+    ```
+    Paths on which this entity appears (generate arcs ONLY for these):
+    {entity_relevant_path_ids}
+    ```
+
+- **[soft] [sm-fragile]** — `{beat_appearances}` header says "in story order" but gives no structural schema hint for what each entry looks like. R-3.5 requires "full context for each entity: beat summaries in order, dilemma questions, path descriptions, overlay details." If the context builder emits bare beat IDs, R-3.5 is violated.
+  - Where: line 18 (`## Beats Featuring This Entity (in story order)`)
+  - Spec citation: `polish.md §R-3.5`; `CLAUDE.md §8`
+  - Recommended fix: Add schema stub: `Format per beat: "[beat_id] ([path_id]) — [summary] — scene_type: [scene|sequel] — exit_mood: [mood]"`
+
+- **[soft] [sm-fragile]** — The constraint that `pivot_beat` MUST equal the matching `pivots[path_id].beat_id` (R-3.8) is stated in the "What NOT to Do" section (line 92) but the working example in the output format section (lines 49–87) already correctly demonstrates this. However, the rule reads as a negative prohibition rather than a positive contract. Small models weight positive examples over negative prohibitions.
+  - Where: line 92 (`- Do NOT use a different pivot_beat than the matching pivots[path_id] entry`)
+  - Spec citation: `polish.md §R-3.8`
+  - Recommended fix: Move the consistency constraint to the `## Arc Structure` section before the example as a positive rule: "**Consistency (REQUIRED):** For each path, `pivots[*].beat_id` and `arcs_per_path[*].pivot_beat` MUST be the SAME beat_id. Pick one beat per path and use it in both fields."
+
+- **[info] [schema-skew]** — `arc_type` placeholder approach (`"_set_by_code"`) is clearly documented in the prompt (line 39) and the Pydantic model `PerPathArc` docstring. The model accepts any string (code overwrites). Clean alignment. No action.
+
+- **[info] [sm-fragile]** — Per-entity call pattern (one entity per call) matches the procedure spec's "constrained ~32k context" note. The scoped approach avoids context overflow. No action.
+
+---
+
+### `polish_phase5a_choice_labels.yaml`
+
+**Verdict:** mixed
+
+**Findings:**
+
+- **[hard] [schema-skew]** — No `### Valid IDs` section. The LLM must produce `from_passage` and `to_passage` IDs that exactly match the `ChoiceSpec.from_passage` / `ChoiceSpec.to_passage` values computed by Phase 4c. Without an explicit valid passage ID list, small models invent or mangle passage IDs, causing Phase 6 to fail to wire choice edges.
+  - Where: entire prompt — no valid passage ID section
+  - Spec citation: `CLAUDE.md §6 Valid ID Injection Principle`; `polish.md §Implementation Constraints §Valid ID Injection`
+  - Recommended fix: Add a `## Valid Passage IDs` section injected from the ChoiceSpec list:
+    ```
+    ## Valid Passage IDs (use ONLY these exact strings)
+    {valid_from_passage_ids}
+    {valid_to_passage_ids}
+    ```
+    and update "What NOT to Do" to include: "Do NOT invent or modify passage IDs — use only the IDs listed above."
+
+- **[soft] [sm-fragile]** — `{story_context}` is injected without a schema header explaining what it contains. CLAUDE.md §8 requires every context block to have an explanatory header.
+  - Where: line 16 (`{story_context}`)
+  - Spec citation: `CLAUDE.md §8`
+  - Recommended fix: Replace `{story_context}` with:
+    ```
+    ## Story Background (for tone and diegetic voice reference)
+    {story_context}
+    ```
+
+- **[soft] [sm-fragile]** — `{choice_details}` contains the ChoiceSpec data but the prompt gives no schema description. The LLM doesn't know if `from_passage` is a passage summary or an ID. If `choice_details` contains bare passage IDs, the model has insufficient context (violating R-5.4: "full context for each choice: source passage summary, target passage summary, surrounding beat summaries, active state flags, relevant dilemma question").
+  - Where: lines 17–18 (`{choice_details}`)
+  - Spec citation: `polish.md §R-5.4`; `CLAUDE.md §8`
+  - Recommended fix: Add a schema stub:
+    ```
+    ## Choices to Label (one entry per choice)
+    Format: "from_passage [passage_id]: [passage_summary] → to_passage [passage_id]: [passage_summary]"
+    Active flags: [flag list]
+    Dilemma question: [question text]
+    {choice_details}
+    ```
+    Confirm the context builder emits this rich format.
+
+- **[soft] [repair-gap]** — No repair-loop slot for label validation failures (e.g., non-diegetic label, labels not distinct within source passage per R-5.2). Retry will only have the static system prompt.
+  - Where: entire file — no `{choice_label_feedback}` variable
+  - Spec citation: `CLAUDE.md §Validation & Repair Loop`; `polish.md §R-5.1`, `§R-5.2`
+  - Recommended fix: Add `{choice_label_feedback}` to user turn (default empty).
+
+- **[info] [schema-skew]** — Output schema uses `from_passage` and `to_passage` matching `ChoiceLabelItem` Pydantic fields exactly. Clean. No action.
+
+---
+
+### `polish_phase5b_residue.yaml`
+
+**Verdict:** mixed
+
+**Findings:**
+
+- **[soft] [sm-fragile]** — `{residue_details}` injected without a schema header. The model does not know what fields each residue entry carries (passage summary, flag context, path description). R-5.5 requires one variant per path; the LLM cannot produce path-specific content without knowing which paths / flags map to which residue.
+  - Where: line 18 (`{residue_details}`)
+  - Spec citation: `polish.md §R-5.5`; `CLAUDE.md §8`
+  - Recommended fix: Add schema stub:
+    ```
+    ## Residue Beats to Write
+    Format per residue:
+    residue_id: [id]
+    target_passage: [summary of the shared scene that follows]
+    active_flag: [state_flag_id] (this path's flag — set if player chose [path_description])
+    other_flag: [sibling_flag_id] (absent for this variant)
+    {residue_details}
+    ```
+
+- **[soft] [sm-fragile]** — No GOOD/BAD example for `content_hint` length. R-5.6 requires "brief — a mood-setter, not a full scene." The prompt says "1-2 sentences max" which is a correct constraint, but CLAUDE.md §7 requires an explicit GOOD/BAD example pair.
+  - Where: lines 7–14 (Goals section)
+  - Spec citation: `polish.md §R-5.6`; `CLAUDE.md §7`
+  - Recommended fix: Add:
+    ```
+    GOOD: "You enter the vault with quiet confidence, the mentor's warning still fresh"
+    BAD: "You spent years preparing for this moment. The vault door is cold to the touch. Behind you, the city sleeps, unaware of what you're about to uncover..." (too long — full passage, not mood-setter)
+    ```
+
+- **[soft] [sm-fragile]** — No repair-loop slot. `mapping_strategy` validation failure (model produces a value outside `{residue_passage_with_variants, parallel_passages}`) has no mechanism for targeted feedback on retry.
+  - Where: entire file — no `{residue_feedback}` variable
+  - Spec citation: `CLAUDE.md §Validation & Repair Loop`
+  - Recommended fix: Add `{residue_feedback}` to user turn (default empty). Include in repair: "`mapping_strategy` must be exactly `residue_passage_with_variants` or `parallel_passages`."
+
+- **[info] [schema-skew]** — `mapping_strategy` Literal values in the prompt match the `ResidueContentItem.mapping_strategy` Pydantic Literal exactly. `residue_id` output field matches `ResidueContentItem.residue_id`. Clean. No action.
+
+---
+
+### `polish_phase5c_false_branches.yaml`
+
+**Verdict:** mixed
+
+**Findings:**
+
+- **[soft] [sm-fragile]** — `{candidate_details}` injected without schema description. The model doesn't know what a candidate stretch looks like (passage IDs, beat summaries, pacing context). R-4d.3 requires "surrounding context: passage IDs, beat summaries, entity references, pacing annotations." Without this schema hint, the model cannot make an informed skip/diamond/sidetrack decision.
+  - Where: line 16 (`{candidate_details}`)
+  - Spec citation: `polish.md §R-4d.3`; `CLAUDE.md §8`
+  - Recommended fix: Add schema stub:
+    ```
+    ## Candidate Stretches (one entry per linear passage run)
+    Format:
+    Candidate [N]: passages [id1 → id2 → id3], [beat count] beats total
+    Beat summaries: [brief per-beat summaries]
+    Entity context: [entities in these passages]
+    Pacing annotation: [exit_mood transitions]
+    {candidate_details}
+    ```
+
+- **[soft] [sm-fragile]** — No constraint preventing false branches at dilemma commit beats (R-5.12). This is a critical rule: "False branches never affect dilemma-driven branching — they sit within linear sections or as cosmetic fork-rejoin structures." A model unaware of this could propose a diamond or sidetrack at a real branching point.
+  - Where: "What NOT to Do" section (lines 48–52) — no mention of R-5.12
+  - Spec citation: `polish.md §R-5.12`
+  - Recommended fix: Add to "What NOT to Do":
+    ```
+    - Do NOT propose diamond or sidetrack at a passage that ends with a real dilemma choice
+      (the candidate_details will mark dilemma-choice passages — never place false branches there)
+    ```
+
+- **[soft] [sm-fragile]** — No GOOD/BAD examples for the `skip` decision. The prompt says "Prefer 'skip' unless the stretch genuinely needs more player engagement" (user turn, line 56), but provides no example of what makes a stretch worth skipping vs. acting on. Without a concrete bad example, small models default to over-applying diamond/sidetrack.
+  - Where: user turn lines 54–58
+  - Spec citation: `CLAUDE.md §7`
+  - Recommended fix: Add in the user turn:
+    ```
+    GOOD reason to skip: "Passage run is naturally tense — forcing a choice here would interrupt the momentum"
+    GOOD reason for diamond: "Introductory scene works equally well from two sensory angles"
+    GOOD reason for sidetrack: "Stretch is 5 passages with no narrative texture — a brief encounter adds atmosphere"
+    ```
+
+- **[info] [schema-skew]** — `candidate_index` (0-based) in `FalseBranchDecisionItem` matches the prompt's "Candidate [N]" format. The off-by-one (0-based vs 1-based labeling) is a minor risk but manageable if context builder emits 0-based labels. Worth verifying at integration time.
+
+---
+
+### `polish_phase5d_variants.yaml`
+
+**Verdict:** clean
+
+**Findings:**
+
+- **[soft] [sm-fragile]** — `{variant_details}` injected without schema description. The model needs to know what active state flags are associated with each variant to write meaningfully different summaries. Without the flag context, all variants risk being generic.
+  - Where: line 18 (`{variant_details}`)
+  - Spec citation: `polish.md §R-5.13` (distinct summary reflecting its flag combination); `CLAUDE.md §8`
+  - Recommended fix: Add schema stub:
+    ```
+    ## Variants to Summarize
+    Format per variant:
+    variant_id: [id]
+    base_passage: [base passage summary]
+    active_flags: [flag_id_1] (player took [path description])
+    {variant_details}
+    ```
+
+- **[info] [schema-skew]** — `variant_id` and `summary` output fields match `VariantSummaryItem` Pydantic exactly. No action.
+
+---
+
+### `polish_phase5e_atmospheric.yaml`
+
+**Verdict:** mixed
+
+**Findings:**
+
+- **[soft] [sm-fragile]** — `{narrative_frame}` injected without a schema label or header. If this contains the story's genre/tone as a string, a small model may conflate it with the beat list that follows.
+  - Where: line 8 (`{narrative_frame}`)
+  - Spec citation: `CLAUDE.md §8`, `CLAUDE.md §9`
+  - Recommended fix: Add header: `## Story Frame (genre and tone, for sensory register reference)` before the variable.
+
+- **[soft] [sm-fragile]** — Partial coverage detection (R-5e.1) cannot happen from this prompt alone — the prompt instructs the model to produce details for "ALL beats" but doesn't explain what the model should do if it is uncertain about a beat. The contract between LLM output and code-side WARNING detection should be clarified.
+  - Where: user turn line 38 (`Every beat needs an atmospheric_detail`) — no fallback instruction for uncertain beats
+  - Spec citation: `polish.md §R-5e.1` (partial coverage MUST log a WARNING)
+  - Recommended fix: Add to user turn: "If you are uncertain about the sensory environment for a beat, write a generic sensory anchor rather than omitting it (e.g., 'Dim ambient light and the faint sound of settling wood'). Omitting a beat is worse than a generic detail."
+
+- **[soft] [sm-fragile]** — No GOOD/BAD example differentiating environment from interiority (R-5e.2). The illustrative examples (lines 13–16) are good but are not labeled GOOD. The prohibition "Write ENVIRONMENT, not character emotion" (line 17) is present but lacks a BAD counterexample.
+  - Where: lines 13–17
+  - Spec citation: `polish.md §R-5e.2`; `CLAUDE.md §7`
+  - Recommended fix: Add:
+    ```
+    BAD: "A sense of dread hangs in the air" (character interiority, not environment)
+    BAD: "The protagonist feels cold and alone" (character emotion)
+    GOOD: "The smell of wet earth and rust" (environment)
+    GOOD: "Cold steel handrails vibrating faintly underfoot" (physical sensation, environment)
+    ```
+
+- **[info] [schema-skew]** — Output format returns `details: [{beat_id, atmospheric_detail}]` array. The Pydantic model for Phase 5e output is not defined in `polish.py` as a named model — but the schema-level check (beat IDs exist, no extra IDs) is handled by code. The prompt matches the expected JSON shape. No action.
+
+---
+
+### `polish_phase5e_feasibility.yaml`
+
+**Verdict:** clean
+
+**Findings:**
+
+- **[soft] [sm-fragile]** — `{case_details}` injected without a schema description. The model doesn't know what the `[0]`, `[1]` labels represent without an explicit schema header.
+  - Where: line 22 (`{case_details}`)
+  - Spec citation: `CLAUDE.md §8`
+  - Recommended fix: Add schema stub:
+    ```
+    ## Cases to Resolve
+    Format per case:
+    Passage: [passage_id] — [passage_summary]
+    Entities in passage: [entity list]
+    Flags to decide:
+      [0] flag_id: [flag description] — weight: heavy|light — dilemma: [question]
+      [1] flag_id: [flag description] — weight: heavy|light — dilemma: [question]
+    {case_details}
+    ```
+    The `[0]`, `[1]` label convention is referenced in the output format (`flag_index`) but only explained in the output schema. Move the explanation to the cases section.
+
+- **[soft] [sm-fragile]** — Decision values `"variant" / "residue" / "irrelevant"` are stated in the task description but the user-turn reminder (lines 50–55) doesn't echo them. Small models completing a long list of flags may drift toward free-form values.
+  - Where: user turn lines 50–55
+  - Spec citation: `CLAUDE.md §10`
+  - Recommended fix: Add to user turn: "REMINDER: each decision MUST be exactly one of: `variant`, `residue`, or `irrelevant` — no other values accepted."
+
+- **[info] [schema-skew]** — `FeasibilityDecisionItem` Pydantic model has `decision: str` (not a Literal). The code validates against `{"variant", "residue", "irrelevant"}` post-parse. Prompt correctly names the three values. Alignment is good.
+
+---
+
+### `polish_phase5f_path_thematic.yaml`
+
+**Verdict:** mixed
+
+**Findings:**
+
+- **[soft] [sm-fragile]** — `{entity_arcs}` injected without a schema label clarifying it contains POLISH Phase 3 output. A small model may treat it as general character descriptions rather than POLISH-synthesized arc metadata. The context builder must ensure R-3.6 `arcs_per_path` data is in this injection.
+  - Where: line 19 (`{entity_arcs}`)
+  - Spec citation: `polish.md §R-5f.2` (LLM consumes full beat sequence with summaries, scene types, narrative functions, exit moods); `CLAUDE.md §8`
+  - Recommended fix: Relabel: `## Character Arcs on This Path (synthesized by POLISH Phase 3)` and add: "Use these to understand how character trajectories influence the path's emotional through-line."
+
+- **[soft] [sm-fragile]** — `{beat_sequence}` injected without a schema description. R-5f specification says the LLM should consume "the full beat sequence with their summaries, scene types, narrative functions, and exit moods." If the context builder emits bare beat IDs or only summaries, the rich context required by the spec is missing.
+  - Where: line 22 (`{beat_sequence}`)
+  - Spec citation: `polish.md §R-5f` (operations description); `CLAUDE.md §8`
+  - Recommended fix: Add schema stub: `Format per beat: "[beat_id] — [summary] — scene_type: [scene|sequel] — narrative_function: [introduce|develop|...] — exit_mood: [mood]"`
+
+- **[soft] [drift]** — Phase identity: this is POLISH Phase 5f but the system prompt says "narrative architect analyzing a single path" with no POLISH attribution. Unlike the Phase 1a case this is less critical (the instructions are narrow and focused), but adding POLISH attribution aligns with the absorbed-from-GROW traceability intent.
+  - Where: lines 3–4 (system header)
+  - Spec citation: `polish.md §Phase 5f — Path Thematic Annotation` ("Absorbed from old GROW 4e per audit Q1")
+  - Recommended fix: Add: "You are the POLISH stage (Phase 5f: Path Thematic Annotation), synthesizing the emotional through-line of a single story path."
+
+- **[info] [schema-skew]** — Output fields `path_id`, `path_theme` (10–200 chars), `path_mood` (2–50 chars) match `story-graph-ontology.md §Part 1 Path Annotations` and `polish.md §R-5f.1`/`R-5f.2` exactly. The length constraints are enforced in the prompt with explicit character examples and a "CRITICAL: count characters manually" warning. This is the best small-model-resilience implementation in all 12 POLISH prompts.
+
+---
+
+### `polish_phase5f_transitions.yaml`
+
+**Verdict:** mixed
+
+**Findings:**
+
+- **[soft] [sm-fragile]** — `{collapsed_passage_details}` injected without a schema description. The model needs to know what "beat boundaries" look like — how they're listed in the injected context — to count them correctly. If the context builder emits passage summaries without explicit boundary markers, the model will miscount.
+  - Where: line 36 (`{collapsed_passage_details}`)
+  - Spec citation: `CLAUDE.md §8`; `polish.md §Phase 5f` (transitions sub-task)
+  - Recommended fix: Add schema stub:
+    ```
+    ## Collapsed Passages to Process
+    Format per passage:
+    passage_id: [id] — [N] beats → [N-1] boundaries needed
+    Beat 1: [summary]
+    Boundary 1 ←
+    Beat 2: [summary]
+    Boundary 2 ←
+    Beat 3: [summary]
+    {collapsed_passage_details}
+    ```
+
+- **[soft] [sm-fragile]** — The transition count constraint ("exactly N-1 transitions for N beats") is stated at lines 10–13 and in the user turn (line 56), but the BAD examples (lines 30–33) include "Transition smoothly" and "Write a transition here" without showing an example of wrong-count output. A small model producing too many or too few transitions is a common failure mode that benefits from a count-violation example.
+  - Where: lines 30–33 (Bad Transition Examples)
+  - Spec citation: `CLAUDE.md §7`
+  - Recommended fix: Add to "What NOT to Do":
+    ```
+    - Do NOT provide 3 transitions for a 3-beat passage (3 beats = 2 boundaries = 2 transitions, not 3)
+    GOOD (2-beat passage = 1 transition): {{"transitions": ["The silence stretches until the protagonist turns away."]}}
+    BAD (2-beat passage = 2 transitions — too many): {{"transitions": ["...", "..."]}}
+    ```
+
+- **[soft] [schema-skew]** — `polish_phase5f_transitions.yaml` is named "5f_transitions" but in the POLISH procedure spec, transition guidance is part of Phase 5f alongside path thematic annotation, not a separate phase. The Pydantic model is `Phase5fOutput` with `TransitionGuidanceItem` — which correctly lumps them together. The prompt file name implies a separate sub-phase that doesn't exist in the spec. This causes navigational confusion when reading the procedure doc alongside the prompt file.
+  - Where: prompt `name` field (line 1: `polish_phase5f_transitions`) vs `polish.md §Phase 5` (5f is Path Thematic Annotation; transitions are a sub-task of Phase 5)
+  - Spec citation: `polish.md §Phase 5f` and `§Phase 5 Output Contract item 6`; `src/questfoundry/models/polish.py:420–435`
+  - Recommended fix: The filename is `5f_transitions` and the other file is `5f_path_thematic`. This correctly splits two LLM calls within Phase 5f. The disconnect is that `polish.md §Phase 5f` does not mention transition guidance as a sub-task — it is implied by `PassageSpec.transition_guidance` and the output contract. No file rename needed; spec should be updated to explicitly list transition guidance as a Phase 5f sub-task.
+  - **spec-gap flag:** `polish.md §Phase 5f` should be updated to include transition guidance as a named sub-task alongside path thematic annotation. Recommend spec edit before any code change.
+
+- **[info] [schema-skew]** — `TransitionGuidanceItem.transitions: list[str]` with `min_length=1` in Pydantic. A single-boundary passage returns one-element list; the prompt correctly handles this. Output field `passage_id` and `transitions` match Pydantic exactly. No action.
+
+---
+
+### Stage summary: POLISH
+
+POLISH is the largest prompt set (12 files covering 9 distinct phases/sub-phases), and it absorbed 5 phases from GROW in epic #1368. That migration created two classes of problems:
+
+**Class 1 — Migration residue (absorbed-from-GROW prompts):** `phase1a_narrative_gaps` still teaches the model to produce `dilemma_impacts` in gap beats, directly violating R-1a.2 (structural-beat invariant). This is the single hardest finding in the stage. `phase2_pacing` is silent on pacing-run detection (R-2.6/R-2.7), leaving it ambiguous whether run correction content is LLM-generated via this call or entirely code-side. `phase3_arcs` handles the `arcs_per_path` consolidation correctly (the `_set_by_code` placeholder pattern is well-documented), but the context-enrichment deficits in `{anchored_dilemmas}` and `{beat_appearances}` risk violating R-3.5.
+
+**Class 2 — Valid ID gaps across Phase 5 prompts:** `phase5a_choice_labels` has no `### Valid IDs` section at all, violating the CLAUDE.md §6 mandate and opening the door to phantom passage IDs in Phase 6's atomic application. All four remaining Phase 5 prompts (5b, 5c, 5d, 5e) lack schema descriptions for their main context injection variables (`{residue_details}`, `{candidate_details}`, `{variant_details}`, `{beat_summaries}`), making R-5.4/R-5.5/R-5.13 context-enrichment requirements effectively unverifiable without inspecting the context builders.
+
+**Migrated phases that are correct:** `phase5f_path_thematic` is the best-written prompt in POLISH — explicit length constraints with character counts, concrete bad examples, and CRITICAL emphasis. `phase1_reorder` and `phase5d_variants` are mostly clean with only soft findings. `phase5e_feasibility` has a modest schema description gap but its decision-value enumeration and example are correct.
+
+**Spec gap:** `polish.md §Phase 5f` does not name transition guidance as a sub-task; the `phase5f_transitions.yaml` prompt exists and the Pydantic output model is `Phase5fOutput`, but the procedure doc needs updating to make this explicit.
+
+- Prompts audited: 12
+- Hard findings: 4 (`phase1a` dilemma_impacts violation ×2, `phase1a` phase identity drift, `phase5a` missing Valid IDs)
+- Soft findings: 22 (context injection schema gaps across Phase 5; repair-loop slot absences; GOOD/BAD example gaps; pacing-run detection gap in Phase 2; identity drift in Phase 1a and Phase 5f)
+- Info findings: 7
+- Spec gaps surfaced: 1 (`polish.md §Phase 5f` missing transition guidance sub-task — recommend spec edit before PR)
+- Recommended PR split: PR-A (hard findings: `phase1a` dilemma_impacts removal + phase identity fix + `phase5a` Valid IDs injection); PR-B (Phase 5 context enrichment: schema stubs for `{residue_details}`, `{candidate_details}`, `{variant_details}`, `{beat_summaries}` + repair-loop slots); PR-C (soft/info: GOOD/BAD examples, sandwich repetitions, R-5.12 false-branch constraint, pacing-run R-2.6 clarification after code investigation)
+- Status: DONE
 
 ---
 
