@@ -37,7 +37,7 @@ sections land.)
 |---|---|---|---|---|---|---|
 | DREAM | 3 | 7 | 5 | 3 | 0 | drift |
 | BRAINSTORM | 3 | 8 | 9 | 3 | 1 | drift |
-| SEED | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ | pending |
+| SEED | 5 | 8 | 16 | 5 | 1 | drift |
 | GROW | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ | pending |
 | POLISH | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ | pending |
 | FILL | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ | pending |
@@ -411,13 +411,165 @@ The `Entity.name` required/optional contradiction between serialize prompt ("lea
 
 ## SEED
 
-(Pending — Task 8.)
+### `discuss_seed.yaml`
 
-> **Already-known finding from Phase 1:** `serialize_seed_sections.yaml`
-> per-path-beats repair-loop didn't echo expected `also_belongs_to`
-> value. Fixed in PR #1384. The subagent should still re-audit this
-> prompt in Task 8 to catch any other findings (the smoke test
-> already surfaced 5 bonus items).
+**Verdict:** mixed
+
+**Findings:**
+
+- **[hard] [schema-skew]** — Worked Example shows legacy `paths: [...]` list format for beats; pre-commit beats MUST use `path_id` + `also_belongs_to` directly per Y-shape (#1206).
+  - Where: "### 4. Create Initial Beats for Each Path" section.
+  - Spec citation: `seed.md §R-3.6`; `models/seed.py:283–323` (migration emits DeprecationWarning).
+  - Recommended fix: Replace generic beat description with concrete Y-shape examples for shared (with `also_belongs_to`) vs per-path (with `also_belongs_to: null`) beats.
+
+- **[hard] [sm-fragile]** — Branching constraint ("at least 2 dilemmas must have both answers explored") absent from discuss prompt; only stated in summarize. The discuss agent makes the actual exploration decisions, so the constraint must be HERE.
+  - Where: "### 2. Choose Which Answers to Explore"; final paragraph contradicts: "you don't need to count arcs or worry about limits".
+  - Spec citation: `seed.md §R-5.1`; `summarize_seed_sections.yaml:52–66`.
+  - Recommended fix: Add MINIMUM BRANCHING REQUIREMENT block with GOOD/BAD examples; remove the contradicting "don't worry" sentence.
+
+- **[soft] [drift]** — `is_canonical: true` terminology used in discuss but `(default)` marker used everywhere else.
+  - Recommended fix: Add clarifier "the canonical answer is marked `(default)`".
+
+- **[soft] [sm-fragile]** — Convergence target `{size_convergence_points}` doesn't note that hard dilemmas have NO convergence (paths never rejoin).
+  - Recommended fix: Add caveat: "Hard dilemmas do NOT need convergence points — target applies to soft dilemmas only."
+
+- **[soft] [schema-skew]** — Beat description omits `temporal_hint`, `location_alternatives`, `role: setup/epilogue` fields that exist in `InitialBeat`.
+  - Recommended fix: Add brief note about location alternatives + temporal hints.
+
+- **[soft] [schema-skew]** — Consequences described only as "list of consequence IDs" — `Consequence` Pydantic requires `description` (min_length=1) and `narrative_effects`.
+  - Recommended fix: Expand: "consequences — what happens in the world after this path. Each has description (world state, not player action) and downstream ripples."
+
+- **[info] [drift]** — `research_tools_section` references `list_clusters`; verify it still exists in the active corpus MCP.
+
+---
+
+### `summarize_seed.yaml`
+
+**Verdict:** mixed
+
+**Findings:**
+
+- **[hard] [schema-skew]** — `### Initial Beats (Y-shape: …)` section uses legacy `paths: list of path IDs` field — same Y-shape gap as discuss prompt. Pre-commit beats need `path_id` + `also_belongs_to`.
+  - Where: lines 84–90.
+  - Spec citation: `seed.md §R-3.6`; `models/seed.py:283–323`.
+  - Recommended fix: Replace beats schema with canonical Y-shape fields explicitly distinguishing shared (with `also_belongs_to`) vs per-path beats.
+
+- **[hard] [repair-gap]** — Summarizer has detailed VERIFY checks for entity/dilemma counts but NO checks for beat counts or Y-shape completeness. Pre-commit beats without `also_belongs_to` pass through summarize silently and only fail in serialize.
+  - Where: "### Initial Beats (Y-shape: …)" section.
+  - Spec citation: `seed.md §R-3.6`, §R-3.10`, §R-3.12`.
+  - Recommended fix: Add VERIFY block: "For EACH dilemma with 2 explored paths: at least 1 shared beat with both `path_id` AND `also_belongs_to` set; each path has exactly 1 commit beat; each path has ≥2 post-commit beats."
+
+- **[soft] [sm-fragile]** — Location Constraint (CRITICAL) appears once at end with no top-of-prompt repetition.
+  - Recommended fix: Add one-line echo at end: "REMINDER: All location IDs MUST be retained entity IDs from brainstorm."
+
+- **[soft] [schema-skew]** — Output format prose for Entity Decisions Manifest doesn't capture `name` field needed for entities marked "(needs name)".
+  - Recommended fix: Add: "If an entity needs a name: `- character::unnamed_spy: retained - name: 'Marcus Delacroix' - ...`".
+
+- **[info] [drift]** — Path schema mentions `shadows: IDs of unexplored answers` but field is named `unexplored_answer_ids`.
+
+---
+
+### `summarize_seed_sections.yaml`
+
+**Verdict:** mixed
+
+**Findings:**
+
+- **[hard] [sm-fragile]** — `dilemmas_system` MINIMUM BRANCHING REQUIREMENT says "GO BACK and fully explore at least 2 dilemmas" — small models can't "go back"; constraint is unactionable.
+  - Where: lines 52–66 (instruction) and 143–147 (FINAL CHECK).
+  - Spec citation: `seed.md §R-5.1`; `CLAUDE.md §10`.
+  - Recommended fix: Replace "GO BACK" with self-sufficient OVERRIDE instruction: "For any dilemma NOT marked 'explore both' in the discussion, you MAY add the non-default answer to `explored` if total fully-explored count is still below 2."
+
+- **[hard] [schema-skew]** — `beats_system` instructs production of beats with deprecated `paths` field — same Y-shape gap.
+  - Where: lines 199–212.
+  - Recommended fix: Same as `summarize_seed.yaml` — explicit `path_id` + `also_belongs_to` description with shared vs per-path distinction.
+
+- **[soft] [sm-fragile]** — `entities_system` silent default ("if not discussed, write disposition `retained`") produces bloated retained sets violating R-1.4 spirit.
+  - Recommended fix: "If an entity was not discussed, make an editorial judgment — retain if narratively necessary; cut if peripheral. Do NOT blindly retain."
+
+- **[soft] [sm-fragile]** — `paths_system` lacks GOOD/BAD examples for path ID format (`path::dilemma_id__answer_id` with double underscore).
+  - Recommended fix: Add explicit examples showing the prefix and double-underscore pattern.
+
+- **[soft] [schema-skew]** — `convergence_system` produces convergence_points/residue_notes fields not directly mapped in any serialize schema; advisory only.
+  - Recommended fix: Add note explaining how Section 7 (Dilemma Analysis) consumes this output.
+
+- **[info] [schema-skew]** — `paths_system` doesn't mention optional `pov_character` field on `Path`.
+
+---
+
+### `serialize_seed.yaml`
+
+**Verdict:** mixed
+
+**Findings:**
+
+- **[hard] [schema-skew]** — Section 5 schema example shows beat with single-element `paths: [...]` array (legacy format) — directly contradicts Y-shape requirement. Doesn't demonstrate `also_belongs_to`.
+  - Where: lines 73–97.
+  - Spec citation: `seed.md §R-3.6, §R-3.7`; `models/seed.py:271–285`.
+  - Recommended fix: Replace single example with TWO canonical examples (shared pre-commit with `also_belongs_to` set; per-path commit/post-commit with `also_belongs_to: null`).
+
+- **[hard] [schema-skew]** — Investigate whether `serialize_seed.yaml` is still on any active code path. The chunked `serialize_seed_sections.yaml` is the documented path. If monolithic is dead, mark with header comment and file tracking issue. If active, must fix Y-shape examples per above.
+
+- **[soft] [sm-fragile]** — Schema Overview says "six main sections" but only shows five. `dilemma_analyses` and `dilemma_relationships` (Sections 7+8) are absent.
+  - Recommended fix: Either correct the count or add the missing sections.
+
+- **[soft] [schema-skew]** — Path schema example shows `consequence_ids: ["host_revealed"]` implying consequences pre-exist; in chunked flow they're generated AFTER paths.
+  - Recommended fix: Use `consequence_ids: []` with note: "Leave empty when generating paths — populated by Section 4."
+
+- **[info] [terminology]** — Mapping Rules table shows only 5 of 7 SeedOutput sections.
+
+---
+
+### `serialize_seed_sections.yaml`
+
+**Verdict:** mixed
+
+**Re-confirmation of Phase 1 PR (#1384) fix (already-known finding):**
+
+The `also_belongs_to` repair-gap is confirmed addressed via `extra_repair_hints` in serialize.py (Option B). Repair message echoes both `path_id` and `also_belongs_to` values per call. No further action needed on this hard finding.
+
+**Other findings:**
+
+- **[hard] [schema-skew]** — `beats_prompt` (the flat all-paths-at-once section) is REGISTERED in `_SEED_SECTION_PROMPTS` but pre-dates Y-shape refactor and has zero Y-shape awareness — no `also_belongs_to`, no shared/commit/post-commit distinction. **If pipeline can reach this prompt on a non-Y-shape code path, it produces stories with no Y-fork → POLISH Phase 4c produces 0 choices** (the known critical failure mode).
+  - Where: `beats_prompt` lines 401–623.
+  - Spec citation: `seed.md §R-3.10`; `story-graph-ontology.md §Part 8`.
+  - Recommended fix: Investigate runtime: does pipeline use `shared_beats_prompt` + `per_path_beats_prompt` exclusively, or fall back to `beats_prompt`? If fallback path exists, this needs Y-shape rewrite. If dead, mark + tracking issue.
+
+- **[soft] [sm-fragile]** (smoke-test bonus #2, confirmed) — `per_path_beats_prompt` FINAL VERIFICATION doesn't re-check `also_belongs_to: null` for post-commit beats.
+  - Recommended fix: Add to FINAL VERIFICATION: "3. `also_belongs_to` is null for EVERY beat in this output."
+
+- **[soft] [sm-fragile]** (smoke-test bonus #3, confirmed) — `shared_beats_prompt` `also_belongs_to` constraint is bullet #7; should be #1.
+  - Recommended fix: Hoist to first bullet with REQUIRED emphasis.
+
+- **[soft] [schema-skew]** (smoke-test bonus #4, confirmed) — `per_path_beats_prompt` schema uses `"dilemma::[other_dilemma_id]"` square-bracket placeholder violating §9.
+  - Recommended fix: Replace with `"dilemma::another_dilemma_id"` + explicit "replace with actual ID — NOT a template" note.
+
+- **[hard] [schema-skew]** — `dilemma_analyses_prompt` Self-Check says "FLAVOR count is 0-2" but `flavor` role is now rejected outright (R-7.1). Small model following Self-Check produces invalid `dilemma_role: "flavor"` → Pydantic rejection.
+  - Where: Self-Check section, line 1113.
+  - Spec citation: `seed.md §R-7.1`; `models/seed.py:400`.
+  - Recommended fix: Remove flavor mention; replace with "Every entry has `dilemma_role` exactly `hard` or `soft` (no other values accepted)."
+
+- **[soft] [schema-skew]** — `dilemma_relationships_prompt` requires exhaustive O(n²) pair declaration but `seed.md §R-8.2` says "Exhaustive O(n²) declaration is forbidden". Spec vs prompt direct contradiction.
+  - **Spec-gap finding:** Resolution requires spec update. Current behaviour (exhaustive) is operationally sensible (missing pairs ambiguous for GROW); spec amendment recommended: "Including concurrent-default pairs for completeness is acceptable."
+
+- **[soft] [sm-fragile]** — `per_dilemma_paths_prompt` schema example uses `{dilemma_name}__{answer_id_example}` template variables inside double-brace JSON; small model may copy literally.
+  - Recommended fix: Use `path::DILEMMA_NAME__ANSWER_ID` with explicit "replace with actual values" note.
+
+- **[info] [terminology]** (smoke-test bonus #5, confirmed) — "commit" used both as field value and concept.
+
+---
+
+### Stage summary: SEED
+
+The SEED stage has the most complex prompt set in the pipeline (5 files, 8+ sections). The Y-shape refactor (#1206) was partially propagated but three concrete gaps remain: (1) deprecated `paths: [a,b]` format still in `summarize_seed.yaml` + `serialize_seed.yaml` schema examples; (2) `beats_prompt` in `serialize_seed_sections.yaml` may still be on active code path without Y-shape awareness (would cause known 0-choice POLISH failure); (3) `summarize_seed_sections.yaml` `beats_system` shows deprecated field. Phase 1 PR #1384 fix for `also_belongs_to` repair-gap is confirmed sufficient. The `flavor` role appearing in `dilemma_analyses_prompt`'s Self-Check is a Pydantic validation hazard. The minimum-branching constraint is absent from `discuss_seed.yaml` where it actually matters. Spec-gap: R-8.2 sparse vs prompt's exhaustive pair declaration.
+
+- Prompts audited: 5 (discuss_seed, summarize_seed, summarize_seed_sections, serialize_seed, serialize_seed_sections)
+- Hard findings: 8
+- Soft findings: 16
+- Info findings: 5
+- Spec gaps surfaced: 1 (R-8.2 sparse vs exhaustive — recommend permitting exhaustive)
+- Recommended PR split: PR-A (Y-shape schema examples in summarize/serialize + `also_belongs_to` sandwich + flavor removal + branching constraint in discuss_seed); PR-B (beats_prompt dead-code investigation + dilemma_relationships reconciliation pending spec update)
+- Status: drift
 
 ---
 
