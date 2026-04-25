@@ -301,6 +301,23 @@ class TestGapProposal:
         with pytest.raises(ValidationError, match="summary"):
             GapProposal(path_id="t1", summary="")
 
+    def test_dilemma_impacts_rejected_per_r_1a_2(self) -> None:
+        # Per polish.md R-1a.2, gap beats are structural and must carry zero
+        # dilemma_impacts. The validator rejects any non-empty value so an
+        # LLM that ignores the prompt fails fast.
+        with pytest.raises(ValidationError, match=r"R-1a\.2"):
+            GapProposal(
+                path_id="t1",
+                summary="A transition beat.",
+                dilemma_impacts=[
+                    {  # type: ignore[list-item]
+                        "dilemma_id": "dilemma::trust",
+                        "effect": "advances",
+                        "note": "test",
+                    }
+                ],
+            )
+
 
 class TestOverlayProposal:
     def test_valid_proposal(self) -> None:

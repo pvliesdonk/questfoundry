@@ -268,7 +268,14 @@ class Phase4fOutput(BaseModel):
 
 
 class GapProposal(BaseModel):
-    """Phase 4b/4c: Proposes new beats to fill structural gaps."""
+    """POLISH Phase 1a (Narrative Gap Insertion): proposes new beats to fill
+    structural transitions between adjacent beats. Per polish.md R-1a.2, gap
+    beats are STRUCTURAL ONLY — they MUST NOT carry `dilemma_impacts`. The
+    field below is retained as an empty default for back-compat with the
+    prior GROW Phase 4b/4c shape; a model_validator rejects any non-empty
+    value so an LLM that ignores the prompt fails validation immediately
+    rather than producing a beat that violates R-1a.2 downstream.
+    """
 
     path_id: str = Field(min_length=1)
     after_beat: str | None = Field(
@@ -281,7 +288,25 @@ class GapProposal(BaseModel):
     )
     summary: str = Field(min_length=1)
     scene_type: Literal["scene", "sequel", "micro_beat"] = "sequel"
-    dilemma_impacts: list[DilemmaImpact] = Field(default_factory=list)
+    dilemma_impacts: list[DilemmaImpact] = Field(
+        default_factory=list,
+        description=(
+            "MUST be empty per polish.md R-1a.2 — gap beats are structural "
+            "transition beats and cannot advance, reveal, commit, or "
+            "complicate any dilemma."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _no_dilemma_impacts(self) -> GapProposal:
+        if self.dilemma_impacts:
+            raise ValueError(
+                "Gap beats MUST NOT carry dilemma_impacts (polish.md R-1a.2). "
+                "Gap beats are structural transition beats only — they cannot "
+                "advance, reveal, commit, or complicate any dilemma. Remove the "
+                "dilemma_impacts entries from this gap proposal."
+            )
+        return self
 
 
 class Phase4bOutput(BaseModel):

@@ -305,10 +305,25 @@ def format_choice_label_context(
             f"     To: {to_id} ({to_summary}){grants_str}"
         )
 
+    # Valid passage IDs: every passage_id referenced by any ChoiceSpec, sorted
+    # for determinism. Per CLAUDE.md §6 the LLM must receive an explicit Valid
+    # IDs list rather than be expected to derive IDs from the choice details
+    # block — small models otherwise invent or mangle passage IDs and Phase 6
+    # fails to wire choice edges.
+    valid_passage_ids = sorted(
+        {
+            pid
+            for spec in choice_specs
+            for pid in (spec.get("from_passage", ""), spec.get("to_passage", ""))
+            if pid
+        }
+    )
+
     return {
         "choice_details": "\n".join(choice_lines),
         "story_context": story_context,
         "choice_count": str(len(choice_specs)),
+        "valid_passage_ids": ", ".join(valid_passage_ids),
     }
 
 

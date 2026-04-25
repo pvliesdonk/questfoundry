@@ -17,6 +17,10 @@ system: |
   ## Choices to Label
   {choice_details}
 
+  ## Valid IDs
+  Valid passage IDs (use ONLY these for from_passage / to_passage):
+  {valid_passage_ids}
+
   ## Output Format
   Return a JSON object with a "choice_labels" array. One entry per choice above.
 
@@ -35,6 +39,7 @@ system: |
   - Do NOT use meta-language ("Choose option A", "Select path 2")
   - Do NOT make labels longer than 15 words
   - Do NOT skip any choice — provide a label for every choice listed
+  - Do NOT invent passage IDs — every from_passage / to_passage MUST appear in the Valid passage IDs list above
   - Do NOT add prose before or after the JSON output
 
 user: |

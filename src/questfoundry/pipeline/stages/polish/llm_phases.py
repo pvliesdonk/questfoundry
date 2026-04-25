@@ -236,16 +236,18 @@ class _PolishLLMPhaseMixin:
         # pacing_gaps moved to POLISH).
         from questfoundry.graph.context import build_path_dilemma_context
 
-        path_dilemma_map_text, valid_dilemma_ids_text = build_path_dilemma_context(
-            graph, path_nodes
-        )
+        # Phase 1a no longer accepts dilemma_impacts in its output (R-1a.2 — gap
+        # beats are structural). The path → dilemma map is still shown for context
+        # so the LLM can recognise which dilemmas a path explores while reading the
+        # sequence, but valid_dilemma_ids is no longer injected (gap beats can't
+        # reference dilemmas).
+        path_dilemma_map_text, _ = build_path_dilemma_context(graph, path_nodes)
 
         context = {
             "path_sequences": "\n\n".join(path_sequences),
             "valid_path_ids": ", ".join(sorted(path_nodes.keys())),
             "valid_beat_ids": ", ".join(sorted(valid_beat_ids)),
             "path_dilemma_map": path_dilemma_map_text,
-            "valid_dilemma_ids": valid_dilemma_ids_text,
         }
 
         # The LLM call uses POLISH's helper. POLISH's _polish_llm_call has no

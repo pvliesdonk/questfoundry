@@ -2,8 +2,16 @@ name: polish_phase1a_narrative_gaps
 description: Identify missing beats in path sequences (POLISH Phase 1a, Narrative Gap Insertion)
 
 system: |
-  You are analyzing path beat sequences to find narrative gaps --
-  places where the story jumps too abruptly between beats.
+  You are POLISH Phase 1a (Narrative Gap Insertion). Your job is to scan
+  each path's beat sequence for narrative gaps and propose inserting
+  *structural transition beats* — gap beats — that bridge abrupt jumps.
+
+  Per polish.md R-1a.2, gap beats are STRUCTURAL ONLY. They MUST NOT
+  advance, reveal, commit, or complicate any dilemma. The
+  `dilemma_impacts` field is intentionally absent from the output schema
+  below — do not invent it. If you find yourself wanting to record a
+  dilemma effect, the beat is not a gap beat and does not belong in this
+  phase's output.
 
   ## Beat Ordering (CRITICAL — read this first)
   after_beat = the EARLIER beat (the new beat goes AFTER it)
@@ -30,16 +38,16 @@ system: |
   4. Gap beats should be concise transitions, not major story events
   5. Maximum 2 gap beats per path
 
-  ## Path → Dilemma mapping (use these dilemma_id values)
+  ## Path → Dilemma mapping (FOR REFERENCE ONLY — do not use in output)
+  This is shown so you can recognise which dilemmas a path explores
+  while reading its sequence. Gap beats do not reference dilemmas.
   {path_dilemma_map}
-
-  ## Valid dilemma IDs
-  {valid_dilemma_ids}
 
   ## Path Sequences (in execution order)
   {path_sequences}
 
   ## What NOT to Do
+  - Do NOT include `dilemma_impacts` in any gap beat (R-1a.2 — gap beats are structural)
   - Do NOT propose gaps for paths with only 1-2 beats
   - Do NOT propose gaps between beats that already flow naturally
   - Do NOT use IDs not listed in the Valid IDs section
@@ -57,13 +65,11 @@ system: |
   - before_beat: the LATER beat (or null for end of path)
   - summary: concise description of the gap beat (1 sentence)
   - scene_type: scene | sequel | micro_beat (default: sequel)
-  - dilemma_impacts: list of how this beat affects dilemmas (may be empty)
-    Each item: {{"dilemma_id": "<id>", "effect": "<advances|reveals|commits|complicates>", "note": "<explanation>"}}
-    Effect values:
-      advances    = moves the dilemma closer to resolution (tension builds)
-      reveals     = discloses new information about the dilemma
-      commits     = a character makes an irreversible choice about the dilemma
-      complicates = adds a new obstacle or contradiction to the dilemma
+
+  Note: POLISH code automatically adds `is_gap_beat: True`, `role: "gap_beat"`,
+  `created_by: "POLISH"`, and zero `dilemma_impacts` to every accepted beat
+  (per R-1a.1). You do not include those fields — they are not part of this
+  schema.
 
   If no gaps are needed, return an empty gaps array.
 
@@ -75,10 +81,7 @@ system: |
         "after_beat": "beat::setup_01",
         "before_beat": "beat::climax_01",
         "summary": "Hero reflects on the stakes before the confrontation",
-        "scene_type": "sequel",
-        "dilemma_impacts": [
-          {{"dilemma_id": "dilemma::trust_or_betray", "effect": "advances", "note": "Hero weighs loyalty against self-interest before the confrontation forces a choice"}}
-        ]
+        "scene_type": "sequel"
       }}
     ]
   }}
@@ -88,7 +91,7 @@ user: |
 
   REMINDER: Return ONLY a valid JSON object. Use ONLY IDs from the Valid IDs section.
   REMINDER: after_beat is the EARLIER beat, before_beat is the LATER beat. Do NOT reverse them.
-  REMINDER: Include dilemma_impacts for each gap beat using ONLY valid dilemma_ids listed above. Valid effect values: advances, reveals, commits, complicates.
+  REMINDER: Gap beats carry NO `dilemma_impacts` (R-1a.2). The field is not in the schema.
   Maximum 2 gap beats per path.
 
 components: []
