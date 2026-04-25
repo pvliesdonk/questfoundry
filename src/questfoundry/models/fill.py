@@ -31,12 +31,15 @@ class VoiceDocument(BaseModel):
     DREAM's high-level vision doesn't specify.
     """
 
-    pov: Literal["first", "second", "third_limited", "third_omniscient"] = Field(
-        description="Narrative point of view"
-    )
+    pov: Literal[
+        "first_person", "second_person", "third_person_limited", "third_person_omniscient"
+    ] = Field(description="Narrative point of view")
     pov_character: str = Field(
-        default="",  # Empty string valid for omniscient/second POV
-        description="Whose perspective (for limited POVs). Empty string for omniscient/second.",
+        default="",
+        description=(
+            "POV character (required for first_person and third_person_limited; "
+            "empty for second_person and third_person_omniscient). See fill.md R-1.3."
+        ),
     )
     tense: Literal["past", "present"] = Field(description="Narrative tense")
     voice_register: Literal["formal", "conversational", "literary", "sparse"] = Field(
@@ -55,6 +58,15 @@ class VoiceDocument(BaseModel):
         default_factory=list,
         description="Patterns to avoid (e.g. adverb-heavy, said-bookisms)",
     )
+
+    @model_validator(mode="after")
+    def _check_pov_character_required(self) -> VoiceDocument:
+        if self.pov in ("first_person", "third_person_limited") and not self.pov_character:
+            raise ValueError(
+                f"pov_character is required when pov is {self.pov!r}; "
+                "set it to the entity ID whose perspective the prose follows. See fill.md R-1.3."
+            )
+        return self
 
 
 # ---------------------------------------------------------------------------

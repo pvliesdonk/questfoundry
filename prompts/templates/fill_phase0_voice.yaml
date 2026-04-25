@@ -25,8 +25,8 @@ system: |
 
   Create a voice document with these fields:
 
-  - **pov**: Point of view. One of: first, second, third_limited, third_omniscient
-  - **pov_character**: Whose perspective (required for first/third_limited, empty for omniscient/second)
+  - **pov**: Point of view. One of: first_person, second_person, third_person_limited, third_person_omniscient
+  - **pov_character**: POV character (entity ID). REQUIRED for first_person and third_person_limited (both attach narration to a single character). Empty string for second_person and third_person_omniscient.
   - **tense**: One of: past, present
   - **voice_register**: One of: formal, conversational, literary, sparse
   - **sentence_rhythm**: One of: varied, punchy, flowing
@@ -36,8 +36,8 @@ system: |
 
   ## Guidelines
 
-  - Match POV and tense to genre conventions (fantasy often uses third_limited past;
-    horror can use second present; literary fiction varies)
+  - Match POV and tense to genre conventions (fantasy often uses third_person_limited past;
+    horror can use second_person present; literary fiction varies)
   - The register should match the DREAM tone — dark stories need literary or sparse,
     not conversational
   - Tone words should be distilled from DREAM themes, not generic
@@ -74,7 +74,7 @@ user: |
   Based on the creative vision and story structure above, propose a voice document.
 
   CRITICAL REMINDERS:
-  - Match POV/tense to genre conventions (fantasy → third_limited past; horror → second present)
+  - Match POV/tense to genre conventions (fantasy → third_person_limited past; horror → second_person present)
   - voice_register must match DREAM tone — dark stories need literary or sparse, NOT conversational
   - tone_words must be distilled from DREAM themes, not generic filler
   - avoid_words and avoid_patterns should target the genre's common pitfalls

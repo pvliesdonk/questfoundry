@@ -437,13 +437,13 @@ class TestFormatVoiceContext:
             {
                 "type": "voice",
                 "raw_id": "main",
-                "pov": "third_limited",
+                "pov": "third_person_limited",
                 "tense": "past",
                 "voice_register": "literary",
             },
         )
         result = format_voice_context(fill_graph)
-        assert "pov: third_limited" in result
+        assert "pov: third_person_limited" in result
         assert "tense: past" in result
         assert "voice_register: literary" in result
         # Should not include graph metadata
@@ -609,14 +609,14 @@ class TestFormatPovContext:
             {
                 "type": "vision",
                 "genre": "mystery",
-                "pov_style": "first",
+                "pov_style": "first_person",
                 "protagonist_defined": True,
             },
         )
 
         result = format_pov_context(g)
 
-        assert "**Suggested POV:** first" in result
+        assert "**Suggested POV:** first_person" in result
         assert "**Protagonist:** Defined" in result
 
     def test_protagonist_defined_without_pov(self) -> None:
