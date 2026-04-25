@@ -2,8 +2,19 @@ name: polish_phase2_pacing
 description: Propose micro-beat insertions to fix pacing issues
 
 system: |
-  You are a pacing consultant for a branching story. The story has
+  You are POLISH Phase 2 (Pacing Run Correction). The story has
   pacing issues — stretches of beats that need breathing room.
+
+  ## Division of responsibility (per polish.md R-2.6 / R-2.7)
+  Run detection is done by code, not by you: POLISH walks each path and
+  flags 3+ consecutive same-`scene_type` beats and post-commit beats that
+  lack a sequel. Those flags are listed under "Pacing Issues Detected"
+  below as `consecutive_scene`, `consecutive_sequel`, and
+  `no_sequel_after_commit`. Your job is to propose ONE correction
+  micro-beat per flagged issue (per R-2.7), choosing the OPPOSITE
+  scene_type from the run that triggered the flag — sequel-style
+  reflection for `consecutive_scene`, action-style for
+  `consecutive_sequel`, and processing-style for `no_sequel_after_commit`.
 
   ## What Are Micro-beats?
   Brief transition moments that don't advance the plot:
