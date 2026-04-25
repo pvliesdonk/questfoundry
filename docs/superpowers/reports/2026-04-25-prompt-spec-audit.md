@@ -42,7 +42,7 @@ sections land.)
 | POLISH | 12 | 4 | 22 | 7 | 1 | drift |
 | FILL | 8 | 3 | 9 | 5 | 2 | drift |
 | DRESS | 8 | 9 | 12 | 4 | 0 | drift |
-| SHIP | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ | pending |
+| SHIP | 0 | 0 | 0 | 0 | 0 | n/a (deterministic) |
 
 ---
 
@@ -1689,4 +1689,26 @@ POLISH is the largest prompt set (12 files covering 9 distinct phases/sub-phases
 
 ## SHIP
 
-(Pending — Task 13.)
+**Verdict:** n/a — no LLM prompts to audit.
+
+SHIP is the only stage in the pipeline that does not invoke an LLM. It is a
+deterministic technical transformation: it reads the completed story graph and
+emits playable formats (Twee, HTML, JSON, Gamebook PDF). Confirmed by:
+
+- `prompts/templates/ship_*.yaml` — no files exist.
+- `src/questfoundry/models/ship*.py` — no SHIP-specific Pydantic artifact models exist.
+- `src/questfoundry/pipeline/stages/ship.py` — module docstrings explicitly state
+  "SHIP is deterministic (no LLM)" and "Unlike other stages, SHIP does not use
+  an LLM. It reads the graph".
+- `docs/design/procedures/ship.md §Overview` — "It is a read-only technical
+  transformation: SHIP does not mutate the graph."
+
+The five audit dimensions (spec accuracy, repair-loop quality, small-model
+resilience, schema alignment, drift markers) presuppose an LLM-driven prompt
+to evaluate. With no prompts, none of the dimensions apply. Any SHIP-related
+correctness work is non-prompt engineering and falls outside this audit's scope.
+
+The codeword projection rules (R-1.1 through R-1.7), persistent/working
+boundary, and export determinism are validated by code and tests, not by
+prompt review. Tracking issues for those concerns belong in the existing
+SHIP cluster from the spec-compliance audit (memory: 8 clusters remaining).
