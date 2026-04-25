@@ -380,6 +380,38 @@ class TestHelperFunctions:
         assert "count" in feedback
         assert "fix" in feedback.lower()
 
+    def test_build_error_feedback_appends_extra_hints(self) -> None:
+        """Caller-supplied repair hints land after the generic feedback.
+
+        Regression for the murder1 SEED halt: the model needs the expected
+        sibling path id template echoed alongside the validation error so
+        small models (qwen3:4b) can recover from constraint-to-value
+        mapping loss across long context. See CLAUDE.md §10.
+        """
+        errors = ["beats.0.also_belongs_to: Field required"]
+        hint = (
+            "REMINDER for shared pre-commit beats of dilemma `dilemma::x`:\n"
+            "  - `path_id` MUST be `path::x__a`\n"
+            "  - `also_belongs_to` MUST be `path::x__b`"
+        )
+
+        feedback = _build_error_feedback(errors, extra_hints=[hint])
+
+        # Generic feedback still present
+        assert "validation errors" in feedback.lower()
+        assert "beats.0.also_belongs_to" in feedback
+        # Hint appended verbatim — sibling path id ECHOED (not just named)
+        assert "path::x__b" in feedback
+        assert "REMINDER" in feedback
+
+    def test_build_error_feedback_no_hints_unchanged(self) -> None:
+        """Without extra_hints, the output is identical to the legacy form."""
+        errors = ["x: required"]
+        without = _build_error_feedback(errors)
+        with_empty = _build_error_feedback(errors, extra_hints=None)
+        with_empty_list = _build_error_feedback(errors, extra_hints=[])
+        assert without == with_empty == with_empty_list
+
 
 class TestSerializationError:
     """Test SerializationError exception."""
