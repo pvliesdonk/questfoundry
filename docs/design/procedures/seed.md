@@ -455,7 +455,9 @@ R-7.5. If the LLM call fails, defaults are applied (role: soft, weight: light, s
 
 R-8.1. Valid relationships: `wraps` (A wraps B when A introduces before B and B resolves before A), `concurrent` (both active at once, no nesting), `serial` (A fully resolves before B introduces).
 
-R-8.2. Relationships are declared only for relevant pairs — those sharing entities, with causal dependencies, or with explicit authorial ordering intent. Exhaustive O(n²) declaration is wasteful but not forbidden; including pairs whose relationship is the default `concurrent` (no shared entities, no causal dependency) for completeness is acceptable when it removes ambiguity for GROW. Exhaustive declarations on every run, however, signal that the LLM is over-applying the pattern and should be discouraged in the prompt.
+R-8.2. Relationships are declared only for relevant pairs — those sharing entities, with causal dependencies, or with explicit authorial ordering intent. Exhaustive O(n²) declaration is wasteful but not forbidden; including pairs whose relationship is the default `concurrent` (no shared entities, no causal dependency) for completeness is acceptable when it removes ambiguity for GROW.
+
+*Note (implementation guidance, not a rule):* Exhaustive declarations on every run signal that the LLM is over-applying the pattern; the prompt should discourage this without rejecting valid completeness-driven exhaustive lists.
 
 R-8.3. `concurrent` is symmetric. The edge is stored once, with the lexicographically smaller Dilemma ID as `dilemma_a`. → ontology §Part 2: Pairwise Relationships.
 

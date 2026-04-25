@@ -711,6 +711,8 @@ R-5e.3: Phase 5e runs after Beat DAG Freeze; transition beats receive `atmospher
 R-5f.1: Multi-beat paths receive `path_theme` and `path_mood`; <2-beat paths skipped.
 R-5f.2: `path_theme` (controlling idea) and `path_mood` (tonal palette) are free-form LLM strings.
 R-5f.3: Per-path LLM failure → WARNING + leave unpopulated; consumers fall back.
+R-5f.4: Collapsed passages (>1 beat) receive N-1 transition instructions per beat boundary; single-beat passages skipped.
+R-5f.5: Transition instructions are free-form LLM hints; per-passage failure → WARNING + empty list; FILL falls back to bridging without guidance.
 R-6.1: Phase 6 runs in a single transaction.
 R-6.2: Application order: passages → variants → residue beats → residue passages → choices → false branches.
 R-6.3: Any step failure rolls back.
@@ -837,7 +839,7 @@ User reviews. Approves.
 - False branch decision: `diamond` pattern for the opening stretch.
 - Variant summary for the climax passage: two versions.
 - **5e:** atmospheric_detail populated for all 14 beats (including the gap and micro beats from Phases 1a/2 and the transition beat from GROW 4c).
-- **5f:** path_theme and path_mood populated for both `mentor_trust` paths and the `archive_nature` canonical path.
+- **5f:** path_theme and path_mood populated for both `mentor_trust` paths and the `archive_nature` canonical path. Transition instructions populated for the multi-beat collapsed passages (the maximal-linear-collapse run from Phase 4a produces several 2- and 3-beat passages, each receiving N-1 transitions); single-beat passages are skipped.
 
 ### Phase 6
 
