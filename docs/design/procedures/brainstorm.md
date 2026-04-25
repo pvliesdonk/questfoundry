@@ -34,7 +34,7 @@ BRAINSTORM is the expansive creative stage: it turns an approved Vision into raw
 
 **Rules:**
 
-R-1.1. Discussion aims for abundance. Err toward inclusion — entity and dilemma targets come from the active size preset (`src/questfoundry/pipeline/size.py`: `entities_min`/`entities_max`, `dilemmas_min`/`dilemmas_max`), ranging from 5–10 entities and 2–3 dilemmas (`micro`) up to 20–35 entities and 5–10 dilemmas (`long`). SEED will cut; do not pre-triage here.
+R-1.1. Discussion aims for abundance. Err toward inclusion — entity and dilemma targets come from the active Size Preset (one of `micro`, `short`, `medium`, `long`), with ranges from 5–10 entities and 2–3 dilemmas (`micro`) up to 20–35 entities and 5–10 dilemmas (`long`); intermediate `short` and `medium` values come from the same preset configuration. SEED will cut; do not pre-triage here.
 
 R-1.2. Discussion writes nothing to the graph. It produces prose notes only. The graph remains empty of BRAINSTORM artifacts through the end of this phase.
 

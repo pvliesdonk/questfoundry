@@ -67,7 +67,7 @@ R-1.7. Human approval of the Voice Document is required before prose generation 
 |---------|-----------|-------------|
 | Two Voice Documents exist after Phase 1 | Retry duplicated | R-1.1 |
 | Voice Document has `pov: "omniscient"` | Value outside permitted set | R-1.3 |
-| Voice Document has `pov: "third_person_limited"` but no `pov_character` | Limited POV needs a character | R-1.3 |
+| Voice Document has `pov: "first_person"` or `"third_person_limited"` but no `pov_character` | Attached-POV needs a named character | R-1.3 |
 | Voice Document has outgoing edges to passages | Singleton contract violated | R-1.5 |
 | Phase 2 starts without recorded approval | Human gate skipped | R-1.7 |
 
@@ -337,7 +337,7 @@ R-5.3. The cap is configurable but defaults to 2.
 
 R-1.1: Exactly one Voice Document node; retries replace.
 R-1.2: Voice Document has required fields: pov, tense, voice_register, sentence_rhythm, tone_words, avoid_words, avoid_patterns.
-R-1.3: `pov` in permitted set; `pov_character` if limited.
+R-1.3: `pov` in permitted set; `pov_character` required for `first_person` and `third_person_limited`.
 R-1.4: `tense` ∈ {past, present}.
 R-1.5: Voice Document has no graph edges.
 R-1.6: Vision's `pov_style` is advisory.

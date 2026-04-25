@@ -573,7 +573,7 @@ R-7.3: Every Dilemma has `ending_salience` ∈ {high, low, none}.
 R-7.4: `residue_weight` and `dilemma_role` are independent axes.
 R-7.5: LLM failure in Phase 7 logged at WARNING; no silent defaults.
 R-8.1: Valid relationships: wraps, concurrent, serial.
-R-8.2: Relationships declared only for relevant pairs (not O(n²)).
+R-8.2: Relationships declared only for relevant pairs; exhaustive O(n²) is wasteful but acceptable when ambiguity-removing.
 R-8.3: `concurrent` is symmetric; stored once with lex-smaller ID as `dilemma_a`.
 R-8.4: `shared_entity` is derived, not declared as an edge.
 R-8.5: LLM failure in Phase 8 logged at WARNING.
