@@ -36,7 +36,7 @@ sections land.)
 | Stage | Prompts | Hard | Soft | Info | Spec gaps | Status |
 |---|---|---|---|---|---|---|
 | DREAM | 3 | 7 | 5 | 3 | 0 | drift |
-| BRAINSTORM | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ | pending |
+| BRAINSTORM | 3 | 8 | 9 | 3 | 1 | drift |
 | SEED | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ | pending |
 | GROW | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ | pending |
 | POLISH | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ | pending |
@@ -278,7 +278,134 @@ DREAM's three active prompts (`discuss.yaml`, `summarize.yaml`, `serialize.yaml`
 
 ## BRAINSTORM
 
-(Pending — Task 7.)
+### `discuss_brainstorm.yaml`
+
+**Verdict:** mixed
+
+**Findings:**
+
+- **[hard] [schema-skew]** — Prompt instructs model to list `central_entity_ids` inline in dilemma prose using bracket-list notation `"Central entities: [entity_id_1], [entity_id_2]"`, which violates CLAUDE.md §9 (Python list repr in LLM-facing text) and seeds the model to produce bracket lists in the summary that the summarizer echoes verbatim into the brief.
+  - Where: lines 67–68; mirrored in `summarize_brainstorm.yaml` line 37.
+  - Spec citation: `CLAUDE.md §9 Prompt Context Formatting (CRITICAL)`.
+  - Recommended fix: Replace with backtick-separated prose: `e.g., "Central entities: \`entity_id_1\`, \`entity_id_2\`"`.
+
+- **[hard] [schema-skew]** — `dilemma::` prefix never mentioned in discuss prompt; all GOOD examples lack the prefix. Small models produce un-prefixed IDs in summary; serializer fails `validate_dilemma_id_format` on every run.
+  - Where: lines 84–99 (`## Dilemma ID Naming`).
+  - Spec citation: `brainstorm.md §R-3.7`; `models/brainstorm.py:126–139`.
+  - Recommended fix: Update every example ID to include `dilemma::` prefix. Add: "**Every dilemma ID MUST start with `dilemma::`** — the serializer will reject any ID that does not."
+
+- **[hard] [schema-skew]** — Prompt prose uses "Entity Type" / "type" but field is `entity_category`. Mental-model drift in discuss propagates to serializer.
+  - Where: lines 18–21, 171.
+  - Spec citation: `models/brainstorm.py:41`; `brainstorm.md §R-2.2`.
+  - Recommended fix: Replace "entity type" with "entity category" throughout. Add anchor sentence: "Each entity has an **entity_category** (character, location, object, or faction)".
+
+- **[hard] [drift]** — Entity namespace (`character::mentor`, `location::archive`) required by R-2.3 but never taught in discuss prompt. Bare IDs propagate, `anchored_to` validation fails because graph stores namespaced IDs.
+  - Where: entire `## Your Goal → Entity` section (lines 18–45).
+  - Spec citation: `brainstorm.md §R-2.3`; `story-graph-ontology.md §Part 1 Entity`.
+  - Recommended fix: Add: "**Entity IDs include their category as a namespace** (e.g., `character::mentor`, `location::archive`, `faction::conspiracy`)".
+
+- **[soft] [sm-fragile]** — No sandwich repetition for binary-only and single-canonical constraints. They appear once mid-prompt; small models forget by output time.
+  - Where: lines 63–75 (no bottom-of-prompt repetition).
+  - Recommended fix: Add `## Critical Rules (Reminder)` section before `{output_language_instruction}` echoing the four critical rules.
+
+- **[soft] [sm-fragile]** — No GOOD/BAD examples for entity ID format. Small models produce `Lady Beatrice`, `The Mentor`, `main_character_mentor`.
+  - Where: entity section (lines 18–45).
+  - Spec citation: `CLAUDE.md §7`.
+  - Recommended fix: Add example block: GOOD `character::lady_beatrice`, BAD `Lady Beatrice` (spaces), `mentor` (missing namespace).
+
+- **[soft] [repair-gap]** — No fallback instruction for tool errors in `research_tools_section`. Small model that gets a tool error may halt or loop.
+  - Where: lines 138–167.
+  - Spec citation: `CLAUDE.md §7`.
+  - Recommended fix: Add: "If a tool call returns an error or no_results, note it briefly and continue. Do not retry the same query more than once."
+
+- **[info] [schema-skew]** — `{size_entities}` and `{size_dilemmas}` correctly injected from `size_template_vars()`. No action required.
+
+- **[info] [spec-gap]** — `brainstorm.md §R-1.1` says "typical targets are 15–25 entities and 4–8 dilemmas for a short story" but `size.py` `short` preset has 10–18 entities, 3–5 dilemmas. Update R-1.1 to reference size preset system rather than hardcoded targets.
+
+---
+
+### `summarize_brainstorm.yaml`
+
+**Verdict:** mixed
+
+**Findings:**
+
+- **[hard] [schema-skew]** — Summarizer instructed to record `central_entity_ids` as bracket-list `"Central entity IDs: [character_id], [location_id]"`. Same Python-list-repr anti-pattern; serializer may emit literal bracket strings.
+  - Where: lines 36–37.
+  - Spec citation: `CLAUDE.md §9`.
+  - Recommended fix: Use backtick notation with real namespaced IDs: `e.g., \`character::mentor\`, \`location::archive\``.
+
+- **[hard] [repair-gap]** — Summarizer has no instruction for handling missing `why_it_matters`. Will silently invent or omit, both of which are silent degradation.
+  - Where: `## Dramatic Dilemmas` section (lines 33–39).
+  - Spec citation: `brainstorm.md §R-3.1`; CLAUDE.md anti-patterns.
+  - Recommended fix: Add: "If `why_it_matters` was not discussed, do NOT invent one. Write: `why_it_matters: [NOT DISCUSSED — serializer will flag this]`."
+
+- **[soft] [sm-fragile]** — `## NO DELEGATION (CRITICAL)` block (lines 41–49) appears AFTER main instructions; small models read top-to-bottom and have already framed task as advisory by then.
+  - Recommended fix: Hoist the block to be first section after the task statement, OR add one-line guard at top: "**You are writing the summary itself — NOT advising on how to write it.**"
+
+- **[soft] [schema-skew]** — Section headers use plural `### Characters`, `### Locations`; `entity_category` Pydantic Literal accepts singular `"character"` etc. A small serializer model may emit `entity_category: "characters"`.
+  - Where: lines 12–31.
+  - Recommended fix: Change to `Characters (entity_category: "character")` to lock the mapping.
+
+- **[soft] [drift]** — Summarizer template doesn't reference `{size_*}` variables but `prompts.py:218` passes them via `**size_template_vars(size_profile)` — silently ignored. Either remove the kwargs from the function or add size guidance to the template (latter is more useful).
+
+- **[info] [schema-skew]** — Summarizer doesn't mention `name` field on entities. Drops names that were established in discussion.
+  - Recommended fix: Add per-section: "If a specific name was established in discussion, include it. If only a role was discussed, omit the name — the serializer will leave it absent for SEED to generate."
+
+---
+
+### `serialize_brainstorm.yaml`
+
+**Verdict:** mixed
+
+**Findings:**
+
+- **[hard] [schema-skew]** — Table column header says "Entity Type" but actual field is `entity_category`. Small model reads column header as field name.
+  - Where: lines 9–13 (`## Entity Mapping (CRITICAL)` table).
+  - Spec citation: `models/brainstorm.py:41`.
+  - Recommended fix: Rename column to `entity_category value` so table reads `| Brief Category | entity_category value |`.
+
+- **[hard] [schema-skew]** — All GOOD examples in `## Dilemma ID Naming (CRITICAL)` lack the `dilemma::` prefix despite the prefix being a hard requirement. Violates §7's "GOOD example must demonstrate the rule" mandate.
+  - Where: lines 40–57.
+  - Spec citation: `brainstorm.md §R-3.7`; `models/brainstorm.py:126–139`; `CLAUDE.md §7`.
+  - Recommended fix: Prefix every GOOD example with `dilemma::`. Add `dilemma::d1` to BAD examples to show prefix alone isn't enough.
+
+- **[hard] [schema-skew]** — Serialize prompt has NO `### Valid Entity IDs` section, violating CLAUDE.md §6 Valid ID Injection Principle. Model must infer valid IDs from prose and will invent names like `mentor_character`, `the_mentor`.
+  - Where: entire file.
+  - Spec citation: `CLAUDE.md §6`; `brainstorm.md §Implementation Constraints`.
+  - Recommended fix: Restructure serialize to two-pass flow: serialize entities first, extract IDs, then serialize dilemmas with `{valid_entity_ids}` injected. `## Guidelines` should state: "ONLY use entity_id values listed in `### Valid Entity IDs` above."
+
+- **[soft] [repair-gap]** — `BrainstormMutationError._format_message()` ends with generic "Use entity_id values from the entities list" without listing them. Small model on retry has lost system prompt context.
+  - Where: `mutations.py` lines 223–234.
+  - Recommended fix: In `_format_message()`, append: `f"Valid entity_id values: {', '.join(f'\`{i}\`' for i in all_ids[:15])}"`.
+
+- **[soft] [sm-fragile]** — `## Guidelines` (lines 62–68) uses passive "Extract ALL" wording that reads as advisory, buried after schema sections.
+  - Recommended fix: Rewrite as `## Rules (MUST follow)` with bolded MUST/NEVER rules at top of section.
+
+- **[soft] [schema-skew]** — Serialize prompt says `name: Optional canonical display name … Leave absent if no specific name was established`. But `Entity.name` Pydantic field is `str` with `min_length=1` (REQUIRED, not Optional). Direct contradiction — every nameless entity will fail validation.
+  - Where: serialize_brainstorm.yaml lines 22–24; `models/brainstorm.py:44`.
+  - Spec citation: `brainstorm.md §R-2.1`.
+  - Recommended fix: Either make `Entity.name` optional in Pydantic, or update prompt to always require a name. Spec R-2.1 mandates non-empty name, so prompt fix: "If no specific name was established, generate a simple descriptive name (e.g., 'The Mentor', 'The Archive') — do not leave name absent."
+
+- **[info] [drift]** — `## Output` block says "Return ONLY valid JSON matching BrainstormOutput schema" without showing the skeleton. Small models would benefit from explicit JSON skeleton with all top-level keys.
+
+---
+
+### Stage summary: BRAINSTORM
+
+The three BRAINSTORM prompts collectively have a significant alignment gap between the discuss phase (which teaches informal notation) and the serialize phase (which enforces strict schema rules). The core failure chain: discuss teaches bare dilemma IDs and bracket-list entity references → summarizer echoes both → serializer receives ambiguous notation → emits invalid `central_entity_ids` and un-prefixed `dilemma_id`s → Pydantic + semantic validation fires → repair-loop gets generic message without the actual entity list → second attempt also fails. Breaking this chain requires four coordinated fixes (prefix propagation, ID notation, Valid ID injection, repair message).
+
+There is one genuine spec gap: `brainstorm.md §R-1.1` cites hardcoded targets ("15–25 entities, 4–8 dilemmas") that contradict `size.py` preset values. Update spec to defer to size preset system.
+
+The `Entity.name` required/optional contradiction between serialize prompt ("leave absent") and Pydantic (`min_length=1`) will cause repair-loop hits on every nameless entity.
+
+- Prompts audited: 3 (`discuss_brainstorm.yaml`, `summarize_brainstorm.yaml`, `serialize_brainstorm.yaml`)
+- Hard findings: 8
+- Soft findings: 9
+- Info findings: 3
+- Spec gaps surfaced: 1 (R-1.1 abundance targets contradict size preset)
+- Recommended PR split: two PRs — A (prompt fixes: ID prefix propagation, bracket notation, Valid ID injection, name required/optional, table column rename); B (repair-loop improvements: `BrainstormMutationError.to_feedback()` self-contained entity list, sandwich repetition in discuss)
+- Status: drift
 
 ---
 
