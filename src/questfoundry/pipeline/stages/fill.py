@@ -778,7 +778,10 @@ class FillStage:
             for field_path in invalid_fields:
                 values = _get_literal_values_at_path(output_schema, field_path)
                 if values is not None:
-                    formatted = ", ".join(repr(v) for v in values)
+                    # Backtick-wrap each value for consistency with the SEED
+                    # repair-feedback pattern (serialize.py) and the prompts
+                    # themselves (CLAUDE.md §9 rule 1).
+                    formatted = ", ".join(f"`{v}`" for v in values)
                     literal_hints.append(f"Allowed values for `{field_path}`: {formatted}")
             if literal_hints:
                 parts.append("\n" + "\n".join(literal_hints))

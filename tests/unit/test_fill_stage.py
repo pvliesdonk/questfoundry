@@ -1356,7 +1356,7 @@ class TestBuildErrorFeedback:
             "third_person_limited",
             "third_person_omniscient",
         ):
-            assert f"'{v}'" in feedback
+            assert f"`{v}`" in feedback
 
     def test_literal_field_failure_lists_allowed_voice_register_values(self) -> None:
         from questfoundry.models.fill import FillPhase0Output
@@ -1386,7 +1386,7 @@ class TestBuildErrorFeedback:
 
         assert "Allowed values for `voice.voice_register`:" in feedback
         for v in ("formal", "conversational", "literary", "sparse"):
-            assert f"'{v}'" in feedback
+            assert f"`{v}`" in feedback
 
     def test_structural_failure_does_not_invoke_literal_lookup(self) -> None:
         """Missing-field structural failures should not trigger Literal echoing —
