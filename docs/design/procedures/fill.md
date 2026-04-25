@@ -448,7 +448,7 @@ R-5.3: Cap is configurable; default 2.
 
 ### Phase 1
 
-LLM proposes Voice Document based on Vision and POLISH structure. `pov: third_person_limited`, `pov_character: character::kay`, `tense: past`, `voice_register: sparse`, `sentence_rhythm: punchy`, tone_words: `[muted, wary, hushed]`, avoid_patterns: `[adverb-heavy, said-bookisms]`. Human approves.
+LLM proposes Voice Document based on Vision and POLISH structure. `pov: third_person_limited`, `pov_character: kay` (raw character ID — not the scoped form `character::kay` and not the display name `Kay`), `tense: past`, `voice_register: sparse`, `sentence_rhythm: punchy`, tone_words: `[muted, wary, hushed]`, avoid_patterns: `[adverb-heavy, said-bookisms]`. Human approves.
 
 ### Phase 2
 
