@@ -60,11 +60,17 @@ class VoiceDocument(BaseModel):
     )
 
     @model_validator(mode="after")
-    def _check_pov_character_required(self) -> VoiceDocument:
-        if self.pov in ("first_person", "third_person_limited") and not self.pov_character:
+    def _check_pov_character(self) -> VoiceDocument:
+        if self.pov in ("first_person", "third_person_limited") and not self.pov_character.strip():
             raise ValueError(
                 f"pov_character is required when pov is {self.pov!r}; "
-                "set it to the entity ID whose perspective the prose follows. See fill.md R-1.3."
+                "set it to the raw character ID whose perspective the prose follows. "
+                "See fill.md R-1.3."
+            )
+        if self.pov in ("second_person", "third_person_omniscient") and self.pov_character.strip():
+            raise ValueError(
+                f"pov_character must be empty when pov is {self.pov!r}; "
+                "narration is not attached to a single character. See fill.md R-1.3."
             )
         return self
 

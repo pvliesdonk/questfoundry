@@ -44,8 +44,8 @@ system: |
   - If no protagonist is defined, discuss options with the user (interactive) or choose the most prominent character (autonomous)
 
   ### POV Character Naming (CRITICAL)
-  GOOD: Use an exact character name from the valid characters list: "Kay", "Marcus"
-  BAD: Invent a new character: "Mila", "the reader as Alex", "your character named Sam"
+  GOOD: Use an exact raw_id from the valid characters list: `kay`, `marcus` (lowercase, no `character::` prefix)
+  BAD: Capitalized display name (`"Kay"`), scoped form (`"character::kay"`), or an invented name (`"Mila"`, `"the reader as Alex"`)
 
   ### Voice Decisions to Make
   1. **POV**: first_person, second_person, third_person_limited, or third_person_omniscient?

@@ -128,6 +128,42 @@ class TestVoiceDocument:
                 tone_words=["dark"],
             )
 
+    def test_whitespace_pov_character_rejected_for_attached_pov(self) -> None:
+        # A whitespace-only pov_character is treated as empty per R-1.3.
+        with pytest.raises(ValidationError, match="pov_character is required"):
+            VoiceDocument(
+                pov="first_person",
+                pov_character="   ",
+                tense="past",
+                voice_register="literary",
+                sentence_rhythm="varied",
+                tone_words=["dark"],
+            )
+
+    def test_second_person_rejects_non_empty_pov_character(self) -> None:
+        # Per fill.md R-1.3: pov_character must be empty for second_person.
+        with pytest.raises(ValidationError, match="pov_character must be empty"):
+            VoiceDocument(
+                pov="second_person",
+                pov_character="kay",
+                tense="past",
+                voice_register="literary",
+                sentence_rhythm="varied",
+                tone_words=["dark"],
+            )
+
+    def test_third_person_omniscient_rejects_non_empty_pov_character(self) -> None:
+        # Per fill.md R-1.3: pov_character must be empty for third_person_omniscient.
+        with pytest.raises(ValidationError, match="pov_character must be empty"):
+            VoiceDocument(
+                pov="third_person_omniscient",
+                pov_character="kay",
+                tense="past",
+                voice_register="literary",
+                sentence_rhythm="varied",
+                tone_words=["dark"],
+            )
+
     def test_invalid_pov_rejected(self) -> None:
         with pytest.raises(ValidationError):
             VoiceDocument(
