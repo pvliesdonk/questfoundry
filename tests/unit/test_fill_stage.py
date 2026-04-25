@@ -504,7 +504,7 @@ class TestPhase0Voice:
                 stage,
                 "_phase_0a_voice_research",
                 new_callable=AsyncMock,
-                return_value=("Use third_limited past for fantasy.", 2, 300),
+                return_value=("Use third_person_limited past for fantasy.", 2, 300),
             ),
             patch.object(stage, "_fill_llm_call", mock_llm_call),
         ):
@@ -517,7 +517,7 @@ class TestPhase0Voice:
         assert "grow_summary" in context
         assert "scene_types_summary" in context
         assert "research_notes" in context
-        assert "Use third_limited past for fantasy." in context["research_notes"]
+        assert "Use third_person_limited past for fantasy." in context["research_notes"]
 
     @pytest.mark.asyncio
     async def test_includes_research_metrics(self) -> None:
@@ -630,12 +630,12 @@ class TestPhase0aVoiceResearch:
             patch(
                 "questfoundry.agents.summarize_discussion",
                 new_callable=AsyncMock,
-                return_value=("Use third_limited past for dark fantasy.", 200),
+                return_value=("Use third_person_limited past for dark fantasy.", 200),
             ),
         ):
             brief, calls, tokens = await stage._phase_0a_voice_research(graph, MagicMock())
 
-        assert brief == "Use third_limited past for dark fantasy."
+        assert brief == "Use third_person_limited past for dark fantasy."
         assert calls == 4  # 3 discuss + 1 summarize
         assert tokens == 800  # 600 + 200
 
