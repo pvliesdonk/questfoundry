@@ -30,8 +30,10 @@ spec — per CLAUDE.md docs-first, the spec is updated first.
 
 ## Overall summary
 
-(Executive summary and totals filled in by Task 14 after all 8 stage
-sections land.)
+The audit covers **47 LLM-driven prompts across 7 stages** (SHIP is
+deterministic). Every audited stage shows drift between its prompts and the
+authoritative specs that were redrafted earlier in 2026 — confirming the
+hypothesis that prompts were postponed during the doc/code overhaul.
 
 | Stage | Prompts | Hard | Soft | Info | Spec gaps | Status |
 |---|---|---|---|---|---|---|
@@ -43,6 +45,93 @@ sections land.)
 | FILL | 8 | 3 | 9 | 5 | 2 | drift |
 | DRESS | 8 | 9 | 12 | 4 | 0 | drift |
 | SHIP | 0 | 0 | 0 | 0 | 0 | n/a (deterministic) |
+| **Total** | **47** | **42** | **81** | **32** | **5** | — |
+
+### Cross-cutting themes
+
+Five patterns recur across stages and account for the bulk of the hard
+findings. Fix PRs should be grouped by theme where possible to amortise
+review and regression cost.
+
+1. **Repair-loop blindness (the murder1 failure pattern).** The original
+   trigger — `serialize_seed_sections.yaml` repair feedback naming
+   `also_belongs_to` without echoing the expected sibling path id —
+   recurs structurally across stages. SEED inherited the Phase 1 fix
+   (PR #1384). DRESS shares one generic `_dress_llm_call` repair message
+   across all 8 templates that strips valid IDs and value constraints.
+   FILL's `_build_error_feedback` does not echo allowed enum values for
+   `pov` / `voice_register` / `sentence_rhythm` failures. Every stage
+   except SHIP has at least one repair-gap finding.
+
+2. **Pydantic-Literal vs spec drift on `pov`.** `dream.yaml` (dead-code
+   notice), `fill_phase0_discuss.yaml`, and `fill_phase0_voice.yaml` all
+   use the short forms (`first`, `second`, `third_limited`,
+   `third_omniscient`) while `dream.md §R-1.9` and `fill.md §R-1.3`
+   require the long forms (`first_person`, etc.). `dream.py` already
+   uses the long forms — `fill.py`'s `VoiceDocument.pov` Literal is the
+   outlier. Per CLAUDE.md §Design Doc Authority the spec wins; this is
+   a single coordinated fix touching the model + both phase0 prompts +
+   a fill.md worked-example correction.
+
+3. **Codeword vs state_flag terminology in DRESS.** `dress_codex.yaml`
+   and `dress_codex_batch.yaml` consistently instruct the model to use
+   "codeword IDs" in `visible_when` while `dress.md §R-3.7` and
+   `story-graph-ontology.md §Part 8` are explicit that DRESS gates
+   internally via state flag IDs. The stage code correctly reads
+   `state_flag` nodes — only the prompt labels (and the Pydantic
+   docstring on `CodexEntry.visible_when`) are wrong. This is the single
+   largest DRESS drift and a clean ~30-line PR.
+
+4. **POLISH migration residue from epic #1368.** Five GROW phases moved
+   to POLISH (narrative_gaps→1a, pacing_gaps→2, entity_arcs→3,
+   atmospheric→5e, path_arcs→5f) and the prompt files inherited their
+   "GROW Phase Nf" headers, rule citations, and identity statements
+   without rewriting. Twelve POLISH templates carry residue; the worst
+   case (`polish_phase1a_*`) still mislabels itself as "GROW Phase 4f"
+   and emits `dilemma_impacts` with `effect: commits` on post-commit
+   beats — a Y-shape guard-rail violation.
+
+5. **Bare-ID context blocks and missing GOOD/BAD examples.** A
+   recurring soft pattern: context builders (`format_*_context()`) emit
+   `{valid_beat_ids}` / `{entity_visuals}` / `{shadow_context}` /
+   `{passages_batch}` as flat or unheaded blocks. Every CLAUDE.md §6
+   /§7 /§8 review noted that small-model output quality drops sharply
+   when the model cannot tell what a context block is for or which
+   constraints apply. Across all stages this accounts for ~40 of the 81
+   soft findings.
+
+### Recommended PR clusters (Phase 3)
+
+The fix work is large enough to need batching. Recommended grouping for
+the demand-driven Phase 3 PRs:
+
+- **PR cluster A — POV alignment (1 PR, narrow):** `fill.py` model
+  + `fill_phase0_discuss.yaml` + `fill_phase0_voice.yaml` + `fill.md`
+  worked-example fix. Touches 4 files; no behavioural change beyond
+  the Literal rename.
+- **PR cluster B — DRESS terminology (1 PR, narrow):** codeword →
+  state_flag rename across `dress_codex.yaml`,
+  `dress_codex_batch.yaml`, `dress_codex_spoiler_check.yaml`, and the
+  `CodexEntry.visible_when` docstring. Add `"cover"` to the
+  `IllustrationCategory` enum lists in both brief templates while in
+  the same area.
+- **PR cluster C — POLISH migration cleanup (1 PR per residue source,
+  ~4 PRs):** rewrite phase identity statements; remove `dilemma_impacts`
+  emission from post-commit-beat templates; replace "GROW Phase Nf"
+  citations.
+- **PR cluster D — Repair-feedback enrichment (1 PR per stage where
+  applicable):** generalise the SEED Phase-1 pattern (`extra_repair_hints`
+  threading) to FILL `_build_error_feedback` and DRESS `_dress_llm_call`,
+  with regression tests pinning the enriched feedback wording.
+- **PR cluster E — Context enrichment (per-stage, lower priority):**
+  add headers to `format_*_context()` outputs; inject
+  `{valid_entity_ids}` into FILL revision; add overlay enrichment to
+  `format_entity_for_codex()`. This is the long tail and may be split
+  into smaller follow-up PRs.
+
+The 5 spec gaps surfaced by the audit (BRAINSTORM 1, SEED 1, POLISH 1,
+FILL 2) get spec-update PRs first per CLAUDE.md §Design Doc Authority,
+then the prompt fixes follow.
 
 ---
 
