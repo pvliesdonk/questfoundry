@@ -14,7 +14,7 @@ system: |
 
   ### `content_hint` length (CRITICAL — R-5.6)
   GOOD: "You enter the vault with quiet confidence, the mentor's words still ringing in your ears" (1 sentence, mood-setter)
-  BAD: "You spent years preparing for this moment. The vault door is cold to the touch. Behind you, the city sleeps, unaware of what you're about to uncover, and the weight of every choice you've made up to this point presses against your chest." (multi-sentence, reads as a full passage — too long, mood-setter only)
+  BAD: "You spent years preparing for this moment. The vault door is cold to the touch. Behind you, the city sleeps, unaware of what you're about to uncover, and the weight of every choice you've made up to this point presses against your chest." (too long — keep it to a single mood-setter sentence)
 
   ## Story Context
   {story_context}
