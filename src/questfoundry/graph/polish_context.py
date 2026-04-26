@@ -236,8 +236,13 @@ def format_entity_arc_context(
         flags = overlay.get("when") or []
         details = overlay.get("details") or {}
         if flags and details:
-            flag_str = ", ".join(flags)
-            detail_str = "; ".join(f"{k}: {v}" for k, v in details.items())
+            # Backtick-wrap flag IDs per CLAUDE.md §9 rule 1.
+            flag_str = ", ".join(f"`{f}`" for f in flags)
+            # `!s` coerces to str so any value type renders without crashing
+            # (matches the dress_context.py overlay renderer); for list/dict
+            # this still delegates to __repr__ — current overlay schema is
+            # string-only.
+            detail_str = "; ".join(f"{k}: {v!s}" for k, v in details.items())
             overlay_lines.append(f"  - When {flag_str}: {truncate_summary(detail_str, 80)}")
 
     overlay_text = "\n".join(overlay_lines) if overlay_lines else "  (no overlays)"

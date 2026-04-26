@@ -171,7 +171,37 @@ class TestFormatEntityArcContext:
         ctx = format_entity_arc_context(graph, "entity::npc", ["beat::b1"])
 
         assert "hostile" in ctx["overlay_data"]
-        assert "dilemma::d1:path::p1" in ctx["overlay_data"]
+        # Flag IDs are backtick-wrapped per CLAUDE.md §9 rule 1 — matches the
+        # DRESS overlay renderer (closes #1406).
+        assert "`dilemma::d1:path::p1`" in ctx["overlay_data"]
+
+    def test_entity_overlay_details_non_string_values_str_cast(self) -> None:
+        """Same `!s`-coerce pattern as the DRESS overlay renderer: any value
+        type renders consistently. Note that for list/dict, `str()` delegates
+        to `__repr__` (bracket-format) — that's the documented behaviour."""
+        graph = Graph.empty()
+        graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
+        graph.create_node(
+            "entity::npc",
+            {
+                "type": "entity",
+                "raw_id": "npc",
+                "name": "NPC",
+                "overlays": [
+                    {
+                        "when": ["state_flag::met_npc"],
+                        "details": {"speech_tics": ["umm", "well"]},
+                    }
+                ],
+            },
+        )
+        _make_beat(graph, "beat::b1", "Meet NPC", entities=["entity::npc"])
+        graph.add_edge("belongs_to", "beat::b1", "path::p1")
+
+        ctx = format_entity_arc_context(graph, "entity::npc", ["beat::b1"])
+        # `str()` on a list delegates to `__repr__` — see the comment in
+        # `polish_context.py` for the documented bracket-format behaviour.
+        assert "speech_tics: ['umm', 'well']" in ctx["overlay_data"]
 
     def test_entity_not_found(self) -> None:
         """Missing entity returns empty fields gracefully."""
