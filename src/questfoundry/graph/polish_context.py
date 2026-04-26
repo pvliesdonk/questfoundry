@@ -256,7 +256,10 @@ def format_entity_arc_context(
         if edge["from"] == entity_id:
             anchored_dilemmas.append(edge["to"])
 
-    anchored_text = ", ".join(anchored_dilemmas) if anchored_dilemmas else "(none)"
+    # Backtick-wrap IDs per CLAUDE.md §9 rule 1.
+    anchored_text = (
+        ", ".join(f"`{d}`" for d in anchored_dilemmas) if anchored_dilemmas else "(none)"
+    )
 
     return {
         "entity_id": entity_id,
@@ -265,9 +268,9 @@ def format_entity_arc_context(
         "beat_appearances": beat_text,
         "overlay_data": overlay_text,
         "anchored_dilemmas": anchored_text,
-        "path_ids": ", ".join(sorted(paths_seen)),
-        "valid_path_ids": ", ".join(sorted(path_nodes.keys())),
-        "valid_beat_ids": ", ".join(sorted(beat_appearances)),
+        "path_ids": ", ".join(f"`{p}`" for p in sorted(paths_seen)),
+        "valid_path_ids": ", ".join(f"`{p}`" for p in sorted(path_nodes.keys())),
+        "valid_beat_ids": ", ".join(f"`{b}`" for b in sorted(beat_appearances)),
     }
 
 

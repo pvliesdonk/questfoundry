@@ -16,9 +16,16 @@ system: |
   {overlay_data}
 
   ## Beats Featuring This Entity (in story order)
+  Format: `- <beat_id> (path: <path_id>) [<scene_type>]: <summary>` —
+  pre-commit beats list both paths of their dilemma and end with
+  `(shared pre-commit)`. Beats with `dilemma_effects=[…]` carry those
+  effects on their listed dilemmas.
   {beat_appearances}
 
-  ## Paths in This Story
+  ## Paths Where This Entity Appears
+  Subset of the story's paths — only those reached via at least one
+  beat the entity is in. The `pivots` and `arcs_per_path` arrays below
+  MUST use IDs from this list.
   {path_ids}
 
   ## Arc Structure

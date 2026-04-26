@@ -145,7 +145,12 @@ class TestFormatEntityArcContext:
         assert "wise guide" in ctx["entity_description"]
         assert "beat::intro" in ctx["beat_appearances"]
         assert "beat::reveal" in ctx["beat_appearances"]
-        assert "path::brave" in ctx["path_ids"]
+        # path_ids backtick-wrapped per CLAUDE.md §9 rule 1.
+        assert "`path::brave`" in ctx["path_ids"]
+        # Same for valid_path_ids and valid_beat_ids.
+        assert "`path::brave`" in ctx["valid_path_ids"]
+        assert "`beat::intro`" in ctx["valid_beat_ids"]
+        assert "`beat::reveal`" in ctx["valid_beat_ids"]
 
     def test_entity_with_overlays(self) -> None:
         graph = Graph.empty()
@@ -202,6 +207,24 @@ class TestFormatEntityArcContext:
         assert "speech_tics: umm, well" in ctx["overlay_data"]
         # Belt-and-braces: explicitly assert the bracket-format is GONE.
         assert "['umm', 'well']" not in ctx["overlay_data"]
+
+    def test_anchored_dilemmas_backtick_wrapped(self) -> None:
+        """Dilemmas the entity is `anchored_to` are backtick-wrapped per
+        CLAUDE.md §9 rule 1 — same convention as overlay flag IDs and the
+        valid_*_ids lists."""
+        graph = Graph.empty()
+        graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
+        graph.create_node(
+            "entity::mentor",
+            {"type": "entity", "raw_id": "mentor", "name": "Mentor", "description": "guide"},
+        )
+        graph.create_node("dilemma::trust", {"type": "dilemma", "raw_id": "trust"})
+        graph.add_edge("anchored_to", "entity::mentor", "dilemma::trust")
+        _make_beat(graph, "beat::b1", "Meet mentor", entities=["entity::mentor"])
+        graph.add_edge("belongs_to", "beat::b1", "path::p1")
+
+        ctx = format_entity_arc_context(graph, "entity::mentor", ["beat::b1"])
+        assert ctx["anchored_dilemmas"] == "`dilemma::trust`"
 
     def test_entity_overlay_details_sorted_for_determinism(self) -> None:
         """Detail keys MUST be iterated in sorted order so the rendered string
