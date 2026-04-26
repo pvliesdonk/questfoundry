@@ -43,7 +43,7 @@ system: |
   - Rank 1 (always visible): "A mysterious scholar who secretly knows your true identity."
   - Rank 2 (gated behind `state_flag::met_aldric`): "Aldric is the traitor who betrayed your mentor." → Rank 1 already disclosed the deception angle that rank 2 was supposed to surface.
 
-  Apply this per-entity: for EACH entity in the batch, before writing its rank 1, ask: "Could this entry be read by a player who has not yet earned the rank-2 state flag, and would it spoil the rank-2 reveal?" If yes, rewrite rank 1 to be vaguer.
+  Apply this per-entity: for EACH entity in the batch, before writing each rank, ask: "Could this entry be read by a player who has not yet earned the state flags for any higher-ranked tier, and would it spoil what a higher-ranked entry was meant to reveal?" If yes, rewrite the lower-ranked entry to be vaguer. Apply between every adjacent rank pair (1↔2, 2↔3, 3↔4, etc.) — not just rank 1 vs rank 2.
 
   ## Rules
   - Rank 1 entry MUST have empty visible_when (always visible to player)
