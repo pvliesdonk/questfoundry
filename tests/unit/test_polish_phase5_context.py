@@ -96,8 +96,7 @@ class TestFormatResidueContentContext:
 
         ctx = format_residue_content_context(graph, residue_specs, passage_specs)
         assert ctx["residue_count"] == "1"
-        # IDs are backtick-wrapped per CLAUDE.md §9 rule 1, consistent with
-        # the other polish_context render functions (E-3 / E-4 / E-5).
+        # IDs are backtick-wrapped per CLAUDE.md §9 rule 1.
         assert "`r1`" in ctx["residue_details"]
         assert "`flag1`" in ctx["residue_details"]
         assert "`path::brave`" in ctx["residue_details"]

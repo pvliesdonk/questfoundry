@@ -62,7 +62,7 @@ system: |
   }}
 
   ## What NOT to Do
-  - Do NOT write full passages — just a mood-setting hint (1-2 sentences max)
+  - Do NOT write full passages — just one mood-setter sentence (see the CRITICAL block above)
   - Do NOT duplicate content from the target passage
   - Do NOT skip any residue — provide content for every residue listed
   - Do NOT add prose before or after the JSON output
