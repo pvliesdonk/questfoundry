@@ -22,8 +22,8 @@ system: |
   Every entity needs exactly ONE decision (retain or cut). No entity can be skipped.
 
   **Dilemmas** are binary dramatic questions with two mutually exclusive answers:
-  - One is **canonical** (marked `is_canonical: true`) - the spine/default story
-  - One is **non-canonical** - exploring it creates a branch
+  - One is **canonical** (the spine/default story — marked `(default)` in the brief and serialized with `is_canonical: true`)
+  - One is **non-canonical** — exploring it creates a branch
 
   **Paths** are storylines you commit to developing from explored answers.
   The canonical answer ALWAYS becomes a path. You decide which non-canonical
@@ -73,8 +73,25 @@ system: |
   the player COULD have discovered he was manipulative - but didn't. The shadow
   enriches the text without adding complexity.
 
-  Explore all answers you find compelling. The system will balance scope
-  automatically - you don't need to count arcs or worry about limits.
+  ## MINIMUM BRANCHING REQUIREMENT (CRITICAL)
+
+  **At least 2 dilemmas MUST have BOTH answers explored.** Without at least
+  one Y-fork, POLISH Phase 4c produces 0 choice edges (see seed.md §Overview)
+  and the story collapses to a linear track. The downstream pipeline assumes
+  a real branching structure.
+
+  GOOD (3 dilemmas, 2 fully explored):
+  - `dilemma::keeper_honest_or_hiding`: explored = `[honest, hiding]` — both answers
+  - `dilemma::artifact_blessed_or_cursed`: explored = `[blessed, cursed]` — both answers
+  - `dilemma::weather_storm_or_clear`: explored = `[clear]` — canonical only (atmospheric)
+
+  BAD (only canonical answers explored):
+  - All dilemmas: explored = `[canonical_answer_only]` → linear story, 0 choices
+  - Only 1 dilemma fully explored → story has only one fork; POLISH Phase 4c produces ≤2 choices
+
+  Pick at least 2 dilemmas where exploring both answers serves the story (per the
+  Identity-defining / Genuine dilemma / Distinct content tests above). Beyond
+  that minimum, explore more if compelling — the size preset bounds the upper end.
 
   ### 3. Create Paths from Explored Answers
 
@@ -96,11 +113,39 @@ system: |
   - Vary locations (not all beats in one place)
   - Impact dilemmas (advance, reveal, commit, complicate)
 
+  **Y-shape beat shape (R-3.6, CRITICAL).** Each beat carries a `path_id`
+  (its primary path). Pre-commit beats — beats SHARED between the two
+  paths of one dilemma — also set `also_belongs_to: [<other_path_id>]`
+  to declare the dual membership. Commit beats and post-commit beats are
+  exclusive to one path; they set `also_belongs_to: null`.
+
+  GOOD (Y-shape with `path_id` + `also_belongs_to`):
+  ```
+  shared pre-commit:  path_id = path::keeper_honest, also_belongs_to = [path::keeper_hiding]
+  commit (honest):    path_id = path::keeper_honest, also_belongs_to = null
+  post-commit (honest): path_id = path::keeper_honest, also_belongs_to = null
+  commit (hiding):    path_id = path::keeper_hiding, also_belongs_to = null
+  post-commit (hiding): path_id = path::keeper_hiding, also_belongs_to = null
+  ```
+
+  BAD (legacy `paths: [...]` list — DEPRECATED, do not use):
+  ```
+  paths: [path::keeper_honest, path::keeper_hiding]   # DROP — use path_id + also_belongs_to
+  ```
+
+  Beats may also carry optional `temporal_hint` (rough scene ordering),
+  `location_alternatives` (acceptable substitutes if the primary location
+  is constrained), and `role` (`setup` for opening framing beats,
+  `epilogue` for closing beats — most beats omit `role`).
+
   ### 5. Design Convergence Points
 
   Paths MUST converge at specific physical locations, not abstract narrative moments.
   Design {size_convergence_points} convergence points where characters from different dilemmas are forced
-  into the same scene:
+  into the same scene. **Note:** convergence applies only to **soft** dilemmas
+  whose paths rejoin. Hard dilemmas have NO convergence — their paths run to
+  separate endings and never meet. The target above counts soft-dilemma
+  convergences only.
 
   - **Location-based convergence**: Name the specific location where paths meet
     (e.g., "all paths converge at the archive_vault for the final confrontation")
@@ -161,6 +206,16 @@ system: |
   - **reveals**: Surfaces information bearing on the question
   - **commits**: Point of no return - answer is locked in
   - **complicates**: Introduces doubt or new dimension
+
+  ## Consequences (per path)
+
+  Each path carries `consequences` describing what happens in the world
+  after the player commits to that answer. Each `Consequence` has a
+  `description` (REQUIRED, non-empty — describes a world-state change,
+  NOT a player action) and `narrative_effects` (REQUIRED — downstream
+  ripples, e.g., NPCs change disposition, locations become accessible
+  or barred). Consequences are not raw IDs; they are described in prose
+  that the serializer uses to produce `Consequence` objects.
 
   ## Format Pitfalls
   - Do NOT skip beat creation - every path needs beats

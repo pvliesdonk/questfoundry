@@ -449,13 +449,14 @@ beats_prompt: |
             "note": "Explanation of the impact"
           }
         ],
-        "entities": ["character::[character_id]", "location::[location_id]"],
-        "location": "location::[location_id]",
-        "location_alternatives": ["location::[other_location]"],
+        "entities": ["character::actual_character_id", "location::actual_location_id"],
+        "location": "location::actual_location_id",
+        "location_alternatives": ["location::another_actual_location_id"],
         "temporal_hint": {
-          "relative_to": "dilemma::[other_dilemma_id]",
+          "relative_to": "dilemma::another_actual_dilemma_id",
           "position": "before_commit"
         }
+        // ↑ Replace `actual_*` / `another_actual_*` with REAL IDs from your story's manifest. Square-bracket placeholders like `[other_dilemma_id]` are NOT template syntax — emitting them literally will fail validation.
       }
     ]
   }
@@ -654,10 +655,10 @@ shared_beats_prompt: |
   pre-commit beats (1–2 is the sweet spot for most stories).
 
   Each shared beat:
+    - **MUST have `also_belongs_to` = `{also_belongs_to}` (the sibling path above) — REQUIRED.** This is the single most-frequently-missed field; setting it correctly is what makes the beat a "shared" beat. Omitting it converts the beat to a single-path beat and breaks the Y-shape.
+    - MUST have `path_id` = `{path_id}` (the primary path above).
     - MUST have `effect` in {{advances, reveals, complicates}}. NEVER `commits`.
     - MUST reference the current dilemma in `dilemma_impacts[0].dilemma_id`.
-    - MUST have `path_id` = `{path_id}` (the primary path above).
-    - MUST have `also_belongs_to` = `{also_belongs_to}` (the sibling path above).
     - SHOULD explore the dilemma's central tension without privileging either answer.
 
   ## Schema
@@ -781,13 +782,14 @@ per_path_beats_prompt: |
             "note": "Explanation"
           }}
         ],
-        "entities": ["character::character_id"],
-        "location": "location::location_id",
-        "location_alternatives": ["location::other_location_if_scene_could_move_there"],
+        "entities": ["character::actual_character_id"],
+        "location": "location::actual_location_id",
+        "location_alternatives": ["location::another_actual_location_id"],
         "temporal_hint": {{
-          "relative_to": "dilemma::[other_dilemma_id]",
+          "relative_to": "dilemma::another_actual_dilemma_id",
           "position": "before_commit"
         }}
+        // ↑ Replace `actual_*` / `another_actual_*` with REAL IDs from your story's manifest. Square-bracket placeholders like `[other_dilemma_id]` are NOT template syntax — emitting them literally will fail validation.
       }}
     ]
   }}
@@ -873,8 +875,11 @@ per_path_beats_prompt: |
   For EACH beat you generate, verify:
   1. `path_id` is `{path_id}`
   2. `dilemma_impacts[0].dilemma_id` is `{dilemma_id}`
+  3. `also_belongs_to` is `null` (these are POST-COMMIT beats, exclusive
+     to one path — never shared)
 
   If you see a dilemma ID in your `path_id` value, YOU MADE A MISTAKE. Fix it.
+  If `also_belongs_to` is anything other than `null`, YOU MADE A MISTAKE. Fix it.
 
   ## Output
   Return ONLY valid JSON with the "initial_beats" array ({size_post_commit_beats_per_path} beats).
@@ -1110,7 +1115,9 @@ dilemma_analyses_prompt: |
      classify the strongest dilemma as hard. If more than 3 are hard:
      demote the weakest to soft.
   2. SOFT count is the majority.
-  3. FLAVOR count is 0-2.
+  3. Every entry has `dilemma_role` set to exactly `hard` or `soft` —
+     no other values are accepted (R-7.1). The legacy `flavor` role was
+     removed; never emit it.
   4. At most 2 have `ending_salience: "high"`.
   5. Every dilemma with `ending_tone` set also has `ending_salience: "high"`.
   6. At most 2 have `residue_weight: "heavy"`.
