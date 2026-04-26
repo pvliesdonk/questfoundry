@@ -39,11 +39,12 @@ class TestFormatLinearSectionContext:
         )
 
         assert ctx["section_id"] == "section_0"
-        assert "beat::a" in ctx["beat_details"]
-        assert "beat::b" in ctx["beat_details"]
-        assert "beat::c" in ctx["beat_details"]
+        # Beat IDs in beat_details lines are backtick-wrapped per CLAUDE.md §9 rule 1.
+        assert "`beat::a`" in ctx["beat_details"]
+        assert "`beat::b`" in ctx["beat_details"]
+        assert "`beat::c`" in ctx["beat_details"]
         assert ctx["beat_count"] == "3"
-        assert ctx["valid_beat_ids"] == "beat::a, beat::b, beat::c"
+        assert ctx["valid_beat_ids"] == "`beat::a`, `beat::b`, `beat::c`"
 
     def test_with_context_beats(self) -> None:
         graph = Graph.empty()
@@ -79,7 +80,10 @@ class TestFormatLinearSectionContext:
         ctx = format_linear_section_context(graph, "s0", ["beat::commit"], None, None)
 
         assert "commits" in ctx["beat_details"]
-        assert "dilemma::d1" in ctx["beat_details"]
+        # Dilemma IDs are backtick-wrapped within the impacts: clause.
+        assert "`dilemma::d1`" in ctx["beat_details"]
+        # No bracket-format leaks per CLAUDE.md §9 rule 1.
+        assert "impacts=[" not in ctx["beat_details"]
 
 
 class TestFormatPacingContext:

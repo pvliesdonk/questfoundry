@@ -80,19 +80,22 @@ def format_linear_section_context(
         impacts = data.get("dilemma_impacts", [])
         entities = data.get("entities", [])
 
+        # Backtick-wrap IDs per CLAUDE.md §9 rule 1.
         impact_str = ""
         if impacts:
-            effects = [f"{imp.get('effect', '?')}({imp.get('dilemma_id', '?')})" for imp in impacts]
-            impact_str = f" impacts=[{', '.join(effects)}]"
+            effects = [
+                f"{imp.get('effect', '?')}(`{imp.get('dilemma_id', '?')}`)" for imp in impacts
+            ]
+            impact_str = f" impacts: {', '.join(effects)}"
 
         entity_str = ""
         if entities:
             # Truncate to 5 entities per beat to keep context compact
             display = entities[:5]
             suffix = f" +{len(entities) - 5}" if len(entities) > 5 else ""
-            entity_str = f" entities=[{', '.join(display)}{suffix}]"
+            entity_str = f" entities: {', '.join(f'`{e}`' for e in display)}{suffix}"
 
-        line = f"  {i + 1}. {bid}: [{scene_type}] {summary}{impact_str}{entity_str}"
+        line = f"  {i + 1}. `{bid}`: [{scene_type}] {summary}{impact_str}{entity_str}"
         beat_items.append(ContextItem(id=bid, text=line))
 
     if config:
@@ -106,10 +109,10 @@ def format_linear_section_context(
 
     return {
         "section_id": section_id,
-        "beat_details": beat_details,
+        "beat_details": beat_details or "(none)",
         "before_context": before_context,
         "after_context": after_context,
-        "valid_beat_ids": ", ".join(beat_ids),
+        "valid_beat_ids": ", ".join(f"`{b}`" for b in beat_ids) or "(none)",
         "beat_count": str(len(beat_ids)),
     }
 
@@ -415,7 +418,7 @@ def format_false_branch_context(
         passage_specs: List of passage spec dicts.
 
     Returns:
-        Dict with keys: candidate_details, story_context, candidate_count.
+        Dict with keys: candidate_details, valid_entity_ids, candidate_count.
     """
     passage_lookup: dict[str, dict[str, Any]] = {}
     for spec in passage_specs:
@@ -544,7 +547,7 @@ def format_ambiguous_feasibility_context(
 
         flags_str = "\n".join(flag_lines)
         case_lines.append(
-            f"  passage_id: {case.passage_id}\n"
+            f"  passage_id: `{case.passage_id}`\n"
             f"  summary: {summary}\n"
             f"  entities: {entities_str}\n"
             f"  flags:\n{flags_str}"
@@ -591,12 +594,12 @@ def format_transition_guidance_context(
             summary = truncate_summary(data.get("summary", ""), 90)
             scene_type = data.get("scene_type", "")
             scene_tag = f"[{scene_type}] " if scene_type else ""
-            beat_lines.append(f"    Beat {i + 1}: {bid} {scene_tag}— {summary}")
+            beat_lines.append(f"    Beat {i + 1}: `{bid}` {scene_tag}— {summary}")
 
         boundary_count = len(beat_ids) - 1
         beats_str = "\n".join(beat_lines)
         passage_lines.append(
-            f"  passage_id: {passage_id}\n"
+            f"  passage_id: `{passage_id}`\n"
             f"  entities: {entities_str}\n"
             f"  beats ({len(beat_ids)} total, {boundary_count} boundary/ies):\n{beats_str}"
         )
