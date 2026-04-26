@@ -101,7 +101,7 @@ Every story begins with a creative contract: what kind of experience are we maki
 
 DREAM establishes the boundaries that every later decision must respect. It defines the genre and subgenre (cyberpunk noir, cozy mystery, epic fantasy), the emotional tone (gritty and cynical, whimsical and warm), the themes the story wants to explore ("what is the price of loyalty?"), the intended audience, and preferences for narrative style.
 
-DREAM also sets the scope — how large this story will be. A vignette with two dilemmas and a handful of passages is a fundamentally different undertaking from a full-length adventure with five dilemmas and a hundred passages. Scope constrains everything downstream: how many dilemmas are feasible, how many beats each path can sustain, how much prose needs to be written.
+DREAM also sets the scope — how large this story will be. A `micro`-sized story with two dilemmas and a handful of passages is a fundamentally different undertaking from a `long`-sized adventure with five dilemmas and a hundred passages. Scope constrains everything downstream: how many dilemmas are feasible, how many beats each path can sustain, how much prose needs to be written.
 
 If an idea later in the pipeline contradicts the vision — a slapstick scene in a gritty noir, a light-hearted tone in a story about grief — it gets cut. DREAM is the North Star.
 

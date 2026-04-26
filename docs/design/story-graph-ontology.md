@@ -24,7 +24,7 @@ The vision's fields include:
 - **Genre and subgenre** — the primary genre (e.g., "mystery") and a more specific subgenre (e.g., "cozy mystery," "noir detective"). "How Branching Stories Work" discusses subgenre narratively; this document formalizes it as a distinct field.
 - **Point-of-view style** — a hint, not a binding constraint. Expressed as one of four narrative perspectives (first person, second person, third person limited, third person omniscient). FILL's voice document makes the final decision — the vision's `pov_style` is advisory context.
 - **Content notes** — explicit guidance on what the story should include or exclude (themes to embrace, topics to avoid, content boundaries). This is a substantive creative constraint, not a filter — it shapes what BRAINSTORM generates and what SEED retains.
-- **Scope** — expressed as a named preset (e.g., "vignette," "short story," "novella") that implies approximate sizes for the cast, dilemma count, beat count, and passage count. The preset system provides BRAINSTORM and SEED with concrete targets.
+- **Scope** — expressed as a named preset (`micro`, `short`, `medium`, or `long` — the canonical names defined in `pipeline/size.py` PRESETS) that implies approximate sizes for the cast, dilemma count, beat count, and passage count. The preset system provides BRAINSTORM and SEED with concrete targets.
 
 The vision has no edges to other nodes. Downstream stages receive it as context — it informs decisions but does not participate in the graph structure. It is working data, not exported to the player.
 
