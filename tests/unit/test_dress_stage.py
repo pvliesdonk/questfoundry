@@ -800,21 +800,28 @@ class TestBuildDressErrorFeedback:
     constraints can self-correct after the first attempt drifts.
     """
 
-    def test_no_hints_legacy_output_unchanged(self) -> None:
+    def test_no_hints_legacy_output_byte_identical(self) -> None:
         """Callers that omit `extra_repair_hints` (the parameter default) get
-        the same generic feedback DRESS produced before this PR — no extra
-        block appended."""
+        the same generic feedback DRESS produced before this PR. Pinning the
+        EXACT string is the entire safety claim of the refactor — substring
+        checks would let a stray `\\n` or reorder slip through silently."""
+        from questfoundry.artifacts.validator import get_all_field_paths
         from questfoundry.models.dress import DressPhase0Output
         from questfoundry.pipeline.stages.dress import _build_dress_error_feedback
 
-        feedback = _build_dress_error_feedback(
-            ValueError("bad output"), DressPhase0Output, extra_repair_hints=None
+        error = ValueError("bad output")
+        expected = ", ".join(get_all_field_paths(DressPhase0Output))
+        # This is what the prior inline f-string produced verbatim:
+        # f"Your response failed validation:\n{e}\n\n"
+        # f"Expected fields: {', '.join(expected)}\n"
+        # f"Please fix the errors and try again."
+        legacy = (
+            f"Your response failed validation:\n{error}\n\n"
+            f"Expected fields: {expected}\n"
+            f"Please fix the errors and try again."
         )
-        assert "Your response failed validation" in feedback
-        assert "Expected fields" in feedback
-        assert "Please fix the errors" in feedback
-        # Legacy callers don't get any REMINDER block.
-        assert "REMINDER" not in feedback
+        feedback = _build_dress_error_feedback(error, DressPhase0Output, extra_repair_hints=None)
+        assert feedback == legacy
 
     def test_hints_appear_verbatim_in_feedback(self) -> None:
         """A caller-supplied hint block appears literally in the retry
@@ -858,6 +865,79 @@ class TestBuildDressErrorFeedback:
             ValueError("bad output"), DressPhase0Output, extra_repair_hints=[]
         )
         assert "REMINDER" not in feedback
+
+    @pytest.mark.asyncio
+    async def test_dress_llm_call_forwards_hints_into_retry_message(self) -> None:
+        """End-to-end: `_dress_llm_call` must actually plumb `extra_repair_hints`
+        through to the appended `HumanMessage` on retry. The unit tests above
+        cover the helper in isolation; this test guards against a regression
+        where someone drops the parameter forwarding inside `_dress_llm_call`
+        — the integration seam Cluster D-2 actually fixes."""
+        from langchain_core.messages import HumanMessage
+        from pydantic import BaseModel, Field, ValidationError
+
+        from questfoundry.pipeline.stages.dress import DressStage
+
+        class _Toy(BaseModel):
+            name: str = Field(min_length=1)
+
+        # First attempt: raise ValidationError. Second: return a valid result.
+        valid = _Toy(name="ok")
+        call_count = {"n": 0}
+        captured_messages: list[Any] = []
+
+        async def _ainvoke(messages: list[Any], config: Any = None) -> _Toy:  # noqa: ARG001
+            captured_messages.append(list(messages))  # snapshot the conversation
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                raise ValidationError.from_exception_data(
+                    "Toy",
+                    [
+                        {
+                            "type": "missing",
+                            "loc": ("name",),
+                            "msg": "Field required",
+                            "input": {},
+                        }
+                    ],
+                )
+            return valid
+
+        structured_model = MagicMock()
+        structured_model.ainvoke = _ainvoke
+
+        # Patch with_structured_output (used by _dress_llm_call line ~640) so
+        # we don't need a real LangChain provider.
+        stage = DressStage()
+        with (
+            patch(
+                "questfoundry.pipeline.stages.dress.with_structured_output",
+                return_value=structured_model,
+            ),
+            patch("questfoundry.prompts.loader.PromptLoader") as mock_loader,
+        ):
+            mock_template = MagicMock()
+            mock_template.system = "system text"
+            mock_template.user = None
+            mock_loader.return_value.load.return_value = mock_template
+
+            hints = ["REMINDER — must-be-present-in-retry"]
+            result, _calls, _tokens = await stage._dress_llm_call(
+                model=MagicMock(),
+                template_name="dummy",
+                context={},
+                output_schema=_Toy,
+                extra_repair_hints=hints,
+            )
+
+        assert result == valid
+        assert call_count["n"] == 2
+        # The retry conversation (second snapshot) must include the hint.
+        retry_messages = captured_messages[1]
+        retry_human_messages = [m for m in retry_messages if isinstance(m, HumanMessage)]
+        assert retry_human_messages, "expected an appended HumanMessage on retry"
+        retry_text = retry_human_messages[-1].content
+        assert "REMINDER — must-be-present-in-retry" in retry_text
 
 
 class TestParseAspectRatio:

@@ -545,9 +545,13 @@ class DressStage:
         if self._unload_after_summarize is not None:
             await self._unload_after_summarize()
 
-        # Phase 3: Serialize
+        # Phase 3: Serialize.
+        # Backtick-wrap each ID per CLAUDE.md §9 rule 1 — small models drift
+        # less when IDs in LLM-facing text are unambiguously delimited. The
+        # value flows into both the initial system prompt (via {entity_ids})
+        # and the retry feedback hint built below.
         entity_ids = "\n".join(
-            f"- {edata.get('raw_id', strip_scope_prefix(eid))}" for eid, edata in entities.items()
+            f"- `{edata.get('raw_id', strip_scope_prefix(eid))}`" for eid, edata in entities.items()
         )
         serialize_template = loader.load("dress_serialize")
         serialize_prompt = serialize_template.system.format(
