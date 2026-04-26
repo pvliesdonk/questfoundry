@@ -18,6 +18,7 @@ system: |
   **Passage ID:** {passage_id}
   **Beat Summary:** {beat_summary}
   **Scene Type:** {scene_type}
+  **Narrative Function:** {narrative_function}
 
   ## Open Dramatic Questions
   {dramatic_questions}
@@ -33,6 +34,18 @@ system: |
     Breathing room after intensity. Ground reactions in physical sensation or gesture.
   - **micro_beat**: Brief transition. 1 paragraph. Functional prose that moves
     the story forward without dwelling. Prefer a single concrete action or image.
+
+  ## Narrative Function Guidance
+  - **introduce**: Ground the reader. Establish new elements through sensory detail
+    and action, not exposition. End with a hook or question.
+  - **develop**: Deepen what is already known. Layer in contradiction, nuance, or
+    intimacy. Show character through choice, not description.
+  - **complicate**: Raise stakes or introduce obstacles. The reader should feel
+    the ground shift. End with the situation worse or more uncertain.
+  - **confront**: Direct engagement with tension. Strip away ambiguity. Force
+    characters (and reader) to face what they have been avoiding.
+  - **resolve**: Settle a thread. Provide earned clarity — not easy answers.
+    The resolution should feel inevitable in hindsight.
 
   ## Scene Blueprint
   {blueprint_context}
@@ -54,6 +67,9 @@ system: |
 
   ## Path Arcs
   {path_arcs}
+
+  ## Shadows (Non-Chosen Alternatives)
+  {shadow_context}
 
   ## Vocabulary Note
   {vocabulary_note}
