@@ -39,11 +39,12 @@ class TestFormatLinearSectionContext:
         )
 
         assert ctx["section_id"] == "section_0"
-        assert "beat::a" in ctx["beat_details"]
-        assert "beat::b" in ctx["beat_details"]
-        assert "beat::c" in ctx["beat_details"]
+        # Beat IDs in beat_details lines are backtick-wrapped per CLAUDE.md §9 rule 1.
+        assert "`beat::a`" in ctx["beat_details"]
+        assert "`beat::b`" in ctx["beat_details"]
+        assert "`beat::c`" in ctx["beat_details"]
         assert ctx["beat_count"] == "3"
-        assert ctx["valid_beat_ids"] == "beat::a, beat::b, beat::c"
+        assert ctx["valid_beat_ids"] == "`beat::a`, `beat::b`, `beat::c`"
 
     def test_with_context_beats(self) -> None:
         graph = Graph.empty()
@@ -67,6 +68,30 @@ class TestFormatLinearSectionContext:
         assert "start/end" in ctx["before_context"]
         assert "start/end" in ctx["after_context"]
 
+    def test_empty_section_falls_back_to_none(self) -> None:
+        """Empty `beat_ids` MUST render `(none)` for both `beat_details` and
+        `valid_beat_ids` per the consistent empty-fallback pattern across
+        polish_context render functions."""
+        graph = Graph.empty()
+        ctx = format_linear_section_context(graph, "section_0", [], None, None)
+        assert ctx["beat_details"] == "(none)"
+        assert ctx["valid_beat_ids"] == "(none)"
+        assert ctx["beat_count"] == "0"
+
+    def test_section_beat_with_entities_renders_backticks(self) -> None:
+        """A section beat whose `entities` field is populated renders the
+        entity list with backticks per CLAUDE.md §9 rule 1 — never as a
+        Python repr-style bracket list. Covers the linear-section
+        equivalent of `test_pacing_beat_with_entities_renders_backticks`."""
+        graph = Graph.empty()
+        _make_beat(graph, "beat::a", "Hero acts", entities=["entity::hero"])
+
+        ctx = format_linear_section_context(graph, "s0", ["beat::a"], None, None)
+
+        assert "entities: `entity::hero`" in ctx["beat_details"]
+        # No bracket-format leak per CLAUDE.md §9 rule 1.
+        assert "entities=[" not in ctx["beat_details"]
+
     def test_dilemma_impacts_shown(self) -> None:
         graph = Graph.empty()
         _make_beat(
@@ -79,7 +104,10 @@ class TestFormatLinearSectionContext:
         ctx = format_linear_section_context(graph, "s0", ["beat::commit"], None, None)
 
         assert "commits" in ctx["beat_details"]
-        assert "dilemma::d1" in ctx["beat_details"]
+        # Dilemma IDs are backtick-wrapped within the impacts: clause.
+        assert "`dilemma::d1`" in ctx["beat_details"]
+        # No bracket-format leaks per CLAUDE.md §9 rule 1.
+        assert "impacts=[" not in ctx["beat_details"]
 
 
 class TestFormatPacingContext:
@@ -103,14 +131,36 @@ class TestFormatPacingContext:
         ctx = format_pacing_context(graph, flags)
 
         assert "consecutive_scene" in ctx["pacing_issues"]
-        assert "beat::a" in ctx["pacing_issues"]
-        assert "entity::hero" in ctx["valid_entity_ids"]
+        # Beat IDs and path IDs backtick-wrapped per CLAUDE.md §9 rule 1.
+        assert "`beat::a`" in ctx["pacing_issues"]
+        assert "Path: `path::p1`" in ctx["pacing_issues"]
+        # valid_entity_ids backtick-wrapped, with `(none)` fallback.
+        assert "`entity::hero`" in ctx["valid_entity_ids"]
         assert ctx["entity_count"] == "1"
 
     def test_no_flags(self) -> None:
         graph = Graph.empty()
         ctx = format_pacing_context(graph, [])
         assert "No pacing issues" in ctx["pacing_issues"]
+        # No entities → valid_entity_ids falls back to `(none)`.
+        assert ctx["valid_entity_ids"] == "(none)"
+
+    def test_pacing_beat_with_entities_renders_backticks(self) -> None:
+        """A pacing flag whose beats reference entities renders the entity
+        list with backticks per CLAUDE.md §9 rule 1 — never as a Python
+        repr-style bracket list."""
+        graph = Graph.empty()
+        _make_beat(graph, "beat::a", "Hero acts", entities=["entity::hero"])
+        graph.create_node("entity::hero", {"type": "entity", "raw_id": "hero", "name": "Hero"})
+
+        flags = [
+            {"issue_type": "consecutive_scene", "beat_ids": ["beat::a"], "path_id": "path::p1"}
+        ]
+        ctx = format_pacing_context(graph, flags)
+
+        assert "entities: `entity::hero`" in ctx["pacing_issues"]
+        # No bracket-format leaking through (CLAUDE.md §9 rule 1).
+        assert "entities=[" not in ctx["pacing_issues"]
 
 
 class TestFormatEntityArcContext:
