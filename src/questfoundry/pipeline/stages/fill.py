@@ -749,6 +749,8 @@ class FillStage:
             failure_type: Classification from _classify_validation_error.
             invalid_fields: Dotted field paths flagged as content failures by
                 _classify_validation_error. Used to look up Literal values.
+            extra_repair_hints: Hint blocks appended verbatim after the standard
+                error text so caller-known IDs/constraints survive context drift.
 
         Returns:
             Formatted error feedback string.
