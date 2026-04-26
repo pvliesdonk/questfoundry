@@ -31,7 +31,7 @@ system: |
     - `answer_id`: Unique short identifier for THIS answer (e.g., "guilty", "framed", "dagger", "poison")
     - `description`: Full description
     - `is_canonical`: true for ONE answer (the default path), false for the other
-  - `central_entity_ids`: List of entity_id values related to this dilemma
+  - `central_entity_ids`: List of **namespaced** `entity_id` values related to this dilemma (e.g., `character::mentor`, `location::archive`). Bare IDs without the category prefix will fail R-2.3 semantic validation.
   - `why_it_matters`: Thematic stakes
 
   ## Dilemma ID Naming (CRITICAL)

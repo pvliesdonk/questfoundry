@@ -28,7 +28,7 @@ system: |
   GOOD entity IDs: `character::lady_beatrice`, `location::vane_manor`, `object::silver_dagger`, `faction::old_guard`
   BAD entity IDs:
   - `Lady Beatrice` (spaces, capitalization — IDs are snake_case)
-  - `mentor` (missing namespace — would fail `validate_entity_id_format`)
+  - `mentor` (missing namespace — would fail R-2.3 semantic validation)
   - `main_character_mentor` (no namespace, free-form)
 
   **Entity Names**: When a specific name emerges naturally during brainstorming (e.g., "Lady Beatrice
