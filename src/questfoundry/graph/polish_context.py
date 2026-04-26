@@ -231,6 +231,9 @@ def format_entity_arc_context(
         beat_text = compact_items(beat_items, config)
     else:
         beat_text = "\n".join(item.text for item in beat_items)
+    # Empty fallback consistent with the four ID list fields below.
+    if not beat_text:
+        beat_text = "  (none)"
 
     # Overlay data (how entity changes based on state flags)
     # Overlays are embedded on the entity node as {when: [state_flag_ids], details: {k: v}}

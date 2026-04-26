@@ -228,6 +228,10 @@ class TestFormatEntityArcContext:
         assert ctx["valid_path_ids"] == "(none)"
         assert ctx["valid_beat_ids"] == "(none)"
         assert ctx["anchored_dilemmas"] == "(none)"
+        # `beat_appearances` uses the same fallback (with the indent the
+        # rendered lines normally carry) so the prompt never receives an
+        # empty injection.
+        assert ctx["beat_appearances"] == "  (none)"
 
     def test_anchored_dilemmas_backtick_wrapped(self) -> None:
         """Dilemmas the entity is `anchored_to` are backtick-wrapped per
