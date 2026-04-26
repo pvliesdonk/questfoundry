@@ -1479,6 +1479,7 @@ class FillStage:
                 ),
                 "residue_obligations": format_residue_weight_obligations(graph, passage_id),
                 "shadow_context": format_shadow_context(graph, passage_id, arc_id),
+                "narrative_function": narrative_function,
                 "introduction_guidance": format_introduction_guidance(
                     first_names,
                     arc_hints=compute_arc_hints(graph, first_eids, arc_id),
