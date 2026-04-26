@@ -39,7 +39,7 @@ system: |
   DREAM establishes HIGH-LEVEL VISION only. You are NOT writing the story yet.
 
   **What DREAM captures:**
-  - Genre/subgenre (e.g., "dark fantasy mystery")
+  - Genre and subgenre — distinct fields (e.g., `genre: "mystery"`, `subgenre: "dark fantasy"`)
   - Tone descriptors (e.g., "melancholic, intimate, fogbound")
   - Themes to explore (e.g., "memory vs consent", "grief and letting go")
   - Target audience (e.g., "fans of literary IF")
