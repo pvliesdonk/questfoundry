@@ -162,6 +162,116 @@ class TestFormatEntityForCodex:
 
         assert format_entity_for_codex(dress_graph, "character::nonexistent") == ""
 
+    def test_includes_overlays_when_present(self, dress_graph: Graph) -> None:
+        """Entities with path-specific overlays MUST surface them per dress.md
+        R-3.8: codex generation needs the full Entity description (base +
+        overlays) so spoiler-graduated tiers can capture path-specific arcs
+        the base concept doesn't reveal."""
+        from questfoundry.graph.dress_context import format_entity_for_codex
+
+        # Add an overlay to aldric — two state flags trigger a different demeanor.
+        dress_graph.update_node(
+            "character::aldric",
+            overlays=[
+                {
+                    "when": ["state_flag::met_aldric", "state_flag::trusted_aldric"],
+                    "details": {
+                        "demeanor": "warm and forthcoming",
+                        "voice": "softer, conspiratorial",
+                    },
+                },
+                {
+                    "when": ["state_flag::betrayed_aldric"],
+                    "details": {"demeanor": "cold and guarded"},
+                },
+            ],
+        )
+
+        result = format_entity_for_codex(dress_graph, "character::aldric")
+        assert "### Overlays (path-specific arcs)" in result
+        # Both overlays present, with backtick-wrapped state flag IDs (CLAUDE.md §9).
+        assert "`state_flag::met_aldric`" in result
+        assert "`state_flag::trusted_aldric`" in result
+        assert "`state_flag::betrayed_aldric`" in result
+        # Detail key:value pairs rendered.
+        assert "demeanor: warm and forthcoming" in result
+        assert "voice: softer, conspiratorial" in result
+        assert "demeanor: cold and guarded" in result
+
+    def test_omits_overlays_section_when_none(self, dress_graph: Graph) -> None:
+        """Entities with no overlays MUST NOT emit an empty `### Overlays`
+        header — the section is conditional, not always present."""
+        from questfoundry.graph.dress_context import format_entity_for_codex
+
+        # `aldric` in the fixture has no overlays.
+        result = format_entity_for_codex(dress_graph, "character::aldric")
+        assert "### Overlays" not in result
+
+    def test_skips_overlays_with_missing_when_or_details(self, dress_graph: Graph) -> None:
+        """Malformed overlays (missing `when` or `details`) MUST be skipped
+        silently — same defensive pattern used in polish_context.py."""
+        from questfoundry.graph.dress_context import format_entity_for_codex
+
+        dress_graph.update_node(
+            "character::aldric",
+            overlays=[
+                {"when": [], "details": {"demeanor": "evasive"}},  # no flags
+                {"when": ["state_flag::met_aldric"], "details": {}},  # no details
+            ],
+        )
+
+        result = format_entity_for_codex(dress_graph, "character::aldric")
+        # Both malformed overlays skipped → no Overlays section emitted.
+        assert "### Overlays" not in result
+
+    def test_skips_malformed_overlay_but_renders_valid_sibling(self, dress_graph: Graph) -> None:
+        """A list mixing one valid overlay and one malformed entry MUST render
+        the valid one and silently drop the malformed one — the section header
+        still appears because at least one overlay survived."""
+        from questfoundry.graph.dress_context import format_entity_for_codex
+
+        dress_graph.update_node(
+            "character::aldric",
+            overlays=[
+                {"when": [], "details": {"demeanor": "skipped"}},  # malformed
+                {
+                    "when": ["state_flag::met_aldric"],
+                    "details": {"demeanor": "warm and forthcoming"},
+                },
+            ],
+        )
+
+        result = format_entity_for_codex(dress_graph, "character::aldric")
+        assert "### Overlays (path-specific arcs)" in result
+        assert "warm and forthcoming" in result
+        assert "skipped" not in result  # malformed entry not rendered
+
+    def test_overlay_details_non_string_values_str_cast(self, dress_graph: Graph) -> None:
+        """The renderer must `!s`-coerce non-string `details` values so it
+        always has a render path (no crash, consistent output). Note: for
+        list/dict values `str()` delegates to `__repr__`, so this test pins
+        the bracket-format repr — that's the documented behaviour, see the
+        comment in `dress_context.py` directing future maintainers toward
+        an explicit per-type formatter if the schema admits non-string
+        values."""
+        from questfoundry.graph.dress_context import format_entity_for_codex
+
+        dress_graph.update_node(
+            "character::aldric",
+            overlays=[
+                {
+                    "when": ["state_flag::met_aldric"],
+                    "details": {"speech_tics": ["umm", "well"]},
+                },
+            ],
+        )
+
+        result = format_entity_for_codex(dress_graph, "character::aldric")
+        # `str()` delegates to `__repr__` for lists, so bracket-format is the
+        # expected output here. See the docstring above for why this is the
+        # documented behaviour rather than a leak.
+        assert "speech_tics: ['umm', 'well']" in result
+
 
 class TestFormatEntitiesBatchForCodex:
     def test_formats_multiple_entities(self, dress_graph: Graph) -> None:
@@ -187,6 +297,31 @@ class TestFormatEntitiesBatchForCodex:
         from questfoundry.graph.dress_context import format_entities_batch_for_codex
 
         assert format_entities_batch_for_codex(dress_graph, []) == ""
+
+    def test_batch_includes_overlays_per_entity(self, dress_graph: Graph) -> None:
+        """The batch formatter delegates to `format_entity_for_codex`, so the
+        overlay enrichment from this PR must surface in the batch output too.
+        Pinning this guards against future refactors that might bypass the
+        single-entity formatter."""
+        from questfoundry.graph.dress_context import format_entities_batch_for_codex
+
+        dress_graph.update_node(
+            "character::aldric",
+            overlays=[
+                {
+                    "when": ["state_flag::met_aldric"],
+                    "details": {"demeanor": "warm"},
+                },
+            ],
+        )
+
+        result = format_entities_batch_for_codex(
+            dress_graph, ["character::protagonist", "character::aldric"]
+        )
+        # Overlay block from aldric appears in the batch output.
+        assert "### Overlays (path-specific arcs)" in result
+        assert "`state_flag::met_aldric`" in result
+        assert "demeanor: warm" in result
 
 
 class TestGetPassageEntityIds:
