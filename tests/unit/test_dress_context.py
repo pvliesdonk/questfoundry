@@ -267,8 +267,9 @@ class TestFormatEntityForCodex:
         )
 
         result = format_entity_for_codex(dress_graph, "character::aldric")
-        # The list is rendered via str() — consistent with how Python prints
-        # lists, just guaranteed not to leak via __repr__ side-channels.
+        # `str()` delegates to `__repr__` for lists, so bracket-format is the
+        # expected output here. See the docstring above for why this is the
+        # documented behaviour rather than a leak.
         assert "speech_tics: ['umm', 'well']" in result
 
 
