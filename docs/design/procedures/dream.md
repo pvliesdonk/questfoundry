@@ -245,10 +245,11 @@ vision:
   audience: "adult readers of literary speculative fiction"
   scope: short                     # enum value — unquoted
   content_notes:
-    - "single protagonist POV"
-    - "no explicit magic system"
-    - "no graphic violence"
-    - "intimate scope (few key relationships)"
+    includes:
+      - "intimate scope (few key relationships)"
+    excludes:
+      - "explicit magic system"
+      - "graphic violence"
   pov_style: third_person_limited  # enum value — unquoted
 ```
 
