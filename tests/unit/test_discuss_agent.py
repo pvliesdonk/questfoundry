@@ -18,9 +18,13 @@ class TestGetDiscussPrompt:
         """Prompt should include key creative questions as deliverables."""
         prompt = get_discuss_prompt()
 
-        assert "genre and subgenre" in prompt
-        assert "emotional tone" in prompt
-        assert "target audience" in prompt.lower()
+        # Genre and subgenre are now elicited as separate questions (1a/1b)
+        # per dream.md §R-1.2; assert each field is referenced individually.
+        assert "PRIMARY `genre`" in prompt
+        assert "`subgenre`" in prompt
+        assert "SEPARATE fields" in prompt
+        assert "emotional `tone`" in prompt
+        assert "target `audience`" in prompt.lower()
         assert "themes" in prompt
 
     def test_prompt_includes_tools_section_when_available(self) -> None:
@@ -54,6 +58,27 @@ class TestGetDiscussPrompt:
         # Verify it returns a non-empty string
         assert isinstance(prompt, str)
         assert len(prompt) > 100  # Should have substantial content
+
+    def test_prompt_includes_sandwich_reminder(self) -> None:
+        """Prompt MUST end with a sandwich reminder echoing the scope fence
+        and the SEPARATE-fields / abstract-themes constraints. Guards
+        against context drift in long discussions on small models."""
+        prompt = get_discuss_prompt()
+
+        assert "REMINDER: DREAM = high-level vision only" in prompt
+        assert "`genre` and `subgenre` are SEPARATE" in prompt
+        assert "`themes` are ABSTRACT" in prompt
+
+    def test_non_interactive_prompt_includes_completeness_checklist(self) -> None:
+        """Non-interactive (autonomous) mode MUST include the completeness
+        checklist enumerating the six required fields and the consequence
+        of omitting them — guards autonomous runs against silent vision
+        degradation."""
+        prompt = get_discuss_prompt(interactive=False)
+
+        assert "confirm you have established ALL of" in prompt
+        assert "`subgenre`" in prompt
+        assert "forces the serialize phase to invent placeholders" in prompt
 
 
 class TestCreateDiscussAgent:
@@ -94,7 +119,9 @@ class TestCreateDiscussAgent:
         call_kwargs = mock_create.call_args.kwargs
         # System prompt should contain discussion guidelines, not user prompt
         assert "creative collaborator" in call_kwargs["system_prompt"]
-        assert "genre and subgenre" in call_kwargs["system_prompt"]
+        # Genre and subgenre are elicited as separate questions per R-1.2.
+        assert "PRIMARY `genre`" in call_kwargs["system_prompt"]
+        assert "`subgenre`" in call_kwargs["system_prompt"]
 
 
 class TestRunDiscussPhase:
