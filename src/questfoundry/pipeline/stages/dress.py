@@ -148,20 +148,7 @@ def _build_dress_error_feedback(
     output_schema: type[BaseModel],
     extra_repair_hints: list[str] | None = None,
 ) -> str:
-    """Build the per-attempt repair feedback for `_dress_llm_call`.
-
-    Mirrors the SEED Phase-1 / FILL D-1 pattern: a generic Pydantic-error
-    description plus the expected field paths, optionally followed by
-    caller-supplied hint blocks (valid IDs, allowed enum values, schema
-    constraints) that the model would otherwise lose between the initial
-    system prompt and the retry message.
-
-    Per CLAUDE.md §6 / §repair-loop quality, retry feedback must echo the
-    *value* the model needs, not just the field name. The initial system
-    prompt's IDs and constraints are far back in context by retry time;
-    small models that drift on the first attempt need the constraint
-    re-stated in the same human-message they're correcting against.
-    """
+    """Build the per-attempt repair feedback for `_dress_llm_call`."""
     expected = get_all_field_paths(output_schema)
     parts = [
         f"Your response failed validation:\n{error}",
@@ -545,11 +532,7 @@ class DressStage:
         if self._unload_after_summarize is not None:
             await self._unload_after_summarize()
 
-        # Phase 3: Serialize.
-        # Backtick-wrap each ID per CLAUDE.md §9 rule 1 — small models drift
-        # less when IDs in LLM-facing text are unambiguously delimited. The
-        # value flows into both the initial system prompt (via {entity_ids})
-        # and the retry feedback hint built below.
+        # Phase 3: Serialize. Backtick-wrap IDs per CLAUDE.md §9 rule 1.
         entity_ids = "\n".join(
             f"- `{edata.get('raw_id', strip_scope_prefix(eid))}`" for eid, edata in entities.items()
         )
@@ -559,11 +542,7 @@ class DressStage:
             entity_ids=entity_ids,
         )
 
-        # Re-echo the valid entity ID list on retry. The list appears in the
-        # initial system prompt via `entity_ids` but is far back in context by
-        # the time the repair feedback fires; without re-echoing, the model
-        # invents a different wrong ID on the second attempt instead of
-        # picking from the valid set.
+        # Re-echo valid entity IDs on retry — system prompt is far back by then.
         serialize_repair_hints = [
             "REMINDER — Valid entity IDs for `entity_visuals[].entity_id` "
             f"(use ONLY these — raw IDs, no `entity::` prefix):\n{entity_ids}",
@@ -647,16 +626,8 @@ class DressStage:
                 mood/caption diversity matters.
             strategy: Override the default structured output strategy for this
                 call. If None, uses the provider-level default.
-            extra_repair_hints: Optional caller-supplied hint blocks (e.g. valid
-                entity IDs, allowed priority range, state-flag list) appended to
-                the retry feedback verbatim. Per CLAUDE.md §6 / §repair-loop
-                quality, retry messages must echo the *value* the model needs,
-                not just the field name. The initial system prompt's IDs and
-                constraints are far back in context by retry time; small models
-                that drift on the first attempt need the constraint re-stated
-                in the same human-message they're correcting against. Mirrors
-                the SEED Phase-1 pattern (`agents/serialize.py`) and the FILL
-                D-1 enrichment (#1399).
+            extra_repair_hints: Hint blocks appended verbatim to retry feedback
+                so caller-known IDs/constraints survive context drift.
 
         Returns:
             Tuple of (validated_result, llm_calls, tokens_used).
@@ -832,16 +803,12 @@ class DressStage:
                 "output_language_instruction": self._lang_instruction,
             }
 
-            # Schema constraints the model routinely violates on retry —
-            # echo them in the repair feedback so the failure mode that
-            # produced the first miss is named explicitly when the model
-            # tries again. See `models/dress.py` IllustrationBrief Field
-            # validators for the source of truth.
+            # Re-echo IllustrationBrief constraints on retry — system prompt is far back by then.
             brief_schema_hints = [
-                "REMINDER for each brief in this batch:",
-                "  - `priority` MUST be 1, 2, or 3 (1=must-have, 2=important, 3=nice-to-have)",
+                "REMINDER for each brief in this batch:\n"
+                "  - `priority` MUST be 1, 2, or 3 (1=must-have, 2=important, 3=nice-to-have)\n"
                 "  - `category` MUST be one of: `scene`, `portrait`, `vista`, "
-                "`item_detail`, `cover` (`cover` only for the story's title image)",
+                "`item_detail`, `cover` (`cover` only for the story's title image)\n"
                 "  - `caption` MUST be 10-60 characters in the format "
                 "`[Subject] [action/state]` (diegetic; no meta-language)",
             ]
@@ -984,9 +951,7 @@ class DressStage:
                 "state_flags": state_flag_list or "No state flags defined.",
                 "output_language_instruction": self._lang_instruction,
             }
-            # Re-echo the state-flag list and the rank-1 invariant on retry —
-            # both appear in the system prompt initially but are far back in
-            # context by the time the retry feedback lands. See dress.md R-3.7.
+            # Re-echo state flags and rank-1 invariant on retry (dress.md R-3.7).
             codex_repair_hints = [
                 f"REMINDER — Available State Flags (use ONLY these in `visible_when`):\n"
                 f"{state_flag_list or 'No state flags defined.'}",
@@ -1206,9 +1171,7 @@ class DressStage:
             "state_flags": state_flag_list or "No state flags defined.",
             "output_language_instruction": self._lang_instruction,
         }
-        # On retry the spoiler-warning text and state-flag list need to be
-        # re-stated so the model doesn't drift back into the leak shape on the
-        # second attempt of a regeneration that already followed a leak.
+        # Re-echo state flags and prior-leak summary on retry to prevent re-drift.
         regen_repair_hints = [
             f"REMINDER — Available State Flags (use ONLY these in `visible_when`):\n"
             f"{state_flag_list or 'No state flags defined.'}",
