@@ -1154,12 +1154,56 @@ class TestPhase3Revision:
         # fill_phase3_revision.yaml's `## Valid Entity IDs` section.
         assert "valid_entity_ids" in captured_context
         valid_ids_text = captured_context["valid_entity_ids"]
-        assert "kay" in valid_ids_text  # raw_id of the entity in _make_reviewed_graph
+        assert "kay" in valid_ids_text  # raw_id of the entity created above
         assert "`kay`" in valid_ids_text  # backtick-wrapped per CLAUDE.md §9 rule 1
 
         # Same constraint also flows as a retry hint so it survives context drift.
         assert captured_hints is not None
         assert any("Valid entity IDs" in h and "`kay`" in h for h in captured_hints)
+
+    @pytest.mark.asyncio
+    async def test_revision_with_zero_entities_uses_fallback_string(self) -> None:
+        """When the graph has flagged passages but zero entity nodes, the
+        `valid_entity_ids` injection must fall back to a non-empty placeholder
+        rather than rendering as an empty block (which would confuse small
+        models reading `## Valid Entity IDs\\n\\n` with no content)."""
+        graph = _make_reviewed_graph()
+        # Intentionally NO entity nodes — fixture doesn't create any.
+        graph.update_node(
+            "passage::p1",
+            review_flags=[
+                {"passage_id": "p1", "issue": "Voice drift", "issue_type": "voice_drift"}
+            ],
+        )
+        stage = FillStage()
+
+        captured_context: dict[str, Any] = {}
+
+        async def mock_llm_call(
+            model: MagicMock,  # noqa: ARG001
+            template_name: str,  # noqa: ARG001
+            context: dict,
+            output_schema: type,  # noqa: ARG001
+            max_retries: int = 3,  # noqa: ARG001
+            *,
+            creative: bool = False,  # noqa: ARG001
+            extra_repair_hints: list[str] | None = None,  # noqa: ARG001
+            **kwargs: object,  # noqa: ARG001
+        ) -> tuple:
+            nonlocal captured_context
+            captured_context = context
+            return (
+                FillPhase1Output(
+                    passage=FillPassageOutput(passage_id="p1", prose="Revised prose.")
+                ),
+                1,
+                300,
+            )
+
+        stage._fill_llm_call = mock_llm_call  # type: ignore[method-assign]
+        await stage._phase_3_revision(graph, MagicMock())
+
+        assert captured_context["valid_entity_ids"] == "(no entities defined)"
 
     @pytest.mark.asyncio
     async def test_multiple_flags_batched(self) -> None:

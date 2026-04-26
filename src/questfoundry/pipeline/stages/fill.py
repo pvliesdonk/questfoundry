@@ -624,6 +624,8 @@ class FillStage:
             creative: Use the discuss-phase model (creative temperature) instead
                 of the serialize model. Enable for prose generation where lexical
                 diversity matters.
+            extra_repair_hints: Hint blocks appended verbatim to retry feedback
+                so caller-known IDs/constraints survive context drift.
 
         Returns:
             Tuple of (validated_result, llm_calls, tokens_used).
@@ -1950,6 +1952,21 @@ class FillStage:
             if node:
                 passage_data[passage_id] = node
 
+        # Valid entity IDs (raw, sorted, backtick-wrapped per CLAUDE.md §9 rule 1).
+        # Hoisted out of the per-passage closure since entities don't change
+        # during revision — matches the pre-computation pattern above.
+        valid_entity_id_list = sorted(
+            enode.get("raw_id", strip_scope_prefix(eid))
+            for eid, enode in graph.get_nodes_by_type("entity").items()
+        )
+        valid_entity_ids = (
+            "\n".join(f"- `{rid}`" for rid in valid_entity_id_list) or "(no entities defined)"
+        )
+        revision_repair_hints = [
+            "REMINDER — Valid entity IDs for `entity_updates[].entity_id` "
+            f"(use ONLY these — raw IDs, no scope prefix):\n{valid_entity_ids}",
+        ]
+
         # Each passage's revision chain is independent of other passages,
         # but flags within one passage must be sequential (chained).
         passage_items = list(flagged_passages.items())
@@ -1978,18 +1995,6 @@ class FillStage:
                 for i, f in enumerate(flags)
             )
 
-            # Valid entity IDs for any entity_updates the revision proposes.
-            # Per CLAUDE.md §6 the model must see this list explicitly; without
-            # it phantom IDs are caught only at stage exit (see escalation
-            # handler below) instead of being prevented at the call.
-            valid_entity_id_list = sorted(
-                enode.get("raw_id", strip_scope_prefix(eid))
-                for eid, enode in graph.get_nodes_by_type("entity").items()
-            )
-            valid_entity_ids = (
-                "\n".join(f"- `{rid}`" for rid in valid_entity_id_list) or "(no entities defined)"
-            )
-
             context = {
                 "voice_document": voice_context,
                 "passage_id": passage.get("raw_id", passage_id),
@@ -2004,12 +2009,6 @@ class FillStage:
                 "valid_entity_ids": valid_entity_ids,
                 "output_language_instruction": self._lang_instruction,
             }
-
-            # Re-echo on retry so the constraint survives context drift.
-            revision_repair_hints = [
-                "REMINDER — Valid entity IDs for `entity_updates[].entity_id` "
-                f"(use ONLY these — raw IDs, no scope prefix):\n{valid_entity_ids}",
-            ]
 
             output, llm_calls, tokens = await self._fill_llm_call(
                 model,
