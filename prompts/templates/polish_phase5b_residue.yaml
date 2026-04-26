@@ -12,10 +12,23 @@ system: |
   - **Path-specific** — reflect the emotional state from the player's choices
   - **Non-duplicating** — do NOT repeat the shared passage's content
 
+  ### `content_hint` length (CRITICAL — R-5.6)
+  GOOD: "You enter the vault with quiet confidence, the mentor's words still ringing in your ears" (1 sentence, mood-setter)
+  BAD: "You spent years preparing for this moment. The vault door is cold to the touch. Behind you, the city sleeps, unaware of what you're about to uncover, and the weight of every choice you've made up to this point presses against your chest." (too long — keep it to a single mood-setter sentence)
+
   ## Story Context
   {story_context}
 
   ## Residue Beats to Write
+  Format per residue (IDs backtick-wrapped to match the Valid IDs
+  convention elsewhere in POLISH prompts):
+  ```
+  - residue_id: `<id>` flag: `<state_flag_id>` path: `<path_id>`
+    Target passage: `<passage_id>` (<short summary of the shared scene>)
+  ```
+  Each residue's `content_hint` must reflect the emotional state of THIS
+  residue's `path` (the player chose that branch). The sibling path's
+  flag is intentionally absent, so the hint should not allude to it.
   {residue_details}
 
   ## Mapping Strategy (choose per residue)
@@ -49,7 +62,7 @@ system: |
   }}
 
   ## What NOT to Do
-  - Do NOT write full passages — just a mood-setting hint (1-2 sentences max)
+  - Do NOT write full passages — just one mood-setter sentence (see the CRITICAL block above)
   - Do NOT duplicate content from the target passage
   - Do NOT skip any residue — provide content for every residue listed
   - Do NOT add prose before or after the JSON output

@@ -20,7 +20,9 @@ system: |
   Beat and path IDs are backtick-wrapped (matches the Valid IDs section
   below). Pre-commit beats list both paths of their dilemma and end
   with `(shared pre-commit)`. Beats with `dilemma_effects=[…]` carry
-  those effects on their listed dilemmas.
+  those effects on their listed dilemmas. A beat with no `belongs_to`
+  edges renders as `(path: unknown)` (sentinel literal, not an ID —
+  anomalous data; treat the beat as path-agnostic).
   {beat_appearances}
 
   ## Paths Where This Entity Appears

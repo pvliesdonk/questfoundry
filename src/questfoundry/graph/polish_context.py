@@ -384,13 +384,14 @@ def format_residue_content_context(
         target_spec = passage_lookup.get(target, {})
         target_summary = truncate_summary(target_spec.get("summary", ""), 80)
 
+        # Backtick-wrap IDs per CLAUDE.md §9 rule 1.
         residue_lines.append(
-            f"  - {residue_id}: flag={flag} path={path_id}\n"
-            f"    Target passage: {target} ({target_summary})"
+            f"  - residue_id: `{residue_id}` flag: `{flag}` path: `{path_id}`\n"
+            f"    Target passage: `{target}` ({target_summary})"
         )
 
     return {
-        "residue_details": "\n".join(residue_lines),
+        "residue_details": "\n".join(residue_lines) or "(none)",
         "story_context": story_context,
         "residue_count": str(len(residue_specs)),
     }
