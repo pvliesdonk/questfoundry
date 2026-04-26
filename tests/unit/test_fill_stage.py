@@ -1359,6 +1359,7 @@ class TestBuildErrorFeedback:
             assert f"`{v}`" in feedback
 
     def test_literal_field_failure_lists_allowed_voice_register_values(self) -> None:
+        """`voice.voice_register` content failure echoes the four valid registers."""
         from questfoundry.models.fill import FillPhase0Output
 
         try:
@@ -1474,6 +1475,20 @@ class TestBuildErrorFeedback:
 
         assert _get_literal_values_at_path(FillPhase0Output, "voice.no_such_field") is None
         assert _get_literal_values_at_path(FillPhase0Output, "no_such_root") is None
+
+    def test_get_literal_values_at_path_walks_list_of_basemodel(self) -> None:
+        """The helper must step through `list[NestedModel]` annotations to reach
+        a Literal field on the inner model. `BatchedExpandOutput.blueprints` is
+        `list[ExpandBlueprint]`, and `ExpandBlueprint.opening_move` is the
+        Literal we want to surface on a `blueprints.0.opening_move` failure.
+        Without this branch the helper would bail at `blueprints` and the
+        repair message would silently omit the valid set — exactly the
+        repair-loop blindness this PR is fixing."""
+        from questfoundry.models.fill import BatchedExpandOutput
+        from questfoundry.pipeline.stages.fill import _get_literal_values_at_path
+
+        result = _get_literal_values_at_path(BatchedExpandOutput, "blueprints.0.opening_move")
+        assert result == ("dialogue", "action", "sensory_image", "internal_thought")
 
     def test_non_literal_content_failure_omits_literal_hint(self) -> None:
         """A `min_length=1` violation on a non-Literal field must not crash and
