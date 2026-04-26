@@ -16,11 +16,11 @@ system: |
   {overlay_data}
 
   ## Beats Featuring This Entity (in story order)
-  Format: `- `<beat_id>` (path: `<path_id>`) [<scene_type>]: <summary>` —
-  beat and path IDs are backtick-wrapped (CLAUDE.md §9 rule 1, matches
-  the Valid IDs section below). Pre-commit beats list both paths of
-  their dilemma and end with `(shared pre-commit)`. Beats with
-  `dilemma_effects=[…]` carry those effects on their listed dilemmas.
+  Format per line: `<beat_id>` (path: `<path_id>`) [<scene_type>]: <summary>
+  Beat and path IDs are backtick-wrapped (matches the Valid IDs section
+  below). Pre-commit beats list both paths of their dilemma and end
+  with `(shared pre-commit)`. Beats with `dilemma_effects=[…]` carry
+  those effects on their listed dilemmas.
   {beat_appearances}
 
   ## Paths Where This Entity Appears

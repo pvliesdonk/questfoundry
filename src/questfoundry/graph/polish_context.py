@@ -265,6 +265,12 @@ def format_entity_arc_context(
         ", ".join(f"`{d}`" for d in anchored_dilemmas) if anchored_dilemmas else "(none)"
     )
 
+    # Render each ID list with a `(none)` fallback when empty so the prompt
+    # never receives a bare empty injection. Matches `anchored_text` above.
+    path_ids_text = ", ".join(f"`{p}`" for p in sorted(paths_seen)) or "(none)"
+    valid_path_ids_text = ", ".join(f"`{p}`" for p in sorted(path_nodes.keys())) or "(none)"
+    valid_beat_ids_text = ", ".join(f"`{b}`" for b in sorted(beat_appearances)) or "(none)"
+
     return {
         "entity_id": entity_id,
         "entity_name": entity_name,
@@ -272,9 +278,9 @@ def format_entity_arc_context(
         "beat_appearances": beat_text,
         "overlay_data": overlay_text,
         "anchored_dilemmas": anchored_text,
-        "path_ids": ", ".join(f"`{p}`" for p in sorted(paths_seen)),
-        "valid_path_ids": ", ".join(f"`{p}`" for p in sorted(path_nodes.keys())),
-        "valid_beat_ids": ", ".join(f"`{b}`" for b in sorted(beat_appearances)),
+        "path_ids": path_ids_text,
+        "valid_path_ids": valid_path_ids_text,
+        "valid_beat_ids": valid_beat_ids_text,
     }
 
 

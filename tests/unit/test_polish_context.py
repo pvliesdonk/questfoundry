@@ -211,6 +211,24 @@ class TestFormatEntityArcContext:
         # Belt-and-braces: explicitly assert the bracket-format is GONE.
         assert "['umm', 'well']" not in ctx["overlay_data"]
 
+    def test_id_lists_fall_back_to_none_when_empty(self) -> None:
+        """Empty source sets MUST render as `(none)` rather than an empty
+        string so the prompt never receives a bare empty injection. Matches
+        the existing `anchored_dilemmas` fallback pattern; pinned because
+        empty-input behaviour is otherwise easy to regress silently."""
+        graph = Graph.empty()
+        graph.create_node(
+            "entity::loner",
+            {"type": "entity", "raw_id": "loner", "name": "Loner", "description": ""},
+        )
+        # No beats, no paths, no anchored_to edges.
+
+        ctx = format_entity_arc_context(graph, "entity::loner", [])
+        assert ctx["path_ids"] == "(none)"
+        assert ctx["valid_path_ids"] == "(none)"
+        assert ctx["valid_beat_ids"] == "(none)"
+        assert ctx["anchored_dilemmas"] == "(none)"
+
     def test_anchored_dilemmas_backtick_wrapped(self) -> None:
         """Dilemmas the entity is `anchored_to` are backtick-wrapped per
         CLAUDE.md §9 rule 1 — same convention as overlay flag IDs and the
