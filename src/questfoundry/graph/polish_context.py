@@ -241,7 +241,8 @@ def format_entity_arc_context(
             # `!s` coerces to str so any value type renders without crashing
             # (matches the dress_context.py overlay renderer); for list/dict
             # this still delegates to __repr__ — current overlay schema is
-            # string-only.
+            # string-only. If non-string values are added, prefer an explicit
+            # per-type formatter rather than relying on this fallback.
             detail_str = "; ".join(f"{k}: {v!s}" for k, v in details.items())
             overlay_lines.append(f"  - When {flag_str}: {truncate_summary(detail_str, 80)}")
 
