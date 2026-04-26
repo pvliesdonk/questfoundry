@@ -39,7 +39,7 @@ system: |
 
   ```
   "content_notes": {
-    "includes": ["single-protagonist POV", "atmospheric horror elements"],
+    "includes": ["slow-burn pacing", "unreliable narrator voice"],
     "excludes": ["graphic violence", "explicit magic systems"]
   }
   ```
@@ -87,7 +87,7 @@ system: |
     "tone": ["...", "..."],
     "themes": ["...", "..."],
     "audience": "...",
-    "scope": {"story_size": "micro|short|medium|long"},
+    "scope": {"story_size": "short"},       ← required; choose: micro|short|medium|long
     "style_notes": "...",                   ← optional
     "content_notes": {"includes": [...], "excludes": [...]},  ← optional, nested
     "pov_style": "first_person",            ← optional, Literal
