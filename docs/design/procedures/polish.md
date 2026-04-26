@@ -620,6 +620,7 @@ R-7.12. Validation failure halts POLISH with ERROR — partial output is not del
 16. Every multi-beat path has `path_theme` (10–200 characters) and `path_mood` (2–50 characters) populated, or a WARNING was logged for per-path Phase 5f failure.
 17. Every collapsed passage (>1 beat) has N-1 transition instructions populated (or a WARNING was logged for per-passage Phase 5f failure). Mirrors Phase 5f §Output Contract item 7 at the stage level.
 18. Gap beats inserted by Phase 1a carry `is_gap_beat: True`, `role: gap_beat`, `created_by: "POLISH"`, zero `dilemma_impacts`, single `belongs_to` to their path, and traceability fields (`bridges_from`, `bridges_to`, `transition_style`).
+19. Every beat has `scene_type`, `narrative_function`, and `exit_mood` populated (or a WARNING was logged for partial coverage from GROW Phase 4b; downstream phases fall back per R-4b.1). Passes through unchanged from POLISH §Stage Input Contract item 17.
 
 ## Implementation Constraints
 
