@@ -247,9 +247,13 @@ class TestFormatEntityForCodex:
         assert "skipped" not in result  # malformed entry not rendered
 
     def test_overlay_details_non_string_values_str_cast(self, dress_graph: Graph) -> None:
-        """If a future schema change makes a `details` value a list/dict, the
-        renderer must `str()`-cast it rather than leak Python repr into
-        LLM-facing text (CLAUDE.md §9 rule 1)."""
+        """The renderer must `!s`-coerce non-string `details` values so it
+        always has a render path (no crash, consistent output). Note: for
+        list/dict values `str()` delegates to `__repr__`, so this test pins
+        the bracket-format repr — that's the documented behaviour, see the
+        comment in `dress_context.py` directing future maintainers toward
+        an explicit per-type formatter if the schema admits non-string
+        values."""
         from questfoundry.graph.dress_context import format_entity_for_codex
 
         dress_graph.update_node(
