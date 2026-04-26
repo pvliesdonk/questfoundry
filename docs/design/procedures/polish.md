@@ -618,7 +618,8 @@ R-7.12. Validation failure halts POLISH with ERROR — partial output is not del
 14. No cycles in the passage graph.
 15. Every beat has `atmospheric_detail` populated (10–200 characters describing sensory environment), or a WARNING was logged for partial Phase 5e coverage.
 16. Every multi-beat path has `path_theme` (10–200 characters) and `path_mood` (2–50 characters) populated, or a WARNING was logged for per-path Phase 5f failure.
-17. Gap beats inserted by Phase 1a carry `is_gap_beat: True`, `role: gap_beat`, `created_by: "POLISH"`, zero `dilemma_impacts`, single `belongs_to` to their path, and traceability fields (`bridges_from`, `bridges_to`, `transition_style`).
+17. Every collapsed passage (>1 beat) has N-1 transition instructions populated (or a WARNING was logged for per-passage Phase 5f failure). Mirrors Phase 5f §Output Contract item 7 at the stage level.
+18. Gap beats inserted by Phase 1a carry `is_gap_beat: True`, `role: gap_beat`, `created_by: "POLISH"`, zero `dilemma_impacts`, single `belongs_to` to their path, and traceability fields (`bridges_from`, `bridges_to`, `transition_style`).
 
 ## Implementation Constraints
 
