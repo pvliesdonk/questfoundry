@@ -143,6 +143,23 @@ def _get_prompts_path() -> Path:
     return Path.cwd() / "prompts"
 
 
+def _build_dress_error_feedback(
+    error: Exception,
+    output_schema: type[BaseModel],
+    extra_repair_hints: list[str] | None = None,
+) -> str:
+    """Build the per-attempt repair feedback for `_dress_llm_call`."""
+    expected = get_all_field_paths(output_schema)
+    parts = [
+        f"Your response failed validation:\n{error}",
+        f"\nExpected fields: {', '.join(expected)}",
+        "Please fix the errors and try again.",
+    ]
+    if extra_repair_hints:
+        parts.append("\n" + "\n\n".join(extra_repair_hints))
+    return "\n".join(parts)
+
+
 class DressStageError(ValueError):
     """Error raised when DRESS stage cannot proceed."""
 
@@ -515,9 +532,9 @@ class DressStage:
         if self._unload_after_summarize is not None:
             await self._unload_after_summarize()
 
-        # Phase 3: Serialize
+        # Phase 3: Serialize. Backtick-wrap IDs per CLAUDE.md §9 rule 1.
         entity_ids = "\n".join(
-            f"- {edata.get('raw_id', strip_scope_prefix(eid))}" for eid, edata in entities.items()
+            f"- `{edata.get('raw_id', strip_scope_prefix(eid))}`" for eid, edata in entities.items()
         )
         serialize_template = loader.load("dress_serialize")
         serialize_prompt = serialize_template.system.format(
@@ -525,6 +542,11 @@ class DressStage:
             entity_ids=entity_ids,
         )
 
+        # Re-echo valid entity IDs on retry — system prompt is far back by then.
+        serialize_repair_hints = [
+            "REMINDER — Valid entity IDs for `entity_visuals[].entity_id` "
+            f"(use ONLY these — raw IDs, no `entity::` prefix):\n{entity_ids}",
+        ]
         output, serialize_tokens = await serialize_to_artifact(
             model=self._serialize_model or model,
             brief=brief,
@@ -533,6 +555,7 @@ class DressStage:
             system_prompt=serialize_prompt,
             callbacks=self._callbacks,
             stage="dress",
+            extra_repair_hints=serialize_repair_hints,
         )
         total_llm_calls += 1
         total_tokens += serialize_tokens
@@ -588,6 +611,7 @@ class DressStage:
         *,
         creative: bool = False,
         strategy: StructuredOutputStrategy | None = None,
+        extra_repair_hints: list[str] | None = None,
     ) -> tuple[T, int, int]:
         """Call LLM with structured output and retry on validation failure.
 
@@ -602,6 +626,8 @@ class DressStage:
                 mood/caption diversity matters.
             strategy: Override the default structured output strategy for this
                 call. If None, uses the provider-level default.
+            extra_repair_hints: Hint blocks appended verbatim to retry feedback
+                so caller-known IDs/constraints survive context drift.
 
         Returns:
             Tuple of (validated_result, llm_calls, tokens_used).
@@ -678,12 +704,7 @@ class DressStage:
                 )
 
                 if attempt < max_retries - 1:
-                    expected = get_all_field_paths(output_schema)
-                    error_msg = (
-                        f"Your response failed validation:\n{e}\n\n"
-                        f"Expected fields: {', '.join(expected)}\n"
-                        f"Please fix the errors and try again."
-                    )
+                    error_msg = _build_dress_error_feedback(e, output_schema, extra_repair_hints)
                     # Append error feedback to conversation history so the
                     # LLM can see what went wrong and fix it
                     messages.append(HumanMessage(content=error_msg))
@@ -782,6 +803,16 @@ class DressStage:
                 "output_language_instruction": self._lang_instruction,
             }
 
+            # Re-echo IllustrationBrief constraints on retry — system prompt is far back by then.
+            brief_schema_hints = [
+                "REMINDER for each brief in this batch:\n"
+                "  - `priority` MUST be 1, 2, or 3 (1=must-have, 2=important, 3=nice-to-have)\n"
+                "  - `category` MUST be one of: `scene`, `portrait`, `vista`, "
+                "`item_detail`, `cover` (`cover` only for the story's title image)\n"
+                "  - `caption` MUST be 10-60 characters in the format "
+                "`[Subject] [action/state]` (diegetic; no meta-language)",
+            ]
+
             output, llm_calls, tokens = await self._dress_llm_call(
                 model,
                 "dress_brief_batch",
@@ -789,6 +820,7 @@ class DressStage:
                 BatchedBriefOutput,
                 creative=True,
                 strategy=StructuredOutputStrategy.JSON_MODE,
+                extra_repair_hints=brief_schema_hints,
             )
 
             # Extract per-item results
@@ -919,8 +951,19 @@ class DressStage:
                 "state_flags": state_flag_list or "No state flags defined.",
                 "output_language_instruction": self._lang_instruction,
             }
+            # Re-echo state flags and rank-1 invariant on retry (dress.md R-3.7).
+            codex_repair_hints = [
+                f"REMINDER — Available State Flags (use ONLY these in `visible_when`):\n"
+                f"{state_flag_list or 'No state flags defined.'}",
+                "REMINDER: Rank 1 entries MUST have empty `visible_when` "
+                "(always visible to player). Higher ranks gate on state flag IDs.",
+            ]
             output, llm_calls, tokens = await self._dress_llm_call(
-                model, "dress_codex_batch", context, BatchedCodexOutput
+                model,
+                "dress_codex_batch",
+                context,
+                BatchedCodexOutput,
+                extra_repair_hints=codex_repair_hints,
             )
 
             # Validate returned entity_ids match input chunk
@@ -1128,8 +1171,20 @@ class DressStage:
             "state_flags": state_flag_list or "No state flags defined.",
             "output_language_instruction": self._lang_instruction,
         }
+        # Re-echo state flags and prior-leak summary on retry to prevent re-drift.
+        regen_repair_hints = [
+            f"REMINDER — Available State Flags (use ONLY these in `visible_when`):\n"
+            f"{state_flag_list or 'No state flags defined.'}",
+            f"REMINDER — Prior attempt leaked higher-tier content. Lower-rank "
+            f"entries MUST NOT disclose what higher-rank entries reveal:\n"
+            f"{leak_summary}",
+        ]
         output, calls, tokens = await self._dress_llm_call(
-            model, "dress_codex", context, DressPhase2Output
+            model,
+            "dress_codex",
+            context,
+            DressPhase2Output,
+            extra_repair_hints=regen_repair_hints,
         )
         return [e.model_dump() for e in output.entries], calls, tokens
 
