@@ -18,9 +18,13 @@ class TestGetDiscussPrompt:
         """Prompt should include key creative questions as deliverables."""
         prompt = get_discuss_prompt()
 
-        assert "genre and subgenre" in prompt
-        assert "emotional tone" in prompt
-        assert "target audience" in prompt.lower()
+        # Genre and subgenre are now elicited as separate questions (1a/1b)
+        # per dream.md §R-1.2; assert each field is referenced individually.
+        assert "PRIMARY `genre`" in prompt
+        assert "`subgenre`" in prompt
+        assert "SEPARATE fields" in prompt
+        assert "emotional `tone`" in prompt
+        assert "target `audience`" in prompt.lower()
         assert "themes" in prompt
 
     def test_prompt_includes_tools_section_when_available(self) -> None:
@@ -94,7 +98,9 @@ class TestCreateDiscussAgent:
         call_kwargs = mock_create.call_args.kwargs
         # System prompt should contain discussion guidelines, not user prompt
         assert "creative collaborator" in call_kwargs["system_prompt"]
-        assert "genre and subgenre" in call_kwargs["system_prompt"]
+        # Genre and subgenre are elicited as separate questions per R-1.2.
+        assert "PRIMARY `genre`" in call_kwargs["system_prompt"]
+        assert "`subgenre`" in call_kwargs["system_prompt"]
 
 
 class TestRunDiscussPhase:
