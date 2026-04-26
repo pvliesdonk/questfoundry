@@ -141,20 +141,24 @@ def format_pacing_context(
 
         issue_lines.append(f"\n### Pacing Issue: {issue_type}")
         if path_id:
-            issue_lines.append(f"Path: {path_id}")
+            issue_lines.append(f"Path: `{path_id}`")
 
         for bid in beat_ids:
             data = beat_nodes.get(bid, {})
             summary = truncate_summary(data.get("summary", ""), 100)
             scene_type = data.get("scene_type", "unknown")
             entities = data.get("entities", [])
-            entity_str = f" entities=[{', '.join(entities[:3])}]" if entities else ""
-            issue_lines.append(f"  - {bid}: [{scene_type}] {summary}{entity_str}")
+            entity_str = (
+                f" entities: {', '.join(f'`{e}`' for e in entities[:3])}" if entities else ""
+            )
+            issue_lines.append(f"  - `{bid}`: [{scene_type}] {summary}{entity_str}")
 
     pacing_issues = "\n".join(issue_lines) if issue_lines else "No pacing issues detected."
 
-    # Valid entity IDs for micro-beat entity references
-    valid_entity_ids = ", ".join(sorted(entity_nodes.keys()))
+    # Valid entity IDs for micro-beat entity references (backtick-wrapped per
+    # CLAUDE.md §9 rule 1, with `(none)` fallback matching the sibling
+    # render functions).
+    valid_entity_ids = ", ".join(f"`{e}`" for e in sorted(entity_nodes.keys())) or "(none)"
 
     return {
         "pacing_issues": pacing_issues,
@@ -325,10 +329,11 @@ def format_choice_label_context(
         from_summary = truncate_summary(from_spec.get("summary", ""), 80)
         to_summary = truncate_summary(to_spec.get("summary", ""), 80)
 
-        grants_str = f" grants=[{', '.join(grants)}]" if grants else ""
+        # Backtick-wrap IDs per CLAUDE.md §9 rule 1.
+        grants_str = f" grants: {', '.join(f'`{g}`' for g in grants)}" if grants else ""
         choice_lines.append(
-            f"  {i + 1}. From: {from_id} ({from_summary})\n"
-            f"     To: {to_id} ({to_summary}){grants_str}"
+            f"  {i + 1}. From: `{from_id}` ({from_summary})\n"
+            f"     To: `{to_id}` ({to_summary}){grants_str}"
         )
 
     # Valid passage IDs: every passage_id referenced by any ChoiceSpec, sorted
@@ -346,10 +351,10 @@ def format_choice_label_context(
     )
 
     return {
-        "choice_details": "\n".join(choice_lines),
+        "choice_details": "\n".join(choice_lines) or "(none)",
         "story_context": story_context,
         "choice_count": str(len(choice_specs)),
-        "valid_passage_ids": ", ".join(valid_passage_ids),
+        "valid_passage_ids": ", ".join(f"`{p}`" for p in valid_passage_ids) or "(none)",
     }
 
 
@@ -417,7 +422,8 @@ def format_false_branch_context(
         passage_lookup[spec["passage_id"]] = spec
 
     entity_nodes = graph.get_nodes_by_type("entity")
-    valid_entity_ids = ", ".join(sorted(entity_nodes.keys()))
+    # Backtick-wrap IDs per CLAUDE.md §9 rule 1, with `(none)` fallback.
+    valid_entity_ids = ", ".join(f"`{e}`" for e in sorted(entity_nodes.keys())) or "(none)"
 
     candidate_lines: list[str] = []
     for i, cand in enumerate(candidates):
@@ -428,7 +434,7 @@ def format_false_branch_context(
         for pid in passage_ids:
             spec = passage_lookup.get(pid, {})
             summary = truncate_summary(spec.get("summary", ""), 60)
-            passage_details.append(f"    - {pid}: {summary}")
+            passage_details.append(f"    - `{pid}`: {summary}")
 
         candidate_lines.append(
             f"  Candidate {i}:\n"
@@ -437,7 +443,7 @@ def format_false_branch_context(
         )
 
     return {
-        "candidate_details": "\n".join(candidate_lines),
+        "candidate_details": "\n".join(candidate_lines) or "(none)",
         "valid_entity_ids": valid_entity_ids,
         "candidate_count": str(len(candidates)),
     }
@@ -473,13 +479,15 @@ def format_variant_summary_context(
         base_spec = passage_lookup.get(base_id, {})
         base_summary = truncate_summary(base_spec.get("summary", ""), 80)
 
+        # Backtick-wrap IDs per CLAUDE.md §9 rule 1.
+        requires_str = ", ".join(f"`{r}`" for r in requires) if requires else "(none)"
         variant_lines.append(
-            f"  - {variant_id}: base={base_id} ({base_summary})\n"
-            f"    requires=[{', '.join(requires)}]"
+            f"  - variant_id: `{variant_id}` base: `{base_id}` ({base_summary})\n"
+            f"    requires: {requires_str}"
         )
 
     return {
-        "variant_details": "\n".join(variant_lines),
+        "variant_details": "\n".join(variant_lines) or "(none)",
         "story_context": story_context,
         "variant_count": str(len(variant_specs)),
     }

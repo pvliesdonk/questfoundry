@@ -43,18 +43,22 @@ class TestFormatChoiceLabelContext:
         assert "choice_details" in ctx
         assert "Start" in ctx["choice_details"]
         assert "End" in ctx["choice_details"]
-        # valid_passage_ids must be populated for the prompt's Valid IDs section
-        # (CLAUDE.md §6) — sorted, comma-joined union of from/to passage IDs.
-        assert ctx["valid_passage_ids"] == "p1, p2"
+        # IDs in the choice line are backtick-wrapped per CLAUDE.md §9 rule 1.
+        assert "From: `p1`" in ctx["choice_details"]
+        assert "To: `p2`" in ctx["choice_details"]
+        assert "grants: `flag1`" in ctx["choice_details"]
+        # valid_passage_ids: backtick-wrapped, sorted, deduplicated.
+        assert ctx["valid_passage_ids"] == "`p1`, `p2`"
 
-    def test_empty_choices(self) -> None:
+    def test_empty_choices_falls_back_to_none(self) -> None:
+        """Empty choice_specs MUST render as `(none)` for both
+        `choice_details` and `valid_passage_ids` per the consistent
+        empty-fallback pattern across polish_context render functions."""
         graph = Graph.empty()
         ctx = format_choice_label_context(graph, [], [])
         assert ctx["choice_count"] == "0"
-        assert ctx["choice_details"] == ""
-        # Empty input → empty Valid IDs string (still present so the template
-        # placeholder always renders).
-        assert ctx["valid_passage_ids"] == ""
+        assert ctx["choice_details"] == "(none)"
+        assert ctx["valid_passage_ids"] == "(none)"
 
     def test_valid_passage_ids_dedups_and_sorts(self) -> None:
         # Same passage appearing as both `from` and `to` across multiple choices
@@ -66,7 +70,7 @@ class TestFormatChoiceLabelContext:
             {"from_passage": "p2", "to_passage": "p3"},
         ]
         ctx = format_choice_label_context(graph, choice_specs, [])
-        assert ctx["valid_passage_ids"] == "p1, p2, p3"
+        assert ctx["valid_passage_ids"] == "`p1`, `p2`, `p3`"
 
     def test_story_context_from_dream(self) -> None:
         graph = Graph.empty()
@@ -134,13 +138,22 @@ class TestFormatFalseBranchContext:
 
         ctx = format_false_branch_context(graph, candidates, passage_specs)
         assert ctx["candidate_count"] == "1"
-        assert "entity::hero" in ctx["valid_entity_ids"]
+        # IDs backtick-wrapped per CLAUDE.md §9 rule 1.
+        assert "`entity::hero`" in ctx["valid_entity_ids"]
+        assert "`p1`" in ctx["candidate_details"]
+        assert "`p2`" in ctx["candidate_details"]
+        assert "`p3`" in ctx["candidate_details"]
         assert "First" in ctx["candidate_details"]
 
-    def test_empty_candidates(self) -> None:
+    def test_empty_candidates_falls_back_to_none(self) -> None:
+        """Empty candidates / empty entity nodes MUST render `(none)` for both
+        `candidate_details` and `valid_entity_ids` per the consistent
+        empty-fallback pattern."""
         graph = Graph.empty()
         ctx = format_false_branch_context(graph, [], [])
         assert ctx["candidate_count"] == "0"
+        assert ctx["candidate_details"] == "(none)"
+        assert ctx["valid_entity_ids"] == "(none)"
 
 
 class TestFormatVariantSummaryContext:
@@ -161,9 +174,32 @@ class TestFormatVariantSummaryContext:
         ctx = format_variant_summary_context(graph, variant_specs, passage_specs)
         assert ctx["variant_count"] == "1"
         assert "Base passage" in ctx["variant_details"]
-        assert "flag1" in ctx["variant_details"]
+        # IDs backtick-wrapped per CLAUDE.md §9 rule 1.
+        assert "`v1`" in ctx["variant_details"]
+        assert "`p1`" in ctx["variant_details"]
+        assert "`flag1`" in ctx["variant_details"]
 
-    def test_empty_variants(self) -> None:
+    def test_empty_variants_falls_back_to_none(self) -> None:
+        """Empty variant_specs MUST render `(none)` for `variant_details`."""
         graph = Graph.empty()
         ctx = format_variant_summary_context(graph, [], [])
         assert ctx["variant_count"] == "0"
+        assert ctx["variant_details"] == "(none)"
+
+    def test_variant_with_no_requires_renders_none(self) -> None:
+        """A variant with no `requires` flags MUST render `requires: (none)`
+        in the per-variant line (consistent with the standalone fallback)."""
+        graph = Graph.empty()
+        ctx = format_variant_summary_context(
+            graph,
+            [
+                {
+                    "variant_id": "v1",
+                    "base_passage_id": "p1",
+                    "requires": [],
+                    "summary": "",
+                },
+            ],
+            [{"passage_id": "p1", "summary": "Base", "beat_ids": ["b1"]}],
+        )
+        assert "requires: (none)" in ctx["variant_details"]

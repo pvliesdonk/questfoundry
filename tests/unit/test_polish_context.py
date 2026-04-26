@@ -103,14 +103,36 @@ class TestFormatPacingContext:
         ctx = format_pacing_context(graph, flags)
 
         assert "consecutive_scene" in ctx["pacing_issues"]
-        assert "beat::a" in ctx["pacing_issues"]
-        assert "entity::hero" in ctx["valid_entity_ids"]
+        # Beat IDs and path IDs backtick-wrapped per CLAUDE.md §9 rule 1.
+        assert "`beat::a`" in ctx["pacing_issues"]
+        assert "Path: `path::p1`" in ctx["pacing_issues"]
+        # valid_entity_ids backtick-wrapped, with `(none)` fallback.
+        assert "`entity::hero`" in ctx["valid_entity_ids"]
         assert ctx["entity_count"] == "1"
 
     def test_no_flags(self) -> None:
         graph = Graph.empty()
         ctx = format_pacing_context(graph, [])
         assert "No pacing issues" in ctx["pacing_issues"]
+        # No entities → valid_entity_ids falls back to `(none)`.
+        assert ctx["valid_entity_ids"] == "(none)"
+
+    def test_pacing_beat_with_entities_renders_backticks(self) -> None:
+        """A pacing flag whose beats reference entities renders the entity
+        list with backticks per CLAUDE.md §9 rule 1 — never as a Python
+        repr-style bracket list."""
+        graph = Graph.empty()
+        _make_beat(graph, "beat::a", "Hero acts", entities=["entity::hero"])
+        graph.create_node("entity::hero", {"type": "entity", "raw_id": "hero", "name": "Hero"})
+
+        flags = [
+            {"issue_type": "consecutive_scene", "beat_ids": ["beat::a"], "path_id": "path::p1"}
+        ]
+        ctx = format_pacing_context(graph, flags)
+
+        assert "entities: `entity::hero`" in ctx["pacing_issues"]
+        # No bracket-format leaking through (CLAUDE.md §9 rule 1).
+        assert "entities=[" not in ctx["pacing_issues"]
 
 
 class TestFormatEntityArcContext:
