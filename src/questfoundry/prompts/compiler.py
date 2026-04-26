@@ -204,7 +204,7 @@ class PromptCompiler:
         """Compile a prompt from a template with context substitution.
 
         Args:
-            template_name: Name of the template (e.g., 'dream').
+            template_name: Name of the template (e.g., 'discuss').
             context: Context dictionary for variable substitution.
 
         Returns:
