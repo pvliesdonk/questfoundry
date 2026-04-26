@@ -68,6 +68,16 @@ class TestFormatLinearSectionContext:
         assert "start/end" in ctx["before_context"]
         assert "start/end" in ctx["after_context"]
 
+    def test_empty_section_falls_back_to_none(self) -> None:
+        """Empty `beat_ids` MUST render `(none)` for both `beat_details` and
+        `valid_beat_ids` per the consistent empty-fallback pattern across
+        polish_context render functions."""
+        graph = Graph.empty()
+        ctx = format_linear_section_context(graph, "section_0", [], None, None)
+        assert ctx["beat_details"] == "(none)"
+        assert ctx["valid_beat_ids"] == "(none)"
+        assert ctx["beat_count"] == "0"
+
     def test_dilemma_impacts_shown(self) -> None:
         graph = Graph.empty()
         _make_beat(

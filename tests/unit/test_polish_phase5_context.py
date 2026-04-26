@@ -4,11 +4,14 @@ from __future__ import annotations
 
 from questfoundry.graph.graph import Graph
 from questfoundry.graph.polish_context import (
+    format_ambiguous_feasibility_context,
     format_choice_label_context,
     format_false_branch_context,
     format_residue_content_context,
+    format_transition_guidance_context,
     format_variant_summary_context,
 )
+from questfoundry.models.polish import AmbiguousFeasibilityCase
 
 
 def _make_beat(graph: Graph, beat_id: str, summary: str = "A beat") -> None:
@@ -203,3 +206,74 @@ class TestFormatVariantSummaryContext:
             [{"passage_id": "p1", "summary": "Base", "beat_ids": ["b1"]}],
         )
         assert "requires: (none)" in ctx["variant_details"]
+
+
+class TestFormatAmbiguousFeasibilityContext:
+    def test_passage_id_backtick_wrapped(self) -> None:
+        r"""`case_details` lines wrap `passage_id` in backticks per CLAUDE.md
+        §9 rule 1, consistent with the surrounding `flag=\`...\`` /
+        `dilemma=\`...\`` pattern already in this function."""
+        graph = Graph.empty()
+        graph.create_node(
+            "dilemma::trust",
+            {"type": "dilemma", "raw_id": "trust", "question": "Trust?", "weight": "heavy"},
+        )
+        case = AmbiguousFeasibilityCase(
+            passage_id="passage::p1",
+            passage_summary="A tense scene",
+            entities=["entity::hero"],
+            flags=["dilemma::trust:path::brave"],
+        )
+        ctx = format_ambiguous_feasibility_context(
+            graph, [case], [{"passage_id": "passage::p1", "summary": "scene"}]
+        )
+        assert "passage_id: `passage::p1`" in ctx["case_details"]
+
+    def test_no_cases_renders_placeholder(self) -> None:
+        """Empty input renders the existing `(no cases)` placeholder rather
+        than an empty string."""
+        graph = Graph.empty()
+        ctx = format_ambiguous_feasibility_context(graph, [], [])
+        assert ctx["case_details"] == "(no cases)"
+        assert ctx["case_count"] == "0"
+
+
+class TestFormatTransitionGuidanceContext:
+    def test_passage_and_beat_ids_backtick_wrapped(self) -> None:
+        """Both `passage_id` (per-passage header) and `bid` (per-beat line)
+        are backtick-wrapped per CLAUDE.md §9 rule 1."""
+        graph = Graph.empty()
+        _make_beat(graph, "beat::a", "First beat")
+        _make_beat(graph, "beat::b", "Second beat")
+        passage_specs = [
+            {
+                "passage_id": "passage::collapse_0",
+                "beat_ids": ["beat::a", "beat::b"],
+                "grouping_type": "collapse",
+                "entities": ["entity::hero"],
+            }
+        ]
+        ctx = format_transition_guidance_context(graph, passage_specs)
+        assert "passage_id: `passage::collapse_0`" in ctx["collapsed_passage_details"]
+        assert "`beat::a`" in ctx["collapsed_passage_details"]
+        assert "`beat::b`" in ctx["collapsed_passage_details"]
+        assert ctx["collapsed_count"] == "1"
+
+    def test_no_collapsed_passages_renders_placeholder(self) -> None:
+        """Empty / non-collapse-only input renders the existing `(none)`
+        placeholder."""
+        graph = Graph.empty()
+        # All passages are single-beat or non-collapse — none qualify.
+        ctx = format_transition_guidance_context(
+            graph,
+            [
+                {
+                    "passage_id": "passage::single",
+                    "beat_ids": ["beat::a"],
+                    "grouping_type": "collapse",
+                    "entities": [],
+                },
+            ],
+        )
+        assert ctx["collapsed_passage_details"] == "(none)"
+        assert ctx["collapsed_count"] == "0"
