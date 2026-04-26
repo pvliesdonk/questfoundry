@@ -100,7 +100,7 @@ system: |
   }}
   ```
 
-  Example B — COMMIT or POST-COMMIT beat (exclusive to one path):
+  Example B — COMMIT beat (exclusive to one path, fork point):
   ```json
   {{
     "beat_id": "host_protector_proof_01",
@@ -119,6 +119,12 @@ system: |
     "location_alternatives": ["location::garden"]
   }}
   ```
+
+  POST-COMMIT (aftermath) beats use the same `also_belongs_to: null` shape
+  as Example B, but their `effect` MUST NOT be `commits` — use `advances`,
+  `reveals`, or `complicates` instead. Only the single COMMIT beat per path
+  carries `effect: commits`; subsequent post-commit beats prove the
+  already-committed answer through consequences.
 
   ## Mapping Rules
 

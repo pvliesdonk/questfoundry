@@ -73,11 +73,12 @@ system: |
   the player COULD have discovered he was manipulative - but didn't. The shadow
   enriches the text without adding complexity.
 
-  ## MINIMUM BRANCHING REQUIREMENT (R-5.1, CRITICAL)
+  ## MINIMUM BRANCHING REQUIREMENT (CRITICAL)
 
-  **At least 2 dilemmas MUST have BOTH answers explored.** A single-branch story
-  collapses to a linear track and POLISH Phase 4c will produce 0 choice edges.
-  The downstream pipeline assumes a real branching structure.
+  **At least 2 dilemmas MUST have BOTH answers explored.** Without at least
+  one Y-fork, POLISH Phase 4c produces 0 choice edges (see seed.md §Overview)
+  and the story collapses to a linear track. The downstream pipeline assumes
+  a real branching structure.
 
   GOOD (3 dilemmas, 2 fully explored):
   - `dilemma::keeper_honest_or_hiding`: explored = `[honest, hiding]` — both answers
