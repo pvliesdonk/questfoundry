@@ -936,8 +936,8 @@ dilemma_analyses_prompt: |
   For each remaining dilemma (still both-answers-explored), ask:
   "Could the SAME scene plausibly follow BOTH answers?"
   - YES, with meaningful or cosmetic differences -> `soft` (most common)
-  - NO, world states are incompatible -> `hard` (max 3 total including Pass 1
-    and the Pass 0 single-path overrides)
+  - NO, world states are incompatible -> `hard` (max 3 total from Pass 1+2
+    combined; Pass 0 single-path overrides are excluded from this cap)
 
   ## Convergence Policies
 
