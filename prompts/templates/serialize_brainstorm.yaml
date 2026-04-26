@@ -6,23 +6,21 @@ system: |
 
   ## Entity Mapping (CRITICAL)
 
-  The brief describes story elements in categories. Map them to entities with the correct `type`:
+  The brief describes story elements in categories. Map them to entities with the correct `entity_category` field value:
 
-  | Brief Category | Entity Type      |
-  |----------------|------------------|
-  | Characters     | "character"      |
-  | Locations      | "location"       |
-  | Objects        | "object"         |
-  | Factions       | "faction"        |
+  | Brief Category | `entity_category` value |
+  |----------------|-------------------------|
+  | Characters     | `"character"`           |
+  | Locations      | `"location"`            |
+  | Objects        | `"object"`              |
+  | Factions       | `"faction"`             |
 
   Each entity needs:
-  - `entity_id`: Short snake_case identifier (e.g., "lady_beatrice", "vane_manor")
-  - `entity_category`: One of "character", "location", "object", "faction"
-  - `name`: Optional canonical display name if it emerged naturally during brainstorming
-    (e.g., "Lady Beatrice Ashford", "The Gilded Compass"). Leave absent if no specific
-    name was established - SEED will generate one. Do NOT just title-case the entity_id.
-  - `concept`: One-line essence from the brief
-  - `notes`: Optional additional context from the brief
+  - `entity_id`: Snake_case identifier with the category as a namespace prefix (e.g., `character::lady_beatrice`, `location::vane_manor`, `object::silver_dagger`, `faction::old_guard`). The serializer rejects bare IDs.
+  - `entity_category`: One of `"character"`, `"location"`, `"object"`, `"faction"` (singular, lowercase — must match the table above).
+  - `name`: REQUIRED non-empty canonical display name. If a specific name was established during brainstorming (e.g., "Lady Beatrice Ashford", "The Gilded Compass"), use it. Otherwise generate a simple descriptive name (e.g., "The Mentor", "The Archive") — do NOT leave name absent. Do NOT just title-case the entity_id.
+  - `concept`: One-line essence from the brief.
+  - `notes`: Optional additional context from the brief.
 
   ## Dilemma Structure
 
@@ -38,25 +36,25 @@ system: |
 
   ## Dilemma ID Naming (CRITICAL)
 
-  Dilemma IDs use the pattern: `subject_optionA_or_optionB`
-  The word `_or_` appears exactly ONCE, between the two options. The ID MUST END with optionB.
+  Dilemma IDs use the pattern: `dilemma::subject_optionA_or_optionB`. **Every dilemma ID MUST start with the `dilemma::` namespace prefix** — the serializer rejects any ID that does not. The word `_or_` appears exactly ONCE, between the two options. The ID MUST END with optionB.
 
   GOOD examples (generate YOUR OWN based on your story):
-  - `mentor_benevolent_or_manipulative` (ends with `manipulative`)
-  - `artifact_blessed_or_cursed` (ends with `cursed`)
-  - `faction_allied_or_hostile` (ends with `hostile`)
+  - `dilemma::mentor_benevolent_or_manipulative` (ends with `manipulative`)
+  - `dilemma::artifact_blessed_or_cursed` (ends with `cursed`)
+  - `dilemma::faction_allied_or_hostile` (ends with `hostile`)
 
   BAD examples (will cause downstream failures):
-  - `mentor_benevolent_or_manipulative_or_` (WRONG: trailing `_or_`)
-  - `artifact_blessed_or_cursed_or_` (WRONG: trailing `_or_`)
-  - `d1`, `d2`, `dilemma_a` (too short, not descriptive)
-  - `character_motivation` (ambiguous, could be confused with path name)
-  - `trust_issue` (too vague)
-  - `single_word` (could be mistaken for a path ID)
+  - `mentor_benevolent_or_manipulative` (MISSING `dilemma::` prefix — most common failure)
+  - `dilemma::mentor_benevolent_or_manipulative_or_` (WRONG: trailing `_or_`)
+  - `dilemma::artifact_blessed_or_cursed_or_` (WRONG: trailing `_or_`)
+  - `dilemma::d1`, `dilemma::d2`, `dilemma::dilemma_a` (too short, not descriptive — even with the prefix)
+  - `dilemma::character_motivation` (ambiguous, could be confused with path name)
+  - `dilemma::trust_issue` (too vague)
+  - `dilemma::single_word` (could be mistaken for a path ID)
 
-  NEVER end a dilemma ID with `_or_` -- the last word must always be the second option.
+  NEVER end a dilemma ID with `_or_` — the last word must always be the second option. NEVER omit the `dilemma::` prefix.
 
-  **DO NOT copy IDs from other stories** - generate IDs specific to YOUR story.
+  **DO NOT copy IDs from other stories** — generate IDs specific to YOUR story.
 
   ## Guidelines
 

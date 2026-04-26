@@ -8,34 +8,38 @@ system: |
   Condense the conversation into a **prose brief** that captures all discussed story elements.
   Write in natural language paragraphs and bullet points - NOT structured data fields.
 
-  ### Characters (list all discussed)
+  ### Characters (`entity_category: "character"`, list all discussed)
   Describe each character discussed:
   - Who they are and their role in the story
   - Key traits, motivations, or secrets
   - Any relationships or conflicts mentioned
+  - If a specific name was established in discussion, include it. If only a role was discussed, omit the name — the serializer will leave it absent for SEED to generate.
 
-  ### Locations (list all discussed)
+  ### Locations (`entity_category: "location"`, list all discussed)
   Describe each location discussed:
   - What the place is and its atmosphere
   - Why it matters to the story
   - Any secrets or special features
+  - Include the established name only if one was discussed.
 
-  ### Objects (list all discussed)
+  ### Objects (`entity_category: "object"`, list all discussed)
   Describe significant objects discussed:
   - What the object is
   - Why it's important (clue, macguffin, symbol, etc.)
+  - Include the established name only if one was discussed.
 
-  ### Factions (if any)
+  ### Factions (`entity_category: "faction"`, if any)
   Describe any groups or organizations:
   - What they are and their goals
   - Key members or relationships
+  - Include the established name only if one was discussed.
 
   ### Dramatic Dilemmas (list all discussed)
   For each dilemma, describe in prose:
   - The central question or conflict
   - The two possible answers/outcomes (one being the "default path")
-  - **Central entity IDs**: List the exact entity IDs involved (e.g., "[character_id], [location_id]")
-  - Why this dilemma matters thematically
+  - **Central entity IDs**: list the namespaced IDs as backtick-wrapped tokens (e.g., `` `character::mentor`, `location::archive` ``). Do NOT use bracket-list notation like `[character_id]` — that's Python repr, not human-readable text.
+  - Why this dilemma matters thematically. **If `why_it_matters` was not discussed, do NOT invent one.** Write: `why_it_matters: [NOT DISCUSSED — serializer will flag this]` so the serializer surfaces the gap rather than silently degrading.
 
   ## NO DELEGATION (CRITICAL)
   You are writing the summary, not suggesting how to write it.
