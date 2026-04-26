@@ -227,6 +227,23 @@ def format_entity_for_codex(graph: Graph, entity_id: str) -> str:
         if features:
             lines.append(f"**Features:** {', '.join(features)}")
 
+    # Path-specific overlays (per dress.md R-3.8: codex generation must see
+    # the full Entity description — base plus overlays — so spoiler-graduated
+    # tiers can surface path-specific arcs the base concept doesn't capture).
+    overlay_lines: list[str] = []
+    for overlay in entity.get("overlays") or []:
+        flags = overlay.get("when") or []
+        details = overlay.get("details") or {}
+        if not flags or not details:
+            continue
+        flag_str = ", ".join(f"`{f}`" for f in flags)
+        detail_str = "; ".join(f"{k}: {v}" for k, v in details.items())
+        overlay_lines.append(f"- When {flag_str}: {detail_str}")
+    if overlay_lines:
+        lines.append("")
+        lines.append("### Overlays (path-specific arcs)")
+        lines.extend(overlay_lines)
+
     # Related state flags — uses substring matching as a heuristic:
     # a state flag is "related" if the entity's raw_id appears in the
     # state flag's trigger text or raw_id (case-insensitive). This is
