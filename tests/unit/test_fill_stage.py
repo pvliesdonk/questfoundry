@@ -7,6 +7,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from pydantic import ValidationError
 
 from questfoundry.graph.graph import Graph
 from questfoundry.models.fill import (
@@ -1321,6 +1322,211 @@ class TestBuildErrorFeedback:
         feedback = FillStage._build_error_feedback(error, FillPhase1Output, "content")
         assert "fix the errors" in feedback.lower()
         assert "keep" not in feedback.lower() or "prose" not in feedback.lower()
+
+    def test_literal_field_failure_lists_allowed_pov_values(self) -> None:
+        """A `voice.pov` content failure must echo the four valid Literal values
+        so a 4B model can self-correct on retry. Closes the FILL repair-gap
+        finding from the 2026-04-25 prompt-vs-spec audit."""
+        from questfoundry.models.fill import FillPhase0Output
+
+        try:
+            FillPhase0Output.model_validate(
+                {
+                    "voice": {
+                        "pov": "third person limited",  # bad — has spaces
+                        "pov_character": "kay",
+                        "tense": "past",
+                        "voice_register": "literary",
+                        "sentence_rhythm": "varied",
+                        "tone_words": ["dark"],
+                    },
+                    "story_title": "The Tower",
+                }
+            )
+            raise AssertionError("expected ValidationError")
+        except ValidationError as exc:
+            feedback = FillStage._build_error_feedback(
+                exc, FillPhase0Output, "content", invalid_fields=["voice.pov"]
+            )
+
+        assert "Allowed values for `voice.pov`:" in feedback
+        for v in (
+            "first_person",
+            "second_person",
+            "third_person_limited",
+            "third_person_omniscient",
+        ):
+            assert f"`{v}`" in feedback
+
+    def test_literal_field_failure_lists_allowed_voice_register_values(self) -> None:
+        """`voice.voice_register` content failure echoes the four valid registers."""
+        from questfoundry.models.fill import FillPhase0Output
+
+        try:
+            FillPhase0Output.model_validate(
+                {
+                    "voice": {
+                        "pov": "third_person_omniscient",
+                        "pov_character": "",
+                        "tense": "past",
+                        "voice_register": "terse",  # bad
+                        "sentence_rhythm": "varied",
+                        "tone_words": ["dark"],
+                    },
+                    "story_title": "T",
+                }
+            )
+            raise AssertionError("expected ValidationError")
+        except ValidationError as exc:
+            feedback = FillStage._build_error_feedback(
+                exc,
+                FillPhase0Output,
+                "content",
+                invalid_fields=["voice.voice_register"],
+            )
+
+        assert "Allowed values for `voice.voice_register`:" in feedback
+        for v in ("formal", "conversational", "literary", "sparse"):
+            assert f"`{v}`" in feedback
+
+    def test_literal_field_failure_lists_allowed_sentence_rhythm_values(self) -> None:
+        """`voice.sentence_rhythm` content failure echoes the three valid rhythms."""
+        from questfoundry.models.fill import FillPhase0Output
+
+        try:
+            FillPhase0Output.model_validate(
+                {
+                    "voice": {
+                        "pov": "third_person_omniscient",
+                        "pov_character": "",
+                        "tense": "past",
+                        "voice_register": "literary",
+                        "sentence_rhythm": "syncopated",  # bad
+                        "tone_words": ["dark"],
+                    },
+                    "story_title": "T",
+                }
+            )
+            raise AssertionError("expected ValidationError")
+        except ValidationError as exc:
+            feedback = FillStage._build_error_feedback(
+                exc,
+                FillPhase0Output,
+                "content",
+                invalid_fields=["voice.sentence_rhythm"],
+            )
+
+        assert "Allowed values for `voice.sentence_rhythm`:" in feedback
+        for v in ("varied", "punchy", "flowing"):
+            assert f"`{v}`" in feedback
+
+    def test_structural_failure_skips_literal_hints_even_with_invalid_fields(self) -> None:
+        """When `_classify_validation_error` returns ('structural', missing, invalid)
+        with a non-empty `invalid` list (mixed missing-field-AND-bad-Literal case),
+        `_build_error_feedback` must NOT emit Allowed-values hints — they would
+        contradict the "fix ONLY the structural issue" instruction. Closes the
+        ambiguity flagged in the #1399 review.
+
+        Uses `BatchedExpandOutput` + `blueprints.0.opening_move` (a real Literal
+        field) so the test actually exercises the `failure_type != "structural"`
+        guard. With a non-Literal path, `_get_literal_values_at_path` would return
+        None regardless and the guard could be silently removed without breaking
+        the test."""
+        from questfoundry.models.fill import BatchedExpandOutput
+
+        error = ValueError("missing field")
+        feedback = FillStage._build_error_feedback(
+            error,
+            BatchedExpandOutput,
+            "structural",
+            invalid_fields=["blueprints.0.opening_move"],  # IS Literal — guard matters
+        )
+        assert "Allowed values for" not in feedback
+        assert "fix only" in feedback.lower()
+
+    def test_none_invalid_fields_omits_literal_hints(self) -> None:
+        """Legacy callers that omit `invalid_fields` (the parameter default) get
+        identical pre-PR feedback output — no Allowed-values block appended."""
+        error = ValueError("min_length")
+        feedback = FillStage._build_error_feedback(
+            error,
+            FillPhase1Output,
+            "content",
+            invalid_fields=None,
+        )
+        assert "Allowed values for" not in feedback
+
+    def test_get_literal_values_at_path_strips_list_index_segments(self) -> None:
+        """The helper must skip numeric segments produced by Pydantic for
+        list-typed validation errors (e.g. `passages.0.entity_updates.1.entity_id`).
+        Without index-stripping the schema walk would bail at "0" and miss the
+        nested Literal lookup entirely."""
+        from questfoundry.models.fill import FillPhase0Output
+        from questfoundry.pipeline.stages.fill import _get_literal_values_at_path
+
+        # voice.pov is Literal — accessed via the bare path
+        direct = _get_literal_values_at_path(FillPhase0Output, "voice.pov")
+        assert direct is not None
+        assert "first_person" in direct
+
+        # Same field with an interleaved spurious numeric segment must resolve
+        # identically (no Pydantic field is named "0" / "1" so the strip is
+        # the only thing keeping the walk alive).
+        with_indices = _get_literal_values_at_path(FillPhase0Output, "voice.0.pov")
+        assert with_indices == direct
+
+    def test_get_literal_values_at_path_returns_none_for_missing_field(self) -> None:
+        """A path that doesn't resolve in the schema returns None silently —
+        downstream code already handles the None branch as 'no hint to append'."""
+        from questfoundry.models.fill import FillPhase0Output
+        from questfoundry.pipeline.stages.fill import _get_literal_values_at_path
+
+        assert _get_literal_values_at_path(FillPhase0Output, "voice.no_such_field") is None
+        assert _get_literal_values_at_path(FillPhase0Output, "no_such_root") is None
+
+    def test_get_literal_values_at_path_walks_list_of_basemodel(self) -> None:
+        """The helper must step through `list[NestedModel]` annotations to reach
+        a Literal field on the inner model. `BatchedExpandOutput.blueprints` is
+        `list[ExpandBlueprint]`, and `ExpandBlueprint.opening_move` is the
+        Literal we want to surface on a `blueprints.0.opening_move` failure.
+        Without this branch the helper would bail at `blueprints` and the
+        repair message would silently omit the valid set — exactly the
+        repair-loop blindness this PR is fixing."""
+        from questfoundry.models.fill import BatchedExpandOutput
+        from questfoundry.pipeline.stages.fill import _get_literal_values_at_path
+
+        result = _get_literal_values_at_path(BatchedExpandOutput, "blueprints.0.opening_move")
+        assert result == ("dialogue", "action", "sensory_image", "internal_thought")
+
+    def test_non_literal_content_failure_omits_literal_hint(self) -> None:
+        """A `min_length=1` violation on a non-Literal field must not crash and
+        must not append a spurious Allowed-values line."""
+        from questfoundry.models.fill import FillPhase0Output
+
+        try:
+            FillPhase0Output.model_validate(
+                {
+                    "voice": {
+                        "pov": "third_person_omniscient",
+                        "pov_character": "",
+                        "tense": "past",
+                        "voice_register": "literary",
+                        "sentence_rhythm": "varied",
+                        "tone_words": [],  # bad — min_length=1
+                    },
+                    "story_title": "T",
+                }
+            )
+            raise AssertionError("expected ValidationError")
+        except ValidationError as exc:
+            feedback = FillStage._build_error_feedback(
+                exc,
+                FillPhase0Output,
+                "content",
+                invalid_fields=["voice.tone_words"],
+            )
+
+        assert "Allowed values for" not in feedback
 
 
 class TestTwoStepFill:
