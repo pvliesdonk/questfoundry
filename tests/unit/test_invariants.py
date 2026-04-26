@@ -87,5 +87,5 @@ class TestAssertPredecessorDagAcyclic:
         graph.add_edge("predecessor", "beat::x", "beat::y")
         graph.add_edge("predecessor", "beat::y", "beat::x")
 
-        with pytest.raises(PipelineInvariantError, match="atmospheric"):
-            assert_predecessor_dag_acyclic(graph, "atmospheric")
+        with pytest.raises(PipelineInvariantError, match="intra_path_predecessors"):
+            assert_predecessor_dag_acyclic(graph, "intra_path_predecessors")
