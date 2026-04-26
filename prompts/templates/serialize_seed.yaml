@@ -72,25 +72,49 @@ system: |
 
   ### 5. initial_beats (Y-shape — shared pre-commit + per-path post-commit)
   Each dilemma is Y-shaped: SHARED pre-commit beats (belong to both paths
-  of the dilemma via path_id + also_belongs_to) + a COMMIT beat per path
-  (single belongs_to) + post-commit consequence beats per path (single
-  belongs_to). Target counts: {size_shared_beats_per_dilemma} shared
-  beats per dilemma, {size_post_commit_beats_per_path} post-commit beats
-  per path. A dilemma with 2 explored paths and 1 shared + 1 commit + 2
-  consequence beats per path produces 1 + 2 * 3 = 7 beats.
+  of the dilemma via `path_id` + `also_belongs_to`) + a COMMIT beat per
+  path (`also_belongs_to: null`) + post-commit consequence beats per path
+  (`also_belongs_to: null`). Target counts: {size_shared_beats_per_dilemma}
+  shared beats per dilemma, {size_post_commit_beats_per_path} post-commit
+  beats per path. A dilemma with 2 explored paths and 1 shared + 1 commit
+  + 2 consequence beats per path produces 1 + 2 * 3 = 7 beats.
+
+  **Use `path_id` + `also_belongs_to`. Do NOT emit the legacy `paths: [...]` list field — it was deprecated in the Y-shape refactor (#1206) and the serializer rejects it.**
+
+  Example A — SHARED pre-commit beat (dual membership):
   ```json
   {{
-    "beat_id": "host_motive_beat_01",
-    "summary": "What happens in this beat",
-    "paths": ["path::host_benevolent_or_selfish__protector"],
+    "beat_id": "host_motive_setup_01",
+    "summary": "The host greets the guest with calculated warmth",
+    "path_id": "path::host_benevolent_or_selfish__protector",
+    "also_belongs_to": ["path::host_benevolent_or_selfish__manipulator"],
     "dilemma_impacts": [
       {{
         "dilemma_id": "dilemma::host_benevolent_or_selfish",
         "effect": "advances",
-        "note": "Explanation of the impact"
+        "note": "Establishes the host's surface charm before the fork"
       }}
     ],
-    "entities": ["character::butler", "character::guest"],
+    "entities": ["character::host", "character::guest"],
+    "location": "location::manor"
+  }}
+  ```
+
+  Example B — COMMIT or POST-COMMIT beat (exclusive to one path):
+  ```json
+  {{
+    "beat_id": "host_protector_proof_01",
+    "summary": "The host shields the guest from a poisoned drink",
+    "path_id": "path::host_benevolent_or_selfish__protector",
+    "also_belongs_to": null,
+    "dilemma_impacts": [
+      {{
+        "dilemma_id": "dilemma::host_benevolent_or_selfish",
+        "effect": "commits",
+        "note": "The host's intervention locks in the protector answer"
+      }}
+    ],
+    "entities": ["character::host", "character::guest"],
     "location": "location::manor",
     "location_alternatives": ["location::garden"]
   }}

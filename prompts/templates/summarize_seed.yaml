@@ -82,14 +82,34 @@ system: |
   - ripples: story effects this implies
 
   ### Initial Beats (Y-shape: {size_shared_beats_per_dilemma} shared per dilemma + {size_post_commit_beats_per_path} post-commit per path)
-  For each opening beat, provide a beat sketch:
-  - beat_id: unique beat identifier
-  - summary: one sentence describing what happens
-  - location: primary location entity ID (must be a retained location)
-  - entities: key entity IDs present in this beat
-  - paths: list of path IDs this beat serves
+  For each opening beat, provide a beat sketch using the canonical Y-shape fields:
+  - `beat_id`: unique beat identifier
+  - `summary`: one sentence describing what happens
+  - `location`: primary location entity ID (must be a retained location)
+  - `entities`: key entity IDs present in this beat
+  - `path_id`: the beat's primary path (REQUIRED, single path ID)
+  - `also_belongs_to`: for SHARED pre-commit beats, list the other path(s) this
+    beat is shared with (e.g., `[path::keeper_hiding]` on a shared beat whose
+    `path_id` is `path::keeper_honest`). For COMMIT and POST-COMMIT beats, use
+    `null` (they are exclusive to one path).
+
+  **Do NOT use the legacy `paths: [a, b]` list field — it was deprecated in
+  the Y-shape refactor (#1206) and will be rejected by the serializer.**
 
   **Location Diversity**: Use at least 2 different locations across your beats.
+
+  ### VERIFY (run BEFORE moving to Convergence Sketch)
+  For EACH dilemma with 2 fully-explored paths, confirm in the summary:
+  1. At least 1 SHARED pre-commit beat exists with `path_id` set to one path
+     AND `also_belongs_to` listing the other path.
+  2. Each path has exactly 1 COMMIT beat (`also_belongs_to: null`, exclusive
+     to its path).
+  3. Each path has at least the configured number of POST-COMMIT beats
+     (`also_belongs_to: null`).
+  4. Pre-commit beats are listed before commit beats in `temporal_hint` order.
+
+  If any of the above is missing, the serializer will fail and the repair
+  loop will rebuild the section from scratch — fix the gap here.
 
   ### Convergence Sketch
   - convergence_points: where paths should merge
@@ -107,6 +127,8 @@ system: |
 
   If your story needs a scene in a character's personal space, use a retained
   location and put details in the beat summary.
+
+  REMINDER: All location IDs MUST be retained entity IDs from brainstorm. No invented locations.
   {output_language_instruction}
 
   ## Output Format
