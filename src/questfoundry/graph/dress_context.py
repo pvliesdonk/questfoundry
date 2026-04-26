@@ -237,13 +237,13 @@ def format_entity_for_codex(graph: Graph, entity_id: str) -> str:
         if not flags or not details:
             continue
         flag_str = ", ".join(f"`{f}`" for f in flags)
-        # `!s` coerces to str, guaranteeing a render path for any value type
-        # (consistent, non-crashing) — note that for list/dict this still
-        # delegates to __repr__ and emits bracket-format. Current overlay
-        # schema is string-only (story-graph-ontology.md §entity overlays);
-        # if non-string values are added, prefer an explicit per-type
-        # formatter rather than relying on this fallback.
-        detail_str = "; ".join(f"{k}: {v!s}" for k, v in details.items())
+        # Format list values explicitly to avoid leaking Python repr
+        # (brackets/quotes) into LLM-facing text per CLAUDE.md §9 rule 1.
+        # Sorted for deterministic output across runs.
+        detail_str = "; ".join(
+            f"{k}: {', '.join(map(str, v)) if isinstance(v, list) else v}"
+            for k, v in sorted(details.items())
+        )
         overlay_lines.append(f"- When {flag_str}: {detail_str}")
     if overlay_lines:
         lines.append("")

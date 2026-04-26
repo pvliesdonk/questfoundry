@@ -246,14 +246,9 @@ class TestFormatEntityForCodex:
         assert "warm and forthcoming" in result
         assert "skipped" not in result  # malformed entry not rendered
 
-    def test_overlay_details_non_string_values_str_cast(self, dress_graph: Graph) -> None:
-        """The renderer must `!s`-coerce non-string `details` values so it
-        always has a render path (no crash, consistent output). Note: for
-        list/dict values `str()` delegates to `__repr__`, so this test pins
-        the bracket-format repr — that's the documented behaviour, see the
-        comment in `dress_context.py` directing future maintainers toward
-        an explicit per-type formatter if the schema admits non-string
-        values."""
+    def test_overlay_list_values_render_human_readable(self, dress_graph: Graph) -> None:
+        """List-valued details render as comma-joined strings (e.g. `umm, well`)
+        — never as Python repr (`['umm', 'well']`) per CLAUDE.md §9 rule 1."""
         from questfoundry.graph.dress_context import format_entity_for_codex
 
         dress_graph.update_node(
@@ -267,10 +262,31 @@ class TestFormatEntityForCodex:
         )
 
         result = format_entity_for_codex(dress_graph, "character::aldric")
-        # `str()` delegates to `__repr__` for lists, so bracket-format is the
-        # expected output here. See the docstring above for why this is the
-        # documented behaviour rather than a leak.
-        assert "speech_tics: ['umm', 'well']" in result
+        assert "speech_tics: umm, well" in result
+        # Belt-and-braces: explicitly assert the bracket-format is GONE.
+        assert "['umm', 'well']" not in result
+
+    def test_overlay_details_sorted_for_determinism(self, dress_graph: Graph) -> None:
+        """Detail keys MUST be iterated in sorted order so the rendered string
+        is byte-identical across runs regardless of dict insertion order."""
+        from questfoundry.graph.dress_context import format_entity_for_codex
+
+        dress_graph.update_node(
+            "character::aldric",
+            overlays=[
+                {
+                    "when": ["state_flag::met_aldric"],
+                    # Inserted in non-alphabetical order intentionally.
+                    "details": {"voice": "soft", "demeanor": "warm"},
+                },
+            ],
+        )
+
+        result = format_entity_for_codex(dress_graph, "character::aldric")
+        # `demeanor` sorts before `voice` alphabetically.
+        d_idx = result.index("demeanor: warm")
+        v_idx = result.index("voice: soft")
+        assert d_idx < v_idx
 
 
 class TestFormatEntitiesBatchForCodex:

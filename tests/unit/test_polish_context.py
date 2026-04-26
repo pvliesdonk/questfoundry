@@ -175,10 +175,10 @@ class TestFormatEntityArcContext:
         # DRESS overlay renderer (closes #1406).
         assert "`dilemma::d1:path::p1`" in ctx["overlay_data"]
 
-    def test_entity_overlay_details_non_string_values_str_cast(self) -> None:
-        """Same `!s`-coerce pattern as the DRESS overlay renderer: any value
-        type renders consistently. Note that for list/dict, `str()` delegates
-        to `__repr__` (bracket-format) — that's the documented behaviour."""
+    def test_entity_overlay_list_values_render_human_readable(self) -> None:
+        """List-valued details render as comma-joined strings (e.g. `umm, well`)
+        — never as Python repr (`['umm', 'well']`) per CLAUDE.md §9 rule 1.
+        Pinned because this is exactly the bracket-format the rule forbids."""
         graph = Graph.empty()
         graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
         graph.create_node(
@@ -199,9 +199,38 @@ class TestFormatEntityArcContext:
         graph.add_edge("belongs_to", "beat::b1", "path::p1")
 
         ctx = format_entity_arc_context(graph, "entity::npc", ["beat::b1"])
-        # `str()` on a list delegates to `__repr__` — see the comment in
-        # `polish_context.py` for the documented bracket-format behaviour.
-        assert "speech_tics: ['umm', 'well']" in ctx["overlay_data"]
+        assert "speech_tics: umm, well" in ctx["overlay_data"]
+        # Belt-and-braces: explicitly assert the bracket-format is GONE.
+        assert "['umm', 'well']" not in ctx["overlay_data"]
+
+    def test_entity_overlay_details_sorted_for_determinism(self) -> None:
+        """Detail keys MUST be iterated in sorted order so the rendered string
+        is byte-identical across runs regardless of dict insertion order."""
+        graph = Graph.empty()
+        graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
+        graph.create_node(
+            "entity::npc",
+            {
+                "type": "entity",
+                "raw_id": "npc",
+                "name": "NPC",
+                "overlays": [
+                    {
+                        "when": ["state_flag::met_npc"],
+                        # Inserted in non-alphabetical order intentionally.
+                        "details": {"voice": "soft", "demeanor": "warm"},
+                    }
+                ],
+            },
+        )
+        _make_beat(graph, "beat::b1", "Meet NPC", entities=["entity::npc"])
+        graph.add_edge("belongs_to", "beat::b1", "path::p1")
+
+        ctx = format_entity_arc_context(graph, "entity::npc", ["beat::b1"])
+        # `demeanor` sorts before `voice` alphabetically.
+        d_idx = ctx["overlay_data"].index("demeanor: warm")
+        v_idx = ctx["overlay_data"].index("voice: soft")
+        assert d_idx < v_idx
 
     def test_entity_not_found(self) -> None:
         """Missing entity returns empty fields gracefully."""
