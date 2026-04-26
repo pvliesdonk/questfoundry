@@ -236,8 +236,15 @@ def format_entity_arc_context(
         flags = overlay.get("when") or []
         details = overlay.get("details") or {}
         if flags and details:
-            flag_str = ", ".join(flags)
-            detail_str = "; ".join(f"{k}: {v}" for k, v in details.items())
+            # Backtick-wrap flag IDs per CLAUDE.md §9 rule 1.
+            flag_str = ", ".join(f"`{f}`" for f in flags)
+            # Format list values explicitly to avoid leaking Python repr
+            # (brackets/quotes) into LLM-facing text per CLAUDE.md §9 rule 1.
+            # Sorted for deterministic output across runs.
+            detail_str = "; ".join(
+                f"{k}: {', '.join(map(str, v)) if isinstance(v, list) else v}"
+                for k, v in sorted(details.items())
+            )
             overlay_lines.append(f"  - When {flag_str}: {truncate_summary(detail_str, 80)}")
 
     overlay_text = "\n".join(overlay_lines) if overlay_lines else "  (no overlays)"
