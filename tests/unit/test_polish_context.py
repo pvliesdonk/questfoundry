@@ -151,7 +151,9 @@ class TestFormatEntityArcContext:
         assert "(path: `path::brave`)" in ctx["beat_appearances"]
         # Same backtick convention for the standalone ID lists.
         assert "`path::brave`" in ctx["path_ids"]
-        assert "`path::brave`" in ctx["valid_path_ids"]
+        # `valid_path_ids` is entity-scoped (same as `path_ids`) per #1410 —
+        # the Phase 3 prompt forbids arcs on paths the entity isn't in.
+        assert ctx["valid_path_ids"] == ctx["path_ids"]
         assert "`beat::intro`" in ctx["valid_beat_ids"]
         assert "`beat::reveal`" in ctx["valid_beat_ids"]
 
@@ -232,6 +234,30 @@ class TestFormatEntityArcContext:
         # rendered lines normally carry) so the prompt never receives an
         # empty injection.
         assert ctx["beat_appearances"] == "  (none)"
+
+    def test_valid_path_ids_excludes_paths_entity_does_not_appear_on(self) -> None:
+        """`valid_path_ids` MUST be scoped to paths where the entity actually
+        appears (closes #1410). Showing the broader story-wide list confused
+        models into inventing arcs on paths the entity is never in."""
+        graph = Graph.empty()
+        # Two paths exist in the story.
+        graph.create_node("path::story_a", {"type": "path", "raw_id": "story_a"})
+        graph.create_node("path::story_b", {"type": "path", "raw_id": "story_b"})
+        graph.create_node(
+            "entity::loner",
+            {"type": "entity", "raw_id": "loner", "name": "Loner", "description": "x"},
+        )
+        # Entity appears only on path_a (via beat::b1).
+        _make_beat(graph, "beat::b1", "Loner appears", entities=["entity::loner"])
+        graph.add_edge("belongs_to", "beat::b1", "path::story_a")
+
+        ctx = format_entity_arc_context(graph, "entity::loner", ["beat::b1"])
+        # Both path_ids and valid_path_ids show only the entity's path,
+        # NOT path::story_b (which exists in the graph but doesn't include
+        # the entity).
+        assert ctx["path_ids"] == "`path::story_a`"
+        assert ctx["valid_path_ids"] == "`path::story_a`"
+        assert "story_b" not in ctx["valid_path_ids"]
 
     def test_anchored_dilemmas_backtick_wrapped(self) -> None:
         """Dilemmas the entity is `anchored_to` are backtick-wrapped per

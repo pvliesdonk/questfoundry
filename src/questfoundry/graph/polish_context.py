@@ -183,7 +183,6 @@ def format_entity_arc_context(
     """
     beat_nodes = graph.get_nodes_by_type("beat")
     entity_nodes = graph.get_nodes_by_type("entity")
-    path_nodes = graph.get_nodes_by_type("path")
 
     # Entity info
     entity_data = entity_nodes.get(entity_id, {})
@@ -270,8 +269,12 @@ def format_entity_arc_context(
 
     # Render each ID list with a `(none)` fallback when empty so the prompt
     # never receives a bare empty injection. Matches `anchored_text` above.
+    # `valid_path_ids` is scoped to the entity's paths (paths_seen) — the
+    # Phase 3 prompt constrains `pivots` / `arcs_per_path` to this set, and
+    # showing the broader story-wide list previously confused models into
+    # inventing arcs for paths the entity never appears in (closes #1410).
     path_ids_text = ", ".join(f"`{p}`" for p in sorted(paths_seen)) or "(none)"
-    valid_path_ids_text = ", ".join(f"`{p}`" for p in sorted(path_nodes.keys())) or "(none)"
+    valid_path_ids_text = path_ids_text
     valid_beat_ids_text = ", ".join(f"`{b}`" for b in sorted(beat_appearances)) or "(none)"
 
     return {
