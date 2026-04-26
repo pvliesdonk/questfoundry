@@ -1425,13 +1425,21 @@ class TestBuildErrorFeedback:
         with a non-empty `invalid` list (mixed missing-field-AND-bad-Literal case),
         `_build_error_feedback` must NOT emit Allowed-values hints — they would
         contradict the "fix ONLY the structural issue" instruction. Closes the
-        ambiguity flagged in the #1399 review."""
+        ambiguity flagged in the #1399 review.
+
+        Uses `BatchedExpandOutput` + `blueprints.0.opening_move` (a real Literal
+        field) so the test actually exercises the `failure_type != "structural"`
+        guard. With a non-Literal path, `_get_literal_values_at_path` would return
+        None regardless and the guard could be silently removed without breaking
+        the test."""
+        from questfoundry.models.fill import BatchedExpandOutput
+
         error = ValueError("missing field")
         feedback = FillStage._build_error_feedback(
             error,
-            FillPhase1Output,
+            BatchedExpandOutput,
             "structural",
-            invalid_fields=["passage.passage_id"],  # non-empty even on structural
+            invalid_fields=["blueprints.0.opening_move"],  # IS Literal — guard matters
         )
         assert "Allowed values for" not in feedback
         assert "fix only" in feedback.lower()
