@@ -892,12 +892,12 @@ dilemma_analyses_prompt: |
   A dilemma's question/stakes drive whether `hard` or `soft` is the
   right *conceptual* answer.
 
-  **Structural override (R-7.4):** if a dilemma's `explored` list
+  **Structural override (GROW R-6.4):** if a dilemma's `explored` list
   contains only ONE answer (the other is a shadow), you MUST classify
   it as `hard`. `soft` reserves a convergence beat where the two paths
   rejoin — and with only one path, there is nothing for that beat to
-  merge with. GROW will halt loudly at convergence validation if a
-  single-path dilemma reaches it as `soft`. The structural override
+  merge with. GROW R-6.4 will halt loudly at convergence validation if
+  a single-path dilemma reaches it as `soft`. The structural override
   takes precedence over the conceptual classification: a "naturally
   soft" dilemma whose alternate answer was deliberately left as a
   shadow is structurally `hard`.
@@ -920,7 +920,7 @@ dilemma_analyses_prompt: |
 
   Classify dilemmas in THREE passes:
 
-  ### Pass 0: Apply the structural override (R-7.4)
+  ### Pass 0: Apply the structural override (GROW R-6.4)
   For each dilemma, check the `explored` list from the SEED Dilemmas
   Decisions section above. If `explored` contains only ONE answer (the
   other is a shadow), the dilemma is structurally `hard` — no
@@ -972,7 +972,7 @@ dilemma_analyses_prompt: |
   - Different emotional tones (that is `soft`)
   - Choosing different allies or methods (usually `soft` — the destination is the same)
 
-  ## Single-Path Examples (R-7.4 structural override)
+  ## Single-Path Examples (GROW R-6.4 structural override)
 
   GOOD (single-path → forced `hard`):
   - `dilemma::locket_planted_or_dropped`, `explored: ["planted"]`,
@@ -984,7 +984,7 @@ dilemma_analyses_prompt: |
   BAD (single-path classified `soft`):
   - Same input, classified as `dilemma_role: "soft"`,
     `convergence_point: "paths converge during final accusation scene"`
-    → GROW R-7.4 will halt: the "convergence" beat has no sibling path
+    → GROW R-6.4 will halt: the "convergence" beat has no sibling path
     to merge with. The reactive failure is loud and explicit; the
     proactive fix is to follow the Pass 0 override here.
 
@@ -1128,8 +1128,8 @@ dilemma_analyses_prompt: |
 
   ## Rules
   - Classify EVERY dilemma from the ### Valid Dilemma IDs list
-  - Classify based on the dilemma's QUESTION and STAKES, not path count
-  - Follow the two-pass procedure above (find hardest first, then classify the rest)
+  - Classify based on the dilemma's QUESTION and STAKES — UNLESS Pass 0 applies (single explored answer → forced `hard` per GROW R-6.4)
+  - Follow the three-pass procedure above (Pass 0: structural override; Pass 1: find hardest; Pass 2: classify the rest)
   - Do NOT classify as `hard` just because paths have different activities or approaches
   - Do NOT classify as `hard` unless convergence is IMPOSSIBLE (not just difficult)
   - If in doubt between `soft` and `hard`, check: does one answer involve death, destruction, or irrevocable identity change? If YES -> `hard`. If NO -> `soft`
@@ -1156,24 +1156,30 @@ dilemma_analyses_prompt: |
   3. Every entry has `dilemma_role` set to exactly `hard` or `soft` —
      no other values are accepted (R-7.1). The legacy `flavor` role was
      removed; never emit it.
-  4. **Path-count cross-check (R-7.4):** for every entry classified
+  4. **Path-count cross-check (GROW R-6.4):** for every entry classified
      `soft`, the corresponding dilemma has BOTH answers in `explored`.
      If a dilemma's `explored` list contains only ONE answer, it MUST
      be `hard` with `convergence_point: null` — single-path soft will
-     halt GROW.
+     halt GROW R-6.4.
   5. At most 2 have `ending_salience: "high"`.
   6. Every dilemma with `ending_tone` set also has `ending_salience: "high"`.
   7. At most 2 have `residue_weight: "heavy"`.
 
   ## REMINDER
   Classify ALL dilemmas. Follow this procedure:
-  STEP 1: Find your STRONGEST dilemma — the one where answers create the MOST
-  incompatible world states. Classify it as `hard`.
-  STEP 2: For each remaining dilemma, ask: "Could the SAME scene follow both answers?"
+  STEP 0 (GROW R-6.4 structural override): Check each dilemma's `explored` list.
+  If it contains only ONE answer (other is a shadow), mark it `hard` with
+  `convergence_point: null`. Skip these in STEP 1/2 — they are settled.
+  STEP 1: Among the REMAINING dilemmas (both answers explored), find your
+  STRONGEST one — the one where answers create the MOST incompatible
+  world states. Classify it as `hard`.
+  STEP 2: For each remaining both-answers-explored dilemma, ask: "Could the
+  SAME scene follow both answers?"
     YES with differences -> soft. YES nearly identical -> soft with residue_weight: cosmetic.
-    NO (incompatible world states) -> hard (max 3 total).
-  STEP 3: Count. You should have 1-3 hard, majority soft.
-  If you have 0 hard, go back to STEP 1.
+    NO (incompatible world states) -> hard (max 3 total in STEP 1+2 combined).
+  STEP 3: Count. Among both-answers dilemmas you should have 1-3 hard, majority soft.
+  If you have 0 hard among both-answers, go back to STEP 1.
+  (Pass 0 single-path overrides do NOT count toward this 1-3 cap.)
   Set `ending_salience` and `residue_weight` for EVERY dilemma (required fields).
   Set `ending_tone` ONLY when `ending_salience` is "high", null otherwise.
 
