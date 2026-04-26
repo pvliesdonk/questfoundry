@@ -77,7 +77,7 @@ class TestAssertPredecessorDagAcyclic:
         graph.add_edge("predecessor", "beat::a", "beat::c")  # closes cycle
 
         with pytest.raises(PipelineInvariantError, match="Cycle detected"):
-            assert_predecessor_dag_acyclic(graph, "narrative_gaps")
+            assert_predecessor_dag_acyclic(graph, "interleave_beats")
 
     def test_error_message_includes_phase_name(self) -> None:
         """Error message contains the phase_name argument."""
@@ -87,5 +87,5 @@ class TestAssertPredecessorDagAcyclic:
         graph.add_edge("predecessor", "beat::x", "beat::y")
         graph.add_edge("predecessor", "beat::y", "beat::x")
 
-        with pytest.raises(PipelineInvariantError, match="pacing_gaps"):
-            assert_predecessor_dag_acyclic(graph, "pacing_gaps")
+        with pytest.raises(PipelineInvariantError, match="intra_path_predecessors"):
+            assert_predecessor_dag_acyclic(graph, "intra_path_predecessors")

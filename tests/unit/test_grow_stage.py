@@ -261,6 +261,32 @@ class TestGrowStagePhaseOrder:
             "validation",
         ]
 
+    def test_method_phases_excludes_migrated_dead_phases(self) -> None:
+        """`_METHOD_PHASES` MUST NOT register phase names whose methods were
+        migrated to POLISH or removed in epic #1368. A dangling registry
+        entry would `AttributeError` if accidentally routed.
+
+        All five migrated/removed phases (PR A + B + C of #1368):
+        - narrative_gaps → POLISH Phase 1a
+        - pacing_gaps → POLISH Phase 2 (extended)
+        - atmospheric → POLISH Phase 5e
+        - path_arcs → POLISH Phase 5f
+        - entity_arcs → POLISH Phase 3 (arcs_per_path)
+        """
+        dead_phases = {
+            "narrative_gaps",
+            "pacing_gaps",
+            "atmospheric",
+            "path_arcs",
+            "entity_arcs",
+        }
+        live = set(GrowStage._METHOD_PHASES.keys())
+        leaked = dead_phases & live
+        assert leaked == set(), (
+            f"Dangling `_METHOD_PHASES` entries for migrated/removed phases: {leaked}. "
+            f"See `grow/llm_phases.py` lines 651-680 for the migration map."
+        )
+
 
 class TestGrowStageGateRejection:
     @pytest.mark.asyncio
