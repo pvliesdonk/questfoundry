@@ -75,9 +75,7 @@ if TYPE_CHECKING:
 
 
 # Phases that write predecessor edges — DAG acyclicity is asserted after each.
-_PREDECESSOR_PHASES: frozenset[str] = frozenset(
-    {"intra_path_predecessors", "interleave_beats", "atmospheric"}
-)
+_PREDECESSOR_PHASES: frozenset[str] = frozenset({"intra_path_predecessors", "interleave_beats"})
 
 
 class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
@@ -135,8 +133,6 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
         "intersections": "_phase_3_intersections",
         "resolve_temporal_hints": "_phase_resolve_temporal_hints",
         "scene_types": "_phase_4a_scene_types",
-        "atmospheric": "_phase_4d_atmospheric",
-        "path_arcs": "_phase_4e_path_arcs",
         "transition_gaps": "_phase_transition_gaps",
         "overlays": "_phase_8c_overlays",
     }
