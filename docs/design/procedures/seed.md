@@ -422,6 +422,8 @@ R-7.4. `residue_weight` and `dilemma_role` are independent axes — a soft dilem
 
 R-7.5. If the LLM call fails, defaults are applied (role: soft, weight: light, salience: low) but the failure is logged at WARNING level with the Dilemma IDs affected. Silent default application is forbidden.
 
+R-7.6. When a Dilemma's `explored` list (from Phase 2) contains only one Answer, `convergence_point` MUST be `null` regardless of `dilemma_role`. With only one path, there is no structural convergence to point to. The conceptual classification (`hard` vs `soft`) is preserved — `soft` remains correct for a dilemma whose alternate answer was deliberately left as a shadow per the F-7 flavor pattern (only the default explored, single arc) — but the structural pointer is not applicable. GROW Phase 6 R-6.4 ("soft Dilemma without structural convergence → halt") fires only when `convergence_point` is non-null and the corresponding beat cannot be located; a null `convergence_point` skips that check, so single-path soft dilemmas pass GROW without a structural error.
+
 **Violations:**
 
 | Symptom | Root cause | Broken rule |
@@ -429,6 +431,7 @@ R-7.5. If the LLM call fails, defaults are applied (role: soft, weight: light, s
 | Dilemma has no `dilemma_role` field after Phase 7 | Phase 7 soft-failed and left the field unset | R-7.1 / R-7.5 |
 | Dilemma has `dilemma_role: flavor` | `flavor` is not a valid role (flavor-level choices are handled by POLISH false branches, not by dilemma role) | R-7.1 |
 | Phase 7 LLM failure produces no log entry | Silent default application | R-7.5 |
+| Dilemma has `explored: [a]`, `unexplored: [b]`, non-null `convergence_point` | Convergence pointer set despite no second path to converge with; will halt GROW R-6.4 unable to locate the beat | R-7.6 (downstream-validated by GROW R-6.4) |
 
 ### Output Contract
 
@@ -572,6 +575,7 @@ R-7.2: Every Dilemma has `residue_weight` ∈ {heavy, light, cosmetic}.
 R-7.3: Every Dilemma has `ending_salience` ∈ {high, low, none}.
 R-7.4: `residue_weight` and `dilemma_role` are independent axes.
 R-7.5: LLM failure in Phase 7 logged at WARNING; no silent defaults.
+R-7.6: Single-explored-Answer Dilemma MUST have `convergence_point: null` regardless of `dilemma_role`; downstream-validated by GROW R-6.4.
 R-8.1: Valid relationships: wraps, concurrent, serial.
 R-8.2: Relationships declared only for relevant pairs; exhaustive O(n²) is wasteful but acceptable when ambiguity-removing.
 R-8.3: `concurrent` is symmetric; stored once with lex-smaller ID as `dilemma_a`.
