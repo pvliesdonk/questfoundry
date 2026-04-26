@@ -183,7 +183,6 @@ def format_entity_arc_context(
     """
     beat_nodes = graph.get_nodes_by_type("beat")
     entity_nodes = graph.get_nodes_by_type("entity")
-    path_nodes = graph.get_nodes_by_type("path")
 
     # Entity info
     entity_data = entity_nodes.get(entity_id, {})
@@ -214,19 +213,26 @@ def format_entity_arc_context(
             effects = [imp.get("effect", "?") for imp in impacts]
             impact_str = f" dilemma_effects=[{', '.join(effects)}]"
 
+        # Backtick-wrap IDs per CLAUDE.md §9 rule 1 — consistent with the
+        # other ID lists this context dict produces, so a model matching beat
+        # IDs against `valid_beat_ids` doesn't have to mentally strip backticks.
         if not path_set:
             path_label = "unknown"
         elif len(path_set) == 1:
-            (path_label,) = path_set
+            (only_path,) = path_set
+            path_label = f"`{only_path}`"
         else:
-            path_label = ", ".join(sorted(path_set)) + " (shared pre-commit)"
-        line = f"  - {bid} (path: {path_label}) [{scene_type}]: {summary}{impact_str}"
+            path_label = ", ".join(f"`{p}`" for p in sorted(path_set)) + " (shared pre-commit)"
+        line = f"  - `{bid}` (path: {path_label}) [{scene_type}]: {summary}{impact_str}"
         beat_items.append(ContextItem(id=bid, text=line))
 
     if config:
         beat_text = compact_items(beat_items, config)
     else:
         beat_text = "\n".join(item.text for item in beat_items)
+    # Empty fallback consistent with the four ID list fields below.
+    if not beat_text:
+        beat_text = "  (none)"
 
     # Overlay data (how entity changes based on state flags)
     # Overlays are embedded on the entity node as {when: [state_flag_ids], details: {k: v}}
@@ -256,7 +262,20 @@ def format_entity_arc_context(
         if edge["from"] == entity_id:
             anchored_dilemmas.append(edge["to"])
 
-    anchored_text = ", ".join(anchored_dilemmas) if anchored_dilemmas else "(none)"
+    # Backtick-wrap IDs per CLAUDE.md §9 rule 1.
+    anchored_text = (
+        ", ".join(f"`{d}`" for d in anchored_dilemmas) if anchored_dilemmas else "(none)"
+    )
+
+    # Render each ID list with a `(none)` fallback when empty so the prompt
+    # never receives a bare empty injection. Matches `anchored_text` above.
+    # `valid_path_ids` is scoped to the entity's paths (paths_seen) — the
+    # Phase 3 prompt constrains `pivots` / `arcs_per_path` to this set, and
+    # showing the broader story-wide list previously confused models into
+    # inventing arcs for paths the entity never appears in (closes #1410).
+    path_ids_text = ", ".join(f"`{p}`" for p in sorted(paths_seen)) or "(none)"
+    valid_path_ids_text = path_ids_text
+    valid_beat_ids_text = ", ".join(f"`{b}`" for b in sorted(beat_appearances)) or "(none)"
 
     return {
         "entity_id": entity_id,
@@ -265,9 +284,9 @@ def format_entity_arc_context(
         "beat_appearances": beat_text,
         "overlay_data": overlay_text,
         "anchored_dilemmas": anchored_text,
-        "path_ids": ", ".join(sorted(paths_seen)),
-        "valid_path_ids": ", ".join(sorted(path_nodes.keys())),
-        "valid_beat_ids": ", ".join(sorted(beat_appearances)),
+        "path_ids": path_ids_text,
+        "valid_path_ids": valid_path_ids_text,
+        "valid_beat_ids": valid_beat_ids_text,
     }
 
 

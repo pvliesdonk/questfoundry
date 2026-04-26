@@ -143,9 +143,19 @@ class TestFormatEntityArcContext:
         assert ctx["entity_id"] == "entity::mentor"
         assert ctx["entity_name"] == "The Mentor"
         assert "wise guide" in ctx["entity_description"]
-        assert "beat::intro" in ctx["beat_appearances"]
-        assert "beat::reveal" in ctx["beat_appearances"]
-        assert "path::brave" in ctx["path_ids"]
+        # IDs in beat_appearances lines are backtick-wrapped per CLAUDE.md §9
+        # rule 1 — matches the valid_*_ids lists so a model doesn't need to
+        # mentally strip backticks when matching IDs across surfaces.
+        assert "`beat::intro`" in ctx["beat_appearances"]
+        assert "`beat::reveal`" in ctx["beat_appearances"]
+        assert "(path: `path::brave`)" in ctx["beat_appearances"]
+        # Same backtick convention for the standalone ID lists.
+        assert "`path::brave`" in ctx["path_ids"]
+        # `valid_path_ids` is entity-scoped (same as `path_ids`) per #1410 —
+        # the Phase 3 prompt forbids arcs on paths the entity isn't in.
+        assert ctx["valid_path_ids"] == ctx["path_ids"]
+        assert "`beat::intro`" in ctx["valid_beat_ids"]
+        assert "`beat::reveal`" in ctx["valid_beat_ids"]
 
     def test_entity_with_overlays(self) -> None:
         graph = Graph.empty()
@@ -202,6 +212,70 @@ class TestFormatEntityArcContext:
         assert "speech_tics: umm, well" in ctx["overlay_data"]
         # Belt-and-braces: explicitly assert the bracket-format is GONE.
         assert "['umm', 'well']" not in ctx["overlay_data"]
+
+    def test_id_lists_fall_back_to_none_when_empty(self) -> None:
+        """Empty source sets MUST render as `(none)` rather than an empty
+        string so the prompt never receives a bare empty injection. Matches
+        the existing `anchored_dilemmas` fallback pattern; pinned because
+        empty-input behaviour is otherwise easy to regress silently."""
+        graph = Graph.empty()
+        graph.create_node(
+            "entity::loner",
+            {"type": "entity", "raw_id": "loner", "name": "Loner", "description": ""},
+        )
+        # No beats, no paths, no anchored_to edges.
+
+        ctx = format_entity_arc_context(graph, "entity::loner", [])
+        assert ctx["path_ids"] == "(none)"
+        assert ctx["valid_path_ids"] == "(none)"
+        assert ctx["valid_beat_ids"] == "(none)"
+        assert ctx["anchored_dilemmas"] == "(none)"
+        # `beat_appearances` uses the same fallback (with the indent the
+        # rendered lines normally carry) so the prompt never receives an
+        # empty injection.
+        assert ctx["beat_appearances"] == "  (none)"
+
+    def test_valid_path_ids_excludes_paths_entity_does_not_appear_on(self) -> None:
+        """`valid_path_ids` MUST be scoped to paths where the entity actually
+        appears (closes #1410). Showing the broader story-wide list confused
+        models into inventing arcs on paths the entity is never in."""
+        graph = Graph.empty()
+        # Two paths exist in the story.
+        graph.create_node("path::story_a", {"type": "path", "raw_id": "story_a"})
+        graph.create_node("path::story_b", {"type": "path", "raw_id": "story_b"})
+        graph.create_node(
+            "entity::loner",
+            {"type": "entity", "raw_id": "loner", "name": "Loner", "description": "x"},
+        )
+        # Entity appears only on path_a (via beat::b1).
+        _make_beat(graph, "beat::b1", "Loner appears", entities=["entity::loner"])
+        graph.add_edge("belongs_to", "beat::b1", "path::story_a")
+
+        ctx = format_entity_arc_context(graph, "entity::loner", ["beat::b1"])
+        # Both path_ids and valid_path_ids show only the entity's path,
+        # NOT path::story_b (which exists in the graph but doesn't include
+        # the entity).
+        assert ctx["path_ids"] == "`path::story_a`"
+        assert ctx["valid_path_ids"] == "`path::story_a`"
+        assert "story_b" not in ctx["valid_path_ids"]
+
+    def test_anchored_dilemmas_backtick_wrapped(self) -> None:
+        """Dilemmas the entity is `anchored_to` are backtick-wrapped per
+        CLAUDE.md §9 rule 1 — same convention as overlay flag IDs and the
+        valid_*_ids lists."""
+        graph = Graph.empty()
+        graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
+        graph.create_node(
+            "entity::mentor",
+            {"type": "entity", "raw_id": "mentor", "name": "Mentor", "description": "guide"},
+        )
+        graph.create_node("dilemma::trust", {"type": "dilemma", "raw_id": "trust"})
+        graph.add_edge("anchored_to", "entity::mentor", "dilemma::trust")
+        _make_beat(graph, "beat::b1", "Meet mentor", entities=["entity::mentor"])
+        graph.add_edge("belongs_to", "beat::b1", "path::p1")
+
+        ctx = format_entity_arc_context(graph, "entity::mentor", ["beat::b1"])
+        assert ctx["anchored_dilemmas"] == "`dilemma::trust`"
 
     def test_entity_overlay_details_sorted_for_determinism(self) -> None:
         """Detail keys MUST be iterated in sorted order so the rendered string
