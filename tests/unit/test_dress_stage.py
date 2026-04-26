@@ -792,6 +792,74 @@ class TestPhase4Generate:
         assert "0 images generated, 1 failed" in result.detail
 
 
+class TestBuildDressErrorFeedback:
+    """Tests for `_build_dress_error_feedback`.
+
+    Cluster D-2 plumbing: extra_repair_hints must reach the retry message
+    so DRESS templates that depend on the initial system prompt's IDs and
+    constraints can self-correct after the first attempt drifts.
+    """
+
+    def test_no_hints_legacy_output_unchanged(self) -> None:
+        """Callers that omit `extra_repair_hints` (the parameter default) get
+        the same generic feedback DRESS produced before this PR — no extra
+        block appended."""
+        from questfoundry.models.dress import DressPhase0Output
+        from questfoundry.pipeline.stages.dress import _build_dress_error_feedback
+
+        feedback = _build_dress_error_feedback(
+            ValueError("bad output"), DressPhase0Output, extra_repair_hints=None
+        )
+        assert "Your response failed validation" in feedback
+        assert "Expected fields" in feedback
+        assert "Please fix the errors" in feedback
+        # Legacy callers don't get any REMINDER block.
+        assert "REMINDER" not in feedback
+
+    def test_hints_appear_verbatim_in_feedback(self) -> None:
+        """A caller-supplied hint block appears literally in the retry
+        feedback so the LLM sees the constraint or ID list re-stated in the
+        same human-message it's correcting against. Closes the murder1 failure
+        shape generalised to DRESS — see audit DRESS §dress_serialize."""
+        from questfoundry.models.dress import DressPhase0Output
+        from questfoundry.pipeline.stages.dress import _build_dress_error_feedback
+
+        hints = [
+            "REMINDER — Valid entity IDs (use ONLY these): kay, marcus, archive",
+            "REMINDER — `priority` MUST be 1, 2, or 3.",
+        ]
+        feedback = _build_dress_error_feedback(
+            ValueError("bad output"), DressPhase0Output, extra_repair_hints=hints
+        )
+        for hint in hints:
+            assert hint in feedback
+
+    def test_hints_block_separated_from_generic_message(self) -> None:
+        """The hint block is positioned AFTER the generic Pydantic-error and
+        field-list lines so the model reads the failure first and the
+        corrective constraint last (closest to its retry context)."""
+        from questfoundry.models.dress import DressPhase0Output
+        from questfoundry.pipeline.stages.dress import _build_dress_error_feedback
+
+        feedback = _build_dress_error_feedback(
+            ValueError("bad output"),
+            DressPhase0Output,
+            extra_repair_hints=["REMINDER — Use only valid IDs."],
+        )
+        assert feedback.index("Please fix the errors") < feedback.index("REMINDER")
+
+    def test_empty_hints_list_omits_reminder_block(self) -> None:
+        """An empty (but non-None) list must not append a stray separator —
+        same falsy-guard semantics as `if extra_repair_hints:`."""
+        from questfoundry.models.dress import DressPhase0Output
+        from questfoundry.pipeline.stages.dress import _build_dress_error_feedback
+
+        feedback = _build_dress_error_feedback(
+            ValueError("bad output"), DressPhase0Output, extra_repair_hints=[]
+        )
+        assert "REMINDER" not in feedback
+
+
 class TestParseAspectRatio:
     """Tests for _parse_aspect_ratio helper."""
 
