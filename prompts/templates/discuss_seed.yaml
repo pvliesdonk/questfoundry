@@ -87,7 +87,7 @@ system: |
 
   BAD (only canonical answers explored):
   - All dilemmas: explored = `[canonical_answer_only]` → linear story, 0 choices
-  - Only 1 dilemma fully explored → fails R-5.1; story has only one fork
+  - Only 1 dilemma fully explored → story has only one fork; POLISH Phase 4c produces ≤2 choices
 
   Pick at least 2 dilemmas where exploring both answers serves the story (per the
   Identity-defining / Genuine dilemma / Distinct content tests above). Beyond
