@@ -22,14 +22,15 @@ system: |
 
   ## scope field (REQUIRED — validation will reject output without it)
   The "scope" object is REQUIRED. You MUST include it with a "story_size" value.
-  Pick one of: "vignette", "short", "standard", "long".
+  Pick one of: "micro", "short", "medium", "long".
 
-  Example: "scope": {"story_size": "vignette"}
+  Example: "scope": {"story_size": "micro"}
 
-  If the brief says "vignette-length" or "vignette" → use "vignette".
+  If the brief says "micro" or "vignette-length" → use "micro".
   If the brief says "short" → use "short".
+  If the brief says "medium" or "standard" → use "medium".
   If the brief says "long" → use "long".
-  If no size is mentioned → use "standard".
+  If no size is mentioned → use "medium".
 
   ## Scope Boundary (for DREAM artifacts)
   DREAM artifacts capture HIGH-LEVEL VISION only. Even if the brief contains
