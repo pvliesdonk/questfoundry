@@ -143,11 +143,14 @@ class TestFormatEntityArcContext:
         assert ctx["entity_id"] == "entity::mentor"
         assert ctx["entity_name"] == "The Mentor"
         assert "wise guide" in ctx["entity_description"]
-        assert "beat::intro" in ctx["beat_appearances"]
-        assert "beat::reveal" in ctx["beat_appearances"]
-        # path_ids backtick-wrapped per CLAUDE.md §9 rule 1.
+        # IDs in beat_appearances lines are backtick-wrapped per CLAUDE.md §9
+        # rule 1 — matches the valid_*_ids lists so a model doesn't need to
+        # mentally strip backticks when matching IDs across surfaces.
+        assert "`beat::intro`" in ctx["beat_appearances"]
+        assert "`beat::reveal`" in ctx["beat_appearances"]
+        assert "(path: `path::brave`)" in ctx["beat_appearances"]
+        # Same backtick convention for the standalone ID lists.
         assert "`path::brave`" in ctx["path_ids"]
-        # Same for valid_path_ids and valid_beat_ids.
         assert "`path::brave`" in ctx["valid_path_ids"]
         assert "`beat::intro`" in ctx["valid_beat_ids"]
         assert "`beat::reveal`" in ctx["valid_beat_ids"]

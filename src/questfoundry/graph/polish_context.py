@@ -214,13 +214,17 @@ def format_entity_arc_context(
             effects = [imp.get("effect", "?") for imp in impacts]
             impact_str = f" dilemma_effects=[{', '.join(effects)}]"
 
+        # Backtick-wrap IDs per CLAUDE.md §9 rule 1 — consistent with the
+        # other ID lists this context dict produces, so a model matching beat
+        # IDs against `valid_beat_ids` doesn't have to mentally strip backticks.
         if not path_set:
             path_label = "unknown"
         elif len(path_set) == 1:
-            (path_label,) = path_set
+            (only_path,) = path_set
+            path_label = f"`{only_path}`"
         else:
-            path_label = ", ".join(sorted(path_set)) + " (shared pre-commit)"
-        line = f"  - {bid} (path: {path_label}) [{scene_type}]: {summary}{impact_str}"
+            path_label = ", ".join(f"`{p}`" for p in sorted(path_set)) + " (shared pre-commit)"
+        line = f"  - `{bid}` (path: {path_label}) [{scene_type}]: {summary}{impact_str}"
         beat_items.append(ContextItem(id=bid, text=line))
 
     if config:
