@@ -78,6 +78,20 @@ class TestFormatLinearSectionContext:
         assert ctx["valid_beat_ids"] == "(none)"
         assert ctx["beat_count"] == "0"
 
+    def test_section_beat_with_entities_renders_backticks(self) -> None:
+        """A section beat whose `entities` field is populated renders the
+        entity list with backticks per CLAUDE.md §9 rule 1 — never as a
+        Python repr-style bracket list. Covers the linear-section
+        equivalent of `test_pacing_beat_with_entities_renders_backticks`."""
+        graph = Graph.empty()
+        _make_beat(graph, "beat::a", "Hero acts", entities=["entity::hero"])
+
+        ctx = format_linear_section_context(graph, "s0", ["beat::a"], None, None)
+
+        assert "entities: `entity::hero`" in ctx["beat_details"]
+        # No bracket-format leak per CLAUDE.md §9 rule 1.
+        assert "entities=[" not in ctx["beat_details"]
+
     def test_dilemma_impacts_shown(self) -> None:
         graph = Graph.empty()
         _make_beat(
