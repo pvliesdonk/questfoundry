@@ -22,6 +22,10 @@ system: |
   ## Extended Sliding Window
   {extended_window}
 
+  ## Valid Entity IDs
+  Use ONLY these IDs in `entity_updates[].entity_id` (raw IDs, no scope prefix):
+  {valid_entity_ids}
+
   ## Revision Guidance by Issue Type
 
   - **voice_drift**: Match register, rhythm, and tone to surrounding passages.

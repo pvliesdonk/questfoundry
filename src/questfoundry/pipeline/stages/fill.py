@@ -608,6 +608,7 @@ class FillStage:
         max_retries: int = 3,
         *,
         creative: bool = False,
+        extra_repair_hints: list[str] | None = None,
     ) -> tuple[T, int, int]:
         """Call LLM with structured output and retry on validation failure.
 
@@ -623,6 +624,8 @@ class FillStage:
             creative: Use the discuss-phase model (creative temperature) instead
                 of the serialize model. Enable for prose generation where lexical
                 diversity matters.
+            extra_repair_hints: Hint blocks appended verbatim to retry feedback
+                so caller-known IDs/constraints survive context drift.
 
         Returns:
             Tuple of (validated_result, llm_calls, tokens_used).
@@ -704,7 +707,11 @@ class FillStage:
 
                 if attempt < max_retries - 1:
                     error_msg = self._build_error_feedback(
-                        e, output_schema, failure_type, invalid_fields=invalid
+                        e,
+                        output_schema,
+                        failure_type,
+                        invalid_fields=invalid,
+                        extra_repair_hints=extra_repair_hints,
                     )
                     messages = list(base_messages)
                     messages.append(HumanMessage(content=error_msg))
@@ -720,6 +727,7 @@ class FillStage:
         output_schema: type[BaseModel],
         failure_type: str = "unknown",
         invalid_fields: list[str] | None = None,
+        extra_repair_hints: list[str] | None = None,
     ) -> str:
         """Build structured error feedback for LLM retry.
 
@@ -741,6 +749,8 @@ class FillStage:
             failure_type: Classification from _classify_validation_error.
             invalid_fields: Dotted field paths flagged as content failures by
                 _classify_validation_error. Used to look up Literal values.
+            extra_repair_hints: Hint blocks appended verbatim after the standard
+                error text so caller-known IDs/constraints survive context drift.
 
         Returns:
             Formatted error feedback string.
@@ -777,6 +787,12 @@ class FillStage:
                     literal_hints.append(f"Allowed values for `{field_path}`: {formatted}")
             if literal_hints:
                 parts.append("\n" + "\n".join(literal_hints))
+
+        # Caller-supplied hint blocks (valid IDs etc.) — appended verbatim so
+        # the model sees the constraint re-stated in the same human-message
+        # it's correcting against. Mirrors the DRESS Cluster D-2 plumbing.
+        if extra_repair_hints:
+            parts.append("\n" + "\n\n".join(extra_repair_hints))
 
         return "\n".join(parts)
 
@@ -1938,6 +1954,21 @@ class FillStage:
             if node:
                 passage_data[passage_id] = node
 
+        # Valid entity IDs (raw, sorted, backtick-wrapped per CLAUDE.md §9 rule 1).
+        # Hoisted out of the per-passage closure since entities don't change
+        # during revision — matches the pre-computation pattern above.
+        valid_entity_id_list = sorted(
+            enode.get("raw_id", strip_scope_prefix(eid))
+            for eid, enode in graph.get_nodes_by_type("entity").items()
+        )
+        valid_entity_ids = (
+            "\n".join(f"- `{rid}`" for rid in valid_entity_id_list) or "(no entities defined)"
+        )
+        revision_repair_hints = [
+            "REMINDER — Valid entity IDs for `entity_updates[].entity_id` "
+            f"(use ONLY these — raw IDs, no scope prefix):\n{valid_entity_ids}",
+        ]
+
         # Each passage's revision chain is independent of other passages,
         # but flags within one passage must be sequential (chained).
         passage_items = list(flagged_passages.items())
@@ -1977,6 +2008,7 @@ class FillStage:
                     if arc_id
                     else ""
                 ),
+                "valid_entity_ids": valid_entity_ids,
                 "output_language_instruction": self._lang_instruction,
             }
 
@@ -1986,6 +2018,7 @@ class FillStage:
                 context,
                 FillPhase1Output,
                 creative=True,
+                extra_repair_hints=revision_repair_hints,
             )
 
             if output.passage.prose:

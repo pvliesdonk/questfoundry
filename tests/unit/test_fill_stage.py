@@ -1104,6 +1104,108 @@ class TestPhase3Revision:
         assert result.llm_calls == 0
 
     @pytest.mark.asyncio
+    async def test_revision_context_and_hints_carry_valid_entity_ids(self) -> None:
+        """The revision call MUST inject `valid_entity_ids` into the prompt
+        context AND pass it as `extra_repair_hints` so the constraint survives
+        context drift on retry. Closes the FILL §fill_phase3_revision audit
+        finding (CLAUDE.md §6 Valid ID Injection)."""
+        graph = _make_reviewed_graph()
+        graph.create_node(
+            "entity::kay",
+            {"type": "entity", "raw_id": "kay", "concept": "A wanderer"},
+        )
+        graph.update_node(
+            "passage::p1",
+            review_flags=[
+                {"passage_id": "p1", "issue": "Voice drift", "issue_type": "voice_drift"}
+            ],
+        )
+        stage = FillStage()
+
+        captured_context: dict[str, Any] = {}
+        captured_hints: list[str] | None = None
+
+        async def mock_llm_call(
+            model: MagicMock,  # noqa: ARG001
+            template_name: str,  # noqa: ARG001
+            context: dict,
+            output_schema: type,  # noqa: ARG001
+            max_retries: int = 3,  # noqa: ARG001
+            *,
+            creative: bool = False,  # noqa: ARG001
+            extra_repair_hints: list[str] | None = None,
+            **kwargs: object,  # noqa: ARG001
+        ) -> tuple:
+            nonlocal captured_context, captured_hints
+            captured_context = context
+            captured_hints = extra_repair_hints
+            return (
+                FillPhase1Output(
+                    passage=FillPassageOutput(passage_id="p1", prose="Revised prose.")
+                ),
+                1,
+                300,
+            )
+
+        stage._fill_llm_call = mock_llm_call  # type: ignore[method-assign]
+        await stage._phase_3_revision(graph, MagicMock())
+
+        # Context contains the prompt-injection variable used by
+        # fill_phase3_revision.yaml's `## Valid Entity IDs` section.
+        assert "valid_entity_ids" in captured_context
+        valid_ids_text = captured_context["valid_entity_ids"]
+        assert "kay" in valid_ids_text  # raw_id of the entity created above
+        assert "`kay`" in valid_ids_text  # backtick-wrapped per CLAUDE.md §9 rule 1
+
+        # Same constraint also flows as a retry hint so it survives context drift.
+        assert captured_hints is not None
+        assert any("Valid entity IDs" in h and "`kay`" in h for h in captured_hints)
+
+    @pytest.mark.asyncio
+    async def test_revision_with_zero_entities_uses_fallback_string(self) -> None:
+        """When the graph has flagged passages but zero entity nodes, the
+        `valid_entity_ids` injection must fall back to a non-empty placeholder
+        rather than rendering as an empty block (which would confuse small
+        models reading `## Valid Entity IDs\\n\\n` with no content)."""
+        graph = _make_reviewed_graph()
+        # Intentionally NO entity nodes — fixture doesn't create any.
+        graph.update_node(
+            "passage::p1",
+            review_flags=[
+                {"passage_id": "p1", "issue": "Voice drift", "issue_type": "voice_drift"}
+            ],
+        )
+        stage = FillStage()
+
+        captured_context: dict[str, Any] = {}
+
+        async def mock_llm_call(
+            model: MagicMock,  # noqa: ARG001
+            template_name: str,  # noqa: ARG001
+            context: dict,
+            output_schema: type,  # noqa: ARG001
+            max_retries: int = 3,  # noqa: ARG001
+            *,
+            creative: bool = False,  # noqa: ARG001
+            extra_repair_hints: list[str] | None = None,  # noqa: ARG001
+            **kwargs: object,  # noqa: ARG001
+        ) -> tuple:
+            nonlocal captured_context
+            captured_context = context
+            return (
+                FillPhase1Output(
+                    passage=FillPassageOutput(passage_id="p1", prose="Revised prose.")
+                ),
+                1,
+                300,
+            )
+
+        stage._fill_llm_call = mock_llm_call  # type: ignore[method-assign]
+        await stage._phase_3_revision(graph, MagicMock())
+
+        assert captured_context["valid_entity_ids"] == "(no entities defined)"
+
+    @pytest.mark.asyncio
     async def test_multiple_flags_batched(self) -> None:
         """Multiple flags on same passage should be batched into one LLM call."""
         graph = _make_reviewed_graph()
@@ -1483,6 +1585,45 @@ class TestBuildErrorFeedback:
 
         assert _get_literal_values_at_path(FillPhase0Output, "voice.no_such_field") is None
         assert _get_literal_values_at_path(FillPhase0Output, "no_such_root") is None
+
+    def test_extra_repair_hints_appended_to_feedback(self) -> None:
+        """Caller-supplied hints (e.g. valid entity IDs) appear verbatim in
+        the retry feedback. Mirrors the SEED Phase-1 / DRESS D-2 plumbing."""
+        from questfoundry.models.fill import FillPhase1Output
+
+        hints = [
+            "REMINDER — Valid entity IDs (use ONLY these): `kay`, `marcus`",
+        ]
+        feedback = FillStage._build_error_feedback(
+            ValueError("missing field"),
+            FillPhase1Output,
+            "structural",
+            invalid_fields=None,
+            extra_repair_hints=hints,
+        )
+        assert "REMINDER — Valid entity IDs" in feedback
+        assert "`kay`" in feedback and "`marcus`" in feedback
+
+    def test_extra_repair_hints_default_none_byte_identical(self) -> None:
+        """Legacy callers that omit `extra_repair_hints` get the same feedback
+        the previous build produced. Pinning byte-equality keeps the new
+        parameter from silently changing legacy retry behaviour."""
+        from questfoundry.models.fill import FillPhase1Output
+
+        with_hints_none = FillStage._build_error_feedback(
+            ValueError("min_length"),
+            FillPhase1Output,
+            "content",
+            invalid_fields=None,
+            extra_repair_hints=None,
+        )
+        without_param = FillStage._build_error_feedback(
+            ValueError("min_length"),
+            FillPhase1Output,
+            "content",
+            invalid_fields=None,
+        )
+        assert with_hints_none == without_param
 
     def test_get_literal_values_at_path_walks_list_of_basemodel(self) -> None:
         """The helper must step through `list[NestedModel]` annotations to reach
