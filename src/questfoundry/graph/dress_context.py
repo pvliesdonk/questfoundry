@@ -237,7 +237,10 @@ def format_entity_for_codex(graph: Graph, entity_id: str) -> str:
         if not flags or not details:
             continue
         flag_str = ", ".join(f"`{f}`" for f in flags)
-        detail_str = "; ".join(f"{k}: {v}" for k, v in details.items())
+        # str(v) defends against future schema additions where details values
+        # become list/dict — without it Python repr would leak into LLM-facing
+        # text, violating CLAUDE.md §9 rule 1.
+        detail_str = "; ".join(f"{k}: {v!s}" for k, v in details.items())
         overlay_lines.append(f"- When {flag_str}: {detail_str}")
     if overlay_lines:
         lines.append("")
