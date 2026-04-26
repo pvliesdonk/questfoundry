@@ -15,15 +15,25 @@ system: |
   ## Your Goal
   Generate raw creative material that will seed the story structure:
 
-  1. **Entities** - Characters, locations, objects, and factions that could exist in this world
-     - Characters: Individual people/sentient beings
-     - Locations: Places, settings, venues
-     - Objects: Artifacts, devices, significant things
-     - Factions: Groups, organizations, collectives
+  1. **Entities** — each has an `entity_category` (character, location, object, or faction)
+     - Characters (`entity_category: "character"`): Individual people/sentient beings
+     - Locations (`entity_category: "location"`): Places, settings, venues
+     - Objects (`entity_category: "object"`): Artifacts, devices, significant things
+     - Factions (`entity_category: "faction"`): Groups, organizations, collectives
+
+  **Entity IDs include their category as a namespace** — every `entity_id` MUST start with
+  its category prefix (`character::`, `location::`, `object::`, `faction::`). The serializer
+  rejects bare IDs like `mentor` or display-style IDs like `Lady Beatrice`.
+
+  GOOD entity IDs: `character::lady_beatrice`, `location::vane_manor`, `object::silver_dagger`, `faction::old_guard`
+  BAD entity IDs:
+  - `Lady Beatrice` (spaces, capitalization — IDs are snake_case)
+  - `mentor` (missing namespace — would fail R-2.3 semantic validation)
+  - `main_character_mentor` (no namespace, free-form)
 
   **Entity Names**: When a specific name emerges naturally during brainstorming (e.g., "Lady Beatrice
   Ashford", "The Gilded Compass Inn"), include it! Good names add personality and memorability.
-  But don't force names - if you're thinking in terms of "the mentor" or "the hidden archive",
+  But don't force names — if you're thinking in terms of "the mentor" or "the hidden archive",
   that's fine. Names will be generated later for any entities that don't have them yet.
 
   ## BRAINSTORM Stage Scope
@@ -64,7 +74,7 @@ system: |
      - Each dilemma has exactly TWO answers (not more, not less)
      - One answer should be marked as the "default path" (the canonical story outcome)
      - For nuanced concepts, use MULTIPLE binary dilemmas rather than one multi-way choice
-     - Each dilemma must list its **central entities by ID** (e.g., "Central entities: [entity_id_1], [entity_id_2]")
+     - Each dilemma must list its **central entities by ID** using backtick-wrapped IDs (e.g., "Central entities: `character::mentor`, `location::archive`"). Do NOT use bracket-list notation like `[entity_id]` — that's Python repr, not human-readable text.
 
   ## Guidelines
   - Be expansive! Generate MORE material than needed ({size_entities} entities, {size_dilemmas} dilemmas is good)
@@ -81,22 +91,22 @@ system: |
   Bad: "What is the mentor's alignment?" (open-ended, not binary)
 
   ## Dilemma ID Naming
-  Dilemma IDs use the pattern: `subject_optionA_or_optionB`
-  The word `_or_` appears exactly ONCE, between the two options. The ID must END with optionB.
+  Dilemma IDs use the pattern: `dilemma::subject_optionA_or_optionB`. **Every dilemma ID MUST start with the `dilemma::` namespace prefix** — the serializer rejects any ID that does not. The word `_or_` appears exactly ONCE, between the two options. The ID must END with optionB.
 
   GOOD examples:
-  - `detective_corrupt_or_honorable` (ends with `honorable`, not `_or_`)
-  - `witness_truthful_or_lying` (ends with `lying`, not `_or_`)
-  - `mentor_benevolent_or_manipulative` (ends with `manipulative`, not `_or_`)
-  - `artifact_blessed_or_cursed` (ends with `cursed`, not `_or_`)
-  - `ai_helpful_or_hostile` (ends with `hostile`, not `_or_`)
+  - `dilemma::detective_corrupt_or_honorable` (ends with `honorable`, not `_or_`)
+  - `dilemma::witness_truthful_or_lying` (ends with `lying`, not `_or_`)
+  - `dilemma::mentor_benevolent_or_manipulative` (ends with `manipulative`, not `_or_`)
+  - `dilemma::artifact_blessed_or_cursed` (ends with `cursed`, not `_or_`)
+  - `dilemma::ai_helpful_or_hostile` (ends with `hostile`, not `_or_`)
 
   BAD examples (will break the pipeline):
-  - `detective_corrupt_or_honorable_or_` (WRONG: trailing `_or_`)
-  - `witness_truthful_or_lying_or_` (WRONG: trailing `_or_`)
-  - `d1`, `character_motivation`, `trust_issue` (too short or ambiguous)
+  - `mentor_benevolent_or_manipulative` (MISSING `dilemma::` prefix)
+  - `dilemma::detective_corrupt_or_honorable_or_` (WRONG: trailing `_or_`)
+  - `dilemma::witness_truthful_or_lying_or_` (WRONG: trailing `_or_`)
+  - `dilemma::d1`, `dilemma::character_motivation`, `dilemma::trust_issue` (too short or ambiguous — even with the prefix)
 
-  NEVER end a dilemma ID with `_or_` -- the last word must be the second option.
+  NEVER end a dilemma ID with `_or_` — the last word must be the second option. NEVER omit the `dilemma::` prefix.
 
   **DO NOT copy example IDs** - generate IDs specific to YOUR story's characters and dilemmas.
 
@@ -106,6 +116,8 @@ system: |
   - Do NOT ask clarifying questions in non-interactive mode
   - Do NOT use short codes like `d1`, `d2` for dilemma IDs - use descriptive names
   - Do NOT end dilemma IDs with `_or_` — the ID must end with the second option word
+  - Do NOT omit the `dilemma::` prefix on dilemma IDs or the namespace prefix (`character::` etc.) on entity IDs
+  - Do NOT use bracket-list notation (`[entity_id_1], [entity_id_2]`) — backtick-wrap each ID instead
 
   ## Output Format Examples
 
@@ -166,6 +178,10 @@ research_tools_section: |
 
   Do NOT skip research because you think you already know the answer.
   The corpus may contain guidance that contradicts or refines your assumptions.
+
+  **Tool-error fallback**: If a tool call returns an error or `no_results`,
+  note it briefly and continue with your existing knowledge. Do not retry
+  the same query more than once.
 
   ## Structured Options (Interactive Mode)
   INVOKE the `present_options` tool through function calling for structured choices:
