@@ -608,6 +608,7 @@ class FillStage:
         max_retries: int = 3,
         *,
         creative: bool = False,
+        extra_repair_hints: list[str] | None = None,
     ) -> tuple[T, int, int]:
         """Call LLM with structured output and retry on validation failure.
 
@@ -704,7 +705,11 @@ class FillStage:
 
                 if attempt < max_retries - 1:
                     error_msg = self._build_error_feedback(
-                        e, output_schema, failure_type, invalid_fields=invalid
+                        e,
+                        output_schema,
+                        failure_type,
+                        invalid_fields=invalid,
+                        extra_repair_hints=extra_repair_hints,
                     )
                     messages = list(base_messages)
                     messages.append(HumanMessage(content=error_msg))
@@ -720,6 +725,7 @@ class FillStage:
         output_schema: type[BaseModel],
         failure_type: str = "unknown",
         invalid_fields: list[str] | None = None,
+        extra_repair_hints: list[str] | None = None,
     ) -> str:
         """Build structured error feedback for LLM retry.
 
@@ -777,6 +783,12 @@ class FillStage:
                     literal_hints.append(f"Allowed values for `{field_path}`: {formatted}")
             if literal_hints:
                 parts.append("\n" + "\n".join(literal_hints))
+
+        # Caller-supplied hint blocks (valid IDs etc.) — appended verbatim so
+        # the model sees the constraint re-stated in the same human-message
+        # it's correcting against. Mirrors the DRESS Cluster D-2 plumbing.
+        if extra_repair_hints:
+            parts.append("\n" + "\n\n".join(extra_repair_hints))
 
         return "\n".join(parts)
 
@@ -1966,6 +1978,18 @@ class FillStage:
                 for i, f in enumerate(flags)
             )
 
+            # Valid entity IDs for any entity_updates the revision proposes.
+            # Per CLAUDE.md §6 the model must see this list explicitly; without
+            # it phantom IDs are caught only at stage exit (see escalation
+            # handler below) instead of being prevented at the call.
+            valid_entity_id_list = sorted(
+                enode.get("raw_id", strip_scope_prefix(eid))
+                for eid, enode in graph.get_nodes_by_type("entity").items()
+            )
+            valid_entity_ids = (
+                "\n".join(f"- `{rid}`" for rid in valid_entity_id_list) or "(no entities defined)"
+            )
+
             context = {
                 "voice_document": voice_context,
                 "passage_id": passage.get("raw_id", passage_id),
@@ -1977,8 +2001,15 @@ class FillStage:
                     if arc_id
                     else ""
                 ),
+                "valid_entity_ids": valid_entity_ids,
                 "output_language_instruction": self._lang_instruction,
             }
+
+            # Re-echo on retry so the constraint survives context drift.
+            revision_repair_hints = [
+                "REMINDER — Valid entity IDs for `entity_updates[].entity_id` "
+                f"(use ONLY these — raw IDs, no scope prefix):\n{valid_entity_ids}",
+            ]
 
             output, llm_calls, tokens = await self._fill_llm_call(
                 model,
@@ -1986,6 +2017,7 @@ class FillStage:
                 context,
                 FillPhase1Output,
                 creative=True,
+                extra_repair_hints=revision_repair_hints,
             )
 
             if output.passage.prose:
