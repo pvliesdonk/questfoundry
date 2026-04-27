@@ -2034,13 +2034,12 @@ class TestSizeProfileInjectedIntoBeatPrompts:
         assert "1-2" in rendered_shared
         assert "{size_shared_beats_per_dilemma}" not in rendered_shared
 
-    def test_default_profile_uses_medium_range(self) -> None:
-        """Without explicit size_profile, medium preset (2-4) is used for post-commit beats."""
+    def test_default_profile_uses_medium_range_for_per_path_beats(self) -> None:
+        """Without explicit size_profile, medium preset (2-3) is used for per-path post-commit beats."""
         from questfoundry.pipeline.size import size_template_vars
 
         size_vars = size_template_vars(None)
-        # legacy key, still emitted by size_template_vars
-        assert size_vars["size_beats_per_path"] == "2-4"
+        assert size_vars["size_post_commit_beats_per_path"] == "2-3"
 
 
 class TestDilemmasPromptStructure:
