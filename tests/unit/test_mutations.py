@@ -1372,6 +1372,67 @@ class TestBrainstormMutationError:
         assert "phantom8" not in feedback  # 9th error hidden
         assert "... and 4 more errors" in feedback
 
+    def test_to_feedback_inlines_valid_entity_ids_when_available(self) -> None:
+        """When errors carry `available` IDs, retry feedback inlines them.
+
+        Per @prompt-engineer Rule 5, the small model on retry has lost the system prompt
+        context, so the bottom-line hint must list the authoritative entity IDs
+        rather than the generic "use entity_id values from the entities list".
+        """
+        errors = [
+            BrainstormValidationError(
+                field_path="dilemmas.0.central_entity_ids",
+                issue="Entity 'phantom' not in entities list",
+                available=["character::kay", "character::mentor", "location::archive"],
+                provided="phantom",
+            ),
+        ]
+        error = BrainstormMutationError(errors)
+        feedback = error.to_feedback()
+
+        assert "Valid entity_id values:" in feedback
+        assert "`character::kay`" in feedback
+        assert "`character::mentor`" in feedback
+        assert "`location::archive`" in feedback
+        # Generic fallback hint must not appear when we have a real list.
+        assert "Use entity_id values from the entities list." not in feedback
+
+    def test_to_feedback_truncates_long_id_list_with_count(self) -> None:
+        """When >15 valid IDs are available, feedback shows 15 with a count suffix."""
+        long_available = [f"character::npc_{i:02d}" for i in range(20)]
+        errors = [
+            BrainstormValidationError(
+                field_path="dilemmas.0.central_entity_ids",
+                issue="Entity 'phantom' not in entities list",
+                available=long_available,
+                provided="phantom",
+            ),
+        ]
+        error = BrainstormMutationError(errors)
+        feedback = error.to_feedback()
+
+        assert "showing 15 of 20" in feedback
+        # First 15 (sorted alphabetically) should be present; last 5 should not.
+        assert "`character::npc_00`" in feedback
+        assert "`character::npc_14`" in feedback
+        assert "`character::npc_19`" not in feedback
+
+    def test_to_feedback_falls_back_when_no_available_ids(self) -> None:
+        """No `available` IDs anywhere → keep the generic hint, don't emit empty list."""
+        errors = [
+            BrainstormValidationError(
+                field_path="dilemmas.0.answers",
+                issue="Duplicate answer_id 'yes' appears 2 times",
+                available=[],
+                provided="yes",
+            ),
+        ]
+        error = BrainstormMutationError(errors)
+        feedback = error.to_feedback()
+
+        assert "Use entity_id values from the entities list." in feedback
+        assert "Valid entity_id values:" not in feedback
+
 
 class TestSeedMutations:
     """Test SEED stage mutations."""

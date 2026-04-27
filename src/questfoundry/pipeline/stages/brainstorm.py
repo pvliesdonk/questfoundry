@@ -3,8 +3,9 @@
 The BRAINSTORM stage generates raw creative material: entities (characters,
 locations, objects, factions) and dilemmas (binary dramatic questions).
 
-Uses the LangChain-native 3-phase pattern:
-Discuss → Summarize → Serialize.
+Uses the LangChain-native 3-phase pattern: Discuss → Summarize → Serialize.
+Serialize itself runs as two LLM passes (entities first, then dilemmas with the
+entities' IDs injected as `### Valid Entity IDs`) per @prompt-engineer Rule 1.
 
 Requires DREAM stage to have completed (reads vision from graph).
 """
@@ -17,8 +18,10 @@ from typing import TYPE_CHECKING, Any
 from langchain_core.messages import AIMessage
 
 from questfoundry.agents import (
+    format_brainstorm_valid_entity_ids,
     get_brainstorm_discuss_prompt,
-    get_brainstorm_serialize_prompt,
+    get_brainstorm_serialize_dilemmas_prompt,
+    get_brainstorm_serialize_entities_prompt,
     get_brainstorm_summarize_prompt,
     run_discuss_phase,
     serialize_to_artifact,
@@ -29,9 +32,14 @@ from questfoundry.graph import Graph
 from questfoundry.graph.dream_validation import validate_dream_output
 from questfoundry.graph.mutations import (
     BrainstormMutationError,
+    BrainstormValidationError,
     validate_brainstorm_mutations,
 )
-from questfoundry.models import BrainstormOutput
+from questfoundry.models import (
+    BrainstormDilemmasOutput,
+    BrainstormEntitiesOutput,
+    BrainstormOutput,
+)
 from questfoundry.observability.logging import get_logger
 from questfoundry.observability.tracing import get_current_run_tree, traceable
 from questfoundry.tools.langchain_tools import (
@@ -42,6 +50,8 @@ from questfoundry.tools.langchain_tools import (
 log = get_logger(__name__)
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from langchain_core.callbacks import BaseCallbackHandler
     from langchain_core.language_models import BaseChatModel
 
@@ -114,6 +124,46 @@ def _format_vision_context(vision_node: dict[str, Any]) -> str:
     return "\n".join(parts) if parts else "No creative vision available."
 
 
+def _validate_brainstorm_entities_only(
+    output: dict[str, Any],
+) -> list[BrainstormValidationError]:
+    """Run BRAINSTORM cross-validator scoped to entities-only output.
+
+    Pass 1 of the two-pass serialize emits ``{"entities": [...]}``. The shared
+    cross-validator expects the full ``{"entities": [...], "dilemmas": [...]}``
+    shape, so we feed it an empty ``dilemmas`` list and discard any errors that
+    target the missing dilemma side. Entity-internal checks (R-2.1 / R-2.3 /
+    R-2.4 / duplicate IDs) still run, with their feedback going back to the
+    pass-1 retry loop where the model can actually fix them.
+    """
+    payload = {"entities": output.get("entities", []), "dilemmas": []}
+    errors = validate_brainstorm_mutations(payload)
+    return [e for e in errors if not e.field_path.startswith("dilemmas")]
+
+
+def _make_brainstorm_dilemmas_validator(
+    entities_dump: list[dict[str, Any]],
+) -> Callable[[dict[str, Any]], list[BrainstormValidationError]]:
+    """Build a semantic validator for pass 2 of the BRAINSTORM serialize.
+
+    The returned callable merges the pass-1 entities into pass-2's dilemmas-only
+    output, runs the shared cross-validator (so central_entity_ids → entities
+    cross-references are checked), and filters out entity-internal errors —
+    those would point at fields the dilemmas-pass model cannot edit on retry,
+    contaminating the repair feedback per @prompt-engineer Rule 5.
+    """
+
+    def _validator(output: dict[str, Any]) -> list[BrainstormValidationError]:
+        merged = {
+            "entities": entities_dump,
+            "dilemmas": output.get("dilemmas", []),
+        }
+        errors = validate_brainstorm_mutations(merged)
+        return [e for e in errors if not e.field_path.startswith("entities")]
+
+    return _validator
+
+
 class BrainstormStage:
     """BRAINSTORM stage - generate entities and dilemmas.
 
@@ -124,7 +174,9 @@ class BrainstormStage:
     Uses the LangChain-native 3-phase pattern:
     - Discuss: Brainstorm entities and dilemmas with research tools
     - Summarize: Condense discussion into structured summary
-    - Serialize: Convert to BrainstormOutput artifact
+    - Serialize: Two-pass — pass 1 emits entities, pass 2 emits dilemmas with
+      pass-1 entity IDs injected as `### Valid Entity IDs`, then results merge
+      into a single BrainstormOutput artifact
 
     Attributes:
         name: Stage identifier ("brainstorm").
@@ -312,24 +364,73 @@ class BrainstormStage:
         if unload_after_summarize is not None:
             await unload_after_summarize()
 
-        # Phase 3: Serialize (use serialize_model if provided)
-        log.debug("brainstorm_phase", phase="serialize")
-        serialize_prompt = get_brainstorm_serialize_prompt(
+        # Phase 3: Serialize — two-pass to inject Valid Entity IDs into the
+        # dilemmas pass per @prompt-engineer Rule 1 (Valid ID Injection). Pass 1
+        # produces entities only; pass 2 produces dilemmas with the entity IDs
+        # from pass 1 rendered into a `### Valid Entity IDs` section, so the
+        # model cannot invent phantom entity references in central_entity_ids.
+        chosen_serialize_model = serialize_model or model
+        chosen_serialize_provider = serialize_provider_name or provider_name
+
+        # Phase 3a: Entities pass
+        log.debug("brainstorm_phase", phase="serialize_entities")
+        entities_prompt = get_brainstorm_serialize_entities_prompt(
             output_language_instruction=lang_instruction,
         )
-        artifact, serialize_tokens = await serialize_to_artifact(
-            model=serialize_model or model,
+        entities_artifact, entities_tokens = await serialize_to_artifact(
+            model=chosen_serialize_model,
             brief=brief,
-            schema=BrainstormOutput,
-            provider_name=serialize_provider_name or provider_name,
-            system_prompt=serialize_prompt,
+            schema=BrainstormEntitiesOutput,
+            provider_name=chosen_serialize_provider,
+            system_prompt=entities_prompt,
             callbacks=callbacks,
-            semantic_validator=validate_brainstorm_mutations,
+            semantic_validator=_validate_brainstorm_entities_only,
             semantic_error_class=BrainstormMutationError,
             stage="brainstorm",
         )
         total_llm_calls += 1
-        total_tokens += serialize_tokens
+        total_tokens += entities_tokens
+
+        entities_dump = [e.model_dump() for e in entities_artifact.entities]
+        if on_phase_progress is not None:
+            on_phase_progress("serialize entities", "completed", f"{len(entities_dump)} entities")
+        valid_entity_ids_block = format_brainstorm_valid_entity_ids(entities_dump)
+
+        # Phase 3b: Dilemmas pass — semantic validator merges pass-1 entities
+        # so cross-validation (central_entity_ids → entities) runs against the
+        # full output, with retry feedback constrained to dilemma-side errors.
+        log.debug("brainstorm_phase", phase="serialize_dilemmas")
+        dilemmas_prompt = get_brainstorm_serialize_dilemmas_prompt(
+            valid_entity_ids=valid_entity_ids_block,
+            output_language_instruction=lang_instruction,
+        )
+        dilemmas_validator = _make_brainstorm_dilemmas_validator(entities_dump)
+        dilemmas_artifact, dilemmas_tokens = await serialize_to_artifact(
+            model=chosen_serialize_model,
+            brief=brief,
+            schema=BrainstormDilemmasOutput,
+            provider_name=chosen_serialize_provider,
+            system_prompt=dilemmas_prompt,
+            callbacks=callbacks,
+            semantic_validator=dilemmas_validator,
+            semantic_error_class=BrainstormMutationError,
+            stage="brainstorm",
+        )
+        total_llm_calls += 1
+        total_tokens += dilemmas_tokens
+
+        if on_phase_progress is not None:
+            on_phase_progress(
+                "serialize dilemmas",
+                "completed",
+                f"{len(dilemmas_artifact.dilemmas)} dilemmas",
+            )
+
+        # Merge into the unified BrainstormOutput artifact for downstream stages.
+        artifact = BrainstormOutput(
+            entities=entities_artifact.entities,
+            dilemmas=dilemmas_artifact.dilemmas,
+        )
 
         # Convert to dict for return
         artifact_data = artifact.model_dump()
@@ -337,9 +438,6 @@ class BrainstormStage:
         # Log summary statistics
         entity_count = len(artifact_data.get("entities", []))
         dilemma_count = len(artifact_data.get("dilemmas", []))
-        if on_phase_progress is not None:
-            on_phase_progress("serialize entities", "completed", f"{entity_count} entities")
-            on_phase_progress("serialize dilemmas", "completed", f"{dilemma_count} dilemmas")
 
         log.info(
             "brainstorm_stage_completed",

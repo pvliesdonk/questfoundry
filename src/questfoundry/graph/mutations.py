@@ -45,6 +45,7 @@ log = get_logger(__name__)
 # Display limits for error messages
 _MAX_ERRORS_DISPLAY = 8
 _MAX_AVAILABLE_DISPLAY = 5
+_MAX_AVAILABLE_INLINE = 15  # Cap for the inline "Valid entity_id values: ..." retry hint
 _MAX_SIMILARITY_SUGGESTIONS = 3  # Max ranked suggestions in "Did you mean?" output
 
 # Similarity thresholds for ID suggestions.
@@ -230,7 +231,25 @@ class BrainstormMutationError(MutationError):
                 lines.append(f"    {suggestion}")
         if len(self.errors) > _MAX_ERRORS_DISPLAY:
             lines.append(f"  ... and {len(self.errors) - _MAX_ERRORS_DISPLAY} more errors")
-        lines.append("Use entity_id values from the entities list.")
+        # Per @prompt-engineer Rule 5, retry feedback must be self-contained — the small
+        # model does not re-read the system prompt on retry. Inline the known-
+        # valid entity IDs collected from each cross-reference error so the
+        # repair attempt has the authoritative list at hand.
+        all_available: set[str] = set()
+        for e in self.errors:
+            all_available.update(e.available)
+        if all_available:
+            sorted_ids = sorted(all_available)
+            shown = sorted_ids[:_MAX_AVAILABLE_INLINE]
+            formatted = ", ".join(f"`{i}`" for i in shown)
+            suffix = (
+                ""
+                if len(sorted_ids) <= _MAX_AVAILABLE_INLINE
+                else f" (showing {_MAX_AVAILABLE_INLINE} of {len(sorted_ids)})"
+            )
+            lines.append(f"Valid entity_id values{suffix}: {formatted}")
+        else:
+            lines.append("Use entity_id values from the entities list.")
         return "\n".join(lines)
 
     def to_feedback(self) -> str:

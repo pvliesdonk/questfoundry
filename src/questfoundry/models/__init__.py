@@ -16,6 +16,8 @@ Terminology (v5):
 
 from questfoundry.models.brainstorm import (
     Answer,
+    BrainstormDilemmasOutput,
+    BrainstormEntitiesOutput,
     BrainstormOutput,
     Dilemma,
     Entity,
@@ -161,6 +163,8 @@ __all__ = [
     "BatchedCodexItem",
     "BatchedCodexOutput",
     "BatchedExpandOutput",
+    "BrainstormDilemmasOutput",
+    "BrainstormEntitiesOutput",
     "BrainstormOutput",
     "CharacterArcMetadata",
     "Choice",

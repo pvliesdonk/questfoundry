@@ -361,25 +361,97 @@ def get_seed_section_summarize_prompts(
     }
 
 
-def get_brainstorm_serialize_prompt(
+def format_brainstorm_valid_entity_ids(entities: list[Any]) -> str:
+    """Format brainstorm entity IDs as the `### Valid Entity IDs` block body.
+
+    Pass-2 of the BRAINSTORM serialize flow needs an authoritative list of the
+    entity IDs produced in pass 1 (per @prompt-engineer Rule 1 — Valid ID
+    Injection). This helper renders that block grouped by entity_category, so
+    the small model on retry sees the available IDs without re-reading the
+    pass-1 brief.
+
+    Args:
+        entities: List of Entity Pydantic instances from pass 1, OR plain dicts
+            with `entity_id` and `entity_category` keys (e.g., from
+            ``BrainstormEntitiesOutput.model_dump()``).
+
+    Returns:
+        Markdown body for the ``### Valid Entity IDs`` template slot. Each
+        category present is listed on its own line with backticked IDs. If the
+        input list is empty, returns an explicit ``"(none)"`` marker so the
+        injected block never reads as silently truncated.
+    """
+    by_category: dict[str, list[str]] = {}
+    for entity in entities:
+        if isinstance(entity, dict):
+            entity_id = entity.get("entity_id")
+            category = entity.get("entity_category")
+        else:
+            entity_id = getattr(entity, "entity_id", None)
+            category = getattr(entity, "entity_category", None)
+        if not entity_id or not category:
+            continue
+        by_category.setdefault(str(category), []).append(str(entity_id))
+
+    if not by_category:
+        return "(none)"
+
+    label_for = {
+        "character": "Characters",
+        "location": "Locations",
+        "object": "Objects",
+        "faction": "Factions",
+    }
+    lines: list[str] = []
+    # Stable order — known categories first, then any unexpected ones alphabetically.
+    ordered_keys = [k for k in ("character", "location", "object", "faction") if k in by_category]
+    ordered_keys += sorted(k for k in by_category if k not in label_for)
+    for key in ordered_keys:
+        ids = sorted(set(by_category[key]))
+        formatted = ", ".join(f"`{i}`" for i in ids)
+        lines.append(f"- **{label_for.get(key, key.title())}**: {formatted}")
+    return "\n".join(lines)
+
+
+def get_brainstorm_serialize_entities_prompt(
     output_language_instruction: str = "",
 ) -> str:
-    """Build the BRAINSTORM serialize prompt.
-
-    This prompt includes explicit instructions for mapping prose categories
-    (Characters, Locations, Objects, Factions) to Entity objects with the
-    correct type field.
+    """Build the BRAINSTORM serialize **entities** prompt (pass 1 of 2).
 
     Args:
         output_language_instruction: Language instruction for non-English output.
 
     Returns:
-        System prompt string for the BRAINSTORM serialize call.
+        System prompt string for the entities-only serialize call.
     """
     loader = _get_loader()
-    template = loader.load("serialize_brainstorm")
+    template = loader.load("serialize_brainstorm_entities")
     prompt = PromptTemplate.from_template(template.system)
     return prompt.format(output_language_instruction=output_language_instruction)
+
+
+def get_brainstorm_serialize_dilemmas_prompt(
+    valid_entity_ids: str,
+    output_language_instruction: str = "",
+) -> str:
+    """Build the BRAINSTORM serialize **dilemmas** prompt (pass 2 of 2).
+
+    Args:
+        valid_entity_ids: Pre-formatted body for the ``### Valid Entity IDs``
+            section. Build with :func:`format_brainstorm_valid_entity_ids`.
+        output_language_instruction: Language instruction for non-English output.
+
+    Returns:
+        System prompt string for the dilemmas-only serialize call, with the
+        valid entity IDs injected.
+    """
+    loader = _get_loader()
+    template = loader.load("serialize_brainstorm_dilemmas")
+    prompt = PromptTemplate.from_template(template.system)
+    return prompt.format(
+        valid_entity_ids=valid_entity_ids,
+        output_language_instruction=output_language_instruction,
+    )
 
 
 def get_seed_serialize_prompt(
