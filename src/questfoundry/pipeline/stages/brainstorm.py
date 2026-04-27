@@ -124,6 +124,15 @@ def _format_vision_context(vision_node: dict[str, Any]) -> str:
     return "\n".join(parts) if parts else "No creative vision available."
 
 
+# Invariant: every error returned by ``validate_brainstorm_mutations`` carries a
+# ``field_path`` that begins with either ``"entities"`` or ``"dilemmas"``. The
+# two helpers below rely on that prefix to route errors back to the pass that
+# produced the offending field. If a future cross-validator rule introduces an
+# error path that does NOT begin with one of those tokens (e.g. a top-level
+# ``""`` schema error, or a rule that touches both sides), it would leak into
+# the wrong retry loop here. Update the validator AND both filters in lockstep.
+
+
 def _validate_brainstorm_entities_only(
     output: dict[str, Any],
 ) -> list[BrainstormValidationError]:
@@ -132,9 +141,10 @@ def _validate_brainstorm_entities_only(
     Pass 1 of the two-pass serialize emits ``{"entities": [...]}``. The shared
     cross-validator expects the full ``{"entities": [...], "dilemmas": [...]}``
     shape, so we feed it an empty ``dilemmas`` list and discard any errors that
-    target the missing dilemma side. Entity-internal checks (R-2.1 / R-2.3 /
-    R-2.4 / duplicate IDs) still run, with their feedback going back to the
-    pass-1 retry loop where the model can actually fix them.
+    target the missing dilemma side (relying on the prefix invariant documented
+    above). Entity-internal checks (R-2.1 / R-2.3 / R-2.4 / duplicate IDs)
+    still run, with their feedback going back to the pass-1 retry loop where
+    the model can actually fix them.
     """
     payload = {"entities": output.get("entities", []), "dilemmas": []}
     errors = validate_brainstorm_mutations(payload)
@@ -148,9 +158,10 @@ def _make_brainstorm_dilemmas_validator(
 
     The returned callable merges the pass-1 entities into pass-2's dilemmas-only
     output, runs the shared cross-validator (so central_entity_ids → entities
-    cross-references are checked), and filters out entity-internal errors —
-    those would point at fields the dilemmas-pass model cannot edit on retry,
-    contaminating the repair feedback per @prompt-engineer Rule 5.
+    cross-references are checked), and filters out entity-internal errors via
+    the prefix invariant documented above — those would point at fields the
+    dilemmas-pass model cannot edit on retry, contaminating the repair feedback
+    per @prompt-engineer Rule 5.
     """
 
     def _validator(output: dict[str, Any]) -> list[BrainstormValidationError]:

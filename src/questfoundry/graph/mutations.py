@@ -44,8 +44,12 @@ log = get_logger(__name__)
 
 # Display limits for error messages
 _MAX_ERRORS_DISPLAY = 8
-_MAX_AVAILABLE_DISPLAY = 5
-_MAX_AVAILABLE_INLINE = 15  # Cap for the inline "Valid entity_id values: ..." retry hint
+# Cap for the per-error "available IDs" line that follows each formatted error.
+_MAX_PER_ERROR_AVAILABLE = 5
+# Cap for the bottom-line "Valid entity_id values: ..." retry hint that
+# aggregates IDs across all errors. Larger because it summarizes the whole
+# set, not just one error's neighbors.
+_MAX_AGGREGATE_AVAILABLE = 15
 _MAX_SIMILARITY_SUGGESTIONS = 3  # Max ranked suggestions in "Did you mean?" output
 
 # Similarity thresholds for ID suggestions.
@@ -122,8 +126,8 @@ def _format_available_with_suggestions(invalid_id: str, available: list[str]) ->
         return "\n".join(lines)
 
     # Low confidence: sorted list only (most similar first)
-    display = [sid for sid, _ in sorted_ids[:_MAX_AVAILABLE_DISPLAY]]
-    suffix = "..." if len(available) > _MAX_AVAILABLE_DISPLAY else ""
+    display = [sid for sid, _ in sorted_ids[:_MAX_PER_ERROR_AVAILABLE]]
+    suffix = "..." if len(available) > _MAX_PER_ERROR_AVAILABLE else ""
     return f"Available IDs (most similar first): {', '.join(display)}{suffix}"
 
 
@@ -149,8 +153,8 @@ def _format_error_available(provided: str, available: list[str]) -> str | None:
             return suggestion
 
     # Fallback for errors without provided value
-    avail = available[:_MAX_AVAILABLE_DISPLAY]
-    suffix = "..." if len(available) > _MAX_AVAILABLE_DISPLAY else ""
+    avail = available[:_MAX_PER_ERROR_AVAILABLE]
+    suffix = "..." if len(available) > _MAX_PER_ERROR_AVAILABLE else ""
     return f"Available: {', '.join(avail)}{suffix}"
 
 
@@ -240,12 +244,12 @@ class BrainstormMutationError(MutationError):
             all_available.update(e.available)
         if all_available:
             sorted_ids = sorted(all_available)
-            shown = sorted_ids[:_MAX_AVAILABLE_INLINE]
+            shown = sorted_ids[:_MAX_AGGREGATE_AVAILABLE]
             formatted = ", ".join(f"`{i}`" for i in shown)
             suffix = (
                 ""
-                if len(sorted_ids) <= _MAX_AVAILABLE_INLINE
-                else f" (showing {_MAX_AVAILABLE_INLINE} of {len(sorted_ids)})"
+                if len(sorted_ids) <= _MAX_AGGREGATE_AVAILABLE
+                else f" (showing {_MAX_AGGREGATE_AVAILABLE} of {len(sorted_ids)})"
             )
             lines.append(f"Valid entity_id values{suffix}: {formatted}")
         else:
@@ -639,6 +643,14 @@ def validate_brainstorm_mutations(output: dict[str, Any]) -> list[BrainstormVali
     3. All central_entity_ids in dilemmas exist in entities list
     4. All answer IDs within a dilemma are unique
     5. Each dilemma has exactly one is_canonical=true answer
+
+    Field-path invariant (LOAD-BEARING — do not break):
+        Every emitted error's ``field_path`` MUST start with either
+        ``"entities"`` or ``"dilemmas"``. The two-pass serialize wrappers in
+        ``pipeline/stages/brainstorm.py`` route errors back to the pass that
+        produced the offending field by checking that prefix. Any new rule
+        that adds an error at a global path (e.g. ``""``) would silently leak
+        into the wrong retry loop and corrupt repair feedback.
 
     Args:
         output: BRAINSTORM stage output (entities, dilemmas).

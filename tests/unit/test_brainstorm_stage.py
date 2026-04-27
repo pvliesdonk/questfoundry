@@ -553,6 +553,40 @@ def test_format_brainstorm_valid_entity_ids_handles_empty() -> None:
     assert format_brainstorm_valid_entity_ids([]) == "(none)"
 
 
+def test_format_brainstorm_valid_entity_ids_skips_malformed_entries() -> None:
+    """Entries missing entity_id or entity_category are skipped, not included."""
+    from questfoundry.agents.prompts import format_brainstorm_valid_entity_ids
+
+    block = format_brainstorm_valid_entity_ids(
+        [
+            {"entity_id": "character::kay", "entity_category": "character"},
+            {"entity_id": "", "entity_category": "character"},  # empty id
+            {"entity_id": "location::archive"},  # missing category
+            {"entity_category": "object"},  # missing id
+        ]
+    )
+    assert "`character::kay`" in block
+    assert "location::archive" not in block
+    # Only one well-formed entity was provided, so only one bullet should appear.
+    assert block.count("- **") == 1
+
+
+def test_format_brainstorm_valid_entity_ids_includes_unknown_categories_alphabetically() -> None:
+    """Unrecognised categories sort alphabetically AFTER the known set."""
+    from questfoundry.agents.prompts import format_brainstorm_valid_entity_ids
+
+    block = format_brainstorm_valid_entity_ids(
+        [
+            {"entity_id": "character::kay", "entity_category": "character"},
+            {"entity_id": "zzz::late", "entity_category": "zzz"},
+            {"entity_id": "aaa::early", "entity_category": "aaa"},
+        ]
+    )
+    # Known category appears first; unknowns sort alphabetically among themselves.
+    assert block.index("Characters") < block.index("Aaa")
+    assert block.index("Aaa") < block.index("Zzz")
+
+
 def test_serialize_dilemmas_prompt_injects_valid_entity_ids() -> None:
     """Pass-2 prompt has the formatted valid_entity_ids body in its body."""
     from questfoundry.agents.prompts import get_brainstorm_serialize_dilemmas_prompt
@@ -587,6 +621,12 @@ def test_entities_only_validator_filters_dilemma_errors() -> None:
         _validate_brainstorm_entities_only,
     )
 
+    # Fixture deliberately violates two entity-side rules so we can confirm
+    # both fire on pass 1. Two locations are present (R-2.4 satisfied), but
+    # the duplicate `character::kay` triggers the duplicate-ID rule. The
+    # behavior under test is "entity-side errors fire and dilemma-side
+    # errors don't" — not which specific entity-side rule fires, so we only
+    # assert on the duplicate-ID error below.
     output = {
         "entities": [
             {
@@ -595,14 +635,19 @@ def test_entities_only_validator_filters_dilemma_errors() -> None:
                 "name": "Kay",
                 "concept": "c",
             },
-            # R-2.4 needs >=2 location entities — only one location here.
             {
                 "entity_id": "location::archive",
                 "entity_category": "location",
                 "name": "Archive",
                 "concept": "c",
             },
-            # Duplicate of the first — R-2.x will complain.
+            {
+                "entity_id": "location::manor",
+                "entity_category": "location",
+                "name": "Manor",
+                "concept": "c",
+            },
+            # Duplicate of the first — entity-internal duplicate-ID rule fires.
             {
                 "entity_id": "character::kay",
                 "entity_category": "character",

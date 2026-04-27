@@ -361,7 +361,7 @@ def get_seed_section_summarize_prompts(
     }
 
 
-def format_brainstorm_valid_entity_ids(entities: list[Any]) -> str:
+def format_brainstorm_valid_entity_ids(entities: list[dict[str, Any]]) -> str:
     """Format brainstorm entity IDs as the `### Valid Entity IDs` block body.
 
     Pass-2 of the BRAINSTORM serialize flow needs an authoritative list of the
@@ -371,24 +371,21 @@ def format_brainstorm_valid_entity_ids(entities: list[Any]) -> str:
     pass-1 brief.
 
     Args:
-        entities: List of Entity Pydantic instances from pass 1, OR plain dicts
-            with `entity_id` and `entity_category` keys (e.g., from
-            ``BrainstormEntitiesOutput.model_dump()``).
+        entities: Plain dicts with `entity_id` and `entity_category` keys —
+            typically from ``BrainstormEntitiesOutput.model_dump()``.
 
     Returns:
         Markdown body for the ``### Valid Entity IDs`` template slot. Each
-        category present is listed on its own line with backticked IDs. If the
-        input list is empty, returns an explicit ``"(none)"`` marker so the
-        injected block never reads as silently truncated.
+        category present is listed on its own line with backticked IDs.
+        BRAINSTORM pass-1 schema requires `min_length=1`, so the empty case is
+        unreachable in production — but if it ever fires, returns the explicit
+        ``"(none)"`` marker so the injected block never reads as silently
+        truncated.
     """
     by_category: dict[str, list[str]] = {}
     for entity in entities:
-        if isinstance(entity, dict):
-            entity_id = entity.get("entity_id")
-            category = entity.get("entity_category")
-        else:
-            entity_id = getattr(entity, "entity_id", None)
-            category = getattr(entity, "entity_category", None)
+        entity_id = entity.get("entity_id")
+        category = entity.get("entity_category")
         if not entity_id or not category:
             continue
         by_category.setdefault(str(category), []).append(str(entity_id))
