@@ -347,19 +347,19 @@ def test_R_5_2_state_flag_name_action_phrased_forbidden(compliant_graph: Graph) 
 
 
 # --------------------------------------------------------------------------
-# Phase 7 — convergence metadata
+# Phase 6 — convergence metadata
 # --------------------------------------------------------------------------
 
 
-def test_R_7_3_hard_dilemma_has_null_convergence(compliant_graph: Graph) -> None:
-    """R-7.3: hard dilemmas have converges_at null."""
+def test_R_6_3_hard_dilemma_has_null_convergence(compliant_graph: Graph) -> None:
+    """GROW R-6.3: hard dilemmas must have converges_at null."""
     compliant_graph.update_node(
         "dilemma::mentor_trust",
         dilemma_role="hard",
         converges_at="beat::post_protector_02",
     )
     errors = validate_grow_output(compliant_graph)
-    assert any("R-7.3" in e or ("hard" in e.lower() and "converges_at" in e) for e in errors), (
+    assert any("R-6.3" in e or ("hard" in e.lower() and "converges_at" in e) for e in errors), (
         f"expected hard-dilemma null-converges_at error, got {errors}"
     )
 
