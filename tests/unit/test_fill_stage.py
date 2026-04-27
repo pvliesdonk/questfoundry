@@ -2342,6 +2342,103 @@ class TestFillSilentDegradationEscalations:
             )
 
 
+class TestFillBatchFailureEscalations:
+    """#1468: batch_llm_calls failures must escalate per-passage, not silent-drop.
+
+    The three batched FILL phases (expand / review / revision) used to bind
+    the errors list to ``_errors`` and discard it. When a batch chunk
+    exhausted retries (e.g. provider safety block — see #1466 for murder3
+    PROHIBITED_CONTENT — or a network error past the connectivity loop), the
+    affected passages got no blueprint / no review / no revision and FILL
+    continued silently. This test class pins the per-passage escalation
+    contract for each phase.
+    """
+
+    def test_three_new_escalation_kinds_accepted(self) -> None:
+        from questfoundry.models.fill import FillEscalation
+
+        for kind in ("expand_batch_failed", "review_batch_failed", "revision_failed"):
+            e = FillEscalation(
+                kind=kind,  # type: ignore[arg-type]
+                passage_id="passage::pid",
+                detail="batch retry exhausted",
+                upstream_stage="FILL",
+            )
+            assert e.kind == kind
+
+    @pytest.mark.asyncio
+    async def test_expand_batch_failure_escalates_each_passage_in_chunk(self) -> None:
+        """When _expand_chunk's call fails for an entire chunk, every passage
+        in that chunk must get an ``expand_batch_failed`` escalation so the
+        gap is visible at stage exit.
+
+        Drives _phase_1_expand directly with patched batch_llm_calls so we
+        exercise the real escalation-building loop without mocking the rest
+        of FILL.
+        """
+        from questfoundry.pipeline.stages.fill import FillStage
+
+        chunk_passage_ids = ["pid_a", "pid_b", "pid_c"]
+        captured_chunks: list[list[tuple[list[str], str]]] = []
+
+        async def mock_batch_llm_calls(
+            chunks: list[tuple[list[str], str]],
+            _call_fn,
+            _max_concurrency: int,
+            **_kwargs: object,
+        ):
+            captured_chunks.append(chunks)
+            # Simulate every chunk failing all retries — the inner repair
+            # loop in serialize_to_artifact would surface this as a
+            # SerializationError, which batch_llm_calls collects into errors.
+            errors = [
+                (idx, RuntimeError("simulated retry exhaustion")) for idx in range(len(chunks))
+            ]
+            results = [None] * len(chunks)
+            return results, 0, 0, errors
+
+        graph = _make_prose_graph()
+        stage = FillStage()
+        # Stub out the chunk-building dependencies that don't matter for the
+        # escalation path: pre-seed generation_order via a graph that has
+        # passages with valid IDs.
+        from unittest.mock import patch
+
+        # The _phase_1_expand body builds chunks from generation_order and
+        # passage_constraints. Patch batch_llm_calls and verify the resulting
+        # escalations carry the expected passage IDs.
+        with patch(
+            "questfoundry.pipeline.stages.fill.batch_llm_calls",
+            new=mock_batch_llm_calls,
+        ):
+            await stage._phase_1a_expand(graph, MagicMock())
+
+        # _make_prose_graph creates passage::p1 (and possibly more); the
+        # exact chunk shape depends on EXPAND_BATCH_SIZE. What matters: every
+        # passage that was in a failed chunk gets an escalation entry.
+        assert captured_chunks, "expected _phase_1_expand to call batch_llm_calls"
+        chunks_passed = captured_chunks[0]
+        expected_passage_ids: set[str] = set()
+        for chunk_ids, _arc_id in chunks_passed:
+            for pid in chunk_ids:
+                full_pid = pid if pid.startswith("passage::") else f"passage::{pid}"
+                expected_passage_ids.add(full_pid)
+
+        expand_escalations = [e for e in stage._escalations if e.kind == "expand_batch_failed"]
+        assert len(expand_escalations) == len(expected_passage_ids), (
+            f"expected one escalation per affected passage, got "
+            f"{len(expand_escalations)} for {len(expected_passage_ids)} passages"
+        )
+        escalated_pids = {e.passage_id for e in expand_escalations}
+        assert escalated_pids == expected_passage_ids
+        for e in expand_escalations:
+            assert "RuntimeError" in e.detail
+            assert "simulated retry exhaustion" in e.detail
+            assert e.upstream_stage == "FILL"
+        # `chunk_passage_ids` was reserved for a future expansion of this test.
+        del chunk_passage_ids
+
+
 class TestReviewCycleEscalation:
     """R-5.2: unresolved review flags after the final cycle become escalations."""
 

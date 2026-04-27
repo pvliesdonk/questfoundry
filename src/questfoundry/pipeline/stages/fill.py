@@ -1305,12 +1305,40 @@ class FillStage:
 
             return [bp.model_dump() for bp in output.blueprints], llm_calls, tokens
 
-        results, total_llm_calls, total_tokens, _errors = await batch_llm_calls(
+        results, total_llm_calls, total_tokens, errors = await batch_llm_calls(
             chunks,
             _expand_chunk,
             self._max_concurrency,
             on_connectivity_error=self._on_connectivity_error,
         )
+
+        # Escalate per-passage when an entire chunk's retries exhausted
+        # (e.g. provider safety block, transient errors past the connectivity
+        # retry loop). Per `.gemini/styleguide.md` §4 "silent fallbacks that
+        # hide bugs": surface which passages have NO blueprint so the user
+        # sees the gap at stage exit instead of guessing from prose quality.
+        for idx, exc in errors:
+            chunk_ids, _arc_id = chunks[idx]
+            for affected_pid in chunk_ids:
+                full_pid = (
+                    affected_pid
+                    if affected_pid.startswith("passage::")
+                    else f"passage::{affected_pid}"
+                )
+                self._escalations.append(
+                    FillEscalation(
+                        kind="expand_batch_failed",
+                        passage_id=full_pid,
+                        detail=(
+                            f"fill_phase1_expand chunk failed after retries "
+                            f"({type(exc).__name__}: {exc}). Passage has no "
+                            "expand-phase blueprint; downstream Phase 1 prose "
+                            "will be generated without the blueprint context "
+                            "and may be lower quality."
+                        ),
+                        upstream_stage="FILL",
+                    )
+                )
 
         # Store blueprints on passage nodes
         blueprints_created = 0
@@ -1856,12 +1884,37 @@ class FillStage:
                 FillPhase2Output,
             )
 
-        results, total_llm_calls, total_tokens, _errors = await batch_llm_calls(
+        results, total_llm_calls, total_tokens, errors = await batch_llm_calls(
             batches,
             _review_batch,
             self._max_concurrency,
             on_connectivity_error=self._on_connectivity_error,
         )
+
+        # Per-passage escalation when a review batch's retries exhausted —
+        # those passages skip review entirely (no flags = looks identical to
+        # "passed review", which it isn't).
+        for idx, exc in errors:
+            for affected_pid in batches[idx]:
+                full_pid = (
+                    affected_pid
+                    if affected_pid.startswith("passage::")
+                    else f"passage::{affected_pid}"
+                )
+                self._escalations.append(
+                    FillEscalation(
+                        kind="review_batch_failed",
+                        passage_id=full_pid,
+                        detail=(
+                            f"fill_phase2_review batch failed after retries "
+                            f"({type(exc).__name__}: {exc}). Passage was not "
+                            "reviewed for prose-quality issues — any "
+                            "flat_prose / blueprint_bleed / continuity issues "
+                            "will not be flagged for revision."
+                        ),
+                        upstream_stage="FILL",
+                    )
+                )
 
         for output in results:
             if output is None:
@@ -2034,12 +2087,30 @@ class FillStage:
                 tokens,
             )
 
-        results, total_llm_calls, total_tokens, _errors = await batch_llm_calls(
+        results, total_llm_calls, total_tokens, errors = await batch_llm_calls(
             passage_items,
             _revise_passage,
             self._max_concurrency,
             on_connectivity_error=self._on_connectivity_error,
         )
+
+        # Per-passage escalation when a revision call's retries exhausted —
+        # the passage keeps its old (flagged-as-broken) prose with no fix.
+        for idx, exc in errors:
+            affected_pid, _flags = passage_items[idx]
+            self._escalations.append(
+                FillEscalation(
+                    kind="revision_failed",
+                    passage_id=affected_pid,
+                    detail=(
+                        f"fill_phase3_revision call failed after retries "
+                        f"({type(exc).__name__}: {exc}). Passage retains its "
+                        "original prose with the prior phase-2 review flags "
+                        "unaddressed."
+                    ),
+                    upstream_stage="FILL",
+                )
+            )
 
         # Apply results to graph (sequential — graph mutations not thread-safe)
         for item in results:
