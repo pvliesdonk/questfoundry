@@ -1204,6 +1204,23 @@ def _create_variant_passage(graph: Graph, vspec: VariantSpec) -> None:
     graph.add_edge("variant_of", vspec.variant_id, vspec.base_passage_id)
 
 
+def _residue_inherited_entities(graph: Graph, target_passage_id: str) -> list[str]:
+    """Return the entity IDs a residue should inherit from its target passage.
+
+    A residue passage / beat plays out narratively at the same dramatic moment
+    as its target — same cast on stage. FILL builds its `### Valid Entity IDs`
+    context from the passage's ``entities`` field, so a missing or empty list
+    on the residue forces the prose-call to invent IDs from the passage_id
+    text and produces phantom-ID escalations downstream (#1457).
+
+    Defensive against the target passage being absent (resilient to call-order
+    issues) or its ``entities`` field being None / missing — both degrade to
+    an empty list rather than raising.
+    """
+    target = graph.get_node(target_passage_id) or {}
+    return list(target.get("entities") or [])
+
+
 def _create_residue_beat_and_passage(graph: Graph, rspec: ResidueSpec) -> None:
     """Phase 6: materialize a residue spec into the passage layer.
 
@@ -1237,6 +1254,8 @@ def _apply_residue_with_variants(graph: Graph, rspec: ResidueSpec) -> None:
     beat_id = f"beat::residue_{residue_suffix}"
     residue_passage_id = f"passage::residue_{residue_suffix}"
 
+    inherited_entities = _residue_inherited_entities(graph, rspec.target_passage_id)
+
     # Create residue beat node
     graph.create_node(
         beat_id,
@@ -1247,7 +1266,7 @@ def _apply_residue_with_variants(graph: Graph, rspec: ResidueSpec) -> None:
             "role": "residue_beat",
             "scene_type": "sequel",
             "dilemma_impacts": [],
-            "entities": [],
+            "entities": list(inherited_entities),
             "created_by": "POLISH",
         },
     )
@@ -1267,6 +1286,7 @@ def _apply_residue_with_variants(graph: Graph, rspec: ResidueSpec) -> None:
             "is_residue": True,
             "residue_for": rspec.target_passage_id,
             "mapping_strategy": rspec.mapping_strategy,
+            "entities": list(inherited_entities),
         },
     )
 
@@ -1320,6 +1340,8 @@ def _apply_residue_parallel_passages(graph: Graph, rspec: ResidueSpec) -> None:
     beat_id = f"beat::residue_{residue_suffix}"
     residue_passage_id = f"passage::residue_{residue_suffix}"
 
+    inherited_entities = _residue_inherited_entities(graph, rspec.target_passage_id)
+
     # Create residue beat — same shape as the variants strategy.
     graph.create_node(
         beat_id,
@@ -1330,7 +1352,7 @@ def _apply_residue_parallel_passages(graph: Graph, rspec: ResidueSpec) -> None:
             "role": "residue_beat",
             "scene_type": "sequel",
             "dilemma_impacts": [],
-            "entities": [],
+            "entities": list(inherited_entities),
             "created_by": "POLISH",
         },
     )
@@ -1350,6 +1372,7 @@ def _apply_residue_parallel_passages(graph: Graph, rspec: ResidueSpec) -> None:
             "is_residue": True,
             "residue_for": rspec.target_passage_id,
             "mapping_strategy": rspec.mapping_strategy,
+            "entities": list(inherited_entities),
         },
     )
 
