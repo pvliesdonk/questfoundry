@@ -2039,10 +2039,7 @@ class TestSizeProfileInjectedIntoBeatPrompts:
         from questfoundry.pipeline.size import size_template_vars
 
         size_vars = size_template_vars(None)
-        # size_beats_per_path is still computed by size_template_vars (legacy
-        # template var key); production prompts now use the Y-shape per_path
-        # and shared variants. Kept here as a smoke test that the helper
-        # still emits the canonical "2-4" range under the medium default.
+        # legacy key, still emitted by size_template_vars
         assert size_vars["size_beats_per_path"] == "2-4"
 
 

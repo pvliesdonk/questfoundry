@@ -1359,8 +1359,8 @@ async def _serialize_shared_beats_per_dilemma(
 
 
 # Maps SeedOutput field_path prefixes to section names used in serialization.
-# Note: "initial_beats" → "beats" because the section config uses "beats" as the
-# section_name while SeedOutput uses "initial_beats" as the field name.
+# Note: "initial_beats" → "beats" because the retry router uses "beats" as
+# the routing label while SeedOutput uses "initial_beats" as the field name.
 _FIELD_PATH_TO_SECTION = {
     "entities": "entities",
     "dilemmas": "dilemmas",
@@ -1832,14 +1832,10 @@ async def serialize_seed_as_function(
 
     prompts = dict(_load_seed_section_prompts())  # Copy — cached original is immutable
 
-    # Inject size-aware beat count ranges into beat prompts
+    # Inject size-aware beat count ranges into the Y-shape beat prompts
     size_vars = size_template_vars(size_profile)
-    beats_range = size_vars["size_beats_per_path"]
     shared_range = size_vars["size_shared_beats_per_dilemma"]
     post_range = size_vars["size_post_commit_beats_per_path"]
-    for key in ("beats",):
-        if key in prompts:
-            prompts[key] = prompts[key].replace("{size_beats_per_path}", beats_range)
     if "shared_beats" in prompts:
         prompts["shared_beats"] = prompts["shared_beats"].replace(
             "{size_shared_beats_per_dilemma}", shared_range
