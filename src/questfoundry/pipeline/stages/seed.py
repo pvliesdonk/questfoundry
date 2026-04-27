@@ -15,6 +15,7 @@ Requires BRAINSTORM stage to have completed (reads brainstorm from graph).
 from __future__ import annotations
 
 import inspect
+from collections import Counter
 from pathlib import Path  # noqa: TC003 - used at runtime for Graph.load()
 from typing import TYPE_CHECKING, Any
 
@@ -601,33 +602,42 @@ def _log_beat_summary_stats(artifact_data: dict[str, Any]) -> None:
     """Advisory warnings about Y-shape beat counts.
 
     Under Y-shape, beats come in two kinds:
-    - Shared pre-commit beats (``also_belongs_to`` set) — one per dilemma.
+    - Shared pre-commit beats (``also_belongs_to`` set) — only multi-path
+      dilemmas need them; they form the chain that diverges into per-path
+      commit beats. Single-path soft dilemmas (locked-dilemma shadow) have
+      no Y-divergence and need no shared beat.
     - Post-commit beats (``also_belongs_to`` null) — one per path, including
       the commit and its consequences.
 
-    A healthy SEED output has ~1-2 shared beats per dilemma and ~2-3
-    post-commit beats per path. Warn below these thresholds.
+    A healthy SEED output has ~1-2 shared beats per *multi-path* dilemma
+    and ~2-3 post-commit beats per path. Warn below these thresholds.
     """
     beats = artifact_data.get("initial_beats", [])
-    dilemma_count = len(artifact_data.get("dilemmas", []))
-    path_count = len(artifact_data.get("paths", []))
+    paths = artifact_data.get("paths", [])
+    path_count = len(paths)
+
+    # Multi-path dilemmas are the only ones that need shared pre-commit beats
+    # — single-path soft dilemmas have no Y-divergence to set up.
+    paths_per_dilemma = Counter(p.get("dilemma_id") for p in paths if p.get("dilemma_id"))
+    multi_path_dilemmas = sum(1 for n in paths_per_dilemma.values() if n >= 2)
 
     shared = [b for b in beats if b.get("also_belongs_to")]
     post_commit = [b for b in beats if not b.get("also_belongs_to")]
 
-    shared_avg = (len(shared) / dilemma_count) if dilemma_count else 0.0
+    shared_avg = (len(shared) / multi_path_dilemmas) if multi_path_dilemmas else 0.0
     post_avg = (len(post_commit) / path_count) if path_count else 0.0
 
-    if shared_avg < 1.0 and dilemma_count > 0:
+    if multi_path_dilemmas > 0 and shared_avg < 1.0:
         log.warning(
             "seed_low_shared_beat_count",
             shared_beats=len(shared),
-            dilemmas=dilemma_count,
+            multi_path_dilemmas=multi_path_dilemmas,
             shared_avg=round(shared_avg, 2),
             message=(
-                f"{shared_avg:.1f} shared pre-commit beats/dilemma "
-                f"(expected ≥1). Every dilemma should set up the choice "
-                f"with at least one shared beat before the commit."
+                f"{shared_avg:.1f} shared pre-commit beats per multi-path "
+                f"dilemma (expected ≥1). Every multi-path dilemma should "
+                f"set up the choice with at least one shared beat before "
+                f"the commit. Single-path soft dilemmas are excluded."
             ),
         )
     if post_avg < 2.0 and path_count > 0:

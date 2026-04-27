@@ -1140,15 +1140,16 @@ def test_seed_advisory_warning_splits_shared_vs_post_commit(caplog) -> None:
     from questfoundry.pipeline.stages.seed import _log_beat_summary_stats
 
     # 2 dilemmas x 2 paths = 4 paths, 2 shared beats per dilemma, 2 post
-    # per path. Expected: shared_avg=2.0 per dilemma, post_avg=2.0 per path.
+    # per path. Expected: shared_avg=2.0 per multi-path dilemma, post_avg=
+    # 2.0 per path.
     artifact_data = {
         "entities": [],
         "dilemmas": [{"dilemma_id": "d_a"}, {"dilemma_id": "d_b"}],
         "paths": [
-            {"path_id": "p_a1"},
-            {"path_id": "p_a2"},
-            {"path_id": "p_b1"},
-            {"path_id": "p_b2"},
+            {"path_id": "p_a1", "dilemma_id": "d_a"},
+            {"path_id": "p_a2", "dilemma_id": "d_a"},
+            {"path_id": "p_b1", "dilemma_id": "d_b"},
+            {"path_id": "p_b2", "dilemma_id": "d_b"},
         ],
         "initial_beats": [
             {
@@ -1197,10 +1198,130 @@ def test_seed_advisory_warning_splits_shared_vs_post_commit(caplog) -> None:
         "Expected advisory warning for low post-commit beat count"
     )
 
-    # shared_avg = 4 shared beats / 2 dilemmas = 2.0 → above threshold (< 1.0)
+    # shared_avg = 4 shared beats / 2 multi-path dilemmas = 2.0 → above threshold (< 1.0)
     assert not any("seed_low_shared_beat_count" in r.message for r in caplog.records), (
         "Did not expect advisory warning for shared beat count"
     )
 
     # No errors should be raised
     assert not any(r.levelno >= logging.ERROR for r in caplog.records)
+
+
+def test_seed_advisory_no_shared_warning_when_some_dilemmas_single_path(caplog) -> None:
+    """No false positive when only some dilemmas are multi-path (locked-dilemma shadow).
+
+    Regression coverage for #1454. Reproduces the user-reported case:
+    5 dilemmas total, 2 fully explored (multi-path) and 3 left as single-path
+    soft (locked-dilemma shadow). 4 shared pre-commit beats live on the 2
+    multi-path dilemmas. Old code divided by total dilemma count
+    (4/5=0.8) and warned; new code divides by multi-path-dilemma count
+    (4/2=2.0) and stays silent.
+    """
+    import logging
+
+    from questfoundry.pipeline.stages.seed import _log_beat_summary_stats
+
+    artifact_data = {
+        "entities": [],
+        "dilemmas": [{"dilemma_id": f"d_{i}"} for i in range(5)],
+        "paths": [
+            # d_0 multi-path
+            {"path_id": "p_0a", "dilemma_id": "d_0"},
+            {"path_id": "p_0b", "dilemma_id": "d_0"},
+            # d_1 multi-path
+            {"path_id": "p_1a", "dilemma_id": "d_1"},
+            {"path_id": "p_1b", "dilemma_id": "d_1"},
+            # d_2, d_3, d_4 single-path (locked-dilemma shadow)
+            {"path_id": "p_2a", "dilemma_id": "d_2"},
+            {"path_id": "p_3a", "dilemma_id": "d_3"},
+            {"path_id": "p_4a", "dilemma_id": "d_4"},
+        ],
+        "initial_beats": [
+            # 2 shared beats on each multi-path dilemma — 4 total.
+            {"beat_id": "s_0_1", "path_id": "p_0a", "also_belongs_to": "p_0b"},
+            {"beat_id": "s_0_2", "path_id": "p_0a", "also_belongs_to": "p_0b"},
+            {"beat_id": "s_1_1", "path_id": "p_1a", "also_belongs_to": "p_1b"},
+            {"beat_id": "s_1_2", "path_id": "p_1a", "also_belongs_to": "p_1b"},
+            # ≥2 post-commit beats per path so the post warning doesn't fire.
+            *(
+                {"beat_id": f"pc_{i}", "path_id": p_id}
+                for i, p_id in enumerate(
+                    [
+                        "p_0a",
+                        "p_0a",
+                        "p_0b",
+                        "p_0b",
+                        "p_1a",
+                        "p_1a",
+                        "p_1b",
+                        "p_1b",
+                        "p_2a",
+                        "p_2a",
+                        "p_3a",
+                        "p_3a",
+                        "p_4a",
+                        "p_4a",
+                    ]
+                )
+            ),
+        ],
+    }
+
+    with caplog.at_level(logging.WARNING):
+        _log_beat_summary_stats(artifact_data)
+
+    assert not any("seed_low_shared_beat_count" in r.message for r in caplog.records), (
+        "Did not expect shared-beat warning when 4 shared beats span "
+        "the 2 multi-path dilemmas (4/2=2.0 ≥ 1)."
+    )
+    assert not any("seed_low_post_commit_beat_count" in r.message for r in caplog.records), (
+        "Did not expect post-commit warning (2 post-commit beats per path)."
+    )
+
+
+def test_seed_advisory_warns_when_multi_path_dilemma_lacks_shared_beat(caplog) -> None:
+    """Warning DOES fire when a multi-path dilemma has no shared pre-commit beat."""
+    import logging
+
+    from questfoundry.pipeline.stages.seed import _log_beat_summary_stats
+
+    artifact_data = {
+        "entities": [],
+        "dilemmas": [{"dilemma_id": "d_a"}, {"dilemma_id": "d_b"}],
+        "paths": [
+            {"path_id": "p_a1", "dilemma_id": "d_a"},
+            {"path_id": "p_a2", "dilemma_id": "d_a"},
+            {"path_id": "p_b1", "dilemma_id": "d_b"},
+            {"path_id": "p_b2", "dilemma_id": "d_b"},
+        ],
+        "initial_beats": [
+            # Only one shared beat across both multi-path dilemmas → 1/2 = 0.5 < 1.0.
+            {"beat_id": "s_only", "path_id": "p_a1", "also_belongs_to": "p_a2"},
+            # Plenty of post-commit so we isolate the shared warning.
+            *(
+                {"beat_id": f"pc_{i}", "path_id": p_id}
+                for i, p_id in enumerate(
+                    ["p_a1", "p_a1", "p_a2", "p_a2", "p_b1", "p_b1", "p_b2", "p_b2"]
+                )
+            ),
+        ],
+    }
+
+    with caplog.at_level(logging.WARNING):
+        _log_beat_summary_stats(artifact_data)
+
+    # Pull the structured event dict — structlog passes kwargs via record.msg
+    # as a dict — and assert on the actual values, not just the event name.
+    matching = [
+        r.msg
+        for r in caplog.records
+        if isinstance(r.msg, dict) and r.msg.get("event") == "seed_low_shared_beat_count"
+    ]
+    assert len(matching) == 1, (
+        "Expected exactly one shared-beat warning when 1 shared beat covers "
+        f"2 multi-path dilemmas, got {len(matching)}."
+    )
+    event = matching[0]
+    assert event["shared_beats"] == 1
+    assert event["multi_path_dilemmas"] == 2
+    assert event["shared_avg"] == 0.5
