@@ -14,6 +14,12 @@ system: |
   ## Transitions
   {transitions_context}
 
+  ## Valid IDs
+  Use ONLY these `transition_id` strings — invented or paraphrased IDs are
+  rejected. Each ID corresponds to one transition above.
+
+  {transition_ids}
+
   ## Story Context
   Genre: {genre}
   Tone: {tone}
@@ -45,7 +51,8 @@ user: |
 
   REMINDER: Return ONLY a valid JSON object with a "bridges" array.
   REMINDER: Each bridge must reference entities or locations from BOTH sides of the transition.
-  REMINDER: Use the exact transition_id strings provided in the Transitions section.
+  REMINDER: Use the exact transition_id strings from the Valid IDs section.
   REMINDER: Bridges are atmospheric only — do NOT commit a character to any dilemma choice.
+  {transition_feedback}
 
 components: []

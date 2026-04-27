@@ -721,3 +721,32 @@ class TestPhaseTransitionGaps:
         )
         # Only the original two beat nodes should exist
         assert set(beat_nodes.keys()) == {"beat::aq_beat", "beat::mt_beat"}
+
+    @pytest.mark.asyncio
+    async def test_transition_gaps_context_has_valid_ids_and_feedback_slot(self) -> None:
+        """Phase 4g context MUST inject ``transition_ids`` (Valid IDs section
+        per CLAUDE.md §6) and ``transition_feedback`` (repair-loop slot,
+        defaults to empty string) — #1478. Pin both keys in the context dict
+        passed to ``_grow_llm_call`` so future template work can trust the
+        slots exist."""
+        graph = _make_cross_dilemma_hard_transition_graph()
+        stage = _make_grow_stage_instance()
+        mock_model = MagicMock()
+
+        captured: dict[str, object] = {}
+
+        async def _capture_call(*, context: dict[str, object], **_kwargs: object) -> tuple:
+            captured.update(context)
+            return TransitionGapsOutput(bridges=[]), 1, 10
+
+        with patch.object(stage, "_grow_llm_call", new=AsyncMock(side_effect=_capture_call)):
+            await stage._phase_transition_gaps(graph, mock_model)
+
+        # Valid IDs section: backtick-wrapped transition_id from the seam.
+        assert "transition_ids" in captured
+        transition_ids_block = captured["transition_ids"]
+        assert isinstance(transition_ids_block, str)
+        assert "`beat::aq_beat|beat::mt_beat`" in transition_ids_block
+
+        # Repair-loop slot exists and defaults to empty string for first call.
+        assert captured.get("transition_feedback") == ""
