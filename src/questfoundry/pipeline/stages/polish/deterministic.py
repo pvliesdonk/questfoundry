@@ -1213,15 +1213,26 @@ def _residue_inherited_entities(graph: Graph, target_passage_id: str) -> list[st
     on the residue forces the prose-call to invent IDs from the passage_id
     text and produces phantom-ID escalations downstream (#1457).
 
-    Defensive against the target passage being absent (resilient to call-order
-    issues) or its ``entities`` field being None / missing — both degrade to
-    an empty list rather than raising. The explicit ``is None`` check guards
-    the missing-target case; ``or []`` on the inner lookup handles a present
-    target with no entities or a None value.
+    A target passage that doesn't exist is a structural failure: phase 6's
+    application order (R-6.2) creates target passages before residues, so
+    this can only happen if Phase 4-5 produced a plan that violates that
+    order or someone called this helper out-of-band. Raise rather than
+    fall back to ``[]`` — silently inheriting an empty entity list is the
+    exact failure mode that produced #1457 in the first place. (Per
+    ``.gemini/styleguide.md`` anti-pattern: silent fallbacks that hide
+    bugs prefer explicit errors.)
+
+    The inner ``or []`` on ``target.get("entities")`` handles a *present*
+    target whose entities field is missing or explicitly ``None`` — that's
+    a legitimate empty case (e.g. setup beats before any cast is on stage).
     """
     target = graph.get_node(target_passage_id)
     if target is None:
-        return []
+        raise ValueError(
+            f"R-6.5: residue target passage {target_passage_id!r} not found in graph. "
+            "Phase 6 application order (R-6.2) requires target passages to be created "
+            "before residues."
+        )
     return list(target.get("entities") or [])
 
 
