@@ -498,7 +498,7 @@ async def phase_divergence(graph: Graph, model: BaseChatModel) -> GrowPhaseResul
 
 @grow_phase(name="convergence", depends_on=["divergence"], is_deterministic=True, priority=11)
 async def phase_convergence(graph: Graph, model: BaseChatModel) -> GrowPhaseResult:  # noqa: ARG001
-    """Phase 7: Identify and persist convergence points for soft dilemmas.
+    """Phase 6: Identify and persist convergence points for soft dilemmas.
 
     For each soft dilemma with 2+ explored paths, walks the interleaved beat
     DAG to find the first beat reachable from all terminal exclusive beats.
@@ -513,7 +513,10 @@ async def phase_convergence(graph: Graph, model: BaseChatModel) -> GrowPhaseResu
     - Dilemma nodes have dilemma_role from SEED analysis.
 
     Postconditions:
-    - Soft dilemma nodes have ``converges_at`` and ``convergence_payoff`` set.
+    - Two-path soft dilemma nodes have ``converges_at`` and
+      ``convergence_payoff`` set.
+    - Single-path soft dilemma nodes have both fields null per
+      GROW R-6.4 single-path scope (locked-dilemma shadow pattern).
     - Hard dilemma nodes are unchanged.
 
     Invariants:

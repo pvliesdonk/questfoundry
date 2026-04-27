@@ -87,7 +87,7 @@ def _check_convergence_and_ordering_exit(graph: Graph, errors: list[str]) -> Non
     for _path_id, pdata in path_nodes.items():
         raw_did = pdata.get("dilemma_id", "")
         if raw_did:
-            scoped = raw_did if raw_did.startswith("dilemma::") else f"dilemma::{raw_did}"
+            scoped = normalize_scoped_id(raw_did, "dilemma")
             dilemma_paths_count[scoped] = dilemma_paths_count.get(scoped, 0) + 1
 
     for dilemma_id, dilemma in sorted(dilemma_nodes.items()):
