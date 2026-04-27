@@ -446,15 +446,15 @@ async def phase_enumerate_arcs(
     )
 
 
-# --- Phase 6: Divergence ---
+# --- Phase 7: Divergence (Arc Validation helper) ---
 
 
 @grow_phase(name="divergence", depends_on=["enumerate_arcs"], is_deterministic=True, priority=10)
 async def phase_divergence(graph: Graph, model: BaseChatModel) -> GrowPhaseResult:  # noqa: ARG001
-    """Phase 6: Compute divergence points between arcs (validation only).
+    """Phase 7: Compute divergence points between arcs (Arc Validation helper).
 
     Preconditions:
-    - Arc enumeration complete (Phase 5).
+    - Arc enumeration complete (prior step in Phase 7).
     - At least one spine arc exists for reference.
 
     Postconditions:
@@ -634,7 +634,7 @@ async def phase_state_flags(graph: Graph, model: BaseChatModel) -> GrowPhaseResu
     """Phase 8b: Create state flag nodes from consequences.
 
     Preconditions:
-    - Beat collapse complete (Phase 7b).
+    - Beat collapse / interleaving complete.
     - Consequence nodes exist with path_id associations.
     - has_consequence edges link paths to consequences.
 
