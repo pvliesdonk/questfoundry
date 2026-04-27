@@ -1760,6 +1760,66 @@ class TestPhase2Codex:
         assert len(codex_nodes) == 1
 
     @pytest.mark.asyncio()
+    async def test_state_flag_list_uses_prefixed_form(self) -> None:
+        """The ``state_flags`` context key injected into the codex prompt MUST
+        list IDs with the ``state_flag::`` prefix so the LLM mirrors that
+        form back in ``visible_when`` (#1473). The validator strip-prefixes
+        for comparison so the unprefixed form was tolerated, but emitting the
+        prefixed form prevents small-model drift between this list and the
+        per-entity ``Related State Flags`` block."""
+        g = Graph()
+        g.create_node(
+            "entity::e0",
+            {"type": "entity", "raw_id": "e0", "entity_type": "character"},
+        )
+        g.create_node(
+            "state_flag::met_aldric",
+            {
+                "type": "state_flag",
+                "raw_id": "met_aldric",
+                "trigger": "Player has met Aldric",
+            },
+        )
+
+        captured_contexts: list[dict[str, Any]] = []
+
+        async def _mock_llm_call(
+            _model: Any,
+            _template: str,
+            _context: dict[str, Any],
+            _schema: type,
+            **_kwargs: Any,
+        ) -> tuple:
+            captured_contexts.append(_context)
+            if _template == "dress_codex_spoiler_check":
+                return (SpoilerCheckResult(has_leak=False, leaks=[], reason=""), 1, 25)
+            return (
+                BatchedCodexOutput(
+                    entities=[
+                        BatchedCodexItem(
+                            entity_id="entity::e0",
+                            entries=[
+                                CodexEntry(title="E0", rank=1, visible_when=[], content="Info.")
+                            ],
+                        )
+                    ]
+                ),
+                1,
+                100,
+            )
+
+        stage = DressStage()
+        with patch.object(stage, "_dress_llm_call", side_effect=_mock_llm_call):
+            await stage._phase_2_codex(g, MagicMock())
+
+        batch_contexts = [c for c in captured_contexts if "entities_batch" in c]
+        assert batch_contexts, "expected at least one codex_batch call"
+        sf_block = batch_contexts[0]["state_flags"]
+        assert "state_flag::met_aldric" in sf_block
+        # And the unprefixed form is NOT what we emit as the leading ID:
+        assert "- `met_aldric`" not in sf_block
+
+    @pytest.mark.asyncio()
     async def test_logs_validation_warnings(self) -> None:
         """Codex validation warnings are logged but don't fail the phase."""
         g = Graph()
