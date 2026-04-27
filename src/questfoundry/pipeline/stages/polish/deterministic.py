@@ -1189,7 +1189,8 @@ def _create_passage_node(graph: Graph, spec: PassageSpec) -> None:
 
 
 def _create_variant_passage(graph: Graph, vspec: VariantSpec) -> None:
-    """Create a variant passage node with variant_of edge to base."""
+    """Create a variant passage node with variant_of edge to base, inheriting entities (R-6.5)."""
+    inherited_entities = _inherited_passage_entities(graph, vspec.base_passage_id)
     graph.create_node(
         vspec.variant_id,
         {
@@ -1198,42 +1199,45 @@ def _create_variant_passage(graph: Graph, vspec: VariantSpec) -> None:
             "summary": vspec.summary,
             "requires": vspec.requires,
             "is_variant": True,
+            "entities": inherited_entities,
         },
     )
 
     graph.add_edge("variant_of", vspec.variant_id, vspec.base_passage_id)
 
 
-def _residue_inherited_entities(graph: Graph, target_passage_id: str) -> list[str]:
-    """Return the entity IDs a residue should inherit from its target passage.
+def _inherited_passage_entities(graph: Graph, source_passage_id: str) -> list[str]:
+    """Return the entity IDs a synthesized passage should inherit from its source.
 
-    A residue passage / beat plays out narratively at the same dramatic moment
-    as its target — same cast on stage. FILL builds its `### Valid Entity IDs`
-    context from the passage's ``entities`` field, so a missing or empty list
-    on the residue forces the prose-call to invent IDs from the passage_id
-    text and produces phantom-ID escalations downstream (#1457).
+    Residue passages / beats and variant passages all play out narratively at
+    the same dramatic moment as a base passage — same cast on stage. FILL
+    builds its `### Valid Entity IDs` context from the passage's ``entities``
+    field, so a missing or empty list on the synthesized node forces the
+    prose-call to invent IDs from the passage_id text and produces phantom-ID
+    escalations downstream (#1457 for residues, #1459 for variants).
 
-    A target passage that doesn't exist is a structural failure: phase 6's
-    application order (R-6.2) creates target passages before residues, so
-    this can only happen if Phase 4-5 produced a plan that violates that
-    order or someone called this helper out-of-band. Raise rather than
-    fall back to ``[]`` — silently inheriting an empty entity list is the
-    exact failure mode that produced #1457 in the first place. (Per
-    ``.gemini/styleguide.md`` anti-pattern: silent fallbacks that hide
+    A source passage that doesn't exist is a structural failure: Phase 6's
+    application order (R-6.2) creates base passages before variants and
+    residues, so this can only happen if Phase 4-5 produced a plan that
+    violates that order or someone called this helper out-of-band. Raise
+    rather than fall back to ``[]`` — silently inheriting an empty entity
+    list is the exact failure mode that produced #1457 in the first place.
+    (Per ``.gemini/styleguide.md`` anti-pattern: silent fallbacks that hide
     bugs prefer explicit errors.)
 
-    The inner ``or []`` on ``target.get("entities")`` handles a *present*
-    target whose entities field is missing or explicitly ``None`` — that's
+    The inner ``or []`` on ``source.get("entities")`` handles a *present*
+    source whose entities field is missing or explicitly ``None`` — that's
     a legitimate empty case (e.g. setup beats before any cast is on stage).
     """
-    target = graph.get_node(target_passage_id)
-    if target is None:
+    source = graph.get_node(source_passage_id)
+    if source is None:
         raise ValueError(
-            f"R-6.5: residue target passage {target_passage_id!r} not found in graph. "
-            "Phase 6 application order (R-6.2) requires target passages to be created "
-            "before residues."
+            f"R-6.5: source passage {source_passage_id!r} not found in graph. "
+            "Phase 6 application order (R-6.2) requires source passages "
+            "(residue targets and variant bases) to be created before "
+            "their dependent residue / variant nodes."
         )
-    return list(target.get("entities") or [])
+    return list(source.get("entities") or [])
 
 
 def _create_residue_beat_and_passage(graph: Graph, rspec: ResidueSpec) -> None:
@@ -1269,7 +1273,7 @@ def _apply_residue_with_variants(graph: Graph, rspec: ResidueSpec) -> None:
     beat_id = f"beat::residue_{residue_suffix}"
     residue_passage_id = f"passage::residue_{residue_suffix}"
 
-    inherited_entities = _residue_inherited_entities(graph, rspec.target_passage_id)
+    inherited_entities = _inherited_passage_entities(graph, rspec.target_passage_id)
 
     # Create residue beat node
     graph.create_node(
@@ -1355,7 +1359,7 @@ def _apply_residue_parallel_passages(graph: Graph, rspec: ResidueSpec) -> None:
     beat_id = f"beat::residue_{residue_suffix}"
     residue_passage_id = f"passage::residue_{residue_suffix}"
 
-    inherited_entities = _residue_inherited_entities(graph, rspec.target_passage_id)
+    inherited_entities = _inherited_passage_entities(graph, rspec.target_passage_id)
 
     # Create residue beat — same shape as the variants strategy.
     graph.create_node(

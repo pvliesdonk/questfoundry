@@ -526,7 +526,12 @@ R-6.3. Any step failure rolls back the transaction. No graph mutations are commi
 
 R-6.4. Phase 6 creates new beat nodes only for residue beats and false-branch beats — never new narrative beats.
 
-R-6.5. Residue passages and their companion residue beats inherit the `entities` field from their target passage (the passage referenced by `residue_for`). The residue plays out at the same dramatic moment as its target — same cast on stage. FILL builds its `### Valid Entity IDs` prompt context from `passage["entities"]`; an empty or missing list there forces phantom-ID emissions in the prose call. Both `residue_passage_with_variants` and `parallel_passages` mapping strategies must apply this inheritance.
+R-6.5. Synthesized passages inherit the `entities` field from their source passage on the beat layer. This applies to:
+
+- **Residue passages** and their companion **residue beats** — inherit from the passage referenced by `residue_for`. Both `residue_passage_with_variants` and `parallel_passages` mapping strategies must apply the inheritance.
+- **Variant passages** — inherit from the passage referenced by `variant_of` (the base passage).
+
+The synthesized node plays out at the same dramatic moment as its source — same cast on stage. FILL builds its `### Valid Entity IDs` prompt context from `passage["entities"]`; an empty or missing list there forces phantom-ID emissions in the prose call (the model invents short IDs from the passage_id text). A missing source passage is a structural failure (R-6.2 application order guarantees the source exists first) and must raise rather than silently fall back to an empty list.
 
 **Violations:**
 
@@ -536,6 +541,8 @@ R-6.5. Residue passages and their companion residue beats inherit the `entities`
 | Phase 6 creates a commit beat | Narrative-beat creation forbidden post-SEED | R-6.4 |
 | Phase 6 mutates an existing `belongs_to` edge | Should only add passage-layer and structural-beat nodes | R-6.4 |
 | Residue passage emits phantom entity IDs (e.g. `clara` instead of `character::clara_yu`) at FILL | Residue created with empty `entities` instead of inheriting from target | R-6.5 |
+| Variant passage emits phantom entity IDs at FILL | Variant created with empty `entities` instead of inheriting from base | R-6.5 |
+| Synthesized passage created against a missing source — empty `entities` propagated silently | R-6.2 application order violated; helper used silent fallback `[]` instead of raising | R-6.5 |
 
 ### Output Contract
 
