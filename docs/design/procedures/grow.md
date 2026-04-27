@@ -445,7 +445,7 @@ R-6.2. `convergence_payoff` is the minimum count of path-exclusive beats (includ
 
 R-6.3. Hard Dilemmas have `converges_at: null` and `convergence_payoff: null`. Paths never rejoin.
 
-R-6.4. If a soft Dilemma **with two explored paths** has no structural convergence beat (e.g., paths lead to different endings), this is a classification error — the Dilemma should be hard. Halt with error identifying the Dilemma. The two-path scope matches the Operations header above: single-path soft Dilemmas are not processed by Phase 6 and are not subject to R-6.4. Single-path soft is a legitimate "flavor" pattern (per SEED Phase 2 R-2.2 — non-canonical Answers may be `shadow`); such a Dilemma keeps `dilemma_role: soft` but `converges_at` and `convergence_payoff` stay null because there is no second path to converge with.
+R-6.4. If a soft Dilemma **with two explored paths** has no structural convergence beat (e.g., paths lead to different endings), this is a classification error — the Dilemma should be hard. Halt with error identifying the Dilemma. The two-path scope matches the Operations header above: single-path soft Dilemmas are not processed by Phase 6 and are not subject to R-6.4. Single-path soft is a legitimate **locked-dilemma shadow** pattern (per SEED Phase 2 R-2.2 — non-canonical Answers may be `shadow`; see `how-branching-stories-work.md` §Common Language for the term); such a Dilemma keeps `dilemma_role: soft` but `converges_at` and `convergence_payoff` stay null because there is no second path to converge with. (Note: a Dilemma where SEED Phase 4 R-4.4 convergence-failure loop-back triggered drops the non-canonical path and is "effectively hard"; SEED Phase 7 should reclassify it to `dilemma_role: hard` before GROW runs, so it never reaches Phase 6 as single-path soft.)
 
 **Violations:**
 
@@ -702,7 +702,7 @@ R-8.4: Path-member beats that are unreachable are structural bugs, not pruning t
 | 3 | Hint cycles slip through (`interleave_cycle_skipped`) | Phase 4a detection | Halt — Phase 3 invariant violated |
 | 4c | Transition drafting LLM fails | LLM timeout/error | Retry once; if still failing, insert placeholder transition beat and log WARNING |
 | 6 | Soft dilemma with TWO explored paths has no convergence beat | R-6.4 check | Halt — classification error in SEED |
-| 6 | Single-path soft Dilemma reaches Phase 6 | R-6.4 single-path scope | Skip — legitimate "flavor" pattern; `converges_at`/`convergence_payoff` stay null |
+| 6 | Single-path soft Dilemma reaches Phase 6 | R-6.4 single-path scope | Skip — legitimate locked-dilemma shadow pattern; `converges_at`/`convergence_payoff` stay null |
 | 7 | Arc has dead end | Reachability check | Re-run Phase 2 (intersection) or abort to SEED |
 
 ## Context Management
