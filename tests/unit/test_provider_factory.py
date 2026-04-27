@@ -323,6 +323,71 @@ def test_create_chat_model_google_top_p() -> None:
     assert call_kwargs["top_p"] == 0.9
 
 
+def test_create_chat_model_google_default_safety_settings_blocks_none() -> None:
+    """Google default safety_settings unblocks all 5 harm categories (#1464).
+
+    Gemini's defaults (BLOCK_MEDIUM_AND_ABOVE) reject genre-typical content
+    for QuestFoundry's mystery / noir / horror / thriller use cases. The
+    factory injects BLOCK_NONE across the board so creative-fiction prose
+    isn't blocked by chatbot-tuned safety thresholds.
+    """
+    from langchain_google_genai import HarmBlockThreshold, HarmCategory
+
+    mock_chat = MagicMock()
+    with (
+        patch.dict("os.environ", {"GOOGLE_API_KEY": "test-key"}),
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            return_value=mock_chat,
+        ) as mock_init,
+    ):
+        create_chat_model("google", "gemini-2.5-flash")
+
+    safety_settings = mock_init.call_args[1]["safety_settings"]
+    expected_categories = {
+        HarmCategory.HARM_CATEGORY_HARASSMENT,
+        HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+        HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+        HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY,
+    }
+    assert set(safety_settings.keys()) == expected_categories
+    assert all(threshold == HarmBlockThreshold.BLOCK_NONE for threshold in safety_settings.values())
+
+
+def test_create_chat_model_google_safety_settings_override_preserved() -> None:
+    """Caller-supplied safety_settings is not overwritten by the default."""
+    from langchain_google_genai import HarmBlockThreshold, HarmCategory
+
+    custom = {HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_LOW_AND_ABOVE}
+    mock_chat = MagicMock()
+    with (
+        patch.dict("os.environ", {"GOOGLE_API_KEY": "test-key"}),
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            return_value=mock_chat,
+        ) as mock_init,
+    ):
+        create_chat_model("google", "gemini-2.5-flash", safety_settings=custom)
+
+    assert mock_init.call_args[1]["safety_settings"] is custom
+
+
+def test_create_chat_model_google_safety_settings_skipped_for_other_providers() -> None:
+    """safety_settings default applies only to Google; other providers untouched."""
+    mock_chat = MagicMock()
+    with (
+        patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"}),
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            return_value=mock_chat,
+        ) as mock_init,
+    ):
+        create_chat_model("openai", "gpt-5-mini")
+
+    assert "safety_settings" not in mock_init.call_args[1]
+
+
 def test_create_chat_model_case_insensitive() -> None:
     """Factory handles uppercase provider names."""
     mock_chat = MagicMock()

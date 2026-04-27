@@ -209,7 +209,35 @@ def _preprocess_provider_kwargs(
             )
         kwargs["api_key"] = api_key
 
+        # Apply default safety_settings unless caller already supplied one (#1464).
+        # Gemini's defaults (BLOCK_MEDIUM_AND_ABOVE) reject genre-typical content
+        # for QuestFoundry's mystery / noir / horror / thriller use cases — see
+        # projects/murder3 PROHIBITED_CONTENT block on fill_phase1_expand for a
+        # blackmail-ledger / undercover-journalist passage batch. QuestFoundry
+        # users explicitly opt into a creative-writing pipeline; the safety
+        # filter is a chatbot-deployment concern, not an authoring concern.
+        if "safety_settings" not in kwargs:
+            kwargs["safety_settings"] = _default_google_safety_settings()
+
     return kwargs
+
+
+def _default_google_safety_settings() -> dict[Any, Any]:
+    """Return the default ``safety_settings`` dict for the Google provider.
+
+    Maps the five user-facing harm categories to ``BLOCK_NONE``. Imported
+    lazily so the factory doesn't require ``langchain-google-genai`` at
+    module load time — only when a Google model is actually requested.
+    """
+    from langchain_google_genai import HarmBlockThreshold, HarmCategory
+
+    return {
+        HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+        HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+        HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+        HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY: HarmBlockThreshold.BLOCK_NONE,
+    }
 
 
 def _map_provider_for_init(provider: str) -> str:
