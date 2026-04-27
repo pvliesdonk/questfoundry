@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import FrozenInstanceError
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -321,6 +322,128 @@ def test_create_chat_model_google_top_p() -> None:
 
     call_kwargs = mock_init.call_args[1]
     assert call_kwargs["top_p"] == 0.9
+
+
+def test_create_chat_model_google_default_safety_settings_blocks_none() -> None:
+    """Google default safety_settings unblocks all 5 harm categories (#1464).
+
+    Gemini's defaults (BLOCK_MEDIUM_AND_ABOVE) reject genre-typical content
+    for QuestFoundry's mystery / noir / horror / thriller use cases. The
+    factory injects BLOCK_NONE across the board so creative-fiction prose
+    isn't blocked by chatbot-tuned safety thresholds.
+    """
+    from langchain_google_genai import HarmBlockThreshold, HarmCategory
+
+    mock_chat = MagicMock()
+    with (
+        patch.dict("os.environ", {"GOOGLE_API_KEY": "test-key"}),
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            return_value=mock_chat,
+        ) as mock_init,
+    ):
+        create_chat_model("google", "gemini-2.5-flash")
+
+    safety_settings = mock_init.call_args[1]["safety_settings"]
+    expected_categories = {
+        HarmCategory.HARM_CATEGORY_HARASSMENT,
+        HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+        HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+        HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY,
+    }
+    assert set(safety_settings.keys()) == expected_categories
+    assert all(threshold == HarmBlockThreshold.BLOCK_NONE for threshold in safety_settings.values())
+
+
+def test_create_chat_model_google_safety_settings_override_preserved() -> None:
+    """Caller-supplied safety_settings is not overwritten by the default."""
+    from langchain_google_genai import HarmBlockThreshold, HarmCategory
+
+    custom = {HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_LOW_AND_ABOVE}
+    mock_chat = MagicMock()
+    with (
+        patch.dict("os.environ", {"GOOGLE_API_KEY": "test-key"}),
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            return_value=mock_chat,
+        ) as mock_init,
+    ):
+        create_chat_model("google", "gemini-2.5-flash", safety_settings=custom)
+
+    assert mock_init.call_args[1]["safety_settings"] is custom
+
+
+@pytest.mark.parametrize("falsy_override", [None, {}])
+def test_create_chat_model_google_safety_settings_falsy_falls_back_to_default(
+    falsy_override: Any,
+) -> None:
+    """``safety_settings=None`` and ``safety_settings={}`` both use our defaults.
+
+    Letting either pass through to ``ChatGoogleGenerativeAI`` would silently
+    re-enable Gemini's consumer-level thresholds — exactly the failure mode
+    this guard exists to prevent. ``not kwargs.get(...)`` treats both falsy
+    sentinels the same as absence.
+    """
+    from langchain_google_genai import HarmBlockThreshold, HarmCategory
+
+    mock_chat = MagicMock()
+    with (
+        patch.dict("os.environ", {"GOOGLE_API_KEY": "test-key"}),
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            return_value=mock_chat,
+        ) as mock_init,
+    ):
+        create_chat_model("google", "gemini-2.5-flash", safety_settings=falsy_override)
+
+    safety_settings = mock_init.call_args[1]["safety_settings"]
+    assert safety_settings is not None
+    assert HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT in safety_settings
+    assert all(threshold == HarmBlockThreshold.BLOCK_NONE for threshold in safety_settings.values())
+
+
+def test_create_chat_model_google_missing_package_still_raises_provider_error() -> None:
+    """If langchain-google-genai isn't installed, the centralised handler still wins.
+
+    The lazy import inside ``_default_google_safety_settings`` happens during
+    ``_preprocess_provider_kwargs`` — outside the ``try/except ImportError``
+    in ``create_chat_model``. A bare ``ImportError`` from the helper would
+    bypass the ``ProviderError`` handler and hide the user-friendly
+    "Run: uv add langchain-google-genai" message. The call site swallows the
+    ``ImportError`` so the existing handler around ``_init_chat_model_safe``
+    can report the missing package cleanly.
+    """
+    with (
+        patch.dict("os.environ", {"GOOGLE_API_KEY": "test-key"}),
+        patch(
+            "questfoundry.providers.factory._default_google_safety_settings",
+            side_effect=ImportError("No module named 'langchain_google_genai'"),
+        ),
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            side_effect=ImportError("No module named 'langchain_google_genai'"),
+        ),
+        pytest.raises(ProviderError) as exc_info,
+    ):
+        create_chat_model("google", "gemini-2.5-flash")
+
+    assert "langchain-google-genai not installed" in str(exc_info.value)
+
+
+def test_create_chat_model_google_safety_settings_skipped_for_other_providers() -> None:
+    """safety_settings default applies only to Google; other providers untouched."""
+    mock_chat = MagicMock()
+    with (
+        patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"}),
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            return_value=mock_chat,
+        ) as mock_init,
+    ):
+        create_chat_model("openai", "gpt-5-mini")
+
+    assert "safety_settings" not in mock_init.call_args[1]
 
 
 def test_create_chat_model_case_insensitive() -> None:

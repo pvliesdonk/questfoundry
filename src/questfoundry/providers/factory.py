@@ -209,7 +209,69 @@ def _preprocess_provider_kwargs(
             )
         kwargs["api_key"] = api_key
 
+        # Apply default safety_settings unless caller already supplied one (#1464).
+        # Gemini's defaults (BLOCK_MEDIUM_AND_ABOVE) reject genre-typical content
+        # for QuestFoundry's mystery / noir / horror / thriller use cases — see
+        # projects/murder3 PROHIBITED_CONTENT block on fill_phase1_expand for a
+        # blackmail-ledger / undercover-journalist passage batch. QuestFoundry
+        # users explicitly opt into a creative-writing pipeline; the safety
+        # filter is a chatbot-deployment concern, not an authoring concern.
+        # ``not kwargs.get(...)`` (rather than ``not in``) intentionally treats
+        # ``safety_settings=None`` and ``safety_settings={}`` as "use our
+        # defaults" too — silently letting None through would re-enable
+        # Gemini's consumer-level defaults, the exact failure this guards
+        # against.
+        if not kwargs.get("safety_settings"):
+            try:
+                kwargs["safety_settings"] = _default_google_safety_settings()
+            except ImportError:
+                # Defer to the centralised handler in ``create_chat_model``:
+                # a missing ``langchain-google-genai`` package surfaces as
+                # ``ProviderError`` with the ``uv add ...`` hint when
+                # ``_init_chat_model_safe`` runs. We only swallow this one
+                # exception class so unknown failures still propagate.
+                pass
+            else:
+                log.debug(
+                    "google_safety_settings_injected",
+                    categories=len(kwargs["safety_settings"]),
+                )
+
     return kwargs
+
+
+def _default_google_safety_settings() -> dict[Any, Any]:
+    """Return the default ``safety_settings`` dict for the Google provider.
+
+    Maps the four core user-facing harm categories to ``BLOCK_NONE``, plus
+    ``HARM_CATEGORY_CIVIC_INTEGRITY`` when the installed
+    ``langchain-google-genai`` exposes it (added in v1.0.4; pyproject pins
+    >=2.0 today, so the absence path is forward-defensive). When that
+    category is absent we log a warning to make the gap observable rather
+    than silently shipping a smaller default set.
+
+    Imported lazily so the factory doesn't require ``langchain-google-genai``
+    at module load time — only when a Google model is actually requested.
+    """
+    from langchain_google_genai import HarmBlockThreshold, HarmCategory
+
+    settings: dict[Any, Any] = {
+        HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+        HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+        HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+    }
+    civic = getattr(HarmCategory, "HARM_CATEGORY_CIVIC_INTEGRITY", None)
+    if civic is not None:
+        settings[civic] = HarmBlockThreshold.BLOCK_NONE
+    else:
+        log.warning(
+            "google_safety_category_missing",
+            category="HARM_CATEGORY_CIVIC_INTEGRITY",
+            hint="langchain-google-genai < 1.0.4; civic-integrity content "
+            "uses Gemini's built-in defaults for this category only.",
+        )
+    return settings
 
 
 def _map_provider_for_init(provider: str) -> str:
