@@ -758,8 +758,7 @@ class _LLMPhaseMixin:
             elif isinstance(tone_val, str):
                 tone = tone_val
 
-        # Build a structured Valid IDs list for the prompt (CLAUDE.md §6 /
-        # @prompt-engineer Rule 1). Sorted for deterministic context.
+        # Sorted for deterministic prompt output (phantom-ID guard).
         transition_ids_block = "\n".join(f"- `{tid}`" for tid in sorted(transition_map))
 
         context = {
@@ -768,9 +767,7 @@ class _LLMPhaseMixin:
             "transition_ids": transition_ids_block,
             "genre": genre or "(not specified)",
             "tone": tone or "(not specified)",
-            # Repair-loop slot reserved for future ``semantic_validator``
-            # wiring (mirrors Phase 3's ``structural_feedback``). Empty by
-            # default so the first call sees no corrective hints.
+            # Empty on first call; reserved for future repair-loop wiring (mirrors Phase 3).
             "transition_feedback": "",
         }
 

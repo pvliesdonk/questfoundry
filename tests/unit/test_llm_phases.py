@@ -724,11 +724,7 @@ class TestPhaseTransitionGaps:
 
     @pytest.mark.asyncio
     async def test_transition_gaps_context_has_valid_ids_and_feedback_slot(self) -> None:
-        """Phase 4g context MUST inject ``transition_ids`` (Valid IDs section
-        per CLAUDE.md §6) and ``transition_feedback`` (repair-loop slot,
-        defaults to empty string) — #1478. Pin both keys in the context dict
-        passed to ``_grow_llm_call`` so future template work can trust the
-        slots exist."""
+        """Pin Phase 4g context: ``transition_ids`` Valid IDs block + empty ``transition_feedback`` slot (#1478)."""
         graph = _make_cross_dilemma_hard_transition_graph()
         stage = _make_grow_stage_instance()
         mock_model = MagicMock()
