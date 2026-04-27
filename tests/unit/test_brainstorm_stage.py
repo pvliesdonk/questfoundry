@@ -8,8 +8,60 @@ from unittest.mock import MagicMock, call, patch
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 
-from questfoundry.models import BrainstormOutput
+from questfoundry.models import (
+    BrainstormDilemmasOutput,
+    BrainstormEntitiesOutput,
+    BrainstormOutput,
+)
 from questfoundry.pipeline.stages import BrainstormStage, BrainstormStageError, get_stage
+
+
+def _two_pass_artifacts(
+    entities: list[dict] | None = None,
+    dilemmas: list[dict] | None = None,
+) -> tuple[BrainstormEntitiesOutput, BrainstormDilemmasOutput]:
+    """Build matched (entities, dilemmas) artifacts for the two-pass serialize.
+
+    Tests mock ``serialize_to_artifact`` with ``side_effect`` so the first
+    call returns the entities artifact and the second returns the dilemmas
+    artifact — mirroring how the BRAINSTORM stage now drives the LLM.
+    """
+    entities = entities or [
+        {
+            "entity_id": "character::stub",
+            "entity_category": "character",
+            "name": "Stub",
+            "concept": "c",
+        },
+        {
+            "entity_id": "location::stub_a",
+            "entity_category": "location",
+            "name": "Stub A",
+            "concept": "c",
+        },
+        {
+            "entity_id": "location::stub_b",
+            "entity_category": "location",
+            "name": "Stub B",
+            "concept": "c",
+        },
+    ]
+    dilemmas = dilemmas or [
+        {
+            "dilemma_id": "dilemma::stub_a_or_b",
+            "question": "Stub a or b?",
+            "why_it_matters": "stakes",
+            "answers": [
+                {"answer_id": "yes", "description": "Yes", "is_canonical": True},
+                {"answer_id": "no", "description": "No", "is_canonical": False},
+            ],
+            "central_entity_ids": ["character::stub"],
+        }
+    ]
+    return (
+        BrainstormEntitiesOutput(entities=entities),
+        BrainstormDilemmasOutput(dilemmas=dilemmas),
+    )
 
 
 def _setup_mock_graph_with_vision(mock_graph: MagicMock, vision_data: dict | None = None) -> None:
@@ -118,18 +170,30 @@ async def test_execute_calls_all_three_phases() -> None:
             500,  # tokens
         )
         mock_summarize.return_value = ("Brief summary", 100)
-        mock_artifact = BrainstormOutput(
+        entities_artifact, dilemmas_artifact = _two_pass_artifacts(
             entities=[
                 {
-                    "entity_id": "hero",
+                    "entity_id": "character::hero",
                     "entity_category": "character",
                     "name": "Hero",
                     "concept": "A brave warrior",
-                }
+                },
+                {
+                    "entity_id": "location::village",
+                    "entity_category": "location",
+                    "name": "Village",
+                    "concept": "Home",
+                },
+                {
+                    "entity_id": "location::keep",
+                    "entity_category": "location",
+                    "name": "Keep",
+                    "concept": "Stronghold",
+                },
             ],
             dilemmas=[
                 {
-                    "dilemma_id": "dilemma::quest",
+                    "dilemma_id": "dilemma::quest_succeed_or_fail",
                     "question": "Will the hero succeed?",
                     "answers": [
                         {
@@ -143,12 +207,12 @@ async def test_execute_calls_all_three_phases() -> None:
                             "is_canonical": False,
                         },
                     ],
-                    "central_entity_ids": ["hero"],
+                    "central_entity_ids": ["character::hero"],
                     "why_it_matters": "Core story dilemma",
                 }
             ],
         )
-        mock_serialize.return_value = (mock_artifact, 200)
+        mock_serialize.side_effect = [(entities_artifact, 100), (dilemmas_artifact, 100)]
 
         artifact, llm_calls, tokens = await stage.execute(
             model=mock_model,
@@ -156,16 +220,16 @@ async def test_execute_calls_all_three_phases() -> None:
             project_path=Path("/test/project"),
         )
 
-        # Verify all phases were called
+        # Verify all phases were called (serialize runs twice — entities + dilemmas).
         mock_discuss.assert_called_once()
         mock_summarize.assert_called_once()
-        mock_serialize.assert_called_once()
+        assert mock_serialize.call_count == 2
 
         # Verify result
-        assert len(artifact["entities"]) == 1
+        assert len(artifact["entities"]) == 3
         assert len(artifact["dilemmas"]) == 1
-        assert llm_calls == 4  # 2 discuss + 1 summarize + 1 serialize
-        assert tokens == 800  # 500 + 100 + 200
+        assert llm_calls == 5  # 2 discuss + 1 summarize + 2 serialize
+        assert tokens == 800  # 500 + 100 + 100 + 100
 
 
 @pytest.mark.asyncio
@@ -193,37 +257,8 @@ async def test_execute_emits_phase_progress() -> None:
             500,
         )
         mock_summarize.return_value = ("Brief summary", 100)
-        mock_artifact = BrainstormOutput(
-            entities=[
-                {
-                    "entity_id": "hero",
-                    "entity_category": "character",
-                    "name": "Hero",
-                    "concept": "A brave warrior",
-                }
-            ],
-            dilemmas=[
-                {
-                    "dilemma_id": "dilemma::quest",
-                    "question": "Will the hero succeed?",
-                    "answers": [
-                        {
-                            "answer_id": "success",
-                            "description": "Hero wins",
-                            "is_canonical": True,
-                        },
-                        {
-                            "answer_id": "failure",
-                            "description": "Hero fails",
-                            "is_canonical": False,
-                        },
-                    ],
-                    "central_entity_ids": ["hero"],
-                    "why_it_matters": "Core story dilemma",
-                }
-            ],
-        )
-        mock_serialize.return_value = (mock_artifact, 200)
+        entities_artifact, dilemmas_artifact = _two_pass_artifacts()
+        mock_serialize.side_effect = [(entities_artifact, 100), (dilemmas_artifact, 100)]
 
         await stage.execute(
             model=mock_model,
@@ -235,7 +270,7 @@ async def test_execute_emits_phase_progress() -> None:
     assert on_phase_progress.mock_calls == [
         call("discuss", "completed", "2 turns"),
         call("summarize", "completed", None),
-        call("serialize entities", "completed", "1 entities"),
+        call("serialize entities", "completed", "3 entities"),
         call("serialize dilemmas", "completed", "1 dilemmas"),
     ]
 
@@ -273,28 +308,8 @@ async def test_execute_passes_vision_context_to_discuss() -> None:
         mock_prompt.return_value = "System prompt with vision"
         mock_discuss.return_value = ([], 1, 100)
         mock_summarize.return_value = ("Brief", 50)
-        mock_artifact = BrainstormOutput(
-            entities=[
-                {
-                    "entity_id": "stub",
-                    "entity_category": "character",
-                    "name": "Stub",
-                    "concept": "c",
-                }
-            ],
-            dilemmas=[
-                {
-                    "dilemma_id": "dilemma::stub",
-                    "question": "A question?",
-                    "why_it_matters": "stakes",
-                    "answers": [
-                        {"answer_id": "yes", "description": "Yes", "is_canonical": True},
-                        {"answer_id": "no", "description": "No", "is_canonical": False},
-                    ],
-                }
-            ],
-        )
-        mock_serialize.return_value = (mock_artifact, 100)
+        entities_artifact, dilemmas_artifact = _two_pass_artifacts()
+        mock_serialize.side_effect = [(entities_artifact, 100), (dilemmas_artifact, 100)]
 
         await stage.execute(
             model=mock_model,
@@ -311,8 +326,8 @@ async def test_execute_passes_vision_context_to_discuss() -> None:
 
 
 @pytest.mark.asyncio
-async def test_execute_passes_brainstorm_output_schema() -> None:
-    """Execute passes BrainstormOutput schema to serialize."""
+async def test_execute_passes_two_pass_serialize_schemas() -> None:
+    """Execute drives two-pass serialize: entities schema, then dilemmas schema."""
     stage = BrainstormStage()
 
     mock_model = MagicMock()
@@ -330,28 +345,8 @@ async def test_execute_passes_brainstorm_output_schema() -> None:
         mock_tools.return_value = []
         mock_discuss.return_value = ([], 1, 100)
         mock_summarize.return_value = ("Brief", 50)
-        mock_artifact = BrainstormOutput(
-            entities=[
-                {
-                    "entity_id": "stub",
-                    "entity_category": "character",
-                    "name": "Stub",
-                    "concept": "c",
-                }
-            ],
-            dilemmas=[
-                {
-                    "dilemma_id": "dilemma::stub",
-                    "question": "A question?",
-                    "why_it_matters": "stakes",
-                    "answers": [
-                        {"answer_id": "yes", "description": "Yes", "is_canonical": True},
-                        {"answer_id": "no", "description": "No", "is_canonical": False},
-                    ],
-                }
-            ],
-        )
-        mock_serialize.return_value = (mock_artifact, 100)
+        entities_artifact, dilemmas_artifact = _two_pass_artifacts()
+        mock_serialize.side_effect = [(entities_artifact, 100), (dilemmas_artifact, 100)]
 
         await stage.execute(
             model=mock_model,
@@ -359,7 +354,13 @@ async def test_execute_passes_brainstorm_output_schema() -> None:
             project_path=Path("/test/project"),
         )
 
-        assert mock_serialize.call_args.kwargs["schema"] is BrainstormOutput
+        assert mock_serialize.call_count == 2
+        first_call_kwargs, second_call_kwargs = (
+            mock_serialize.call_args_list[0].kwargs,
+            mock_serialize.call_args_list[1].kwargs,
+        )
+        assert first_call_kwargs["schema"] is BrainstormEntitiesOutput
+        assert second_call_kwargs["schema"] is BrainstormDilemmasOutput
 
 
 @pytest.mark.asyncio
@@ -386,28 +387,8 @@ async def test_execute_uses_brainstorm_summarize_prompt() -> None:
         mock_prompt.return_value = "Brainstorm summarize prompt"
         mock_discuss.return_value = ([], 1, 100)
         mock_summarize.return_value = ("Brief", 50)
-        mock_artifact = BrainstormOutput(
-            entities=[
-                {
-                    "entity_id": "stub",
-                    "entity_category": "character",
-                    "name": "Stub",
-                    "concept": "c",
-                }
-            ],
-            dilemmas=[
-                {
-                    "dilemma_id": "dilemma::stub",
-                    "question": "A question?",
-                    "why_it_matters": "stakes",
-                    "answers": [
-                        {"answer_id": "yes", "description": "Yes", "is_canonical": True},
-                        {"answer_id": "no", "description": "No", "is_canonical": False},
-                    ],
-                }
-            ],
-        )
-        mock_serialize.return_value = (mock_artifact, 100)
+        entities_artifact, dilemmas_artifact = _two_pass_artifacts()
+        mock_serialize.side_effect = [(entities_artifact, 100), (dilemmas_artifact, 100)]
 
         await stage.execute(
             model=mock_model,
@@ -440,29 +421,41 @@ async def test_execute_returns_artifact_as_dict() -> None:
         mock_tools.return_value = []
         mock_discuss.return_value = ([], 1, 100)
         mock_summarize.return_value = ("Brief", 50)
-        mock_artifact = BrainstormOutput(
+        entities_artifact, dilemmas_artifact = _two_pass_artifacts(
             entities=[
                 {
-                    "entity_id": "kay",
+                    "entity_id": "character::kay",
                     "entity_category": "character",
                     "name": "Kay",
                     "concept": "Protagonist",
-                }
+                },
+                {
+                    "entity_id": "location::manor",
+                    "entity_category": "location",
+                    "name": "Manor",
+                    "concept": "Estate",
+                },
+                {
+                    "entity_id": "location::archive",
+                    "entity_category": "location",
+                    "name": "Archive",
+                    "concept": "Library",
+                },
             ],
             dilemmas=[
                 {
-                    "dilemma_id": "dilemma::trust",
+                    "dilemma_id": "dilemma::mentor_trust_or_betray",
                     "question": "Can Kay trust the mentor?",
                     "answers": [
                         {"answer_id": "yes", "description": "Trust", "is_canonical": True},
                         {"answer_id": "no", "description": "Betray", "is_canonical": False},
                     ],
-                    "central_entity_ids": ["kay"],
+                    "central_entity_ids": ["character::kay"],
                     "why_it_matters": "Theme of trust",
                 }
             ],
         )
-        mock_serialize.return_value = (mock_artifact, 100)
+        mock_serialize.side_effect = [(entities_artifact, 60), (dilemmas_artifact, 40)]
 
         artifact, _, _ = await stage.execute(
             model=mock_model,
@@ -471,8 +464,8 @@ async def test_execute_returns_artifact_as_dict() -> None:
         )
 
         assert isinstance(artifact, dict)
-        assert artifact["entities"][0]["entity_id"] == "kay"
-        assert artifact["dilemmas"][0]["dilemma_id"] == "dilemma::trust"
+        assert artifact["entities"][0]["entity_id"] == "character::kay"
+        assert artifact["dilemmas"][0]["dilemma_id"] == "dilemma::mentor_trust_or_betray"
 
 
 # --- Vision Context Formatting Tests ---
@@ -519,6 +512,253 @@ def test_format_vision_context_handles_empty() -> None:
     result = _format_vision_context(vision)
 
     assert "No creative vision available" in result
+
+
+# --- Two-Pass Serialize Prompt + Helper Tests (F-6) ---
+
+
+def test_format_brainstorm_valid_entity_ids_groups_by_category() -> None:
+    """Helper renders entity IDs grouped by entity_category with backticks."""
+    from questfoundry.agents.prompts import format_brainstorm_valid_entity_ids
+
+    block = format_brainstorm_valid_entity_ids(
+        [
+            {"entity_id": "character::kay", "entity_category": "character"},
+            {"entity_id": "character::mentor", "entity_category": "character"},
+            {"entity_id": "location::archive", "entity_category": "location"},
+            {"entity_id": "object::dagger", "entity_category": "object"},
+            {"entity_id": "faction::guard", "entity_category": "faction"},
+        ]
+    )
+
+    # Stable category order: character → location → object → faction.
+    assert block.index("Characters") < block.index("Locations") < block.index("Objects")
+    assert block.index("Objects") < block.index("Factions")
+
+    # Each ID is backticked and listed under its category line.
+    for needle in [
+        "`character::kay`",
+        "`character::mentor`",
+        "`location::archive`",
+        "`object::dagger`",
+        "`faction::guard`",
+    ]:
+        assert needle in block
+
+
+def test_format_brainstorm_valid_entity_ids_handles_empty() -> None:
+    """Empty input renders an explicit `(none)` marker, not silent truncation."""
+    from questfoundry.agents.prompts import format_brainstorm_valid_entity_ids
+
+    assert format_brainstorm_valid_entity_ids([]) == "(none)"
+
+
+def test_format_brainstorm_valid_entity_ids_skips_malformed_entries() -> None:
+    """Entries missing entity_id or entity_category are skipped, not included."""
+    from questfoundry.agents.prompts import format_brainstorm_valid_entity_ids
+
+    block = format_brainstorm_valid_entity_ids(
+        [
+            {"entity_id": "character::kay", "entity_category": "character"},
+            {"entity_id": "", "entity_category": "character"},  # empty id
+            {"entity_id": "location::archive"},  # missing category
+            {"entity_category": "object"},  # missing id
+        ]
+    )
+    assert "`character::kay`" in block
+    assert "location::archive" not in block
+    # Only one well-formed entity was provided, so only one bullet should appear.
+    assert block.count("- **") == 1
+
+
+def test_format_brainstorm_valid_entity_ids_includes_unknown_categories_alphabetically() -> None:
+    """Unrecognised categories sort alphabetically AFTER the known set."""
+    from questfoundry.agents.prompts import format_brainstorm_valid_entity_ids
+
+    block = format_brainstorm_valid_entity_ids(
+        [
+            {"entity_id": "character::kay", "entity_category": "character"},
+            {"entity_id": "zzz::late", "entity_category": "zzz"},
+            {"entity_id": "aaa::early", "entity_category": "aaa"},
+        ]
+    )
+    # Known category appears first; unknowns sort alphabetically among themselves.
+    assert block.index("Characters") < block.index("Aaa")
+    assert block.index("Aaa") < block.index("Zzz")
+
+
+def test_serialize_dilemmas_prompt_injects_valid_entity_ids() -> None:
+    """Pass-2 prompt has the formatted valid_entity_ids body in its body."""
+    from questfoundry.agents.prompts import get_brainstorm_serialize_dilemmas_prompt
+
+    block = "- **Characters**: `character::kay`\n- **Locations**: `location::archive`"
+    prompt = get_brainstorm_serialize_dilemmas_prompt(valid_entity_ids=block)
+
+    assert "### Valid Entity IDs" in prompt
+    assert "`character::kay`" in prompt
+    assert "`location::archive`" in prompt
+    # Pass 2 explicitly forbids inventing entity IDs.
+    assert "ONLY use" in prompt and "Valid Entity IDs" in prompt
+
+
+def test_serialize_entities_prompt_omits_valid_entity_ids_section() -> None:
+    """Pass-1 prompt has no Valid Entity IDs slot — entities are the source."""
+    from questfoundry.agents.prompts import get_brainstorm_serialize_entities_prompt
+
+    prompt = get_brainstorm_serialize_entities_prompt()
+
+    assert "### Valid Entity IDs" not in prompt
+    # Pass 1 explicitly tells the model not to emit dilemmas yet.
+    assert "Do NOT emit dilemmas" in prompt
+
+
+# --- Two-Pass Validator Tests (F-6) ---
+
+
+def test_entities_only_validator_filters_dilemma_errors() -> None:
+    """Pass-1 validator runs entity checks; ignores dilemma-side noise."""
+    from questfoundry.pipeline.stages.brainstorm import (
+        _validate_brainstorm_entities_only,
+    )
+
+    # Fixture deliberately violates two entity-side rules so we can confirm
+    # both fire on pass 1. Two locations are present (R-2.4 satisfied), but
+    # the duplicate `character::kay` triggers the duplicate-ID rule. The
+    # behavior under test is "entity-side errors fire and dilemma-side
+    # errors don't" — not which specific entity-side rule fires, so we only
+    # assert on the duplicate-ID error below.
+    output = {
+        "entities": [
+            {
+                "entity_id": "character::kay",
+                "entity_category": "character",
+                "name": "Kay",
+                "concept": "c",
+            },
+            {
+                "entity_id": "location::archive",
+                "entity_category": "location",
+                "name": "Archive",
+                "concept": "c",
+            },
+            {
+                "entity_id": "location::manor",
+                "entity_category": "location",
+                "name": "Manor",
+                "concept": "c",
+            },
+            # Duplicate of the first — entity-internal duplicate-ID rule fires.
+            {
+                "entity_id": "character::kay",
+                "entity_category": "character",
+                "name": "Kay",
+                "concept": "c",
+            },
+        ],
+    }
+
+    errors = _validate_brainstorm_entities_only(output)
+    assert all(not e.field_path.startswith("dilemmas") for e in errors)
+    # Duplicate entity_id should still surface — entity-internal checks ran.
+    assert any("Duplicate entity" in e.issue for e in errors)
+
+
+def test_dilemmas_validator_merges_pass1_entities_for_cross_check() -> None:
+    """Pass-2 validator catches phantom central_entity_ids using pass-1 entities."""
+    from questfoundry.pipeline.stages.brainstorm import (
+        _make_brainstorm_dilemmas_validator,
+    )
+
+    entities_dump = [
+        {
+            "entity_id": "character::kay",
+            "entity_category": "character",
+            "name": "Kay",
+            "concept": "c",
+        },
+        {
+            "entity_id": "location::archive",
+            "entity_category": "location",
+            "name": "Archive",
+            "concept": "c",
+        },
+        {
+            "entity_id": "location::manor",
+            "entity_category": "location",
+            "name": "Manor",
+            "concept": "c",
+        },
+    ]
+    validator = _make_brainstorm_dilemmas_validator(entities_dump)
+
+    output = {
+        "dilemmas": [
+            {
+                "dilemma_id": "dilemma::trust_or_betray",
+                "question": "Trust or betray?",
+                "why_it_matters": "stakes",
+                "answers": [
+                    {"answer_id": "trust", "description": "Trust", "is_canonical": True},
+                    {"answer_id": "betray", "description": "Betray", "is_canonical": False},
+                ],
+                "central_entity_ids": ["character::ghost"],  # phantom
+            },
+        ],
+    }
+
+    errors = validator(output)
+    # No entity-side errors leak into dilemma retry feedback.
+    assert all(not e.field_path.startswith("entities") for e in errors)
+    # Phantom central_entity_id must be flagged so retry receives it.
+    assert any(
+        e.field_path == "dilemmas.0.central_entity_ids" and "ghost" in e.issue for e in errors
+    )
+
+
+def test_dilemmas_validator_passes_when_central_entity_ids_match_pass1() -> None:
+    """Valid pass-2 output (entities exist in pass-1) raises no errors."""
+    from questfoundry.pipeline.stages.brainstorm import (
+        _make_brainstorm_dilemmas_validator,
+    )
+
+    entities_dump = [
+        {
+            "entity_id": "character::kay",
+            "entity_category": "character",
+            "name": "Kay",
+            "concept": "c",
+        },
+        {
+            "entity_id": "location::archive",
+            "entity_category": "location",
+            "name": "Archive",
+            "concept": "c",
+        },
+        {
+            "entity_id": "location::manor",
+            "entity_category": "location",
+            "name": "Manor",
+            "concept": "c",
+        },
+    ]
+    validator = _make_brainstorm_dilemmas_validator(entities_dump)
+
+    output = {
+        "dilemmas": [
+            {
+                "dilemma_id": "dilemma::trust_or_betray",
+                "question": "Trust or betray?",
+                "why_it_matters": "stakes",
+                "answers": [
+                    {"answer_id": "trust", "description": "Trust", "is_canonical": True},
+                    {"answer_id": "betray", "description": "Betray", "is_canonical": False},
+                ],
+                "central_entity_ids": ["character::kay"],
+            },
+        ],
+    }
+
+    assert validator(output) == []
 
 
 # --- Model Tests ---

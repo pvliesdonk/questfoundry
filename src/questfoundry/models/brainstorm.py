@@ -176,12 +176,44 @@ class Dilemma(BaseModel):
         return self.answers
 
 
+class BrainstormEntitiesOutput(BaseModel):
+    """Pass-1 partial output of the BRAINSTORM serialize phase.
+
+    Pass 1 produces only entities so that pass 2 can be primed with the
+    authoritative `### Valid Entity IDs` section per @prompt-engineer Rule 1
+    (Valid ID Injection). The merged BrainstormOutput is assembled after
+    pass 2 completes.
+    """
+
+    model_config = {"extra": "forbid"}
+
+    entities: list[Entity] = Field(
+        min_length=1,
+        description="Generated story entities (at least 1 required per R-1.1).",
+    )
+
+
+class BrainstormDilemmasOutput(BaseModel):
+    """Pass-2 partial output of the BRAINSTORM serialize phase.
+
+    Pass 2 produces only dilemmas, with `central_entity_ids` constrained to
+    the entity IDs emitted in pass 1.
+    """
+
+    model_config = {"extra": "forbid"}
+
+    dilemmas: list[Dilemma] = Field(
+        min_length=1,
+        description="Generated dramatic dilemmas (at least 1 required per R-1.1).",
+    )
+
+
 class BrainstormOutput(BaseModel):
     """Complete output of the BRAINSTORM stage.
 
-    This structured output is produced by the LLM after the Discuss phase.
-    It contains all generated entities and dilemmas that will be triaged
-    by SEED into committed story structure.
+    This structured output is the merged result of the two-pass serialize
+    phase (entities pass + dilemmas pass). It contains all generated entities
+    and dilemmas that will be triaged by SEED into committed story structure.
 
     Good BRAINSTORM produces 15-25 entities and 4-8 dilemmas.
 
