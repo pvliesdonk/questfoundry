@@ -1782,6 +1782,81 @@ class TestPhase2Codex:
         assert g.get_node("codex::protagonist_rank1") is not None
 
 
+class TestDressBatchFailureEscalations:
+    """R-1480: ``batch_llm_calls`` retry exhaustion records per-item escalations.
+
+    The previous behaviour (``_errors`` underscore-discard at three sites)
+    silently dropped failed items; symptoms only surfaced at end-of-stage
+    via missing-artifact contract violations. After #1480 each phase
+    populates ``self._escalations`` with per-item ``DressEscalation``
+    entries, and the stage-exit ``DressStageError`` folds them into the
+    contract-failure message.
+    """
+
+    def test_three_new_escalation_kinds_accepted(self) -> None:
+        """Schema sanity: the three new ``DressEscalation.kind`` Literals are accepted."""
+        from questfoundry.models.dress import DressEscalation
+
+        for kind in (
+            "briefs_batch_failed",
+            "codex_batch_failed",
+            "distill_batch_failed",
+        ):
+            esc = DressEscalation(
+                kind=kind,  # type: ignore[arg-type]
+                item_id="passage::p1",
+                detail="some detail",
+                upstream_stage="DRESS",
+            )
+            assert esc.kind == kind
+
+    @pytest.mark.asyncio()
+    async def test_codex_batch_failure_escalates_each_entity_in_chunk(self) -> None:
+        """When _codex_batch retries exhaust, every entity_id in the failed
+        chunk gets a ``codex_batch_failed`` escalation on ``self._escalations``."""
+        from unittest.mock import patch
+
+        g = Graph()
+        for raw in ("clara_yu", "simon_blackwood", "alistair_vance"):
+            g.create_node(
+                f"character::{raw}",
+                {"type": "entity", "raw_id": raw, "entity_type": "character"},
+            )
+
+        captured_chunks: list[list[list[str]]] = []
+
+        async def mock_batch_llm_calls(
+            chunks: list[list[str]],
+            _call_fn,
+            _max_concurrency: int,
+            **_kwargs: object,
+        ):
+            captured_chunks.append(chunks)
+            errors = [(idx, RuntimeError("codex retry exhaustion")) for idx in range(len(chunks))]
+            results = [None] * len(chunks)
+            return results, 0, 0, errors
+
+        stage = DressStage()
+        with patch(
+            "questfoundry.pipeline.stages.dress.batch_llm_calls",
+            new=mock_batch_llm_calls,
+        ):
+            await stage._phase_2_codex(g, MagicMock())
+
+        assert captured_chunks, "expected _phase_2_codex to call batch_llm_calls"
+        expected_eids: set[str] = set()
+        for chunk in captured_chunks[0]:
+            expected_eids.update(chunk)
+
+        codex_escs = [e for e in stage._escalations if e.kind == "codex_batch_failed"]
+        assert len(codex_escs) == len(expected_eids)
+        assert {e.item_id for e in codex_escs} == expected_eids
+        for esc in codex_escs:
+            assert "RuntimeError" in esc.detail
+            assert "codex retry exhaustion" in esc.detail
+            assert esc.upstream_stage == "DRESS"
+
+
 # ---------------------------------------------------------------------------
 # Phase 2: spoiler-direction enforcement (R-3.6)
 # ---------------------------------------------------------------------------
