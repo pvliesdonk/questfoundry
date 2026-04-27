@@ -221,22 +221,21 @@ class _LLMPhaseMixin:
                     skipped_count += 1
                     continue
 
-                # Resolve location (prefer LLM proposal, fallback to algorithm)
-                # Guard against qwen3:4b returning the literal string "null".
+                # Resolve location (prefer LLM proposal, fallback to algorithm).
+                # Pydantic enforces non-empty via min_length=1; the only path
+                # the algorithm-fallback now exercises is the qwen3:4b footgun
+                # of returning the literal word "null" as a string.
                 raw_loc = proposal.resolved_location
-                llm_location: str | None = (
-                    None if raw_loc in (None, "null", "NULL", "") else raw_loc
-                )
                 location: str | None
-                if llm_location:
-                    location = llm_location
-                else:
+                if raw_loc.lower() == "null":
                     location = resolve_intersection_location(pre_intersection_graph, valid_ids)
                     log.debug(
                         "phase3_location_resolved",
                         beat_ids=valid_ids,
                         resolved=location,
                     )
+                else:
+                    location = raw_loc
 
                 accepted.append((valid_ids, location, proposal.shared_entities, proposal.rationale))
                 log.debug(

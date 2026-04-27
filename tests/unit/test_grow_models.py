@@ -207,15 +207,23 @@ class TestIntersectionProposal:
 
     def test_single_beat_rejected(self) -> None:
         with pytest.raises(ValidationError, match="beat_ids"):
-            IntersectionProposal(beat_ids=["beat_1"], rationale="test")
+            IntersectionProposal(beat_ids=["beat_1"], resolved_location="x", rationale="test")
 
     def test_empty_beat_ids_rejected(self) -> None:
         with pytest.raises(ValidationError, match="beat_ids"):
-            IntersectionProposal(beat_ids=[], rationale="test")
+            IntersectionProposal(beat_ids=[], resolved_location="x", rationale="test")
 
-    def test_no_resolved_location_allowed(self) -> None:
-        intersection = IntersectionProposal(beat_ids=["b1", "b2"], rationale="Entity overlap")
-        assert intersection.resolved_location is None
+    def test_missing_resolved_location_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="resolved_location"):
+            IntersectionProposal(beat_ids=["b1", "b2"], rationale="Entity overlap")  # type: ignore[call-arg]
+
+    def test_empty_resolved_location_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="resolved_location"):
+            IntersectionProposal(
+                beat_ids=["b1", "b2"],
+                resolved_location="",
+                rationale="Entity overlap",
+            )
 
 
 class TestSceneTypeTag:

@@ -644,8 +644,11 @@ class TestPhase3Knots:
         assert graph.get_node("beat::artifact_discover")["location"] == "market"
 
     @pytest.mark.asyncio
-    async def test_phase_3_resolves_location_when_missing(self) -> None:
-        """Phase 3 resolves location when LLM leaves it null."""
+    async def test_phase_3_resolves_location_when_llm_returns_null_string(self) -> None:
+        """Phase 3 falls back to the deterministic resolver when the LLM
+        returns the literal word ``"null"`` as a string. Pydantic catches
+        missing/empty values via ``min_length=1``; the algorithmic fallback
+        only covers the qwen3:4b footgun of stringified null."""
         from questfoundry.models.grow import IntersectionProposal, Phase3Output
         from tests.fixtures.grow_fixtures import make_intersection_candidate_graph
 
@@ -656,7 +659,7 @@ class TestPhase3Knots:
             intersections=[
                 IntersectionProposal(
                     beat_ids=["beat::mentor_meet", "beat::artifact_discover"],
-                    resolved_location=None,
+                    resolved_location="null",
                     rationale="Let the algorithm resolve the shared location",
                 ),
             ]

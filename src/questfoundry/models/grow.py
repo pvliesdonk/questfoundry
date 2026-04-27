@@ -111,7 +111,16 @@ class IntersectionProposal(BaseModel):
     """Phase 3: Proposes beats that form structural intersections."""
 
     beat_ids: list[str] = Field(min_length=2)
-    resolved_location: str | None = None
+    resolved_location: str = Field(
+        min_length=1,
+        description=(
+            "Specific location where the intersection scene occurs. Must be a "
+            "non-empty string — pick the best-fit location from the candidate "
+            "beats when uncertain rather than punting. The deterministic "
+            "resolver only runs as a fallback when the model returns the "
+            "literal word 'null' as a string."
+        ),
+    )
     shared_entities: list[str] = Field(default_factory=list)
     rationale: str = Field(min_length=1)
 
