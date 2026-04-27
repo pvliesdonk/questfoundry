@@ -243,12 +243,21 @@ def _preprocess_provider_kwargs(
 def _default_google_safety_settings() -> dict[Any, Any]:
     """Return the default ``safety_settings`` dict for the Google provider.
 
-    Maps the four core user-facing harm categories to ``BLOCK_NONE``, plus
+    Maps the four core user-facing harm categories to ``OFF``, plus
     ``HARM_CATEGORY_CIVIC_INTEGRITY`` when the installed
     ``langchain-google-genai`` exposes it (added in v1.0.4; pyproject pins
     >=2.0 today, so the absence path is forward-defensive). When that
     category is absent we log a warning to make the gap observable rather
     than silently shipping a smaller default set.
+
+    ``OFF`` (not ``BLOCK_NONE``) is intentional: ``BLOCK_NONE`` only governs
+    the response-side filter — the input-side prefilter still rejects
+    prompts that mention things like \"blackmail ledger\" or \"undercover
+    journalist\" with ``block_reason=PROHIBITED_CONTENT`` (#1466 reproduced
+    against the murder3 cozy-mystery project after #1465 / #1464). ``OFF``
+    is the documented threshold that disables filtering at both layers,
+    appropriate for a creative-fiction authoring tool where genre-typical
+    content is expected.
 
     Imported lazily so the factory doesn't require ``langchain-google-genai``
     at module load time — only when a Google model is actually requested.
@@ -256,14 +265,14 @@ def _default_google_safety_settings() -> dict[Any, Any]:
     from langchain_google_genai import HarmBlockThreshold, HarmCategory
 
     settings: dict[Any, Any] = {
-        HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
-        HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
-        HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+        HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.OFF,
+        HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.OFF,
+        HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.OFF,
+        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.OFF,
     }
     civic = getattr(HarmCategory, "HARM_CATEGORY_CIVIC_INTEGRITY", None)
     if civic is not None:
-        settings[civic] = HarmBlockThreshold.BLOCK_NONE
+        settings[civic] = HarmBlockThreshold.OFF
     else:
         log.warning(
             "google_safety_category_missing",

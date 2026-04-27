@@ -324,13 +324,17 @@ def test_create_chat_model_google_top_p() -> None:
     assert call_kwargs["top_p"] == 0.9
 
 
-def test_create_chat_model_google_default_safety_settings_blocks_none() -> None:
-    """Google default safety_settings unblocks all 5 harm categories (#1464).
+def test_create_chat_model_google_default_safety_settings_off() -> None:
+    """Google default safety_settings sets all 5 harm categories to OFF (#1464 / #1466).
 
     Gemini's defaults (BLOCK_MEDIUM_AND_ABOVE) reject genre-typical content
-    for QuestFoundry's mystery / noir / horror / thriller use cases. The
-    factory injects BLOCK_NONE across the board so creative-fiction prose
-    isn't blocked by chatbot-tuned safety thresholds.
+    for QuestFoundry's mystery / noir / horror / thriller use cases. We use
+    ``OFF`` rather than ``BLOCK_NONE`` because BLOCK_NONE only disables the
+    response-side filter — the input-side prefilter still rejects prompts
+    with ``block_reason=PROHIBITED_CONTENT`` for plain mystery content.
+    ``OFF`` is the documented threshold that disables filtering at both
+    layers (#1466 reproduced against the murder3 cozy-mystery project after
+    BLOCK_NONE landed in #1465 and didn't unblock the prompt prefilter).
     """
     from langchain_google_genai import HarmBlockThreshold, HarmCategory
 
@@ -353,7 +357,7 @@ def test_create_chat_model_google_default_safety_settings_blocks_none() -> None:
         HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY,
     }
     assert set(safety_settings.keys()) == expected_categories
-    assert all(threshold == HarmBlockThreshold.BLOCK_NONE for threshold in safety_settings.values())
+    assert all(threshold == HarmBlockThreshold.OFF for threshold in safety_settings.values())
 
 
 def test_create_chat_model_google_safety_settings_override_preserved() -> None:
@@ -400,7 +404,7 @@ def test_create_chat_model_google_safety_settings_falsy_falls_back_to_default(
     safety_settings = mock_init.call_args[1]["safety_settings"]
     assert safety_settings is not None
     assert HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT in safety_settings
-    assert all(threshold == HarmBlockThreshold.BLOCK_NONE for threshold in safety_settings.values())
+    assert all(threshold == HarmBlockThreshold.OFF for threshold in safety_settings.values())
 
 
 def test_create_chat_model_google_missing_package_still_raises_provider_error() -> None:
