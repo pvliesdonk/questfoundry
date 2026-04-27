@@ -15,6 +15,7 @@ Requires BRAINSTORM stage to have completed (reads brainstorm from graph).
 from __future__ import annotations
 
 import inspect
+from collections import Counter
 from pathlib import Path  # noqa: TC003 - used at runtime for Graph.load()
 from typing import TYPE_CHECKING, Any
 
@@ -611,8 +612,6 @@ def _log_beat_summary_stats(artifact_data: dict[str, Any]) -> None:
     A healthy SEED output has ~1-2 shared beats per *multi-path* dilemma
     and ~2-3 post-commit beats per path. Warn below these thresholds.
     """
-    from collections import Counter
-
     beats = artifact_data.get("initial_beats", [])
     paths = artifact_data.get("paths", [])
     path_count = len(paths)

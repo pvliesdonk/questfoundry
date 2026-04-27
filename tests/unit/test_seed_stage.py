@@ -1310,6 +1310,18 @@ def test_seed_advisory_warns_when_multi_path_dilemma_lacks_shared_beat(caplog) -
     with caplog.at_level(logging.WARNING):
         _log_beat_summary_stats(artifact_data)
 
-    assert any("seed_low_shared_beat_count" in r.message for r in caplog.records), (
-        "Expected shared-beat warning when 1 shared beat covers 2 multi-path dilemmas."
+    # Pull the structured event dict — structlog passes kwargs via record.msg
+    # as a dict — and assert on the actual values, not just the event name.
+    matching = [
+        r.msg
+        for r in caplog.records
+        if isinstance(r.msg, dict) and r.msg.get("event") == "seed_low_shared_beat_count"
+    ]
+    assert len(matching) == 1, (
+        "Expected exactly one shared-beat warning when 1 shared beat covers "
+        f"2 multi-path dilemmas, got {len(matching)}."
     )
+    event = matching[0]
+    assert event["shared_beats"] == 1
+    assert event["multi_path_dilemmas"] == 2
+    assert event["shared_avg"] == 0.5
