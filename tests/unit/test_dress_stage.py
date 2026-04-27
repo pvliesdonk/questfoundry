@@ -1704,9 +1704,10 @@ class TestPhase2Codex:
                 return (SpoilerCheckResult(has_leak=False, leaks=[], reason=""), 1, 25)
             # dress_codex_batch
             batch_calls.append(_context)
-            # Parse entity IDs from batch context (each starts with "## Entity: <raw_id>")
-            raw_ids = re.findall(r"## Entity: (\S+)", _context["entities_batch"])
-            eids = [f"entity::{raw_id}" for raw_id in raw_ids]
+            # Parse entity IDs from batch context. The header now emits the
+            # full prefixed form (`## Entity: entity::e0`) per #1473 — the LLM
+            # mirrors what it sees, and so does this mock.
+            eids = re.findall(r"## Entity: (\S+)", _context["entities_batch"])
             return (_make_batch_output(eids), 1, 100)
 
         stage = DressStage()

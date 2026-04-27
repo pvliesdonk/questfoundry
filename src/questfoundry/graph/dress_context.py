@@ -203,7 +203,12 @@ def format_entity_for_codex(graph: Graph, entity_id: str) -> str:
     raw_id = entity.get("raw_id", strip_scope_prefix(entity_id))
     lines: list[str] = []
 
-    lines.append(f"## Entity: {raw_id}")
+    # Emit the prefixed entity_id (e.g. ``character::clara_yu``) here, not the
+    # raw_id. The codex prompt instructs the LLM to mirror this header back as
+    # the JSON ``entity_id`` field; if we strip the prefix, Gemini faithfully
+    # mirrors the unprefixed form and every entry fails the chunk-membership
+    # validator at dress.py — silently dropping all entries.
+    lines.append(f"## Entity: {entity_id}")
     lines.append("")
 
     # Basic info
@@ -267,10 +272,14 @@ def format_entity_for_codex(graph: Graph, entity_id: str) -> str:
         lines.append("")
         lines.append("### Related State Flags (potential codex gates)")
         for sf_raw, trigger in sorted(related):
+            # Emit the prefixed form so the LLM mirrors `state_flag::...` back
+            # in `visible_when` — same prefix-mirroring pattern as the entity
+            # header above. The validator is forgiving here, but consistency
+            # avoids confusing small models.
             if trigger:
-                lines.append(f"- `{sf_raw}`: {trigger}")
+                lines.append(f"- `state_flag::{sf_raw}`: {trigger}")
             else:
-                lines.append(f"- `{sf_raw}`")
+                lines.append(f"- `state_flag::{sf_raw}`")
 
     return "\n".join(lines).strip()
 

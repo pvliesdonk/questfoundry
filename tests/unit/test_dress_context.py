@@ -151,11 +151,27 @@ class TestFormatEntityForCodex:
         assert "character" in result
         assert "court advisor" in result
 
+    def test_header_uses_prefixed_entity_id(self, dress_graph: Graph) -> None:
+        """The ``## Entity:`` header MUST emit the prefixed ``entity_id`` (e.g.
+        ``character::aldric``), not the raw_id. The codex prompt instructs the
+        LLM to mirror this header back as the JSON ``entity_id``; emitting the
+        unprefixed form makes the LLM return ``"aldric"`` and every entry then
+        fails the chunk-membership validator at dress.py — silently dropping
+        all entries (the murder3 / #1473 in-the-wild bug)."""
+        from questfoundry.graph.dress_context import format_entity_for_codex
+
+        result = format_entity_for_codex(dress_graph, "character::aldric")
+        assert "## Entity: character::aldric" in result
+        # And the raw form is NOT what shows up as the header line:
+        assert "## Entity: aldric\n" not in result
+
     def test_includes_related_state_flags(self, dress_graph: Graph) -> None:
         from questfoundry.graph.dress_context import format_entity_for_codex
 
         result = format_entity_for_codex(dress_graph, "character::aldric")
-        assert "met_aldric" in result
+        # Related state flags are emitted with the ``state_flag::`` prefix so
+        # the LLM mirrors the same form back in ``visible_when`` (#1473).
+        assert "`state_flag::met_aldric`" in result
 
     def test_nonexistent_entity(self, dress_graph: Graph) -> None:
         from questfoundry.graph.dress_context import format_entity_for_codex

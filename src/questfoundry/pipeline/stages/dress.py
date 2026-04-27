@@ -925,8 +925,14 @@ class DressStage:
 
         vision_ctx = format_dream_vision(graph)
         state_flags = graph.get_nodes_by_type("state_flag")
+        # Emit prefixed `state_flag::` IDs so the LLM mirrors the same form
+        # back in `visible_when`. The validator strip-prefixes for comparison,
+        # so the unprefixed form was tolerated, but emitting the prefixed form
+        # matches the codex prompt's "use IDs from this list" mandate and the
+        # rest of dress_context.py.
         state_flag_list = "\n".join(
-            f"- `{sf_data.get('raw_id', sf_id)}`: {sf_data.get('trigger', '')}"
+            f"- `state_flag::{sf_data.get('raw_id', strip_scope_prefix(sf_id))}`: "
+            f"{sf_data.get('trigger', '')}"
             for sf_id, sf_data in state_flags.items()
         )
 
