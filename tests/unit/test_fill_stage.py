@@ -2342,6 +2342,186 @@ class TestFillSilentDegradationEscalations:
             )
 
 
+class TestFillBatchFailureEscalations:
+    """#1468: batch_llm_calls failures must escalate per-passage, not silent-drop.
+
+    The three batched FILL phases (expand / review / revision) used to bind
+    the errors list to ``_errors`` and discard it. When a batch chunk
+    exhausted retries (e.g. provider safety block — see #1466 for murder3
+    PROHIBITED_CONTENT — or a network error past the connectivity loop), the
+    affected passages got no blueprint / no review / no revision and FILL
+    continued silently. This test class pins the per-passage escalation
+    contract for each phase.
+    """
+
+    def test_three_new_escalation_kinds_accepted(self) -> None:
+        from questfoundry.models.fill import FillEscalation
+
+        for kind in ("expand_batch_failed", "review_batch_failed", "revision_failed"):
+            e = FillEscalation(
+                kind=kind,  # type: ignore[arg-type]
+                passage_id="passage::pid",
+                detail="batch retry exhausted",
+                upstream_stage="FILL",
+            )
+            assert e.kind == kind
+
+    @pytest.mark.asyncio
+    async def test_expand_batch_failure_escalates_each_passage_in_chunk(self) -> None:
+        """Phase 1a: when batch_llm_calls returns errors for a chunk, every
+        passage in that chunk must get an ``expand_batch_failed`` escalation."""
+        from unittest.mock import patch
+
+        from questfoundry.pipeline.stages.fill import FillStage
+
+        captured_chunks: list[list[tuple[list[str], str]]] = []
+
+        async def mock_batch_llm_calls(
+            chunks: list[tuple[list[str], str]],
+            _call_fn,
+            _max_concurrency: int,
+            **_kwargs: object,
+        ):
+            captured_chunks.append(chunks)
+            errors = [
+                (idx, RuntimeError("simulated retry exhaustion")) for idx in range(len(chunks))
+            ]
+            results = [None] * len(chunks)
+            return results, 0, 0, errors
+
+        graph = _make_prose_graph()
+        stage = FillStage()
+        with patch(
+            "questfoundry.pipeline.stages.fill.batch_llm_calls",
+            new=mock_batch_llm_calls,
+        ):
+            await stage._phase_1a_expand(graph, MagicMock())
+
+        assert captured_chunks, "expected _phase_1a_expand to call batch_llm_calls"
+        expected_passage_ids: set[str] = set()
+        for chunk_ids, _arc_id in captured_chunks[0]:
+            for pid in chunk_ids:
+                full_pid = pid if pid.startswith("passage::") else f"passage::{pid}"
+                expected_passage_ids.add(full_pid)
+
+        expand_escalations = [e for e in stage._escalations if e.kind == "expand_batch_failed"]
+        assert len(expand_escalations) == len(expected_passage_ids)
+        assert {e.passage_id for e in expand_escalations} == expected_passage_ids
+        for e in expand_escalations:
+            assert "RuntimeError" in e.detail
+            assert "simulated retry exhaustion" in e.detail
+            assert e.upstream_stage == "FILL"
+
+    @pytest.mark.asyncio
+    async def test_review_batch_failure_escalates_each_passage_in_batch(self) -> None:
+        """Phase 2: when a review batch fails, every passage in that batch
+        must get a ``review_batch_failed`` escalation.
+
+        Phase 2 batches are ``list[list[str]]`` (just passage IDs, no arc
+        tuple), so the unpacking shape differs from Phase 1a — that's the
+        per-phase shape difference this test pins.
+        """
+        from unittest.mock import patch
+
+        from questfoundry.pipeline.stages.fill import FillStage
+
+        captured_batches: list[list[list[str]]] = []
+
+        async def mock_batch_llm_calls(
+            batches: list[list[str]],
+            _call_fn,
+            _max_concurrency: int,
+            **_kwargs: object,
+        ):
+            captured_batches.append(batches)
+            errors = [(idx, RuntimeError("phase2 retry exhaustion")) for idx in range(len(batches))]
+            results = [None] * len(batches)
+            return results, 0, 0, errors
+
+        graph = _make_prose_graph()
+        # _phase_2_review only batches passages that have a non-empty prose
+        # field. Seed both passages so the batching loop produces work.
+        graph.update_node("passage::p1", prose="draft prose for p1")
+        graph.update_node("passage::p2", prose="draft prose for p2")
+        stage = FillStage()
+        with patch(
+            "questfoundry.pipeline.stages.fill.batch_llm_calls",
+            new=mock_batch_llm_calls,
+        ):
+            await stage._phase_2_review(graph, MagicMock())
+
+        assert captured_batches, "expected _phase_2_review to call batch_llm_calls"
+        expected_passage_ids: set[str] = set()
+        for batch_ids in captured_batches[0]:
+            for pid in batch_ids:
+                full_pid = pid if pid.startswith("passage::") else f"passage::{pid}"
+                expected_passage_ids.add(full_pid)
+
+        review_escalations = [e for e in stage._escalations if e.kind == "review_batch_failed"]
+        assert len(review_escalations) == len(expected_passage_ids)
+        assert {e.passage_id for e in review_escalations} == expected_passage_ids
+        for e in review_escalations:
+            assert "RuntimeError" in e.detail
+            assert "phase2 retry exhaustion" in e.detail
+            assert e.upstream_stage == "FILL"
+
+    @pytest.mark.asyncio
+    async def test_revision_failure_escalates_each_failed_passage(self) -> None:
+        """Phase 3: when a per-passage revision call fails, that passage must
+        get a ``revision_failed`` escalation.
+
+        Phase 3 ``passage_items`` is ``list[tuple[str, list[dict]]]`` —
+        unpacking ``(pid, flags)`` rather than the Phase 1a ``(chunk_ids,
+        arc_id)`` or Phase 2 plain list — exercising the third shape variant.
+        """
+        from unittest.mock import patch
+
+        from questfoundry.pipeline.stages.fill import FillStage
+
+        captured_items: list[list[tuple[str, list[dict[str, str]]]]] = []
+
+        async def mock_batch_llm_calls(
+            passage_items: list[tuple[str, list[dict[str, str]]]],
+            _call_fn,
+            _max_concurrency: int,
+            **_kwargs: object,
+        ):
+            captured_items.append(passage_items)
+            errors = [
+                (idx, RuntimeError("phase3 retry exhaustion")) for idx in range(len(passage_items))
+            ]
+            results = [None] * len(passage_items)
+            return results, 0, 0, errors
+
+        graph = _make_prose_graph()
+        # Seed a review flag on p1 so _phase_3_revision finds something to revise.
+        graph.update_node(
+            "passage::p1",
+            review_flags=[{"issue_type": "voice_drift", "issue": "x"}],
+            prose="draft",
+        )
+        stage = FillStage()
+        with patch(
+            "questfoundry.pipeline.stages.fill.batch_llm_calls",
+            new=mock_batch_llm_calls,
+        ):
+            await stage._phase_3_revision(graph, MagicMock(), final_cycle=False)
+
+        assert captured_items, "expected _phase_3_revision to call batch_llm_calls"
+        expected_passage_ids = {
+            (pid if pid.startswith("passage::") else f"passage::{pid}")
+            for pid, _flags in captured_items[0]
+        }
+
+        revision_escalations = [e for e in stage._escalations if e.kind == "revision_failed"]
+        assert len(revision_escalations) == len(expected_passage_ids)
+        assert {e.passage_id for e in revision_escalations} == expected_passage_ids
+        for e in revision_escalations:
+            assert "RuntimeError" in e.detail
+            assert "phase3 retry exhaustion" in e.detail
+            assert e.upstream_stage == "FILL"
+
+
 class TestReviewCycleEscalation:
     """R-5.2: unresolved review flags after the final cycle become escalations."""
 

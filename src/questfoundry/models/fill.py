@@ -284,6 +284,9 @@ class FillEscalation(BaseModel):
         "voice_research_failed",
         "blueprint_validation_failed",
         "entity_extract_failed",
+        "expand_batch_failed",
+        "review_batch_failed",
+        "revision_failed",
     ] = Field(description="What kind of escalation this is.")
     passage_id: str = Field(
         description="Passage where the escalation was raised. Empty string if not passage-scoped."
