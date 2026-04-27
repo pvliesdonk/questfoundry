@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import re
-import warnings
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import lru_cache
@@ -28,7 +27,6 @@ from questfoundry.graph.context import (
 )
 from questfoundry.graph.mutations import (
     SeedErrorCategory,
-    SeedMutationError,
     SeedValidationError,
     _format_available_with_suggestions,
     categorize_error,
@@ -517,7 +515,6 @@ _REQUIRED_SECTION_PROMPT_KEYS = [
     "paths_prompt",
     "per_dilemma_paths_prompt",
     "consequences_prompt",
-    "beats_prompt",
     "shared_beats_prompt",
     "per_path_beats_prompt",
     "dilemma_analyses_prompt",
@@ -567,7 +564,6 @@ def _load_seed_section_prompts() -> dict[str, str]:
         "dilemmas": data["dilemmas_prompt"],
         "paths": data["paths_prompt"],
         "consequences": data["consequences_prompt"],
-        "beats": data["beats_prompt"],
         "shared_beats": data["shared_beats_prompt"],
         "per_path_beats": data["per_path_beats_prompt"],
         "per_dilemma_paths": data["per_dilemma_paths_prompt"],
@@ -1362,228 +1358,6 @@ async def _serialize_shared_beats_per_dilemma(
     return all_shared_beats, total_tokens
 
 
-@traceable(
-    name="Serialize SEED Iteratively", run_type="chain", tags=["phase:serialize", "stage:seed"]
-)
-async def serialize_seed_iteratively(
-    model: BaseChatModel,
-    brief: str,
-    provider_name: str | None = None,
-    max_retries: int = 3,
-    callbacks: list[BaseCallbackHandler] | None = None,
-    graph: Graph | None = None,
-    max_semantic_retries: int = 2,
-) -> tuple[Any, int]:
-    """Serialize SEED brief in sections to avoid output truncation.
-
-    .. deprecated:: 5.2
-        Use serialize_seed_as_function() instead. This function raises
-        SeedMutationError on validation failures; the new function returns
-        a SerializeResult with errors for conversation-level retry.
-
-    Instead of serializing the entire SeedOutput at once (which can cause
-    truncation with complex schemas on smaller models), this function
-    serializes each section independently and merges the results.
-
-    Sections are serialized in order:
-    1. entities (EntityDecision list)
-    2. dilemmas (DilemmaDecision list)
-    3. paths (Path list)
-    4. consequences (Consequence list)
-    5. initial_beats (InitialBeat list)
-    After all sections are merged, if a graph is provided, semantic validation
-    runs to check cross-references against BRAINSTORM data. If validation fails,
-    the problematic sections are re-serialized with feedback.
-
-    Args:
-        model: Chat model to use for generation.
-        brief: The summary brief from the Summarize phase.
-        provider_name: Provider name for strategy auto-detection.
-        max_retries: Maximum retries per section (Pydantic validation).
-        callbacks: LangChain callback handlers for logging LLM calls.
-        graph: Graph containing BRAINSTORM data for semantic validation.
-            If None, semantic validation is skipped.
-        max_semantic_retries: Maximum retries for semantic validation failures.
-
-    Returns:
-        Tuple of (SeedOutput, total_tokens_used).
-
-    Raises:
-        SerializationError: If any section fails validation after retries.
-        SeedMutationError: If semantic validation fails after all retries.
-    """
-    warnings.warn(
-        "serialize_seed_iteratively() is deprecated. Use serialize_seed_as_function() instead.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    from questfoundry.models.seed import (
-        BeatsSection,
-        ConsequencesSection,
-        DilemmasSection,
-        EntitiesSection,
-        PathsSection,
-        SeedOutput,
-    )
-
-    log.info("serialize_seed_iteratively_started")
-
-    prompts = _load_seed_section_prompts()
-    total_tokens = 0
-
-    # Inject valid IDs context if graph is provided
-    # This gives the LLM authoritative ID list upfront to prevent phantom references
-    enhanced_brief = brief
-    if graph is not None:
-        valid_ids_context = format_valid_ids_context(graph, stage="seed")
-        if valid_ids_context:
-            enhanced_brief = f"{valid_ids_context}\n\n---\n\n{brief}"
-            log.debug("valid_ids_context_injected", context_length=len(valid_ids_context))
-
-    # Section configuration: (section_name, schema, output_field)
-    # section_name matches prompt dict keys, output_field matches SeedOutput field names
-    sections: list[tuple[str, type[BaseModel], str]] = [
-        ("entities", EntitiesSection, "entities"),
-        ("dilemmas", DilemmasSection, "dilemmas"),
-        ("paths", PathsSection, "paths"),
-        ("consequences", ConsequencesSection, "consequences"),
-        ("beats", BeatsSection, "initial_beats"),
-    ]
-
-    collected: dict[str, Any] = {}
-
-    # Track brief with path IDs injected (for beats section)
-    brief_with_paths = enhanced_brief
-
-    for section_name, schema, output_field in sections:
-        log.debug("serialize_section_started", section=section_name)
-
-        # Use brief with path IDs for consequences and beats (paths are known by then)
-        # Consequences reference path_id, so they need path context too
-        current_brief = (
-            brief_with_paths if section_name in ("beats", "consequences") else enhanced_brief
-        )
-
-        section_prompt = prompts[section_name]
-        section_result, section_tokens = await serialize_to_artifact(
-            model=model,
-            brief=current_brief,
-            schema=schema,
-            provider_name=provider_name,
-            max_retries=max_retries,
-            system_prompt=section_prompt,
-            callbacks=callbacks,
-            stage="seed",
-        )
-        total_tokens += section_tokens
-
-        # Extract the field value from the section wrapper
-        section_data = section_result.model_dump()
-        if output_field not in section_data:
-            raise ValueError(
-                f"Section {section_name} returned unexpected structure. "
-                f"Expected field '{output_field}', got: {list(section_data.keys())}"
-            )
-        collected[output_field] = section_data[output_field]
-
-        # After paths are serialized, inject path IDs for subsequent sections
-        if section_name == "paths" and collected.get("paths"):
-            path_ids_context = format_path_ids_context(collected["paths"])
-            if path_ids_context:
-                # Insert path IDs after the valid IDs section
-                brief_with_paths = f"{enhanced_brief}\n\n{path_ids_context}"
-                log.debug("path_ids_context_injected", path_count=len(collected["paths"]))
-
-        log.debug(
-            "serialize_section_completed",
-            section=section_name,
-            items=len(collected[output_field]) if isinstance(collected[output_field], list) else 1,
-            tokens=section_tokens,
-        )
-
-    # Merge all sections into SeedOutput
-    seed_output = SeedOutput.model_validate(collected)
-
-    # Semantic validation (if graph provided)
-    if graph is not None:
-        for semantic_attempt in range(1, max_semantic_retries + 1):
-            all_errors = validate_seed_mutations(graph, seed_output.model_dump())
-            errors = [e for e in all_errors if e.category != SeedErrorCategory.WARNING]
-            if not errors:
-                break
-
-            log.info(
-                "semantic_validation_failed",
-                attempt=semantic_attempt,
-                max_attempts=max_semantic_retries,
-                error_count=len(errors),
-            )
-
-            if semantic_attempt >= max_semantic_retries:
-                log.error(
-                    "semantic_validation_exhausted",
-                    error_count=len(errors),
-                )
-                raise SeedMutationError(errors)
-
-            # Determine which sections need re-serialization based on error field paths
-            sections_to_retry = _get_sections_to_retry(errors)
-            feedback = SeedMutationError(errors).to_feedback()
-
-            log.debug(
-                "semantic_retry_sections",
-                sections=list(sections_to_retry),
-                feedback_length=len(feedback),
-            )
-
-            # Re-serialize problematic sections with feedback appended to brief
-            brief_with_feedback = (
-                f"{enhanced_brief}\n\n## VALIDATION ERRORS - PLEASE FIX\n\n{feedback}"
-            )
-
-            for section_name, schema, output_field in sections:
-                if section_name not in sections_to_retry:
-                    continue
-
-                log.debug("semantic_retry_section", section=section_name)
-
-                section_prompt = prompts[section_name]
-                section_result, section_tokens = await serialize_to_artifact(
-                    model=model,
-                    brief=brief_with_feedback,
-                    schema=schema,
-                    provider_name=provider_name,
-                    max_retries=max_retries,
-                    system_prompt=section_prompt,
-                    callbacks=callbacks,
-                    stage="seed",
-                )
-                total_tokens += section_tokens
-
-                section_data = section_result.model_dump()
-                if output_field not in section_data:
-                    raise ValueError(
-                        f"Section {section_name} returned unexpected structure on retry. "
-                        f"Expected field '{output_field}', got: {list(section_data.keys())}"
-                    )
-                collected[output_field] = section_data[output_field]
-
-            # Re-merge with updated sections
-            seed_output = SeedOutput.model_validate(collected)
-
-    log.info(
-        "serialize_seed_iteratively_completed",
-        entities=len(seed_output.entities),
-        dilemmas=len(seed_output.dilemmas),
-        paths=len(seed_output.paths),
-        consequences=len(seed_output.consequences),
-        beats=len(seed_output.initial_beats),
-        tokens=total_tokens,
-    )
-
-    return seed_output, total_tokens
-
-
 # Maps SeedOutput field_path prefixes to section names used in serialization.
 # Note: "initial_beats" → "beats" because the section config uses "beats" as the
 # section_name while SeedOutput uses "initial_beats" as the field name.
@@ -1594,26 +1368,6 @@ _FIELD_PATH_TO_SECTION = {
     "consequences": "consequences",
     "initial_beats": "beats",
 }
-
-
-def _get_sections_to_retry(errors: list[SeedValidationError]) -> set[str]:
-    """Determine which sections need re-serialization based on error field paths.
-
-    Args:
-        errors: List of SeedValidationError objects.
-
-    Returns:
-        Set of section names that have errors.
-    """
-    sections = set()
-    for error in errors:
-        field_path = error.field_path
-        # Extract the top-level field (e.g., "paths.0.dilemma_id" -> "paths")
-        top_level = field_path.split(".")[0] if field_path else ""
-        if top_level in _FIELD_PATH_TO_SECTION:
-            sections.add(_FIELD_PATH_TO_SECTION[top_level])
-
-    return sections
 
 
 # Dependency order for section retries (upstream first).

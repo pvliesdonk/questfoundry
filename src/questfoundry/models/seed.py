@@ -687,15 +687,6 @@ class ConsequencesSection(BaseModel):
         return self
 
 
-class BeatsSection(BaseModel):
-    """Wrapper for serializing initial beats separately."""
-
-    initial_beats: list[InitialBeat] = Field(
-        default_factory=list,
-        description="Initial beats for each path",
-    )
-
-
 class PathBeatsSection(BaseModel):
     """Wrapper for serializing beats for a single path.
 
