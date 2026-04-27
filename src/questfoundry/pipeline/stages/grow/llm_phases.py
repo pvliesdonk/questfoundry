@@ -860,7 +860,13 @@ class _LLMPhaseMixin:
         - Consequence nodes linked to paths and dilemmas.
 
         Postconditions:
-        - Entity nodes gain overlays list with {when: [state_flag_ids], details: {...}}.
+        - Entity nodes gain overlays list. Each overlay is stored with
+          ``when: [state_flag_ids]`` and ``details: dict[str, str]`` —
+          this is the *graph-stored* shape (``EntityOverlay.details``).
+          The LLM produces ``OverlayProposal.details: list[OverlayDetailItem]``
+          (key/value list, OpenAI strict-mode-compatible) which is
+          converted via ``OverlayProposal.details_as_dict()`` at
+          graph-write time.
         - Overlays modify entity presentation when state flags are granted.
         - Invalid entity/state flag IDs from LLM output silently skipped.
 
