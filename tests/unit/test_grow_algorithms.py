@@ -1929,7 +1929,7 @@ class TestPhase6ConvergenceIntegration:
         await phase_divergence(graph, mock_model)
         result = await phase_convergence(graph, mock_model)
 
-        # Phase 7 computes convergence metadata without graph writes
+        # Phase 6 computes convergence metadata without graph writes
         assert result.status == "completed"
         assert "convergence" in result.detail.lower()
 
@@ -1960,11 +1960,11 @@ class TestPhase6ConvergenceIntegration:
 
     @pytest.mark.asyncio
     async def test_phase_6_halts_on_soft_dilemma_without_convergence(self) -> None:
-        """GROW R-6.4: a soft dilemma with TWO explored paths whose paths never rejoin must halt Phase 7.
+        """GROW R-6.4: a soft dilemma with TWO explored paths whose paths never rejoin must halt Phase 6.
 
         Build a minimal graph: one soft dilemma with two explored paths (P1, P2)
         that each terminate in separate commit beats with NO shared successor beat.
-        Phase 7 cannot find a convergence beat and must return a failed
+        Phase 6 cannot find a convergence beat and must return a failed
         PhaseResult — silent null is forbidden (Silent Degradation policy).
         The stage loop translates the failed status into GrowMutationError so
         savepoint cleanup (release/save) runs before the error propagates.

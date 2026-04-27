@@ -493,7 +493,7 @@ async def phase_divergence(graph: Graph, model: BaseChatModel) -> GrowPhaseResul
     )
 
 
-# --- Phase 7: Convergence ---
+# --- Phase 6: Convergence ---
 
 
 @grow_phase(name="convergence", depends_on=["divergence"], is_deterministic=True, priority=11)

@@ -168,7 +168,7 @@ def _check_transition_beats(graph: Graph, errors: list[str]) -> None:
 
 
 def _check_entity_overlays(graph: Graph, errors: list[str]) -> None:
-    """Entity overlay composition (R-6.5, R-6.6)."""
+    """Entity overlay composition (R-5.5, R-5.6)."""
     entity_nodes = graph.get_nodes_by_type("entity")
 
     for entity_id, entity in sorted(entity_nodes.items()):
@@ -178,25 +178,25 @@ def _check_entity_overlays(graph: Graph, errors: list[str]) -> None:
 
         for idx, overlay in enumerate(overlays):
             if not isinstance(overlay, dict):
-                errors.append(f"R-6.5: entity {entity_id!r} overlay[{idx}] is not a dict")
+                errors.append(f"R-5.5: entity {entity_id!r} overlay[{idx}] is not a dict")
                 continue
             when = overlay.get("when", [])
             details = overlay.get("details")
             if not when:
                 errors.append(
-                    f"R-6.5: entity {entity_id!r} overlay[{idx}] has empty "
+                    f"R-5.5: entity {entity_id!r} overlay[{idx}] has empty "
                     "'when' (activation condition missing)"
                 )
             if not details:
-                errors.append(f"R-6.5: entity {entity_id!r} overlay[{idx}] has empty 'details'")
+                errors.append(f"R-5.5: entity {entity_id!r} overlay[{idx}] has empty 'details'")
 
-    # R-6.6: detect per-state entity duplicates (entity_id__state pattern).
+    # R-5.6: detect per-state entity duplicates (entity_id__state pattern).
     for entity_id in sorted(entity_nodes):
         if "__" in entity_id:
             base = entity_id.rsplit("__", 1)[0]
             if base in entity_nodes:
                 errors.append(
-                    f"R-6.6: entity {entity_id!r} appears to be a state-variant "
+                    f"R-5.6: entity {entity_id!r} appears to be a state-variant "
                     f"of {base!r}; overlays must be embedded, not separate nodes"
                 )
 
