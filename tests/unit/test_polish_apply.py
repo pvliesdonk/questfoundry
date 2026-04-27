@@ -28,7 +28,7 @@ from questfoundry.pipeline.stages.polish.deterministic import (
     _create_passage_node,
     _create_residue_beat_and_passage,
     _create_variant_passage,
-    _residue_inherited_entities,
+    _inherited_passage_entities,
     _store_plan,
     phase_plan_application,
 )
@@ -130,6 +130,41 @@ class TestCreateVariantPassage:
         assert len(edges) == 1
         assert edges[0]["from"] == "passage::variant_0"
         assert edges[0]["to"] == "passage::base"
+
+    def test_variant_inherits_entities_from_base_passage(self) -> None:
+        """Regression: #1459 — variant passages must copy entities from base.
+
+        Same shape and rationale as #1457 for residues: a variant plays out
+        at the same dramatic moment as its base, so FILL's `### Valid Entity
+        IDs` prompt slot needs the entity list populated. R-6.5 covers both
+        residue and variant inheritance.
+        """
+        graph = Graph.empty()
+        _make_beat(graph, "beat::a")
+
+        base_spec = PassageSpec(
+            passage_id="passage::base",
+            beat_ids=["beat::a"],
+            summary="Base passage",
+            entities=["character::clara_yu", "character::alistair_vance"],
+        )
+        _create_passage_node(graph, base_spec)
+
+        vspec = VariantSpec(
+            base_passage_id="passage::base",
+            variant_id="passage::variant_0",
+            requires=["flag1"],
+            summary="Variant version",
+        )
+        _create_variant_passage(graph, vspec)
+
+        passages = graph.get_nodes_by_type("passage")
+        variant = passages.get("passage::variant_0")
+        assert variant is not None
+        assert variant["entities"] == [
+            "character::clara_yu",
+            "character::alistair_vance",
+        ]
 
 
 class TestCreateResidueBeatAndPassage:
@@ -381,19 +416,20 @@ class TestCreateResidueBeatAndPassage:
         assert residue_beat is not None
         assert residue_beat["entities"] == ["character::clara_yu"]
 
-    def test_residue_inherited_entities_raises_for_absent_target(self) -> None:
-        """Helper raises ``ValueError`` when the target passage is missing.
+    def test_inherited_passage_entities_raises_for_absent_source(self) -> None:
+        """Helper raises ``ValueError`` when the source passage is missing.
 
         Per `.gemini/styleguide.md` anti-pattern (silent fallbacks that hide
-        bugs prefer explicit errors): a residue created against a missing
-        target passage is a structural failure — Phase 6's application order
-        (R-6.2) creates target passages before residues. Returning ``[]``
-        instead would silently propagate the exact symptom #1457 fixed
-        (residue with empty entities → FILL phantom-ID escalations).
+        bugs prefer explicit errors): a residue or variant synthesized against
+        a missing source is a structural failure — Phase 6's application order
+        (R-6.2) creates base passages before residues and variants. Returning
+        ``[]`` instead would silently propagate the exact symptom #1457 fixed
+        (synthesized passage with empty entities → FILL phantom-ID
+        escalations); same failure mode for variants per #1459.
         """
         graph = Graph.empty()
-        with pytest.raises(ValueError, match=r"R-6\.5: residue target passage"):
-            _residue_inherited_entities(graph, "passage::does_not_exist")
+        with pytest.raises(ValueError, match=r"R-6\.5: source passage"):
+            _inherited_passage_entities(graph, "passage::does_not_exist")
 
     def test_residue_inheritance_defensive_when_target_has_no_entities(self) -> None:
         """If the target has no entities (early-stage passage), residue gets []
