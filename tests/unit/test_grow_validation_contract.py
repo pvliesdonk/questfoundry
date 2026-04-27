@@ -315,7 +315,7 @@ def test_R_5_1_transition_beat_with_belongs_to_forbidden(compliant_graph: Graph)
 
 
 # --------------------------------------------------------------------------
-# Phase 6 — state flags + overlays
+# Phase 5 — state flags + overlays
 # --------------------------------------------------------------------------
 
 
