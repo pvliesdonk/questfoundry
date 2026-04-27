@@ -114,11 +114,11 @@ class IntersectionProposal(BaseModel):
     resolved_location: str = Field(
         min_length=1,
         description=(
-            "Specific location where the intersection scene occurs. Must be a "
-            "non-empty string — pick the best-fit location from the candidate "
-            "beats when uncertain rather than punting. The deterministic "
-            "resolver only runs as a fallback when the model returns the "
-            "literal word 'null' as a string."
+            "Specific location where this intersection scene occurs. "
+            "Must be a non-empty string. When multiple locations are mentioned "
+            "in the candidate group, pick the one that fits most beats. "
+            "When genuinely uncertain, use the most specific location from "
+            "any of the beat descriptions rather than a placeholder."
         ),
     )
     shared_entities: list[str] = Field(default_factory=list)
