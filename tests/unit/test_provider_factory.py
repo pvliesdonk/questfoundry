@@ -398,6 +398,34 @@ def test_create_chat_model_google_safety_settings_none_falls_back_to_default() -
     assert all(threshold == HarmBlockThreshold.BLOCK_NONE for threshold in safety_settings.values())
 
 
+def test_create_chat_model_google_missing_package_still_raises_provider_error() -> None:
+    """If langchain-google-genai isn't installed, the centralised handler still wins.
+
+    The lazy import inside ``_default_google_safety_settings`` happens during
+    ``_preprocess_provider_kwargs`` — outside the ``try/except ImportError``
+    in ``create_chat_model``. A bare ``ImportError`` from the helper would
+    bypass the ``ProviderError`` handler and hide the user-friendly
+    "Run: uv add langchain-google-genai" message. The call site swallows the
+    ``ImportError`` so the existing handler around ``_init_chat_model_safe``
+    can report the missing package cleanly.
+    """
+    with (
+        patch.dict("os.environ", {"GOOGLE_API_KEY": "test-key"}),
+        patch(
+            "questfoundry.providers.factory._default_google_safety_settings",
+            side_effect=ImportError("No module named 'langchain_google_genai'"),
+        ),
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            side_effect=ImportError("No module named 'langchain_google_genai'"),
+        ),
+        pytest.raises(ProviderError) as exc_info,
+    ):
+        create_chat_model("google", "gemini-2.5-flash")
+
+    assert "langchain-google-genai not installed" in str(exc_info.value)
+
+
 def test_create_chat_model_google_safety_settings_skipped_for_other_providers() -> None:
     """safety_settings default applies only to Google; other providers untouched."""
     mock_chat = MagicMock()

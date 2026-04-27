@@ -222,8 +222,23 @@ def _preprocess_provider_kwargs(
         # Gemini's consumer-level defaults, the exact failure this guards
         # against.
         if not kwargs.get("safety_settings"):
-            kwargs["safety_settings"] = _default_google_safety_settings()
-            log.debug("google_safety_settings_injected", categories=5)
+            try:
+                kwargs["safety_settings"] = _default_google_safety_settings()
+            except (ImportError, AttributeError):
+                # Defer to the centralised handler in ``create_chat_model``:
+                # a missing ``langchain-google-genai`` package surfaces as
+                # ``ProviderError`` with the ``uv add ...`` hint when
+                # ``_init_chat_model_safe`` runs. ``AttributeError`` covers
+                # version skew (e.g. ``HARM_CATEGORY_CIVIC_INTEGRITY`` is
+                # absent in langchain-google-genai < 1.0.4 — pyproject pins
+                # >=2.0 today, so this is a defensive guard for future
+                # downgrades, not the happy path).
+                pass
+            else:
+                log.debug(
+                    "google_safety_settings_injected",
+                    categories=len(kwargs["safety_settings"]),
+                )
 
     return kwargs
 
