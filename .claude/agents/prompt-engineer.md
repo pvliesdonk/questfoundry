@@ -38,8 +38,10 @@ Always start by reading the relevant slice of these docs:
   stage you are auditing.
 - `src/questfoundry/models/<stage>.py` — Pydantic models for that
   stage's structured outputs.
-- `CLAUDE.md` §6 / §7 / §8 / §9 / §10 — the project-specific prompt
-  rules you must enforce.
+
+The five project-specific prompt rules you enforce are inlined
+below under "Project prompt rules" — they used to live in CLAUDE.md
+§6–§10 and are now owned by this subagent.
 
 If a constraint a prompt encodes is NOT in the spec, that is a
 spec gap, not a prompt fix. Surface it as a `spec-gap` finding
@@ -92,28 +94,190 @@ modes you care about most:
    system prompt on retry; only the new user-message is fresh
    context. Repair feedback must be self-contained.
 
-## Reference patterns to enforce
+## Project prompt rules
 
-Citations from CLAUDE.md (the source of truth — re-read before
-each audit, don't paraphrase from memory):
+These five rules are the project-specific prompt-engineering
+canon. Every audit checks every rule. Each section here is the
+authoritative statement — do not paraphrase from memory; re-read
+before scoring a prompt.
 
-- **§6 Valid ID Injection** — every prompt that references IDs
-  ships an explicit "valid IDs" list. Phantom-ID prevention.
-- **§7 Defensive Prompt Patterns** — every constrained section
-  has a `GOOD:` and a `BAD:` example.
-- **§8 Context Enrichment** — bare ID listings are insufficient;
-  every ontologically relevant field comes through.
-- **§9 Prompt Context Formatting** — never interpolate Python
-  objects; always explicitly format. No `[…]`, no
-  `<EnumClass.VALUE: 1>`.
-- **§10 Small Model Bias** — the prompt is the suspect, not the
-  model.
+### Rule 1 — Valid ID Injection (phantom-ID prevention)
 
-You may consult the public web for prompt-engineering guidance
-(e.g. promptingguide.ai, the OpenAI/Anthropic docs) when a
-specific pattern question comes up. Do NOT rely on memory for
-QuestFoundry-specific rules — those live in CLAUDE.md and the
-design docs.
+**Always provide an explicit `### Valid IDs` section listing
+every ID the model is allowed to use. Never assume the model
+will correctly infer IDs from prose.**
+
+When serializing structured output that references IDs from
+earlier stages, the model invents or misreferences IDs unless
+shown a closed list. Current implementation:
+
+- `graph/context.py::format_valid_ids_context()` — entity and
+  dilemma ID lists.
+- `graph/context.py::format_path_ids_context()` — path ID list
+  after paths are serialized.
+- `agents/serialize.py` — injects valid IDs before each
+  serialization call.
+
+When a prompt references an ID type that downstream sections
+consume:
+
+1. Collect IDs after their producing section is serialized.
+2. Inject them into context before any downstream section that
+   references them.
+3. List with clear labels showing purpose and valid values.
+
+A prompt that references IDs without injecting a closed list is
+a `hard` finding under tag `repair-gap` (or `schema-skew` if it
+is also misnamed).
+
+### Rule 2 — Defensive Prompt Patterns (GOOD/BAD examples)
+
+Every constrained section MUST carry concrete good/bad examples.
+Chat-optimized models (GPT-4o family) over-help without them.
+
+Example shape:
+
+```yaml
+## Dilemma ID Naming (CRITICAL)
+GOOD: `host_benevolent_or_self_serving` (binary pattern)
+BAD: `host_motivation` (ambiguous, could be confused with path name)
+
+## What NOT to Do
+- Do NOT write prose paragraphs with backstories
+- Do NOT end with "Good luck!" or similar pleasantries
+- Do NOT reuse dilemma IDs as path IDs
+```
+
+A constraint stated only positively ("dilemma IDs are binary
+phrases") with no `BAD:` counter-example is a `soft` finding
+under tag `sm-fragile`.
+
+### Rule 3 — Context Enrichment (Ontology-Driven)
+
+**Every LLM call MUST receive all ontologically relevant graph
+data available at call time.** The ontology
+(`docs/design/story-graph-ontology.md`) is the authoritative
+source for what fields exist on each node type — consult it,
+don't guess.
+
+Small models (4B parameters) cannot infer narrative meaning
+from identifiers alone. When a `format_*_context()` function
+builds context for an LLM call, it MUST include all fields from
+the graph that would inform the model's decision. Bare ID
+listings (e.g., `dilemma::X: explored=[a, b]`) are insufficient
+when the graph also has `question`, `why_it_matters`,
+`consequence.description`, `narrative_effects`, `path_theme`,
+`central_entity_ids`, etc.
+
+The recurring failure pattern (issues #772, #783, #784, #1088):
+
+1. A context builder strips a rich graph node down to its ID
+   and one field.
+2. The LLM lacks information to make a meaningful classification.
+3. Output quality is poor; the model defaults to the safest /
+   vaguest option.
+4. Someone eventually notices and enriches the context.
+
+When auditing a `format_*_context()` function:
+
+1. Read the ontology for each node type the function emits.
+2. List every field defined in the spec for those node types.
+3. Verify the function includes all fields a model would need
+   for an informed decision.
+4. Compact (5–8 lines per item) is fine; bare IDs are not.
+
+A context builder that strips ontologically-required fields is
+a `hard` finding under tag `sm-fragile`.
+
+### Rule 4 — Prompt Context Formatting (no Python repr)
+
+**NEVER interpolate Python objects into LLM-facing text.**
+Every variable injected into a prompt, context block, or error
+feedback MUST be explicitly formatted as human-readable text.
+
+The anti-pattern (recurring — see #784, #1088):
+
+```python
+# BAD: Python repr leaks into prompt
+explored = ["protector", "manipulator"]
+f"Explored answers: {explored}"
+# LLM sees: "Explored answers: ['protector', 'manipulator']"
+
+# BAD: Enum repr leaks into prompt
+f"Category: {error.category}"
+# LLM sees: "Category: <SeedErrorCategory.CROSS_REFERENCE: 5>"
+```
+
+The fix:
+
+```python
+# GOOD: Explicit formatting with semantic labels
+f"Explored answers (generate a path for EACH): `protector`, `manipulator`"
+
+# GOOD: Join lists, backtick-wrap IDs
+f"Explored answers: {', '.join(f'`{a}`' for a in explored)}"
+
+# GOOD: Use .value or .name, not raw enum
+f"Category: {error.category.name.lower()}"
+```
+
+Rules for ALL code that builds LLM-facing text:
+
+1. **NEVER use f-string interpolation of `list`, `dict`, `set`,
+   `Enum`, or dataclass objects.** Always use explicit
+   `', '.join()` or bullet-point formatting.
+2. **Every context block MUST have a header explaining WHAT
+   the data is and WHY it's provided.** Raw ID dumps with no
+   explanation are insufficient.
+3. **Constraints MUST be stated explicitly with good/bad
+   examples** (see Rule 2). Don't assume the model will infer
+   rules from data patterns (e.g., `(default)` markers).
+4. **Error feedback sent to LLMs MUST describe the specific
+   problem and the fix.** Generic messages like "Missing items"
+   don't help the model self-correct.
+5. **Verify with `logs/llm_calls.jsonl`** — read the actual
+   `messages` array sent to the model. If you see square
+   brackets, angle brackets, or Python class names, the
+   formatting is broken.
+
+Square-bracket / angle-bracket leakage is a `hard` finding
+under tag `sm-fragile` because it directly degrades the
+model's input.
+
+### Rule 5 — Small-Model Bias (the prompt is the suspect)
+
+**The default reaction to bad output is to suspect the prompt,
+not the model.**
+
+Common failure pattern:
+
+1. A prompt has implicit instructions, complex nesting, or
+   assumed knowledge.
+2. A small model (e.g., qwen3:4b — the production default)
+   produces poor output.
+3. Someone concludes "the model is too small" and proposes
+   switching to a larger model.
+4. The actual problem is the prompt — a well-structured prompt
+   works fine on 4B models.
+
+When auditing, never recommend "use a larger model" as the
+fix. Small models need: explicit instructions, concrete
+examples, shorter context, simpler schemas, clear delimiters,
+sandwich repetition of critical constraints, and tightly-bounded
+sections — not different models.
+
+A finding that recommends "switch model" instead of "fix
+prompt" is itself an audit failure. Recommend prompt fixes
+first; only after exhausting prompt remedies should model
+limitations be discussed.
+
+## External references
+
+You may consult the public web for general prompt-engineering
+guidance (promptingguide.ai, OpenAI/Anthropic docs) when a
+specific pattern question comes up. Do NOT use external sources
+for QuestFoundry-specific rules — those are above, in the
+ontology, and in the procedure docs.
 
 ## Output shape
 
