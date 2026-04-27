@@ -315,12 +315,12 @@ def test_R_5_1_transition_beat_with_belongs_to_forbidden(compliant_graph: Graph)
 
 
 # --------------------------------------------------------------------------
-# Phase 6 — state flags + overlays
+# Phase 5 — state flags + overlays
 # --------------------------------------------------------------------------
 
 
-def test_R_6_1_state_flag_without_derived_from(compliant_graph: Graph) -> None:
-    """R-6.1: every state_flag has a derived_from edge to exactly one Consequence."""
+def test_R_5_1_state_flag_without_derived_from(compliant_graph: Graph) -> None:
+    """GROW R-5.1: every state_flag has a derived_from edge to exactly one Consequence."""
     compliant_graph.create_node(
         "state_flag::orphan",
         {"type": "state_flag", "raw_id": "orphan", "name": "some_world_state"},
@@ -331,8 +331,8 @@ def test_R_6_1_state_flag_without_derived_from(compliant_graph: Graph) -> None:
     )
 
 
-def test_R_6_2_state_flag_name_action_phrased_forbidden(compliant_graph: Graph) -> None:
-    """R-6.2: state flag names express world state, not player actions.
+def test_R_5_2_state_flag_name_action_phrased_forbidden(compliant_graph: Graph) -> None:
+    """GROW R-5.2: state flag names express world state, not player actions.
 
     `raw_id` is what `phase_state_flags` populates on real GROW output, so
     the check must cover that field (not only `name`).
@@ -341,35 +341,88 @@ def test_R_6_2_state_flag_name_action_phrased_forbidden(compliant_graph: Graph) 
         "state_flag::mentor_protector", raw_id="player_chose_to_trust_mentor"
     )
     errors = validate_grow_output(compliant_graph)
-    assert any("R-6.2" in e or "player" in e.lower() or "action" in e.lower() for e in errors), (
+    assert any("R-5.2" in e or "player" in e.lower() or "action" in e.lower() for e in errors), (
         f"expected action-phrased name error, got {errors}"
     )
 
 
 # --------------------------------------------------------------------------
-# Phase 7 — convergence metadata
+# Phase 6 — convergence metadata
 # --------------------------------------------------------------------------
 
 
-def test_R_7_3_hard_dilemma_has_null_convergence(compliant_graph: Graph) -> None:
-    """R-7.3: hard dilemmas have converges_at null."""
+def test_R_6_3_hard_dilemma_has_null_convergence(compliant_graph: Graph) -> None:
+    """GROW R-6.3: hard dilemmas must have converges_at null."""
     compliant_graph.update_node(
         "dilemma::mentor_trust",
         dilemma_role="hard",
         converges_at="beat::post_protector_02",
     )
     errors = validate_grow_output(compliant_graph)
-    assert any("R-7.3" in e or ("hard" in e.lower() and "converges_at" in e) for e in errors), (
+    assert any("R-6.3" in e or ("hard" in e.lower() and "converges_at" in e) for e in errors), (
         f"expected hard-dilemma null-converges_at error, got {errors}"
     )
 
 
-def test_R_7_4_soft_dilemma_missing_convergence(compliant_graph: Graph) -> None:
-    """R-7.4: soft dilemmas must have converges_at populated."""
+def test_R_6_4_soft_dilemma_missing_convergence(compliant_graph: Graph) -> None:
+    """GROW R-6.4: soft dilemmas with TWO explored paths must have converges_at populated.
+
+    The two-path scope matches the Phase 6 Operations header. Single-path
+    soft dilemmas (the locked-dilemma shadow pattern) are exempt — see
+    `test_R_6_4_single_path_soft_exempt` below for the exemption case.
+    """
     compliant_graph.update_node("dilemma::mentor_trust", converges_at=None, convergence_payoff=None)
     errors = validate_grow_output(compliant_graph)
-    assert any("R-7.4" in e or "converges_at" in e for e in errors), (
+    assert any("R-6.4" in e or "converges_at" in e for e in errors), (
         f"expected soft-dilemma missing-converges_at error, got {errors}"
+    )
+
+
+def test_R_6_4_single_path_soft_exempt(compliant_graph: Graph) -> None:
+    """GROW R-6.4 single-path scope: single-path soft Dilemma is exempt.
+
+    Per the GROW R-6.4 wording (the operation is scoped to two explored
+    paths), a soft Dilemma whose `explored` list contains only one Answer
+    is the legitimate locked-dilemma shadow pattern (SEED Phase 2 R-2.2).
+    Both `converges_at` and `convergence_payoff` stay null per Phase 6
+    §Output Contract item 3, and the exit validator does NOT flag it.
+
+    Regression for the projects/murder2/ failure: pre-fix, the validator
+    flagged `dilemma::locket_planted_or_dropped` (single-path soft) as a
+    contract violation; post-fix, it is silently skipped.
+    """
+    # Add a NEW soft dilemma with only ONE explored path (locked-dilemma
+    # shadow). The compliant_graph fixture stays intact for other tests.
+    compliant_graph.create_node(
+        "dilemma::locket_planted_or_dropped",
+        {
+            "type": "dilemma",
+            "raw_id": "locket_planted_or_dropped",
+            "question": "Was the locket planted or dropped?",
+            "dilemma_role": "soft",
+            # Single-path soft → both convergence fields null per R-6.4 scope.
+            "converges_at": None,
+            "convergence_payoff": None,
+            "ending_salience": "low",
+            "residue_weight": "light",
+        },
+    )
+    compliant_graph.create_node(
+        "path::locket_planted_or_dropped__planted",
+        {
+            "type": "path",
+            "raw_id": "locket_planted_or_dropped__planted",
+            "dilemma_id": "dilemma::locket_planted_or_dropped",
+            "is_canonical": True,
+        },
+    )
+    # Note: no second path — `dropped` was deliberately left as a shadow.
+
+    errors = validate_grow_output(compliant_graph)
+
+    flagged = [e for e in errors if "locket_planted_or_dropped" in e and "converges_at" in e]
+    assert flagged == [], (
+        f"single-path soft dilemma should be exempt from R-6.4, but validator flagged: {flagged}"
     )
 
 

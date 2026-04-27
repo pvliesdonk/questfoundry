@@ -446,15 +446,15 @@ async def phase_enumerate_arcs(
     )
 
 
-# --- Phase 6: Divergence ---
+# --- Phase 7: Divergence (Arc Validation helper) ---
 
 
 @grow_phase(name="divergence", depends_on=["enumerate_arcs"], is_deterministic=True, priority=10)
 async def phase_divergence(graph: Graph, model: BaseChatModel) -> GrowPhaseResult:  # noqa: ARG001
-    """Phase 6: Compute divergence points between arcs (validation only).
+    """Phase 7: Compute divergence points between arcs (Arc Validation helper).
 
     Preconditions:
-    - Arc enumeration complete (Phase 5).
+    - Arc enumeration complete (prior step in Phase 7).
     - At least one spine arc exists for reference.
 
     Postconditions:
@@ -493,12 +493,12 @@ async def phase_divergence(graph: Graph, model: BaseChatModel) -> GrowPhaseResul
     )
 
 
-# --- Phase 7: Convergence ---
+# --- Phase 6: Convergence ---
 
 
 @grow_phase(name="convergence", depends_on=["divergence"], is_deterministic=True, priority=11)
 async def phase_convergence(graph: Graph, model: BaseChatModel) -> GrowPhaseResult:  # noqa: ARG001
-    """Phase 7: Identify and persist convergence points for soft dilemmas.
+    """Phase 6: Identify and persist convergence points for soft dilemmas.
 
     For each soft dilemma with 2+ explored paths, walks the interleaved beat
     DAG to find the first beat reachable from all terminal exclusive beats.
@@ -513,7 +513,10 @@ async def phase_convergence(graph: Graph, model: BaseChatModel) -> GrowPhaseResu
     - Dilemma nodes have dilemma_role from SEED analysis.
 
     Postconditions:
-    - Soft dilemma nodes have ``converges_at`` and ``convergence_payoff`` set.
+    - Two-path soft dilemma nodes have ``converges_at`` and
+      ``convergence_payoff`` set.
+    - Single-path soft dilemma nodes have both fields null per
+      GROW R-6.4 single-path scope (locked-dilemma shadow pattern).
     - Hard dilemma nodes are unchanged.
 
     Invariants:
@@ -548,18 +551,34 @@ async def phase_convergence(graph: Graph, model: BaseChatModel) -> GrowPhaseResu
         if role == "hard":
             continue
 
+        # R-6.4 (single-path scope): single-path soft is the legitimate
+        # locked-dilemma shadow pattern — Phase 6's Operations header scopes
+        # the operation to "two explored paths" and R-6.4's halt only fires
+        # within that scope.  Skip without halting; converges_at and
+        # convergence_payoff stay null per Output Contract item 3.
+        paths_for_dilemma = dilemma_paths_map.get(dilemma_id, set())
+        if len(paths_for_dilemma) < 2:
+            log.debug(
+                "convergence_skipped_single_path_soft",
+                dilemma_id=dilemma_id,
+                explored_paths=len(paths_for_dilemma),
+                reason="locked-dilemma shadow pattern (R-6.4 single-path scope)",
+            )
+            continue
+
         result = find_dag_convergence_beat(
             graph,
             dilemma_id,
-            dilemma_paths=dilemma_paths_map.get(dilemma_id),
+            dilemma_paths=paths_for_dilemma,
         )
         if result is None:
-            # R-7.4: a soft dilemma with no structural convergence beat is a
-            # classification error — the dilemma should be hard, or the paths
-            # need rework so they rejoin.  Silent null is forbidden.  Return a
-            # failed GrowPhaseResult so the stage loop can run its savepoint
-            # cleanup (release/save) before raising GrowMutationError.  Reserve
-            # GrowContractError for stage exit, not intra-phase failures.
+            # R-6.4: a soft dilemma with two explored paths and no structural
+            # convergence beat is a classification error — the dilemma should
+            # be hard, or the paths need rework so they rejoin.  Silent null
+            # is forbidden.  Return a failed GrowPhaseResult so the stage
+            # loop can run its savepoint cleanup (release/save) before
+            # raising GrowMutationError.  Reserve GrowContractError for stage
+            # exit, not intra-phase failures.
             log.error(
                 "soft_dilemma_no_convergence",
                 dilemma_id=dilemma_id,
@@ -569,9 +588,9 @@ async def phase_convergence(graph: Graph, model: BaseChatModel) -> GrowPhaseResu
                 phase="convergence",
                 status="failed",
                 detail=(
-                    f"R-7.4: soft dilemma {dilemma_id!r} has no structural convergence "
-                    "beat — misclassified as soft (paths never rejoin; should be "
-                    "hard, or paths need rework)."
+                    f"R-6.4: soft dilemma {dilemma_id!r} (two explored paths) has no "
+                    "structural convergence beat — misclassified as soft (paths "
+                    "never rejoin; should be hard, or paths need rework)."
                 ),
             )
         converges_at, payoff = result
@@ -615,7 +634,7 @@ async def phase_state_flags(graph: Graph, model: BaseChatModel) -> GrowPhaseResu
     """Phase 8b: Create state flag nodes from consequences.
 
     Preconditions:
-    - Beat collapse complete (Phase 7b).
+    - Beat collapse / interleaving complete.
     - Consequence nodes exist with path_id associations.
     - has_consequence edges link paths to consequences.
 

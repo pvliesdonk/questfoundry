@@ -72,8 +72,23 @@ _ACTION_PHRASE_PATTERNS = (
 
 
 def _check_convergence_and_ordering_exit(graph: Graph, errors: list[str]) -> None:
-    """Soft vs hard dilemma convergence metadata (R-7.3, R-7.4)."""
+    """Soft vs hard dilemma convergence metadata (GROW R-6.3, GROW R-6.4).
+
+    Single-path soft Dilemmas (the locked-dilemma shadow pattern; SEED Phase 2
+    R-2.2) are exempt from the converges_at requirement per GROW R-6.4's
+    two-path scope: with only one path, there is no second path to converge
+    with, so converges_at and convergence_payoff stay null.
+    """
     dilemma_nodes = graph.get_nodes_by_type("dilemma")
+
+    # Pre-build dilemma → paths map for the path-count check (R-6.4 single-path scope).
+    path_nodes = graph.get_nodes_by_type("path")
+    dilemma_paths_count: dict[str, int] = {}
+    for _path_id, pdata in path_nodes.items():
+        raw_did = pdata.get("dilemma_id", "")
+        if raw_did:
+            scoped = normalize_scoped_id(raw_did, "dilemma")
+            dilemma_paths_count[scoped] = dilemma_paths_count.get(scoped, 0) + 1
 
     for dilemma_id, dilemma in sorted(dilemma_nodes.items()):
         role = dilemma.get("dilemma_role")
@@ -83,22 +98,30 @@ def _check_convergence_and_ordering_exit(graph: Graph, errors: list[str]) -> Non
         if role == "hard":
             if converges_at is not None:
                 errors.append(
-                    f"R-7.3: hard dilemma {dilemma_id!r} must have "
+                    f"GROW R-6.3: hard dilemma {dilemma_id!r} must have "
                     f"converges_at null, got {converges_at!r}"
                 )
             if payoff is not None:
                 errors.append(
-                    f"R-7.3: hard dilemma {dilemma_id!r} must have "
+                    f"GROW R-6.3: hard dilemma {dilemma_id!r} must have "
                     f"convergence_payoff null, got {payoff!r}"
                 )
         elif role == "soft":
+            # GROW R-6.4 single-path scope: skip the converges_at requirement
+            # for single-path soft (locked-dilemma shadow pattern). Both fields
+            # stay null per Phase 6 §Output Contract item 3.
+            if dilemma_paths_count.get(dilemma_id, 0) < 2:
+                continue
             if converges_at is None:
                 errors.append(
-                    f"R-7.4: soft dilemma {dilemma_id!r} missing "
-                    "converges_at (paths must structurally rejoin)"
+                    f"GROW R-6.4: soft dilemma {dilemma_id!r} (two explored paths) "
+                    "missing converges_at (paths must structurally rejoin)"
                 )
             if payoff is None:
-                errors.append(f"R-7.4: soft dilemma {dilemma_id!r} missing convergence_payoff")
+                errors.append(
+                    f"GROW R-6.4: soft dilemma {dilemma_id!r} (two explored paths) "
+                    "missing convergence_payoff"
+                )
 
 
 def _check_arc_enumeration(graph: Graph, errors: list[str]) -> None:
@@ -145,7 +168,7 @@ def _check_transition_beats(graph: Graph, errors: list[str]) -> None:
 
 
 def _check_entity_overlays(graph: Graph, errors: list[str]) -> None:
-    """Entity overlay composition (R-6.5, R-6.6)."""
+    """Entity overlay composition (R-5.5, R-5.6)."""
     entity_nodes = graph.get_nodes_by_type("entity")
 
     for entity_id, entity in sorted(entity_nodes.items()):
@@ -155,36 +178,36 @@ def _check_entity_overlays(graph: Graph, errors: list[str]) -> None:
 
         for idx, overlay in enumerate(overlays):
             if not isinstance(overlay, dict):
-                errors.append(f"R-6.5: entity {entity_id!r} overlay[{idx}] is not a dict")
+                errors.append(f"R-5.5: entity {entity_id!r} overlay[{idx}] is not a dict")
                 continue
             when = overlay.get("when", [])
             details = overlay.get("details")
             if not when:
                 errors.append(
-                    f"R-6.5: entity {entity_id!r} overlay[{idx}] has empty "
+                    f"R-5.5: entity {entity_id!r} overlay[{idx}] has empty "
                     "'when' (activation condition missing)"
                 )
             if not details:
-                errors.append(f"R-6.5: entity {entity_id!r} overlay[{idx}] has empty 'details'")
+                errors.append(f"R-5.5: entity {entity_id!r} overlay[{idx}] has empty 'details'")
 
-    # R-6.6: detect per-state entity duplicates (entity_id__state pattern).
+    # R-5.6: detect per-state entity duplicates (entity_id__state pattern).
     for entity_id in sorted(entity_nodes):
         if "__" in entity_id:
             base = entity_id.rsplit("__", 1)[0]
             if base in entity_nodes:
                 errors.append(
-                    f"R-6.6: entity {entity_id!r} appears to be a state-variant "
+                    f"R-5.6: entity {entity_id!r} appears to be a state-variant "
                     f"of {base!r}; overlays must be embedded, not separate nodes"
                 )
 
 
 def _check_state_flags(graph: Graph, errors: list[str]) -> None:
-    """State flag derivation + naming (R-6.1, R-6.2, R-6.4)."""
+    """State flag derivation + naming (GROW R-5.1, R-5.2, R-5.4)."""
     state_flag_nodes = graph.get_nodes_by_type("state_flag")
     consequence_nodes = graph.get_nodes_by_type("consequence")
     derived_from_edges = graph.get_edges(edge_type="derived_from")
 
-    # R-6.1: every state_flag has ≥1 derived_from edge.
+    # R-5.1: every state_flag has ≥1 derived_from edge.
     flag_to_conseqs: dict[str, list[str]] = {}
     for edge in derived_from_edges:
         flag_to_conseqs.setdefault(edge["from"], []).append(edge["to"])
@@ -192,11 +215,11 @@ def _check_state_flags(graph: Graph, errors: list[str]) -> None:
     for flag_id in sorted(state_flag_nodes.keys()):
         if not flag_to_conseqs.get(flag_id):
             errors.append(
-                f"R-6.1: state_flag {flag_id!r} has no derived_from edge "
+                f"R-5.1: state_flag {flag_id!r} has no derived_from edge "
                 "(ad-hoc creation forbidden)"
             )
 
-    # R-6.2: state flag names express world state, not player actions.
+    # R-5.2: state flag names express world state, not player actions.
     # phase_state_flags populates `raw_id` (the stable name), not `name`.
     # Check both so the rule enforces against real GROW output, not just
     # fixtures that happen to set `name`.
@@ -214,18 +237,18 @@ def _check_state_flags(graph: Graph, errors: list[str]) -> None:
         if matched is not None:
             offender, pattern = matched
             errors.append(
-                f"R-6.2: state_flag {flag_id!r} name {offender!r} is "
+                f"R-5.2: state_flag {flag_id!r} name {offender!r} is "
                 f"action-phrased (contains {pattern!r}); must express "
                 "world state"
             )
 
-    # R-6.4: every Consequence produces at least one State Flag.
+    # R-5.4: every Consequence produces at least one State Flag.
     derived_conseqs: set[str] = set()
     for edge in derived_from_edges:
         derived_conseqs.add(edge["to"])
     for conseq_id in sorted(consequence_nodes.keys()):
         if conseq_id not in derived_conseqs:
-            errors.append(f"R-6.4: consequence {conseq_id!r} has no derived state_flag")
+            errors.append(f"R-5.4: consequence {conseq_id!r} has no derived state_flag")
 
 
 def _check_intersections(graph: Graph, errors: list[str]) -> None:

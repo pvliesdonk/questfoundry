@@ -504,3 +504,55 @@ class TestPhaseConvergencePersistence:
         assert d2_node is not None
         # Hard dilemma must not have converges_at set by phase_convergence
         assert d2_node.get("converges_at") is None
+
+    @pytest.mark.asyncio
+    async def test_single_path_soft_dilemma_skipped_no_halt(self) -> None:
+        """Single-path soft Dilemma is skipped per GROW R-6.4 single-path scope.
+
+        Per the GROW spec change codifying R-6.4's two-path scope, a soft
+        Dilemma with only one explored path is the legitimate locked-dilemma
+        shadow pattern (SEED Phase 2 R-2.2). Phase 6 must skip it without
+        halting; `converges_at` and `convergence_payoff` stay null per
+        Phase 6 §Output Contract item 3.
+
+        Regression test for the projects/murder2/ failure: SEED produced
+        `dilemma::locket_planted_or_dropped` with `dilemma_role: "soft"`
+        and `explored: ["planted"]` only. Pre-fix, GROW Phase 6 halted
+        on this single-path soft dilemma. Post-fix, the dilemma is
+        skipped and the run completes.
+        """
+        graph = Graph.empty()
+
+        # Create one soft dilemma with only ONE explored path (the other is shadow)
+        graph.create_node(
+            "dilemma::single_soft",
+            {
+                "type": "dilemma",
+                "raw_id": "single_soft",
+                "dilemma_role": "soft",
+                "payoff_budget": 2,
+            },
+        )
+        graph.create_node(
+            "path::single_soft_a",
+            {
+                "type": "path",
+                "raw_id": "single_soft_a",
+                "dilemma_id": "dilemma::single_soft",
+                "is_canonical": True,
+            },
+        )
+        # No second path — `b` was deliberately left as shadow.
+
+        result = await phase_convergence(graph, _make_mock_model())
+
+        # Phase must NOT halt — single-path soft is legitimate
+        assert result.status == "completed", (
+            f"Expected completed, got {result.status}: {result.detail}"
+        )
+        # converges_at and convergence_payoff stay null on the dilemma node
+        # (no second path to converge with)
+        d_node = graph.get_node("dilemma::single_soft")
+        assert d_node is not None
+        assert d_node.get("converges_at") is None
+        assert d_node.get("convergence_payoff") is None
