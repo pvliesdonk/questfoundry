@@ -532,7 +532,7 @@ class DressStage:
         if self._unload_after_summarize is not None:
             await self._unload_after_summarize()
 
-        # Phase 3: Serialize. Backtick-wrap IDs per CLAUDE.md §9 rule 1.
+        # Phase 3: Serialize. Backtick-wrap IDs per @prompt-engineer Rule 4.
         entity_ids = "\n".join(
             f"- `{edata.get('raw_id', strip_scope_prefix(eid))}`" for eid, edata in entities.items()
         )

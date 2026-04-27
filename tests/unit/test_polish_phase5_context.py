@@ -46,7 +46,7 @@ class TestFormatChoiceLabelContext:
         assert "choice_details" in ctx
         assert "Start" in ctx["choice_details"]
         assert "End" in ctx["choice_details"]
-        # IDs in the choice line are backtick-wrapped per CLAUDE.md §9 rule 1.
+        # IDs in the choice line are backtick-wrapped per @prompt-engineer Rule 4.
         assert "From: `p1`" in ctx["choice_details"]
         assert "To: `p2`" in ctx["choice_details"]
         assert "grants: `flag1`" in ctx["choice_details"]
@@ -103,7 +103,7 @@ class TestFormatResidueContentContext:
 
         ctx = format_residue_content_context(graph, residue_specs, passage_specs)
         assert ctx["residue_count"] == "1"
-        # IDs are backtick-wrapped per CLAUDE.md §9 rule 1.
+        # IDs are backtick-wrapped per @prompt-engineer Rule 4.
         assert "`r1`" in ctx["residue_details"]
         assert "`flag1`" in ctx["residue_details"]
         assert "`path::brave`" in ctx["residue_details"]
@@ -141,7 +141,7 @@ class TestFormatFalseBranchContext:
 
         ctx = format_false_branch_context(graph, candidates, passage_specs)
         assert ctx["candidate_count"] == "1"
-        # IDs backtick-wrapped per CLAUDE.md §9 rule 1.
+        # IDs backtick-wrapped per @prompt-engineer Rule 4.
         assert "`entity::hero`" in ctx["valid_entity_ids"]
         assert "`p1`" in ctx["candidate_details"]
         assert "`p2`" in ctx["candidate_details"]
@@ -177,7 +177,7 @@ class TestFormatVariantSummaryContext:
         ctx = format_variant_summary_context(graph, variant_specs, passage_specs)
         assert ctx["variant_count"] == "1"
         assert "Base passage" in ctx["variant_details"]
-        # IDs backtick-wrapped per CLAUDE.md §9 rule 1.
+        # IDs backtick-wrapped per @prompt-engineer Rule 4.
         assert "`v1`" in ctx["variant_details"]
         assert "`p1`" in ctx["variant_details"]
         assert "`flag1`" in ctx["variant_details"]
@@ -241,7 +241,7 @@ class TestFormatAmbiguousFeasibilityContext:
 class TestFormatTransitionGuidanceContext:
     def test_passage_and_beat_ids_backtick_wrapped(self) -> None:
         """Both `passage_id` (per-passage header) and `bid` (per-beat line)
-        are backtick-wrapped per CLAUDE.md §9 rule 1."""
+        are backtick-wrapped per @prompt-engineer Rule 4."""
         graph = Graph.empty()
         _make_beat(graph, "beat::a", "First beat")
         _make_beat(graph, "beat::b", "Second beat")

@@ -180,18 +180,6 @@ For *adding a new stage* or substantively reshaping an existing one (orchestrato
 
 For *debugging output that came back wrong*, use the **`questfoundry-llm-debugging`** skill.
 
-**Citation map for prior `CLAUDE.md §6–§10` references.** Earlier code, tests, and audit reports cite these section numbers. The rules now live in the `@prompt-engineer` subagent — same content, renamed:
-
-| Old citation | New location |
-|---|---|
-| `CLAUDE.md §6` Valid ID Injection | `@prompt-engineer` Rule 1 |
-| `CLAUDE.md §7` Defensive Prompt Patterns | `@prompt-engineer` Rule 2 |
-| `CLAUDE.md §8` Context Enrichment | `@prompt-engineer` Rule 3 |
-| `CLAUDE.md §9` Prompt Context Formatting | `@prompt-engineer` Rule 4 |
-| `CLAUDE.md §10` Small-Model Bias | `@prompt-engineer` Rule 5 |
-
-Existing inline comments that cite the old numbers can be updated opportunistically; not required for this PR.
-
 ---
 
 ## Configuration (Pointer)

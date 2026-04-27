@@ -235,7 +235,7 @@ async def serialize_to_artifact(
             the validation-failure feedback message on every retry attempt. Used
             to echo expected values for constraint-to-value mappings the model
             loses across long context (e.g. SEED shared-beats `also_belongs_to`
-            sibling path id). Per CLAUDE.md §10, the model does not re-read the
+            sibling path id). Per @prompt-engineer Rule 5, the model does not re-read the
             system prompt on retry — only the new user-message — so the hint
             must be self-contained.
 
@@ -492,7 +492,7 @@ def _build_error_feedback(errors: list[str], extra_hints: list[str] | None = Non
             generic feedback. Used to echo expected values for
             constraint-to-value mappings the model loses across long
             context (e.g. SEED shared-beats `also_belongs_to` value
-            template — see CLAUDE.md §10 small-model repair-loop
+            template — see @prompt-engineer Rule 5 small-model repair-loop
             blindness).
 
     Returns:
@@ -1231,7 +1231,7 @@ async def _serialize_shared_beats_for_dilemma(
     # Per-attempt repair hint — the validator's `also_belongs_to`-missing
     # error names the field but doesn't echo the value, and small models
     # (qwen3:4b production default) lose the constraint-to-value mapping
-    # across retry attempts (CLAUDE.md §10 small-model repair-loop
+    # across retry attempts (@prompt-engineer Rule 5 small-model repair-loop
     # blindness — the model doesn't re-read the system prompt on retry).
     # The hint is dilemma-specific so it always applies to this call.
     also_belongs_to_hint = (

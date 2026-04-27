@@ -39,7 +39,7 @@ class TestFormatLinearSectionContext:
         )
 
         assert ctx["section_id"] == "section_0"
-        # Beat IDs in beat_details lines are backtick-wrapped per CLAUDE.md §9 rule 1.
+        # Beat IDs in beat_details lines are backtick-wrapped per @prompt-engineer Rule 4.
         assert "`beat::a`" in ctx["beat_details"]
         assert "`beat::b`" in ctx["beat_details"]
         assert "`beat::c`" in ctx["beat_details"]
@@ -80,7 +80,7 @@ class TestFormatLinearSectionContext:
 
     def test_section_beat_with_entities_renders_backticks(self) -> None:
         """A section beat whose `entities` field is populated renders the
-        entity list with backticks per CLAUDE.md §9 rule 1 — never as a
+        entity list with backticks per @prompt-engineer Rule 4 — never as a
         Python repr-style bracket list. Covers the linear-section
         equivalent of `test_pacing_beat_with_entities_renders_backticks`."""
         graph = Graph.empty()
@@ -89,7 +89,7 @@ class TestFormatLinearSectionContext:
         ctx = format_linear_section_context(graph, "s0", ["beat::a"], None, None)
 
         assert "entities: `entity::hero`" in ctx["beat_details"]
-        # No bracket-format leak per CLAUDE.md §9 rule 1.
+        # No bracket-format leak per @prompt-engineer Rule 4.
         assert "entities=[" not in ctx["beat_details"]
 
     def test_dilemma_impacts_shown(self) -> None:
@@ -106,7 +106,7 @@ class TestFormatLinearSectionContext:
         assert "commits" in ctx["beat_details"]
         # Dilemma IDs are backtick-wrapped within the impacts: clause.
         assert "`dilemma::d1`" in ctx["beat_details"]
-        # No bracket-format leaks per CLAUDE.md §9 rule 1.
+        # No bracket-format leaks per @prompt-engineer Rule 4.
         assert "impacts=[" not in ctx["beat_details"]
 
 
@@ -131,7 +131,7 @@ class TestFormatPacingContext:
         ctx = format_pacing_context(graph, flags)
 
         assert "consecutive_scene" in ctx["pacing_issues"]
-        # Beat IDs and path IDs backtick-wrapped per CLAUDE.md §9 rule 1.
+        # Beat IDs and path IDs backtick-wrapped per @prompt-engineer Rule 4.
         assert "`beat::a`" in ctx["pacing_issues"]
         assert "Path: `path::p1`" in ctx["pacing_issues"]
         # valid_entity_ids backtick-wrapped, with `(none)` fallback.
@@ -147,7 +147,7 @@ class TestFormatPacingContext:
 
     def test_pacing_beat_with_entities_renders_backticks(self) -> None:
         """A pacing flag whose beats reference entities renders the entity
-        list with backticks per CLAUDE.md §9 rule 1 — never as a Python
+        list with backticks per @prompt-engineer Rule 4 — never as a Python
         repr-style bracket list."""
         graph = Graph.empty()
         _make_beat(graph, "beat::a", "Hero acts", entities=["entity::hero"])
@@ -159,7 +159,7 @@ class TestFormatPacingContext:
         ctx = format_pacing_context(graph, flags)
 
         assert "entities: `entity::hero`" in ctx["pacing_issues"]
-        # No bracket-format leaking through (CLAUDE.md §9 rule 1).
+        # No bracket-format leaking through (@prompt-engineer Rule 4).
         assert "entities=[" not in ctx["pacing_issues"]
 
 
@@ -193,7 +193,7 @@ class TestFormatEntityArcContext:
         assert ctx["entity_id"] == "entity::mentor"
         assert ctx["entity_name"] == "The Mentor"
         assert "wise guide" in ctx["entity_description"]
-        # IDs in beat_appearances lines are backtick-wrapped per CLAUDE.md §9
+        # IDs in beat_appearances lines are backtick-wrapped per @prompt-engineer Rule 4
         # rule 1 — matches the valid_*_ids lists so a model doesn't need to
         # mentally strip backticks when matching IDs across surfaces.
         assert "`beat::intro`" in ctx["beat_appearances"]
@@ -231,13 +231,13 @@ class TestFormatEntityArcContext:
         ctx = format_entity_arc_context(graph, "entity::npc", ["beat::b1"])
 
         assert "hostile" in ctx["overlay_data"]
-        # Flag IDs are backtick-wrapped per CLAUDE.md §9 rule 1 — matches the
+        # Flag IDs are backtick-wrapped per @prompt-engineer Rule 4 — matches the
         # DRESS overlay renderer (closes #1406).
         assert "`dilemma::d1:path::p1`" in ctx["overlay_data"]
 
     def test_entity_overlay_list_values_render_human_readable(self) -> None:
         """List-valued details render as comma-joined strings (e.g. `umm, well`)
-        — never as Python repr (`['umm', 'well']`) per CLAUDE.md §9 rule 1.
+        — never as Python repr (`['umm', 'well']`) per @prompt-engineer Rule 4.
         Pinned because this is exactly the bracket-format the rule forbids."""
         graph = Graph.empty()
         graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
@@ -311,7 +311,7 @@ class TestFormatEntityArcContext:
 
     def test_anchored_dilemmas_backtick_wrapped(self) -> None:
         """Dilemmas the entity is `anchored_to` are backtick-wrapped per
-        CLAUDE.md §9 rule 1 — same convention as overlay flag IDs and the
+        @prompt-engineer Rule 4 — same convention as overlay flag IDs and the
         valid_*_ids lists."""
         graph = Graph.empty()
         graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})

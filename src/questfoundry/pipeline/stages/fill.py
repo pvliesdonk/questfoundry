@@ -769,7 +769,7 @@ class FillStage:
         else:
             parts.append("\nPlease fix the errors and try again.")
 
-        # Per CLAUDE.md §6 / §repair-loop quality: echo allowed Literal values
+        # Per @prompt-engineer Rule 1 / §repair-loop quality: echo allowed Literal values
         # for any invalid Literal-typed field so the model can self-correct
         # instead of guessing again. Skipped on structural failures because
         # those carry the "fix ONLY the structural issue" instruction above —
@@ -782,7 +782,7 @@ class FillStage:
                 if values is not None:
                     # Backtick-wrap each value for consistency with the SEED
                     # repair-feedback pattern (serialize.py) and the prompts
-                    # themselves (CLAUDE.md §9 rule 1).
+                    # themselves (@prompt-engineer Rule 4).
                     formatted = ", ".join(f"`{v}`" for v in values)
                     literal_hints.append(f"Allowed values for `{field_path}`: {formatted}")
             if literal_hints:
@@ -1955,7 +1955,7 @@ class FillStage:
             if node:
                 passage_data[passage_id] = node
 
-        # Valid entity IDs (raw, sorted, backtick-wrapped per CLAUDE.md §9 rule 1).
+        # Valid entity IDs (raw, sorted, backtick-wrapped per @prompt-engineer Rule 4).
         # Hoisted out of the per-passage closure since entities don't change
         # during revision — matches the pre-computation pattern above.
         valid_entity_id_list = sorted(

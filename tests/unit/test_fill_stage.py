@@ -1108,7 +1108,7 @@ class TestPhase3Revision:
         """The revision call MUST inject `valid_entity_ids` into the prompt
         context AND pass it as `extra_repair_hints` so the constraint survives
         context drift on retry. Closes the FILL §fill_phase3_revision audit
-        finding (CLAUDE.md §6 Valid ID Injection)."""
+        finding (@prompt-engineer Rule 1 Valid ID Injection)."""
         graph = _make_reviewed_graph()
         graph.create_node(
             "entity::kay",
@@ -1155,7 +1155,7 @@ class TestPhase3Revision:
         assert "valid_entity_ids" in captured_context
         valid_ids_text = captured_context["valid_entity_ids"]
         assert "kay" in valid_ids_text  # raw_id of the entity created above
-        assert "`kay`" in valid_ids_text  # backtick-wrapped per CLAUDE.md §9 rule 1
+        assert "`kay`" in valid_ids_text  # backtick-wrapped per @prompt-engineer Rule 4
 
         # Same constraint also flows as a retry hint so it survives context drift.
         assert captured_hints is not None
