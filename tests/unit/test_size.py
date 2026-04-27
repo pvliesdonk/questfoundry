@@ -44,9 +44,6 @@ class TestSizeProfile:
         # discuss_brainstorm.yaml — 15-25 entities
         assert s.entities_min == 15
         assert s.entities_max == 25
-        # discuss_seed.yaml — 2-4 beats per path
-        assert s.beats_per_path_min == 2
-        assert s.beats_per_path_max == 4
         # fill_phase0_voice.yaml — 3-5 tone words
         assert s.tone_words_min == 3
         assert s.tone_words_max == 5
@@ -98,7 +95,6 @@ class TestSizeProfile:
             "objects",
             "dilemmas",
             "entities",
-            "beats_per_path",
             "convergence_points",
             "est_passages",
             "est_words",
@@ -244,7 +240,7 @@ class TestSizeTemplateVars:
         assert vars_["size_characters"] == "5-10"
         assert vars_["size_dilemmas"] == "4-8"
         assert vars_["size_locations"] == "3-6"
-        assert vars_["size_beats_per_path"] == "2-4"
+        assert vars_["size_post_commit_beats_per_path"] == "2-3"
         assert vars_["size_preset"] == "medium"
 
     def test_micro_template_vars(self) -> None:
@@ -267,7 +263,6 @@ class TestSizeTemplateVars:
             "size_objects",
             "size_dilemmas",
             "size_entities",
-            "size_beats_per_path",
             "size_shared_beats_per_dilemma",
             "size_post_commit_beats_per_path",
             "size_convergence_points",

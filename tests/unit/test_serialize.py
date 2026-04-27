@@ -429,266 +429,6 @@ class TestSerializationError:
         assert "Failed to serialize" in str(error)
 
 
-class TestGetSectionsToRetry:
-    """Test _get_sections_to_retry helper function."""
-
-    def test_maps_entities_field_to_entities_section(self) -> None:
-        """Should map entities.* errors to entities section."""
-        from questfoundry.agents.serialize import _get_sections_to_retry
-        from questfoundry.graph.mutations import SeedValidationError
-
-        errors = [
-            SeedValidationError(
-                field_path="entities.0.entity_id",
-                issue="Entity not found",
-                available=["a", "b"],
-                provided="x",
-            )
-        ]
-
-        sections = _get_sections_to_retry(errors)
-        assert sections == {"entities"}
-
-    def test_maps_paths_field_to_paths_section(self) -> None:
-        """Should map paths.* errors to paths section."""
-        from questfoundry.agents.serialize import _get_sections_to_retry
-        from questfoundry.graph.mutations import SeedValidationError
-
-        errors = [
-            SeedValidationError(
-                field_path="paths.0.dilemma_id",
-                issue="Dilemma not found",
-                available=[],
-                provided="x",
-            )
-        ]
-
-        sections = _get_sections_to_retry(errors)
-        assert sections == {"paths"}
-
-    def test_maps_initial_beats_to_beats_section(self) -> None:
-        """Should map initial_beats.* errors to beats section."""
-        from questfoundry.agents.serialize import _get_sections_to_retry
-        from questfoundry.graph.mutations import SeedValidationError
-
-        errors = [
-            SeedValidationError(
-                field_path="initial_beats.0.entities",
-                issue="Entity not found",
-                available=[],
-                provided="x",
-            )
-        ]
-
-        sections = _get_sections_to_retry(errors)
-        assert sections == {"beats"}
-
-    def test_multiple_errors_from_different_sections(self) -> None:
-        """Should return all affected sections."""
-        from questfoundry.agents.serialize import _get_sections_to_retry
-        from questfoundry.graph.mutations import SeedValidationError
-
-        errors = [
-            SeedValidationError(
-                field_path="paths.0.dilemma_id",
-                issue="Dilemma not found",
-                available=[],
-                provided="x",
-            ),
-            SeedValidationError(
-                field_path="initial_beats.0.entities",
-                issue="Entity not found",
-                available=[],
-                provided="y",
-            ),
-        ]
-
-        sections = _get_sections_to_retry(errors)
-        assert sections == {"paths", "beats"}
-
-
-class TestSerializeSeedIterativelySemanticValidation:
-    """Test semantic validation in serialize_seed_iteratively."""
-
-    @pytest.mark.asyncio
-    async def test_skips_semantic_validation_when_graph_is_none(self) -> None:
-        """Should skip semantic validation when graph is not provided."""
-        from unittest.mock import MagicMock
-
-        from questfoundry.agents.serialize import serialize_seed_iteratively
-
-        # Create mock model that returns valid section data
-        mock_model = MagicMock()
-
-        # We need to mock serialize_to_artifact since serialize_seed_iteratively calls it
-        with patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_serialize:
-            # Set up mock returns for each section
-            mock_serialize.side_effect = [
-                (MagicMock(model_dump=lambda: {"entities": []}), 10),
-                (MagicMock(model_dump=lambda: {"dilemmas": []}), 10),
-                (MagicMock(model_dump=lambda: {"paths": []}), 10),
-                (MagicMock(model_dump=lambda: {"consequences": []}), 10),
-                (MagicMock(model_dump=lambda: {"initial_beats": []}), 10),
-            ]
-
-            with patch("questfoundry.agents.serialize.validate_seed_mutations") as mock_validate:
-                _result, _tokens = await serialize_seed_iteratively(
-                    model=mock_model,
-                    brief="Test brief",
-                    graph=None,  # No graph - should skip semantic validation
-                )
-
-                # Validate should NOT be called when graph is None
-                mock_validate.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_semantic_validation_passes_on_first_try(self) -> None:
-        """Should not retry when semantic validation passes."""
-        from unittest.mock import MagicMock
-
-        from questfoundry.agents.serialize import serialize_seed_iteratively
-
-        mock_model = MagicMock()
-        mock_graph = MagicMock()
-
-        with patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_serialize:
-            mock_serialize.side_effect = [
-                (MagicMock(model_dump=lambda: {"entities": []}), 10),
-                (MagicMock(model_dump=lambda: {"dilemmas": []}), 10),
-                (MagicMock(model_dump=lambda: {"paths": []}), 10),
-                (MagicMock(model_dump=lambda: {"consequences": []}), 10),
-                (MagicMock(model_dump=lambda: {"initial_beats": []}), 10),
-            ]
-
-            with patch("questfoundry.agents.serialize.validate_seed_mutations", return_value=[]):
-                _result, _tokens = await serialize_seed_iteratively(
-                    model=mock_model,
-                    brief="Test brief",
-                    graph=mock_graph,
-                )
-
-                # Should only call serialize 5 times (once per section)
-                assert mock_serialize.call_count == 5
-
-    @pytest.mark.asyncio
-    async def test_semantic_validation_retries_on_error(self) -> None:
-        """Should retry sections with semantic errors."""
-        from unittest.mock import MagicMock
-
-        from questfoundry.agents.serialize import serialize_seed_iteratively
-        from questfoundry.graph.mutations import SeedValidationError
-
-        mock_model = MagicMock()
-        mock_graph = MagicMock()
-
-        call_count = [0]
-
-        def mock_serialize_side_effect(*_args, **_kwargs):
-            call_count[0] += 1
-            # Map call number to section
-            section_map = {
-                1: "entities",
-                2: "dilemmas",
-                3: "paths",
-                4: "consequences",
-                5: "initial_beats",
-                # Retry calls
-                6: "paths",  # Retry paths section
-            }
-            call_num = call_count[0]
-            section = section_map.get(call_num, "unknown")
-
-            return (MagicMock(model_dump=lambda s=section: {s: []}), 10)
-
-        validation_call_count = [0]
-
-        def mock_validate_side_effect(_graph, _output):
-            validation_call_count[0] += 1
-            if validation_call_count[0] == 1:
-                # First validation: return errors for paths section
-                return [
-                    SeedValidationError(
-                        field_path="paths.0.dilemma_id",
-                        issue="Dilemma not found",
-                        available=["valid_dilemma"],
-                        provided="invalid_dilemma",
-                    )
-                ]
-            # Second validation: pass
-            return []
-
-        with (
-            patch(
-                "questfoundry.agents.serialize.serialize_to_artifact",
-                side_effect=mock_serialize_side_effect,
-            ),
-            patch(
-                "questfoundry.agents.serialize.validate_seed_mutations",
-                side_effect=mock_validate_side_effect,
-            ),
-        ):
-            _result, _tokens = await serialize_seed_iteratively(
-                model=mock_model,
-                brief="Test brief",
-                graph=mock_graph,
-            )
-
-            # Should have called serialize 6 times (5 initial + 1 retry for paths)
-            assert call_count[0] == 6
-            # Should have validated twice
-            assert validation_call_count[0] == 2
-
-    @pytest.mark.asyncio
-    async def test_semantic_validation_raises_after_max_retries(self) -> None:
-        """Should raise SeedMutationError after max_semantic_retries."""
-        from unittest.mock import MagicMock
-
-        from questfoundry.agents.serialize import serialize_seed_iteratively
-        from questfoundry.graph.mutations import SeedMutationError, SeedValidationError
-
-        mock_model = MagicMock()
-        mock_graph = MagicMock()
-
-        # Always return errors
-        errors = [
-            SeedValidationError(
-                field_path="paths.0.dilemma_id",
-                issue="Dilemma not found",
-                available=["valid_dilemma"],
-                provided="invalid_dilemma",
-            )
-        ]
-
-        with (
-            patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_serialize,
-            patch("questfoundry.agents.serialize.validate_seed_mutations", return_value=errors),
-        ):
-            # Set up returns for initial sections + retries
-            mock_serialize.return_value = (
-                MagicMock(
-                    model_dump=lambda: {
-                        "entities": [],
-                        "dilemmas": [],
-                        "paths": [],
-                        "consequences": [],
-                        "initial_beats": [],
-                    }
-                ),
-                10,
-            )
-
-            with pytest.raises(SeedMutationError) as exc_info:
-                await serialize_seed_iteratively(
-                    model=mock_model,
-                    brief="Test brief",
-                    graph=mock_graph,
-                    max_semantic_retries=2,
-                )
-
-            assert len(exc_info.value.errors) == 1
-            assert "paths.0.dilemma_id" in exc_info.value.errors[0].field_path
-
-
 class TestSerializeResult:
     """Tests for SerializeResult dataclass."""
 
@@ -2260,11 +2000,10 @@ class TestSizeProfileInjectedIntoBeatPrompts:
     """Test that size_profile controls beat count range in prompts."""
 
     def test_size_profile_renders_beats_range_in_prompts(self) -> None:
-        """Beat prompts should use the correct size placeholder per prompt type.
+        """Y-shape beat prompts should use the correct size placeholder per prompt type.
 
-        - beats: uses {size_beats_per_path} (legacy monolithic prompt)
-        - per_path_beats: uses {size_post_commit_beats_per_path} (Y-shape two-call)
-        - shared_beats: uses {size_shared_beats_per_dilemma} (Y-shape two-call)
+        - per_path_beats: uses {size_post_commit_beats_per_path}
+        - shared_beats: uses {size_shared_beats_per_dilemma}
         """
         from questfoundry.agents.serialize import _load_seed_section_prompts
         from questfoundry.pipeline.size import get_size_profile, size_template_vars
@@ -2272,18 +2011,15 @@ class TestSizeProfileInjectedIntoBeatPrompts:
         prompts = _load_seed_section_prompts()
 
         # Verify the template placeholders exist before rendering
-        assert "{size_beats_per_path}" in prompts["beats"]
         assert "{size_post_commit_beats_per_path}" in prompts["per_path_beats"]
         assert "{size_shared_beats_per_dilemma}" in prompts["shared_beats"]
 
         # Render with 'long' preset
         long_profile = get_size_profile("long")
         size_vars = size_template_vars(long_profile)
-        beats_range = size_vars["size_beats_per_path"]
         post_range = size_vars["size_post_commit_beats_per_path"]
         shared_range = size_vars["size_shared_beats_per_dilemma"]
 
-        rendered_beats = prompts["beats"].replace("{size_beats_per_path}", beats_range)
         rendered_per_path = prompts["per_path_beats"].replace(
             "{size_post_commit_beats_per_path}", post_range
         )
@@ -2291,8 +2027,6 @@ class TestSizeProfileInjectedIntoBeatPrompts:
             "{size_shared_beats_per_dilemma}", shared_range
         )
 
-        assert "3-5" in rendered_beats
-        assert "{size_beats_per_path}" not in rendered_beats
         # per_path_beats uses post_range (2-3 for long)
         assert "2-3" in rendered_per_path
         assert "{size_post_commit_beats_per_path}" not in rendered_per_path
@@ -2300,12 +2034,12 @@ class TestSizeProfileInjectedIntoBeatPrompts:
         assert "1-2" in rendered_shared
         assert "{size_shared_beats_per_dilemma}" not in rendered_shared
 
-    def test_default_profile_uses_medium_range(self) -> None:
-        """Without explicit size_profile, medium preset (2-4) is used."""
+    def test_default_profile_uses_medium_range_for_per_path_beats(self) -> None:
+        """Without explicit size_profile, medium preset (2-3) is used for per-path post-commit beats."""
         from questfoundry.pipeline.size import size_template_vars
 
         size_vars = size_template_vars(None)
-        assert size_vars["size_beats_per_path"] == "2-4"
+        assert size_vars["size_post_commit_beats_per_path"] == "2-3"
 
 
 class TestDilemmasPromptStructure:

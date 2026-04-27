@@ -22,7 +22,6 @@ from questfoundry.agents.serialize import (
     serialize_dilemma_relationships,
     serialize_post_prune_analysis,
     serialize_seed_as_function,
-    serialize_seed_iteratively,
     serialize_to_artifact,
 )
 from questfoundry.agents.summarize import summarize_discussion, summarize_seed_chunked
@@ -48,7 +47,6 @@ __all__ = [
     "serialize_dilemma_relationships",
     "serialize_post_prune_analysis",
     "serialize_seed_as_function",
-    "serialize_seed_iteratively",
     "serialize_to_artifact",
     "summarize_discussion",
     "summarize_seed_chunked",

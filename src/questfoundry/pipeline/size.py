@@ -49,9 +49,6 @@ class SizeProfile:
     entities_min: int
     entities_max: int
 
-    # Beat structure
-    beats_per_path_min: int
-    beats_per_path_max: int
     # Y-shape beat structure (shared pre-commit + per-path post-commit)
     shared_beats_per_dilemma_min: int
     shared_beats_per_dilemma_max: int
@@ -103,8 +100,6 @@ PRESETS: dict[str, SizeProfile] = {
         dilemmas_max=3,
         entities_min=5,
         entities_max=10,
-        beats_per_path_min=2,
-        beats_per_path_max=3,
         shared_beats_per_dilemma_min=1,
         shared_beats_per_dilemma_max=1,
         post_commit_beats_per_path_min=1,
@@ -132,8 +127,6 @@ PRESETS: dict[str, SizeProfile] = {
         dilemmas_max=5,
         entities_min=10,
         entities_max=18,
-        beats_per_path_min=2,
-        beats_per_path_max=4,
         shared_beats_per_dilemma_min=1,
         shared_beats_per_dilemma_max=2,
         post_commit_beats_per_path_min=1,
@@ -161,8 +154,6 @@ PRESETS: dict[str, SizeProfile] = {
         dilemmas_max=8,
         entities_min=15,
         entities_max=25,
-        beats_per_path_min=2,
-        beats_per_path_max=4,
         shared_beats_per_dilemma_min=1,
         shared_beats_per_dilemma_max=2,
         post_commit_beats_per_path_min=2,
@@ -190,8 +181,6 @@ PRESETS: dict[str, SizeProfile] = {
         dilemmas_max=10,
         entities_min=20,
         entities_max=35,
-        beats_per_path_min=3,
-        beats_per_path_max=5,
         shared_beats_per_dilemma_min=1,
         shared_beats_per_dilemma_max=2,
         post_commit_beats_per_path_min=2,
@@ -271,7 +260,6 @@ def size_template_vars(profile: SizeProfile | None = None) -> dict[str, str]:
         "size_objects": p.range_str("objects"),
         "size_dilemmas": p.range_str("dilemmas"),
         "size_entities": p.range_str("entities"),
-        "size_beats_per_path": p.range_str("beats_per_path"),
         "size_shared_beats_per_dilemma": p.range_str("shared_beats_per_dilemma"),
         "size_post_commit_beats_per_path": p.range_str("post_commit_beats_per_path"),
         "size_convergence_points": p.range_str("convergence_points"),
