@@ -1960,7 +1960,7 @@ class TestPhase7Integration:
 
     @pytest.mark.asyncio
     async def test_phase_7_halts_on_soft_dilemma_without_convergence(self) -> None:
-        """R-7.4: a soft dilemma whose paths never rejoin must halt Phase 7.
+        """GROW R-6.4: a soft dilemma with TWO explored paths whose paths never rejoin must halt Phase 7.
 
         Build a minimal graph: one soft dilemma with two explored paths (P1, P2)
         that each terminate in separate commit beats with NO shared successor beat.
@@ -2035,7 +2035,7 @@ class TestPhase7Integration:
 
         result = await phase_convergence(graph, mock_model)
         assert result.status == "failed"
-        assert "R-7.4" in result.detail
+        assert "R-6.4" in result.detail
 
 
 class TestPhase8bIntegration:

@@ -72,8 +72,23 @@ _ACTION_PHRASE_PATTERNS = (
 
 
 def _check_convergence_and_ordering_exit(graph: Graph, errors: list[str]) -> None:
-    """Soft vs hard dilemma convergence metadata (R-7.3, R-7.4)."""
+    """Soft vs hard dilemma convergence metadata (GROW R-6.3, GROW R-6.4).
+
+    Single-path soft Dilemmas (the locked-dilemma shadow pattern; SEED Phase 2
+    R-2.2) are exempt from the converges_at requirement per GROW R-6.4's
+    two-path scope: with only one path, there is no second path to converge
+    with, so converges_at and convergence_payoff stay null.
+    """
     dilemma_nodes = graph.get_nodes_by_type("dilemma")
+
+    # Pre-build dilemma → paths map for the path-count check (R-6.4 single-path scope).
+    path_nodes = graph.get_nodes_by_type("path")
+    dilemma_paths_count: dict[str, int] = {}
+    for _path_id, pdata in path_nodes.items():
+        raw_did = pdata.get("dilemma_id", "")
+        if raw_did:
+            scoped = raw_did if raw_did.startswith("dilemma::") else f"dilemma::{raw_did}"
+            dilemma_paths_count[scoped] = dilemma_paths_count.get(scoped, 0) + 1
 
     for dilemma_id, dilemma in sorted(dilemma_nodes.items()):
         role = dilemma.get("dilemma_role")
@@ -83,22 +98,30 @@ def _check_convergence_and_ordering_exit(graph: Graph, errors: list[str]) -> Non
         if role == "hard":
             if converges_at is not None:
                 errors.append(
-                    f"R-7.3: hard dilemma {dilemma_id!r} must have "
+                    f"GROW R-6.3: hard dilemma {dilemma_id!r} must have "
                     f"converges_at null, got {converges_at!r}"
                 )
             if payoff is not None:
                 errors.append(
-                    f"R-7.3: hard dilemma {dilemma_id!r} must have "
+                    f"GROW R-6.3: hard dilemma {dilemma_id!r} must have "
                     f"convergence_payoff null, got {payoff!r}"
                 )
         elif role == "soft":
+            # GROW R-6.4 single-path scope: skip the converges_at requirement
+            # for single-path soft (locked-dilemma shadow pattern). Both fields
+            # stay null per Phase 6 §Output Contract item 3.
+            if dilemma_paths_count.get(dilemma_id, 0) < 2:
+                continue
             if converges_at is None:
                 errors.append(
-                    f"R-7.4: soft dilemma {dilemma_id!r} missing "
-                    "converges_at (paths must structurally rejoin)"
+                    f"GROW R-6.4: soft dilemma {dilemma_id!r} (two explored paths) "
+                    "missing converges_at (paths must structurally rejoin)"
                 )
             if payoff is None:
-                errors.append(f"R-7.4: soft dilemma {dilemma_id!r} missing convergence_payoff")
+                errors.append(
+                    f"GROW R-6.4: soft dilemma {dilemma_id!r} (two explored paths) "
+                    "missing convergence_payoff"
+                )
 
 
 def _check_arc_enumeration(graph: Graph, errors: list[str]) -> None:

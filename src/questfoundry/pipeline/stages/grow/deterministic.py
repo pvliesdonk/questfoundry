@@ -548,18 +548,34 @@ async def phase_convergence(graph: Graph, model: BaseChatModel) -> GrowPhaseResu
         if role == "hard":
             continue
 
+        # R-6.4 (single-path scope): single-path soft is the legitimate
+        # locked-dilemma shadow pattern — Phase 6's Operations header scopes
+        # the operation to "two explored paths" and R-6.4's halt only fires
+        # within that scope.  Skip without halting; converges_at and
+        # convergence_payoff stay null per Output Contract item 3.
+        paths_for_dilemma = dilemma_paths_map.get(dilemma_id, set())
+        if len(paths_for_dilemma) < 2:
+            log.debug(
+                "convergence_skipped_single_path_soft",
+                dilemma_id=dilemma_id,
+                explored_paths=len(paths_for_dilemma),
+                reason="locked-dilemma shadow pattern (R-6.4 single-path scope)",
+            )
+            continue
+
         result = find_dag_convergence_beat(
             graph,
             dilemma_id,
-            dilemma_paths=dilemma_paths_map.get(dilemma_id),
+            dilemma_paths=paths_for_dilemma,
         )
         if result is None:
-            # R-7.4: a soft dilemma with no structural convergence beat is a
-            # classification error — the dilemma should be hard, or the paths
-            # need rework so they rejoin.  Silent null is forbidden.  Return a
-            # failed GrowPhaseResult so the stage loop can run its savepoint
-            # cleanup (release/save) before raising GrowMutationError.  Reserve
-            # GrowContractError for stage exit, not intra-phase failures.
+            # R-6.4: a soft dilemma with two explored paths and no structural
+            # convergence beat is a classification error — the dilemma should
+            # be hard, or the paths need rework so they rejoin.  Silent null
+            # is forbidden.  Return a failed GrowPhaseResult so the stage
+            # loop can run its savepoint cleanup (release/save) before
+            # raising GrowMutationError.  Reserve GrowContractError for stage
+            # exit, not intra-phase failures.
             log.error(
                 "soft_dilemma_no_convergence",
                 dilemma_id=dilemma_id,
@@ -569,9 +585,9 @@ async def phase_convergence(graph: Graph, model: BaseChatModel) -> GrowPhaseResu
                 phase="convergence",
                 status="failed",
                 detail=(
-                    f"R-7.4: soft dilemma {dilemma_id!r} has no structural convergence "
-                    "beat — misclassified as soft (paths never rejoin; should be "
-                    "hard, or paths need rework)."
+                    f"R-6.4: soft dilemma {dilemma_id!r} (two explored paths) has no "
+                    "structural convergence beat — misclassified as soft (paths "
+                    "never rejoin; should be hard, or paths need rework)."
                 ),
             )
         converges_at, payoff = result
