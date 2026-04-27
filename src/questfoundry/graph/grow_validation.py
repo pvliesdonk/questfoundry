@@ -202,12 +202,12 @@ def _check_entity_overlays(graph: Graph, errors: list[str]) -> None:
 
 
 def _check_state_flags(graph: Graph, errors: list[str]) -> None:
-    """State flag derivation + naming (R-6.1, R-6.2, R-6.4)."""
+    """State flag derivation + naming (GROW R-5.1, R-5.2, R-5.4)."""
     state_flag_nodes = graph.get_nodes_by_type("state_flag")
     consequence_nodes = graph.get_nodes_by_type("consequence")
     derived_from_edges = graph.get_edges(edge_type="derived_from")
 
-    # R-6.1: every state_flag has ≥1 derived_from edge.
+    # R-5.1: every state_flag has ≥1 derived_from edge.
     flag_to_conseqs: dict[str, list[str]] = {}
     for edge in derived_from_edges:
         flag_to_conseqs.setdefault(edge["from"], []).append(edge["to"])
@@ -215,11 +215,11 @@ def _check_state_flags(graph: Graph, errors: list[str]) -> None:
     for flag_id in sorted(state_flag_nodes.keys()):
         if not flag_to_conseqs.get(flag_id):
             errors.append(
-                f"R-6.1: state_flag {flag_id!r} has no derived_from edge "
+                f"R-5.1: state_flag {flag_id!r} has no derived_from edge "
                 "(ad-hoc creation forbidden)"
             )
 
-    # R-6.2: state flag names express world state, not player actions.
+    # R-5.2: state flag names express world state, not player actions.
     # phase_state_flags populates `raw_id` (the stable name), not `name`.
     # Check both so the rule enforces against real GROW output, not just
     # fixtures that happen to set `name`.
@@ -237,18 +237,18 @@ def _check_state_flags(graph: Graph, errors: list[str]) -> None:
         if matched is not None:
             offender, pattern = matched
             errors.append(
-                f"R-6.2: state_flag {flag_id!r} name {offender!r} is "
+                f"R-5.2: state_flag {flag_id!r} name {offender!r} is "
                 f"action-phrased (contains {pattern!r}); must express "
                 "world state"
             )
 
-    # R-6.4: every Consequence produces at least one State Flag.
+    # R-5.4: every Consequence produces at least one State Flag.
     derived_conseqs: set[str] = set()
     for edge in derived_from_edges:
         derived_conseqs.add(edge["to"])
     for conseq_id in sorted(consequence_nodes.keys()):
         if conseq_id not in derived_conseqs:
-            errors.append(f"R-6.4: consequence {conseq_id!r} has no derived state_flag")
+            errors.append(f"R-5.4: consequence {conseq_id!r} has no derived state_flag")
 
 
 def _check_intersections(graph: Graph, errors: list[str]) -> None:

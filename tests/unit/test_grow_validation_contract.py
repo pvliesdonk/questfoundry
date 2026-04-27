@@ -319,8 +319,8 @@ def test_R_5_1_transition_beat_with_belongs_to_forbidden(compliant_graph: Graph)
 # --------------------------------------------------------------------------
 
 
-def test_R_6_1_state_flag_without_derived_from(compliant_graph: Graph) -> None:
-    """R-6.1: every state_flag has a derived_from edge to exactly one Consequence."""
+def test_R_5_1_state_flag_without_derived_from(compliant_graph: Graph) -> None:
+    """GROW R-5.1: every state_flag has a derived_from edge to exactly one Consequence."""
     compliant_graph.create_node(
         "state_flag::orphan",
         {"type": "state_flag", "raw_id": "orphan", "name": "some_world_state"},
@@ -331,8 +331,8 @@ def test_R_6_1_state_flag_without_derived_from(compliant_graph: Graph) -> None:
     )
 
 
-def test_R_6_2_state_flag_name_action_phrased_forbidden(compliant_graph: Graph) -> None:
-    """R-6.2: state flag names express world state, not player actions.
+def test_R_5_2_state_flag_name_action_phrased_forbidden(compliant_graph: Graph) -> None:
+    """GROW R-5.2: state flag names express world state, not player actions.
 
     `raw_id` is what `phase_state_flags` populates on real GROW output, so
     the check must cover that field (not only `name`).
@@ -341,7 +341,7 @@ def test_R_6_2_state_flag_name_action_phrased_forbidden(compliant_graph: Graph) 
         "state_flag::mentor_protector", raw_id="player_chose_to_trust_mentor"
     )
     errors = validate_grow_output(compliant_graph)
-    assert any("R-6.2" in e or "player" in e.lower() or "action" in e.lower() for e in errors), (
+    assert any("R-5.2" in e or "player" in e.lower() or "action" in e.lower() for e in errors), (
         f"expected action-phrased name error, got {errors}"
     )
 

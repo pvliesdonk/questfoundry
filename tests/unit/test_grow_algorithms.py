@@ -1898,9 +1898,9 @@ class TestFindConvergencePointsPolicyAware:
             assert isinstance(dc.budget, int)
 
 
-class TestPhase7Integration:
+class TestPhase6ConvergenceIntegration:
     @pytest.mark.asyncio
-    async def test_phase_7_finds_convergence(self) -> None:
+    async def test_phase_6_finds_convergence(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_two_dilemma_graph()
@@ -1916,7 +1916,7 @@ class TestPhase7Integration:
         assert result.status == "completed"
 
     @pytest.mark.asyncio
-    async def test_phase_7_reports_convergence_metadata(self) -> None:
+    async def test_phase_6_reports_convergence_metadata(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_two_dilemma_graph()
@@ -1934,7 +1934,7 @@ class TestPhase7Integration:
         assert "convergence" in result.detail.lower()
 
     @pytest.mark.asyncio
-    async def test_phase_7_no_arcs(self) -> None:
+    async def test_phase_6_no_arcs(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = Graph.empty()
@@ -1944,7 +1944,7 @@ class TestPhase7Integration:
         assert result.status == "completed"
 
     @pytest.mark.asyncio
-    async def test_phase_7_completes_convergence(self) -> None:
+    async def test_phase_6_completes_convergence(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_two_dilemma_graph()
@@ -1959,7 +1959,7 @@ class TestPhase7Integration:
         assert result.status == "completed"
 
     @pytest.mark.asyncio
-    async def test_phase_7_halts_on_soft_dilemma_without_convergence(self) -> None:
+    async def test_phase_6_halts_on_soft_dilemma_without_convergence(self) -> None:
         """GROW R-6.4: a soft dilemma with TWO explored paths whose paths never rejoin must halt Phase 7.
 
         Build a minimal graph: one soft dilemma with two explored paths (P1, P2)
