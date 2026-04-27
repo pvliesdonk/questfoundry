@@ -28,6 +28,7 @@ from questfoundry.pipeline.stages.polish.deterministic import (
     _create_passage_node,
     _create_residue_beat_and_passage,
     _create_variant_passage,
+    _residue_inherited_entities,
     _store_plan,
     phase_plan_application,
 )
@@ -379,6 +380,19 @@ class TestCreateResidueBeatAndPassage:
         residue_beat = beats.get("beat::residue_r_par")
         assert residue_beat is not None
         assert residue_beat["entities"] == ["character::clara_yu"]
+
+    def test_residue_inherited_entities_returns_empty_for_absent_target(self) -> None:
+        """Helper degrades to ``[]`` when the target passage doesn't exist.
+
+        The full residue creation path can't reach this branch in practice —
+        ``graph.add_edge('precedes', residue, target)`` raises
+        ``EdgeEndpointError`` first when the target is absent. But the
+        helper's ``is None`` guard exists so unit tests, alternate call
+        sites, and future refactors don't have to special-case the
+        missing-target case themselves.
+        """
+        graph = Graph.empty()
+        assert _residue_inherited_entities(graph, "passage::does_not_exist") == []
 
     def test_residue_inheritance_defensive_when_target_has_no_entities(self) -> None:
         """If the target has no entities (early-stage passage), residue gets []
