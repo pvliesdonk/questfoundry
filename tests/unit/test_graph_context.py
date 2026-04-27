@@ -1617,7 +1617,8 @@ class TestFormatInteractionCandidatesContext:
         assert "every pair shares at least one entity" in other_section
 
     def test_disjoint_pair_listed_as_other(self) -> None:
-        """Pairs with no shared entities appear under 'Other Pairs (optional)'."""
+        """Pairs with no shared entities appear under 'Other Pairs (optional)'
+        and the Relevant section explicitly says the LLM may return ``[]``."""
         graph = self._graph_with_dilemmas(
             {
                 "alpha": ["entity::hero"],
@@ -1632,6 +1633,27 @@ class TestFormatInteractionCandidatesContext:
         # Disjoint pair must appear under Other, not Relevant
         assert "dilemma::alpha" in other_section
         assert "dilemma::beta" in other_section
+        assert "alpha` + `dilemma::beta" not in relevant_section
+        # Relevant section must guide the LLM to an empty result when no pair shares entities
+        assert "No pairs share anchored entities" in relevant_section
+        assert "return an empty list" in relevant_section
+
+    def test_dilemma_without_anchored_entities_pairs_as_other(self) -> None:
+        """A dilemma with zero ``anchored_to`` edges paired with one that has
+        entities lands under 'Other Pairs' — set intersection is empty, so the
+        pair cannot be relevant."""
+        graph = Graph.empty()
+        # Build the entity for the entity-having dilemma
+        graph.create_node("entity::hero", {"type": "entity", "raw_id": "hero"})
+        # alpha has the entity; beta has none
+        graph.create_node("dilemma::alpha", {"type": "dilemma", "raw_id": "alpha"})
+        graph.add_edge("anchored_to", "dilemma::alpha", "entity::hero")
+        graph.create_node("dilemma::beta", {"type": "dilemma", "raw_id": "beta"})
+
+        seed = _seed_output(dilemmas=[_dilemma("alpha"), _dilemma("beta")])
+        result = format_interaction_candidates_context(seed, graph)
+        relevant_section, _, other_section = result.partition("## Other Pairs")
+        assert "alpha` + `dilemma::beta" in other_section
         assert "alpha` + `dilemma::beta" not in relevant_section
 
     def test_mixed_pairs_split_by_relevance(self) -> None:

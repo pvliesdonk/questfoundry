@@ -1004,7 +1004,6 @@ dilemma_relationships_prompt: |
   - Use canonical ordering: dilemma_a < dilemma_b (alphabetically).
   - `ordering` must be exactly one of: `wraps`, `concurrent`, `serial`.
   - `reasoning` must explain the temporal (not thematic) relationship.
-  - Each pair appears at most once.
 
   ## Output
   Return ONLY valid JSON with the "dilemma_relationships" array.
