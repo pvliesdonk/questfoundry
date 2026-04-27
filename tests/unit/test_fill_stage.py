@@ -2461,6 +2461,7 @@ class TestFillBatchFailureEscalations:
         assert len(review_escalations) == len(expected_passage_ids)
         assert {e.passage_id for e in review_escalations} == expected_passage_ids
         for e in review_escalations:
+            assert "RuntimeError" in e.detail
             assert "phase2 retry exhaustion" in e.detail
             assert e.upstream_stage == "FILL"
 
@@ -2516,6 +2517,7 @@ class TestFillBatchFailureEscalations:
         assert len(revision_escalations) == len(expected_passage_ids)
         assert {e.passage_id for e in revision_escalations} == expected_passage_ids
         for e in revision_escalations:
+            assert "RuntimeError" in e.detail
             assert "phase3 retry exhaustion" in e.detail
             assert e.upstream_stage == "FILL"
 
