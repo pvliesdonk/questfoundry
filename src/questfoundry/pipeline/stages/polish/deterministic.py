@@ -1215,9 +1215,13 @@ def _residue_inherited_entities(graph: Graph, target_passage_id: str) -> list[st
 
     Defensive against the target passage being absent (resilient to call-order
     issues) or its ``entities`` field being None / missing — both degrade to
-    an empty list rather than raising.
+    an empty list rather than raising. The explicit ``is None`` check guards
+    the missing-target case; ``or []`` on the inner lookup handles a present
+    target with no entities or a None value.
     """
-    target = graph.get_node(target_passage_id) or {}
+    target = graph.get_node(target_passage_id)
+    if target is None:
+        return []
     return list(target.get("entities") or [])
 
 
