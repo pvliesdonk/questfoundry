@@ -173,6 +173,23 @@ class TestFormatEntityForCodex:
         # the LLM mirrors the same form back in ``visible_when`` (#1473).
         assert "`state_flag::met_aldric`" in result
 
+    def test_related_state_flag_without_trigger(self, dress_graph: Graph) -> None:
+        """A related state flag with empty ``trigger`` MUST still be emitted —
+        without a trailing ``: <text>``. Covers the no-trigger branch in
+        ``format_entity_for_codex`` (#1473)."""
+        from questfoundry.graph.dress_context import format_entity_for_codex
+
+        # `betrayed_aldric` matches via raw_id substring, has no trigger text.
+        dress_graph.create_node(
+            "state_flag::betrayed_aldric",
+            {"type": "state_flag", "raw_id": "betrayed_aldric", "trigger": ""},
+        )
+
+        result = format_entity_for_codex(dress_graph, "character::aldric")
+        # No-trigger branch: `state_flag::<id>` line with no trailing colon-space-text.
+        assert "- `state_flag::betrayed_aldric`" in result
+        assert "- `state_flag::betrayed_aldric`:" not in result
+
     def test_nonexistent_entity(self, dress_graph: Graph) -> None:
         from questfoundry.graph.dress_context import format_entity_for_codex
 
