@@ -526,6 +526,8 @@ R-6.3. Any step failure rolls back the transaction. No graph mutations are commi
 
 R-6.4. Phase 6 creates new beat nodes only for residue beats and false-branch beats — never new narrative beats.
 
+R-6.5. Residue passages and their companion residue beats inherit the `entities` field from their target passage (the passage referenced by `residue_for`). The residue plays out at the same dramatic moment as its target — same cast on stage. FILL builds its `### Valid Entity IDs` prompt context from `passage["entities"]`; an empty or missing list there forces phantom-ID emissions in the prose call. Both `residue_passage_with_variants` and `parallel_passages` mapping strategies must apply this inheritance.
+
 **Violations:**
 
 | Symptom | Root cause | Broken rule |
@@ -533,6 +535,7 @@ R-6.4. Phase 6 creates new beat nodes only for residue beats and false-branch be
 | Half-built passage layer visible to Phase 7 | Atomicity violated | R-6.1 / R-6.3 |
 | Phase 6 creates a commit beat | Narrative-beat creation forbidden post-SEED | R-6.4 |
 | Phase 6 mutates an existing `belongs_to` edge | Should only add passage-layer and structural-beat nodes | R-6.4 |
+| Residue passage emits phantom entity IDs (e.g. `clara` instead of `character::clara_yu`) at FILL | Residue created with empty `entities` instead of inheriting from target | R-6.5 |
 
 ### Output Contract
 

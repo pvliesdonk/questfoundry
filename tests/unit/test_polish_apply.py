@@ -28,6 +28,7 @@ from questfoundry.pipeline.stages.polish.deterministic import (
     _create_passage_node,
     _create_residue_beat_and_passage,
     _create_variant_passage,
+    _residue_inherited_entities,
     _store_plan,
     phase_plan_application,
 )
@@ -292,6 +293,138 @@ class TestCreateResidueBeatAndPassage:
         # edge to the target is PRESERVED.  Flag-absent players take this
         # path; flag-present players take the parallel-passage detour above.
         assert ("beat::target", "beat::pred") in beat_edges
+
+    def test_residue_with_variants_inherits_target_entities(self) -> None:
+        """Regression: #1457 — residue_passage_with_variants must copy entities
+        from the target passage onto both the residue beat and residue
+        passage. FILL builds its Valid Entity IDs prompt context from
+        ``passage["entities"]`` — an empty list there forces phantom-ID
+        emissions like ``clara`` instead of ``character::clara_yu``.
+        """
+        graph = Graph.empty()
+        _make_beat(graph, "beat::target")
+        graph.create_node("path::brave", {"type": "path", "raw_id": "brave"})
+
+        target_spec = PassageSpec(
+            passage_id="passage::target",
+            beat_ids=["beat::target"],
+            summary="Target",
+            entities=["character::clara_yu", "character::alistair_vance"],
+        )
+        _create_passage_node(graph, target_spec)
+
+        rspec = ResidueSpec(
+            target_passage_id="passage::target",
+            residue_id="residue::r1",
+            flag="dilemma::d1:path::brave",
+            path_id="path::brave",
+            content_hint="You feel confident",
+        )
+        _create_residue_beat_and_passage(graph, rspec)
+
+        passages = graph.get_nodes_by_type("passage")
+        residue_passage = passages.get("passage::residue_r1")
+        assert residue_passage is not None
+        assert residue_passage["entities"] == [
+            "character::clara_yu",
+            "character::alistair_vance",
+        ]
+
+        beats = graph.get_nodes_by_type("beat")
+        residue_beat = beats.get("beat::residue_r1")
+        assert residue_beat is not None
+        assert residue_beat["entities"] == [
+            "character::clara_yu",
+            "character::alistair_vance",
+        ]
+
+    def test_residue_parallel_passages_inherits_target_entities(self) -> None:
+        """Same inheritance contract for the ``parallel_passages`` strategy."""
+        graph = Graph.empty()
+        _make_beat(graph, "beat::pred")
+        _make_beat(graph, "beat::target")
+        graph.add_edge("predecessor", "beat::target", "beat::pred")
+        graph.create_node("path::brave", {"type": "path", "raw_id": "brave"})
+
+        pred_spec = PassageSpec(
+            passage_id="passage::pred",
+            beat_ids=["beat::pred"],
+            summary="Pred",
+        )
+        target_spec = PassageSpec(
+            passage_id="passage::target",
+            beat_ids=["beat::target"],
+            summary="Target",
+            entities=["character::clara_yu"],
+        )
+        _create_passage_node(graph, pred_spec)
+        _create_passage_node(graph, target_spec)
+        graph.add_edge("precedes", "passage::pred", "passage::target")
+
+        rspec = ResidueSpec(
+            target_passage_id="passage::target",
+            residue_id="residue::r_par",
+            flag="dilemma::d1:path::brave",
+            path_id="path::brave",
+            content_hint="You feel confident",
+            mapping_strategy="parallel_passages",
+        )
+        _create_residue_beat_and_passage(graph, rspec)
+
+        passages = graph.get_nodes_by_type("passage")
+        residue_passage = passages.get("passage::residue_r_par")
+        assert residue_passage is not None
+        assert residue_passage["entities"] == ["character::clara_yu"]
+
+        beats = graph.get_nodes_by_type("beat")
+        residue_beat = beats.get("beat::residue_r_par")
+        assert residue_beat is not None
+        assert residue_beat["entities"] == ["character::clara_yu"]
+
+    def test_residue_inherited_entities_raises_for_absent_target(self) -> None:
+        """Helper raises ``ValueError`` when the target passage is missing.
+
+        Per `.gemini/styleguide.md` anti-pattern (silent fallbacks that hide
+        bugs prefer explicit errors): a residue created against a missing
+        target passage is a structural failure — Phase 6's application order
+        (R-6.2) creates target passages before residues. Returning ``[]``
+        instead would silently propagate the exact symptom #1457 fixed
+        (residue with empty entities → FILL phantom-ID escalations).
+        """
+        graph = Graph.empty()
+        with pytest.raises(ValueError, match=r"R-6\.5: residue target passage"):
+            _residue_inherited_entities(graph, "passage::does_not_exist")
+
+    def test_residue_inheritance_defensive_when_target_has_no_entities(self) -> None:
+        """If the target has no entities (early-stage passage), residue gets []
+        rather than raising. The structural invariant — target passage exists —
+        is enforced by spec validators elsewhere; the helper just degrades
+        gracefully on missing/empty entity data.
+        """
+        graph = Graph.empty()
+        _make_beat(graph, "beat::target")
+
+        target_spec = PassageSpec(
+            passage_id="passage::target",
+            beat_ids=["beat::target"],
+            summary="Target",
+            # No entities passed — PassageSpec defaults to empty list.
+        )
+        _create_passage_node(graph, target_spec)
+
+        rspec = ResidueSpec(
+            target_passage_id="passage::target",
+            residue_id="residue::r_empty",
+            flag="flag1",
+        )
+        _create_residue_beat_and_passage(graph, rspec)
+
+        residue_passage = graph.get_nodes_by_type("passage").get("passage::residue_r_empty")
+        assert residue_passage is not None
+        assert residue_passage["entities"] == []
+        residue_beat = graph.get_nodes_by_type("beat").get("beat::residue_r_empty")
+        assert residue_beat is not None
+        assert residue_beat["entities"] == []
 
 
 class TestCreateChoiceEdge:
