@@ -1093,20 +1093,26 @@ def format_interaction_candidates_context(
     seed_output: SeedOutput,
     graph: Graph,
 ) -> str:
-    """Format all dilemma pairs for ordering classification (Section 8).
+    """Format dilemma pairs for ordering classification (Section 8).
 
     Builds rich per-dilemma context (question, stakes, answers via has_answer
-    edges, convergence point) and enumerates ALL pairs of surviving dilemmas.
-    Pairs that share central entities are flagged so the LLM has extra signal,
-    but every pair is included because small stories (2-4 dilemmas = 3-6 pairs
-    max) rarely have enough shared-entity pairs to trigger any classification.
+    edges, convergence point) and groups surviving-dilemma pairs into two
+    buckets per spec R-8.2:
+
+    - **Relevant pairs** (share at least one anchored entity): these are the
+      default candidates for an ordering relationship; the LLM should
+      classify them.
+    - **Other pairs** (no shared entities): listed for reference only.
+      Declaring an ordering for these is optional and only valuable when it
+      removes ambiguity for GROW (causal dependency or explicit authorial
+      ordering intent that the LLM detects from the dilemma details).
 
     Args:
         seed_output: Pruned SEED output with surviving dilemmas.
         graph: Graph containing brainstorm dilemma nodes.
 
     Returns:
-        Formatted markdown context with all pairs and per-dilemma details,
+        Formatted markdown context with grouped pairs and per-dilemma details,
         or a short message if fewer than 2 dilemmas survive.
     """
     surviving_ids = {strip_scope_prefix(d.dilemma_id) for d in seed_output.dilemmas}
@@ -1162,17 +1168,19 @@ def format_interaction_candidates_context(
             block.append("**Central entities:** " + ", ".join(f"`{e}`" for e in sorted(entities)))
         dilemma_blocks.append("\n".join(block))
 
-    # Enumerate ALL pairs; flag shared-entity pairs for extra signal
-    pair_lines: list[str] = []
+    # Group pairs by relevance: shared-entity pairs are the default candidates
+    # for classification (R-8.2); pairs with no shared entities are listed for
+    # reference only, declaring an ordering is optional.
+    relevant_lines: list[str] = []
+    other_lines: list[str] = []
     for i, id_a in enumerate(sorted_ids):
         for id_b in sorted_ids[i + 1 :]:
             shared = dilemma_entities[id_a] & dilemma_entities[id_b]
-            shared_note = (
-                f" — shared entities: {', '.join(f'`{e}`' for e in sorted(shared))}"
-                if shared
-                else ""
-            )
-            pair_lines.append(f"- `dilemma::{id_a}` + `dilemma::{id_b}`{shared_note}")
+            if shared:
+                shared_note = " — shared entities: " + ", ".join(f"`{e}`" for e in sorted(shared))
+                relevant_lines.append(f"- `dilemma::{id_a}` + `dilemma::{id_b}`{shared_note}")
+            else:
+                other_lines.append(f"- `dilemma::{id_a}` + `dilemma::{id_b}`")
 
     valid_ids = [f"`dilemma::{rid}`" for rid in sorted_ids]
 
@@ -1181,14 +1189,40 @@ def format_interaction_candidates_context(
         "",
         *[line for block in dilemma_blocks for line in block.split("\n")],
         "",
-        "## All Dilemma Pairs (classify EVERY pair)",
+        "## Relevant Pairs (classify these)",
         "",
-        "You MUST classify ALL pairs below. `concurrent` is the default when no",
-        "structural ordering exists, but do NOT skip any pair — an empty list means",
-        "NOTHING was classified, which is only correct when fewer than 2 surviving",
-        "dilemmas exist.",
+    ]
+    if relevant_lines:
+        lines += [
+            "These pairs share at least one anchored entity, so the way they",
+            "interact temporally affects how GROW interleaves their beats.",
+            "Classify each as `wraps`, `concurrent`, or `serial`.",
+            "",
+            *relevant_lines,
+        ]
+    else:
+        lines += [
+            "_No pairs share anchored entities. You may still classify pairs",
+            "from the next section if causal dependencies or authorial",
+            "ordering intent are clear from the dilemma details above; otherwise",
+            "return an empty list._",
+        ]
+    lines += [
         "",
-        *pair_lines,
+        "## Other Pairs (optional)",
+        "",
+        "These pairs have no shared entities. Declaring an ordering is",
+        "**optional** — include a pair here only if you can identify a causal",
+        "dependency or authorial ordering intent from the dilemma details that",
+        "would otherwise be ambiguous for GROW. The default for unlisted pairs",
+        "is implicit `concurrent` (free interleaving with no temporal hints).",
+        "",
+    ]
+    if other_lines:
+        lines += other_lines
+    else:
+        lines.append("_No other pairs — every pair shares at least one entity._")
+    lines += [
         "",
         "### Valid Dilemma IDs",
         "",

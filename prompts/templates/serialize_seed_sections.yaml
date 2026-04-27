@@ -914,14 +914,14 @@ dilemma_analyses_prompt: |
 
 # Section 8: Dilemma Ordering Relationships (post-prune, Story Graph Ontology)
 dilemma_relationships_prompt: |
-  You are classifying the temporal ordering between ALL dilemma pairs for a SEED stage.
+  You are classifying the temporal ordering of relevant dilemma pairs for a SEED stage.
 
-  Each dilemma pair has a structural relationship that affects how GROW
-  interleaves their beats. You MUST classify EVERY pair listed in the Context.
-  `concurrent` is the default when no structural nesting or sequencing exists,
-  but you must still include the pair with `ordering: "concurrent"` — do NOT
-  skip it. An empty list means NOTHING was classified and is only correct when
-  the Context says "fewer than 2 surviving dilemmas."
+  Each ordering edge tells GROW how to interleave the beats of two dilemmas.
+  Declare an edge **only when the relationship matters** — pairs that share
+  entities, have a causal dependency, or have explicit authorial ordering
+  intent. Pairs you don't classify default to implicit `concurrent` (free
+  interleaving with no temporal hints), so omitting an unambiguous pair is
+  the right move; do not pad the output to make it exhaustive.
 
   ## Ordering Types
 
@@ -930,9 +930,11 @@ dilemma_relationships_prompt: |
     wraps the mentor's betrayal subplot (B) — the mystery is present from the
     start and resolves at the climax, while the betrayal plays out in the middle."
   - **concurrent**: Neither wraps the other. Both are active simultaneously,
-    interleaving but without nesting. Use this when no clear nesting or
-    sequencing exists. Example: "both the romance and the political intrigue
-    develop in parallel."
+    interleaving but without nesting. Declare this *explicitly* only when the
+    pair shares entities or has causal interaction worth recording — otherwise
+    leave it out. Example: "the romance and the political intrigue both
+    revolve around the council, so their beats must alternate to keep both
+    threads visible."
   - **serial**: A resolves (commits and converges) before B introduces. The
     dilemmas never structurally interact. Example: "the escape subplot resolves
     in Act 1 before the revenge plot begins in Act 2."
@@ -940,23 +942,42 @@ dilemma_relationships_prompt: |
   NOTE: shared_entity is NOT an ordering type — it is derived automatically
   from entity anchoring in the graph. Do NOT classify pairs as shared_entity.
 
+  ## What to Classify
+
+  - **Relevant pairs (default candidates):** every pair listed under "Relevant
+    Pairs" in the Context. Pick `wraps`, `concurrent`, or `serial` based on
+    the dilemmas' details. Skipping a relevant pair is acceptable only if you
+    have no signal — but normally these pairs are listed precisely *because*
+    they share entities, so an explicit ordering helps GROW.
+  - **Other pairs (optional):** every pair under "Other Pairs" is opt-in.
+    Include one only when the dilemma details reveal a causal dependency or
+    authorial ordering intent that GROW would otherwise miss. Padding this
+    section with `concurrent` defaults adds no information and is wasteful.
+
   ## What NOT to Do
-  - Do NOT skip any pair — every pair in "All Dilemma Pairs" must appear in output
-  - Do NOT use ordering values other than wraps, concurrent, serial
-  - Do NOT classify shared characters/locations as ordering — that is derived
-  - Do NOT return an empty array unless the Context says fewer than 2 dilemmas
+
+  - Do NOT mechanically classify every pair from both sections — empty arrays
+    and partial classifications are valid outputs.
+  - Do NOT use ordering values other than `wraps`, `concurrent`, `serial`.
+  - Do NOT classify shared characters/locations as `shared_entity` — that is
+    derived from `anchored_to` edges, not an ordering relationship.
 
   GOOD: "The central mystery wraps the betrayal subplot — it introduces first
-  and resolves last."
-  BAD: "Both dilemmas involve the mentor" (that is shared_entity, derived from
-  anchored_to edges, not an ordering relationship).
+  and resolves last." (relevant pair, justified)
+  GOOD: Returning `[]` when only one entity-sharing pair has a clear ordering
+  and the rest are independent.
+  GOOD: Including an "Other Pairs" entry as `serial` because Dilemma B's
+  resolution unlocks a fact that Dilemma A depends on.
+  BAD: Adding a `concurrent` entry for every "Other Pairs" entry just to be
+  thorough — that is the over-application R-8.2 explicitly discourages.
 
   ## Context
 
   {candidate_pairs_context}
 
   ## Schema
-  Return a JSON object with a "dilemma_relationships" array — one entry per pair:
+  Return a JSON object with a "dilemma_relationships" array. Include zero or
+  more entries — only the pairs you actually classified:
   ```json
   {{
     "dilemma_relationships": [
@@ -971,7 +992,8 @@ dilemma_relationships_prompt: |
   }}
   ```
 
-  If the Context says "No candidate pairs — fewer than 2 surviving dilemmas", return:
+  If the Context says "No candidate pairs — fewer than 2 surviving dilemmas",
+  or if you have no ordering signal worth recording, return:
   ```json
   {{
     "dilemma_relationships": []
@@ -979,15 +1001,10 @@ dilemma_relationships_prompt: |
   ```
 
   ## Rules
-  - Classify EVERY pair from the "All Dilemma Pairs" list in the Context
-  - Use canonical ordering: dilemma_a < dilemma_b (alphabetically)
-  - `ordering` must be exactly one of: `wraps`, `concurrent`, `serial`
-  - `reasoning` must explain the temporal (not thematic) relationship
-  - Output must contain one entry per pair — no pairs may be omitted
-
-  ## FINAL CHECK
-  Count the pairs listed under "All Dilemma Pairs" in the Context.
-  Your output MUST contain that exact number of entries.
+  - Use canonical ordering: dilemma_a < dilemma_b (alphabetically).
+  - `ordering` must be exactly one of: `wraps`, `concurrent`, `serial`.
+  - `reasoning` must explain the temporal (not thematic) relationship.
+  - Each pair appears at most once.
 
   ## Output
   Return ONLY valid JSON with the "dilemma_relationships" array.
