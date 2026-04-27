@@ -1266,7 +1266,7 @@ def _apply_residue_with_variants(graph: Graph, rspec: ResidueSpec) -> None:
             "role": "residue_beat",
             "scene_type": "sequel",
             "dilemma_impacts": [],
-            "entities": list(inherited_entities),
+            "entities": inherited_entities,
             "created_by": "POLISH",
         },
     )
@@ -1286,7 +1286,7 @@ def _apply_residue_with_variants(graph: Graph, rspec: ResidueSpec) -> None:
             "is_residue": True,
             "residue_for": rspec.target_passage_id,
             "mapping_strategy": rspec.mapping_strategy,
-            "entities": list(inherited_entities),
+            "entities": inherited_entities,
         },
     )
 
@@ -1352,7 +1352,7 @@ def _apply_residue_parallel_passages(graph: Graph, rspec: ResidueSpec) -> None:
             "role": "residue_beat",
             "scene_type": "sequel",
             "dilemma_impacts": [],
-            "entities": list(inherited_entities),
+            "entities": inherited_entities,
             "created_by": "POLISH",
         },
     )
@@ -1372,7 +1372,7 @@ def _apply_residue_parallel_passages(graph: Graph, rspec: ResidueSpec) -> None:
             "is_residue": True,
             "residue_for": rspec.target_passage_id,
             "mapping_strategy": rspec.mapping_strategy,
-            "entities": list(inherited_entities),
+            "entities": inherited_entities,
         },
     )
 
