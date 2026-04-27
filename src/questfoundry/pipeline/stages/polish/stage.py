@@ -90,11 +90,18 @@ class PolishStage(_PolishLLMHelperMixin, _PolishLLMPhaseMixin):
         self._serialize_provider_name: str | None = None
 
     # Map from registry phase name → self method name.
-    # LLM phases that need binding to ``self`` at call time.
+    # LLM phases on _PolishLLMPhaseMixin that need binding to ``self`` at call
+    # time. Every method on the mixin decorated with @polish_phase MUST appear
+    # here — _phase_order() rejects an unmapped phase rather than silently
+    # falling back to the unbound mixin function (which would crash when called
+    # as ``fn(graph, model)`` because ``self`` is missing).
     _METHOD_PHASES: ClassVar[dict[str, str]] = {
         "beat_reordering": "_phase_1_beat_reordering",
+        "narrative_gaps": "_phase_1a_narrative_gaps",
         "pacing": "_phase_2_pacing",
         "character_arcs": "_phase_3_character_arcs",
+        "atmospheric_annotation": "_phase_5e_atmospheric",
+        "path_thematic_annotation": "_phase_5f_path_thematic",
         "llm_enrichment": "_phase_5_llm_enrichment",
     }
 
@@ -109,9 +116,13 @@ class PolishStage(_PolishLLMHelperMixin, _PolishLLMPhaseMixin):
     def _phase_order(self) -> list[tuple[PhaseFunc, str]]:
         """Return ordered list of (phase_function, phase_name) tuples.
 
-        Uses the phase registry for topological ordering, then resolves
-        each phase to its callable: bound method for LLM phases, module-
-        level import for deterministic free functions.
+        Uses the phase registry for topological ordering, then resolves each
+        phase to its callable: bound method for LLM phases, module-level
+        import for deterministic free functions. Phases registered via
+        ``@polish_phase`` that do not appear in either ``_METHOD_PHASES`` or
+        ``_FREE_PHASES`` are a programming error — they're rejected here
+        rather than silently dispatched through the registry, which would
+        return an unbound mixin function and crash mid-stage.
         """
         import questfoundry.pipeline.stages.polish.stage as _this_module
 
@@ -127,18 +138,13 @@ class PolishStage(_PolishLLMHelperMixin, _PolishLLMPhaseMixin):
             elif free_name is not None:
                 fn = getattr(_this_module, free_name)
             else:
-                log.warning(
-                    "phase_fallback_to_registry",
-                    phase=phase_name,
-                    hint="Phase not in _METHOD_PHASES or _FREE_PHASES; "
-                    "using registry.get_function() fallback",
+                raise PolishStageError(
+                    f"Phase {phase_name!r} is registered via @polish_phase "
+                    "but is missing from PolishStage._METHOD_PHASES "
+                    "(LLM mixin methods) or PolishStage._FREE_PHASES "
+                    "(deterministic free functions). Add the mapping where "
+                    "the phase belongs."
                 )
-                fn = registry.get_function(phase_name)
-                if fn is None:
-                    raise PolishStageError(
-                        f"Phase {phase_name!r} has no resolvable function "
-                        "(not in _METHOD_PHASES, _FREE_PHASES, or registry)."
-                    )
 
             result.append((fn, phase_name))
 
