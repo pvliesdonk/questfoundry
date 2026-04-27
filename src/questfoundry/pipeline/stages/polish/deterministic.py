@@ -1189,14 +1189,7 @@ def _create_passage_node(graph: Graph, spec: PassageSpec) -> None:
 
 
 def _create_variant_passage(graph: Graph, vspec: VariantSpec) -> None:
-    """Create a variant passage node with variant_of edge to base.
-
-    The variant inherits its ``entities`` from the base passage per R-6.5 —
-    a variant plays out at the same dramatic moment as its base, with the
-    same cast on stage. Without the inheritance, FILL's `### Valid Entity
-    IDs` prompt slot would be empty for variant prose generation, which is
-    the same phantom-ID failure mode that produced #1457 for residues.
-    """
+    """Create a variant passage node with variant_of edge to base, inheriting entities (R-6.5)."""
     inherited_entities = _inherited_passage_entities(graph, vspec.base_passage_id)
     graph.create_node(
         vspec.variant_id,
@@ -1240,8 +1233,9 @@ def _inherited_passage_entities(graph: Graph, source_passage_id: str) -> list[st
     if source is None:
         raise ValueError(
             f"R-6.5: source passage {source_passage_id!r} not found in graph. "
-            "Phase 6 application order (R-6.2) requires base passages to be created "
-            "before variants and residues."
+            "Phase 6 application order (R-6.2) requires source passages "
+            "(residue targets and variant bases) to be created before "
+            "their dependent residue / variant nodes."
         )
     return list(source.get("entities") or [])
 
