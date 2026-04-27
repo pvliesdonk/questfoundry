@@ -22,6 +22,10 @@ from questfoundry.graph.context_compact import (
     truncate_summary,
 )
 from questfoundry.graph.graph import Graph
+from questfoundry.graph.grow_context import (
+    format_valid_entity_ids_by_category,
+    format_valid_state_flag_ids_by_dilemma,
+)
 from questfoundry.models.grow import GrowPhaseResult
 from questfoundry.pipeline.stages.grow._helpers import (
     GrowStageError,
@@ -964,11 +968,6 @@ class _LLMPhaseMixin:
             entity_lines.append(f"- {ent_id} ({category}): {concept}")
 
         entity_context = "\n".join(entity_lines)
-
-        from questfoundry.graph.grow_context import (
-            format_valid_entity_ids_by_category,
-            format_valid_state_flag_ids_by_dilemma,
-        )
 
         context = {
             "consequence_context": consequence_context,

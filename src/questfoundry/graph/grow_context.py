@@ -72,8 +72,9 @@ def format_grow_valid_ids(graph: Graph) -> dict[str, str]:
 
     Returns:
         Dict with keys 'valid_beat_ids', 'valid_path_ids',
-        'valid_dilemma_ids', 'valid_entity_ids'. Each value is a
-        comma-separated string of scoped IDs, or empty string if none.
+        'valid_dilemma_ids', 'valid_entity_ids', 'valid_passage_ids',
+        'valid_choice_ids'. Each value is a comma-separated string of
+        scoped IDs, or empty string if none.
     """
 
     def _get_sorted_ids(node_type: str) -> str:
