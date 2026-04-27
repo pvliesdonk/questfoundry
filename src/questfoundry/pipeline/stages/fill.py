@@ -1312,11 +1312,9 @@ class FillStage:
             on_connectivity_error=self._on_connectivity_error,
         )
 
-        # Escalate per-passage when an entire chunk's retries exhausted
-        # (e.g. provider safety block, transient errors past the connectivity
-        # retry loop). Per `.gemini/styleguide.md` §4 "silent fallbacks that
-        # hide bugs": surface which passages have NO blueprint so the user
-        # sees the gap at stage exit instead of guessing from prose quality.
+        # Escalate per-passage when a chunk's retries exhausted: each
+        # passage in the failed chunk gets no blueprint, downstream Phase 1
+        # prose is generated without it.
         for idx, exc in errors:
             chunk_ids, _arc_id = chunks[idx]
             for affected_pid in chunk_ids:
@@ -1324,6 +1322,11 @@ class FillStage:
                     affected_pid
                     if affected_pid.startswith("passage::")
                     else f"passage::{affected_pid}"
+                )
+                log.warning(
+                    "expand_batch_failed_escalated",
+                    passage_id=full_pid,
+                    error=f"{type(exc).__name__}: {exc}",
                 )
                 self._escalations.append(
                     FillEscalation(
@@ -1901,6 +1904,11 @@ class FillStage:
                     if affected_pid.startswith("passage::")
                     else f"passage::{affected_pid}"
                 )
+                log.warning(
+                    "review_batch_failed_escalated",
+                    passage_id=full_pid,
+                    error=f"{type(exc).__name__}: {exc}",
+                )
                 self._escalations.append(
                     FillEscalation(
                         kind="review_batch_failed",
@@ -2097,11 +2105,17 @@ class FillStage:
         # Per-passage escalation when a revision call's retries exhausted —
         # the passage keeps its old (flagged-as-broken) prose with no fix.
         for idx, exc in errors:
-            affected_pid, _flags = passage_items[idx]
+            raw_pid, _flags = passage_items[idx]
+            full_pid = raw_pid if raw_pid.startswith("passage::") else f"passage::{raw_pid}"
+            log.warning(
+                "revision_failed_escalated",
+                passage_id=full_pid,
+                error=f"{type(exc).__name__}: {exc}",
+            )
             self._escalations.append(
                 FillEscalation(
                     kind="revision_failed",
-                    passage_id=affected_pid,
+                    passage_id=full_pid,
                     detail=(
                         f"fill_phase3_revision call failed after retries "
                         f"({type(exc).__name__}: {exc}). Passage retains its "
