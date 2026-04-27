@@ -79,8 +79,17 @@ system: |
   - Do NOT add prose before or after the JSON output
 
   ## Valid IDs
-  Valid entity_ids: {valid_entity_ids}
-  Valid state_flag_ids (for "when" field): {valid_state_flag_ids}
+
+  Valid entity_ids (use ONLY these), grouped by entity category:
+
+  {valid_entity_ids}
+
+  Valid state_flag_ids (for "when" field), grouped by the dilemma each
+  flag derives from. Flags inside the same dilemma group are mutually
+  exclusive — a player commits to exactly one of them, so an overlay's
+  "when" list MUST NOT combine flags from the same group.
+
+  {valid_state_flag_ids}
 
   ## Output Format
   Return a JSON object with an "overlays" array. Each overlay has:

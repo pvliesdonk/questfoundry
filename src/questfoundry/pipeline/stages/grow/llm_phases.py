@@ -965,11 +965,18 @@ class _LLMPhaseMixin:
 
         entity_context = "\n".join(entity_lines)
 
+        from questfoundry.graph.grow_context import (
+            format_valid_entity_ids_by_category,
+            format_valid_state_flag_ids_by_dilemma,
+        )
+
         context = {
             "consequence_context": consequence_context,
             "entity_context": entity_context,
-            "valid_entity_ids": ", ".join(valid_entity_ids),
-            "valid_state_flag_ids": ", ".join(valid_state_flag_ids),
+            "valid_entity_ids": format_valid_entity_ids_by_category(graph, valid_entity_ids),
+            "valid_state_flag_ids": format_valid_state_flag_ids_by_dilemma(
+                valid_state_flag_ids, flag_to_dilemma
+            ),
         }
 
         from questfoundry.graph.grow_validators import validate_phase8c_output
