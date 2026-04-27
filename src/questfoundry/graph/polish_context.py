@@ -80,7 +80,7 @@ def format_linear_section_context(
         impacts = data.get("dilemma_impacts", [])
         entities = data.get("entities", [])
 
-        # Backtick-wrap IDs per CLAUDE.md §9 rule 1.
+        # Backtick-wrap IDs per @prompt-engineer Rule 4.
         impact_str = ""
         if impacts:
             effects = [
@@ -159,7 +159,7 @@ def format_pacing_context(
     pacing_issues = "\n".join(issue_lines) if issue_lines else "No pacing issues detected."
 
     # Valid entity IDs for micro-beat entity references (backtick-wrapped per
-    # CLAUDE.md §9 rule 1, with `(none)` fallback matching the sibling
+    # @prompt-engineer Rule 4, with `(none)` fallback matching the sibling
     # render functions).
     valid_entity_ids = ", ".join(f"`{e}`" for e in sorted(entity_nodes.keys())) or "(none)"
 
@@ -220,7 +220,7 @@ def format_entity_arc_context(
             effects = [imp.get("effect", "?") for imp in impacts]
             impact_str = f" dilemma_effects=[{', '.join(effects)}]"
 
-        # Backtick-wrap IDs per CLAUDE.md §9 rule 1 — consistent with the
+        # Backtick-wrap IDs per @prompt-engineer Rule 4 — consistent with the
         # other ID lists this context dict produces, so a model matching beat
         # IDs against `valid_beat_ids` doesn't have to mentally strip backticks.
         if not path_set:
@@ -249,10 +249,10 @@ def format_entity_arc_context(
         flags = overlay.get("when") or []
         details = overlay.get("details") or {}
         if flags and details:
-            # Backtick-wrap flag IDs per CLAUDE.md §9 rule 1.
+            # Backtick-wrap flag IDs per @prompt-engineer Rule 4.
             flag_str = ", ".join(f"`{f}`" for f in flags)
             # Format list values explicitly to avoid leaking Python repr
-            # (brackets/quotes) into LLM-facing text per CLAUDE.md §9 rule 1.
+            # (brackets/quotes) into LLM-facing text per @prompt-engineer Rule 4.
             # Sorted for deterministic output across runs.
             detail_str = "; ".join(
                 f"{k}: {', '.join(map(str, v)) if isinstance(v, list) else v}"
@@ -269,7 +269,7 @@ def format_entity_arc_context(
         if edge["from"] == entity_id:
             anchored_dilemmas.append(edge["to"])
 
-    # Backtick-wrap IDs per CLAUDE.md §9 rule 1.
+    # Backtick-wrap IDs per @prompt-engineer Rule 4.
     anchored_text = (
         ", ".join(f"`{d}`" for d in anchored_dilemmas) if anchored_dilemmas else "(none)"
     )
@@ -332,7 +332,7 @@ def format_choice_label_context(
         from_summary = truncate_summary(from_spec.get("summary", ""), 80)
         to_summary = truncate_summary(to_spec.get("summary", ""), 80)
 
-        # Backtick-wrap IDs per CLAUDE.md §9 rule 1.
+        # Backtick-wrap IDs per @prompt-engineer Rule 4.
         grants_str = f" grants: {', '.join(f'`{g}`' for g in grants)}" if grants else ""
         choice_lines.append(
             f"  {i + 1}. From: `{from_id}` ({from_summary})\n"
@@ -340,7 +340,7 @@ def format_choice_label_context(
         )
 
     # Valid passage IDs: every passage_id referenced by any ChoiceSpec, sorted
-    # for determinism. Per CLAUDE.md §6 the LLM must receive an explicit Valid
+    # for determinism. Per @prompt-engineer Rule 1 the LLM must receive an explicit Valid
     # IDs list rather than be expected to derive IDs from the choice details
     # block — small models otherwise invent or mangle passage IDs and Phase 6
     # fails to wire choice edges.
@@ -392,7 +392,7 @@ def format_residue_content_context(
         target_spec = passage_lookup.get(target, {})
         target_summary = truncate_summary(target_spec.get("summary", ""), 80)
 
-        # Backtick-wrap IDs per CLAUDE.md §9 rule 1.
+        # Backtick-wrap IDs per @prompt-engineer Rule 4.
         residue_lines.append(
             f"  - residue_id: `{residue_id}` flag: `{flag}` path: `{path_id}`\n"
             f"    Target passage: `{target}` ({target_summary})"
@@ -425,7 +425,7 @@ def format_false_branch_context(
         passage_lookup[spec["passage_id"]] = spec
 
     entity_nodes = graph.get_nodes_by_type("entity")
-    # Backtick-wrap IDs per CLAUDE.md §9 rule 1, with `(none)` fallback.
+    # Backtick-wrap IDs per @prompt-engineer Rule 4, with `(none)` fallback.
     valid_entity_ids = ", ".join(f"`{e}`" for e in sorted(entity_nodes.keys())) or "(none)"
 
     candidate_lines: list[str] = []
@@ -482,7 +482,7 @@ def format_variant_summary_context(
         base_spec = passage_lookup.get(base_id, {})
         base_summary = truncate_summary(base_spec.get("summary", ""), 80)
 
-        # Backtick-wrap IDs per CLAUDE.md §9 rule 1.
+        # Backtick-wrap IDs per @prompt-engineer Rule 4.
         requires_str = ", ".join(f"`{r}`" for r in requires) if requires else "(none)"
         variant_lines.append(
             f"  - variant_id: `{variant_id}` base: `{base_id}` ({base_summary})\n"

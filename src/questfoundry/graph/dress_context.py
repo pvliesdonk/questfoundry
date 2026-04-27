@@ -238,7 +238,7 @@ def format_entity_for_codex(graph: Graph, entity_id: str) -> str:
             continue
         flag_str = ", ".join(f"`{f}`" for f in flags)
         # Format list values explicitly to avoid leaking Python repr
-        # (brackets/quotes) into LLM-facing text per CLAUDE.md §9 rule 1.
+        # (brackets/quotes) into LLM-facing text per @prompt-engineer Rule 4.
         # Sorted for deterministic output across runs.
         detail_str = "; ".join(
             f"{k}: {', '.join(map(str, v)) if isinstance(v, list) else v}"

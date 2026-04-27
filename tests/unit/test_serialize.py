@@ -386,7 +386,7 @@ class TestHelperFunctions:
         Regression for the murder1 SEED halt: the model needs the expected
         sibling path id template echoed alongside the validation error so
         small models (qwen3:4b) can recover from constraint-to-value
-        mapping loss across long context. See CLAUDE.md §10.
+        mapping loss across long context. See @prompt-engineer Rule 5.
         """
         errors = ["beats.0.also_belongs_to: Field required"]
         hint = (

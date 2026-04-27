@@ -189,7 +189,7 @@ class TestFormatEntityForCodex:
 
         result = format_entity_for_codex(dress_graph, "character::aldric")
         assert "### Overlays (path-specific arcs)" in result
-        # Both overlays present, with backtick-wrapped state flag IDs (CLAUDE.md §9).
+        # Both overlays present, with backtick-wrapped state flag IDs (@prompt-engineer Rule 4).
         assert "`state_flag::met_aldric`" in result
         assert "`state_flag::trusted_aldric`" in result
         assert "`state_flag::betrayed_aldric`" in result
@@ -248,7 +248,7 @@ class TestFormatEntityForCodex:
 
     def test_overlay_list_values_render_human_readable(self, dress_graph: Graph) -> None:
         """List-valued details render as comma-joined strings (e.g. `umm, well`)
-        — never as Python repr (`['umm', 'well']`) per CLAUDE.md §9 rule 1."""
+        — never as Python repr (`['umm', 'well']`) per @prompt-engineer Rule 4."""
         from questfoundry.graph.dress_context import format_entity_for_codex
 
         dress_graph.update_node(
