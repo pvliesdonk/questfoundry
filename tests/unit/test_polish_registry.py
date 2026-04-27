@@ -289,3 +289,21 @@ class TestPolishStagePhaseMappingDrift:
                 f"_METHOD_PHASES[{phase_name!r}] = {method_name!r}, but that "
                 "method does not exist on _PolishLLMPhaseMixin."
             )
+
+    def test_free_phases_target_existing_module_functions(self) -> None:
+        """Every mapped free-function name must exist in polish/stage.py.
+
+        Mirror of ``test_method_phases_target_existing_methods_on_mixin``
+        for the deterministic side. Catches typos in ``_FREE_PHASES`` values
+        before they become runtime AttributeErrors at ``_phase_order()``.
+        """
+        import questfoundry.pipeline.stages.polish.stage as polish_stage_module
+        from questfoundry.pipeline.stages.polish.stage import PolishStage
+
+        for phase_name, fn_name in PolishStage._FREE_PHASES.items():
+            assert hasattr(polish_stage_module, fn_name), (
+                f"_FREE_PHASES[{phase_name!r}] = {fn_name!r}, but that "
+                "function is not importable from polish.stage. The free "
+                "function must be re-exported via stage.py for "
+                "_phase_order()'s getattr lookup to find it."
+            )
