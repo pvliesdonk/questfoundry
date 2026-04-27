@@ -14,41 +14,7 @@ if TYPE_CHECKING:
 
 
 def format_valid_beat_ids_by_dilemma(graph: Graph, beat_ids: set[str]) -> str:
-    """Format a beat-ID list grouped by the dilemma each beat belongs to.
-
-    Replaces the flat ``", ".join(sorted(...))`` injection that small models
-    lose track of for large stories. Per CLAUDE.md §6 Valid ID Injection,
-    structured Valid IDs lists prevent phantom-ID hallucinations and reduce
-    position-bias errors when the surface area is large.
-
-    Layout:
-    - One bullet per dilemma listing its beats (sorted). Y-shape pre-commit
-      beats (multiple ``belongs_to`` edges to paths of the SAME dilemma per
-      Story Graph Ontology Part 8) land under that dilemma's bullet — they
-      are single-dilemma in narrative terms.
-    - One ``(spans multiple dilemmas)`` bullet for beats whose
-      ``belongs_to`` paths resolve to multiple distinct dilemmas. Per SGO
-      Part 8 this is a spec violation; surfacing it defensively helps
-      catch upstream regressions rather than silently picking one
-      dilemma's bullet.
-    - One ``(unmapped)`` bullet for beats with no ``belongs_to`` edge —
-      e.g. structural beats that haven't been wired to a path yet. Surfaced
-      explicitly so the LLM doesn't silently invent a parent.
-
-    Empty buckets are omitted. The whole list returns as a single string
-    suitable for direct injection as the ``valid_beat_ids`` template
-    variable. The caller must own the input set; this helper does not
-    consult the graph for which beats are "valid" — it groups whatever
-    set is passed.
-
-    Args:
-        graph: Graph used to look up ``belongs_to`` edges and ``path``
-            nodes for dilemma resolution.
-        beat_ids: Beat IDs (prefixed, e.g. ``beat::foo``) to group.
-
-    Returns:
-        Multi-line markdown string. Empty string if ``beat_ids`` is empty.
-    """
+    """Format ``beat_ids`` grouped by dilemma; cross-dilemma anomalies and unmapped beats surface in dedicated buckets."""
     if not beat_ids:
         return ""
 

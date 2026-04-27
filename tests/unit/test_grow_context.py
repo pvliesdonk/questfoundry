@@ -56,8 +56,9 @@ class TestFormatValidBeatIdsByDilemma:
         result = format_valid_beat_ids_by_dilemma(g, beat_ids)
         assert "- `dilemma::archive_nature`: `beat::an_a`" in result
         assert "- `dilemma::mentor_trust`: `beat::mt_a`, `beat::mt_b`" in result
-        # No multi or unmapped buckets when all beats are single-dilemma
-        assert "(multi-dilemma" not in result
+        # No cross-dilemma or unmapped buckets when all beats are single-dilemma.
+        # Use the real bucket label so a future rename trips this test.
+        assert "(spans multiple dilemmas)" not in result
         assert "(unmapped)" not in result
 
     def test_pre_commit_beat_groups_under_its_dilemma(self) -> None:
