@@ -302,6 +302,8 @@ class DressStage:
         self._lang_instruction = get_output_language_instruction(kwargs.get("language", "en"))
 
         log.info("stage_start", stage="dress")
+        # Reset escalations for this run; previous runs' escalations don't carry over.
+        self._escalations = []
 
         phases = self._phase_order()
         phase_map = {name: i for i, (_, name) in enumerate(phases)}
@@ -863,23 +865,20 @@ class DressStage:
         )
 
         # Per-item escalation when a brief batch's retries exhausted (#1480).
+        # eligible_ids comes from graph.get_nodes_by_type("passage").keys() —
+        # always fully-prefixed `passage::*`, no normalization needed.
         for idx, exc in errors:
             for affected_pid in chunks[idx]:
-                full_pid = (
-                    affected_pid
-                    if affected_pid.startswith("passage::")
-                    else f"passage::{affected_pid}"
-                )
                 log.warning(
                     "briefs_batch_failed_escalated",
-                    passage_id=full_pid,
+                    passage_id=affected_pid,
                     exc_type=type(exc).__name__,
                     exc_msg=str(exc),
                 )
                 self._escalations.append(
                     DressEscalation(
                         kind="briefs_batch_failed",
-                        item_id=full_pid,
+                        item_id=affected_pid,
                         detail=(
                             f"dress_brief_batch failed after retries "
                             f"({type(exc).__name__}: {exc}). Passage has no "
