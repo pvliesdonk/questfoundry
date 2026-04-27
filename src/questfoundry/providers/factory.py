@@ -216,8 +216,14 @@ def _preprocess_provider_kwargs(
         # blackmail-ledger / undercover-journalist passage batch. QuestFoundry
         # users explicitly opt into a creative-writing pipeline; the safety
         # filter is a chatbot-deployment concern, not an authoring concern.
-        if "safety_settings" not in kwargs:
+        # ``not kwargs.get(...)`` (rather than ``not in``) intentionally treats
+        # ``safety_settings=None`` and ``safety_settings={}`` as "use our
+        # defaults" too — silently letting None through would re-enable
+        # Gemini's consumer-level defaults, the exact failure this guards
+        # against.
+        if not kwargs.get("safety_settings"):
             kwargs["safety_settings"] = _default_google_safety_settings()
+            log.debug("google_safety_settings_injected", categories=5)
 
     return kwargs
 
@@ -228,6 +234,12 @@ def _default_google_safety_settings() -> dict[Any, Any]:
     Maps the five user-facing harm categories to ``BLOCK_NONE``. Imported
     lazily so the factory doesn't require ``langchain-google-genai`` at
     module load time — only when a Google model is actually requested.
+
+    Note: ``HARM_CATEGORY_CIVIC_INTEGRITY`` was added in Gemini 1.5 (early
+    2024) and is absent from older models. The default model in
+    :data:`PROVIDER_DEFAULTS` is ``gemini-2.5-flash``, which supports it;
+    callers using pre-1.5 models should pass an explicit
+    ``safety_settings`` dict that omits this category.
     """
     from langchain_google_genai import HarmBlockThreshold, HarmCategory
 

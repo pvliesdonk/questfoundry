@@ -373,6 +373,31 @@ def test_create_chat_model_google_safety_settings_override_preserved() -> None:
     assert mock_init.call_args[1]["safety_settings"] is custom
 
 
+def test_create_chat_model_google_safety_settings_none_falls_back_to_default() -> None:
+    """``safety_settings=None`` is treated as "use our defaults", not as opt-out.
+
+    Letting ``None`` pass through to ``ChatGoogleGenerativeAI`` would silently
+    re-enable Gemini's consumer-level thresholds — exactly the failure mode
+    this guard exists to prevent. Same treatment for the empty-dict case.
+    """
+    from langchain_google_genai import HarmBlockThreshold, HarmCategory
+
+    mock_chat = MagicMock()
+    with (
+        patch.dict("os.environ", {"GOOGLE_API_KEY": "test-key"}),
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            return_value=mock_chat,
+        ) as mock_init,
+    ):
+        create_chat_model("google", "gemini-2.5-flash", safety_settings=None)
+
+    safety_settings = mock_init.call_args[1]["safety_settings"]
+    assert safety_settings is not None
+    assert HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT in safety_settings
+    assert all(threshold == HarmBlockThreshold.BLOCK_NONE for threshold in safety_settings.values())
+
+
 def test_create_chat_model_google_safety_settings_skipped_for_other_providers() -> None:
     """safety_settings default applies only to Google; other providers untouched."""
     mock_chat = MagicMock()
