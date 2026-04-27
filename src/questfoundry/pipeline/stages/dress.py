@@ -401,24 +401,7 @@ class DressStage:
 
             exit_errors = validate_dress_output(graph)
             if exit_errors:
-                # Fold per-item escalations into the contract failure message
-                # so the failure surface points at the batch responses that
-                # misbehaved, not just at the missing artifacts (#1480). The
-                # escalations only enrich an existing contract failure; we
-                # do NOT raise on escalations alone (a phase may legitimately
-                # have no per-item output to validate).
-                lines = [
-                    f"DRESS output contract violated ({len(exit_errors)} error(s)):",
-                    *[f"  - {e}" for e in exit_errors],
-                ]
-                if self._escalations:
-                    lines.append(
-                        f"Plus {len(self._escalations)} batch_llm_calls retry-exhaustion escalation(s):"
-                    )
-                    lines += [
-                        f"  - [{esc.kind}] {esc.item_id}: {esc.detail}" for esc in self._escalations
-                    ]
-                raise DressStageError("\n".join(lines))
+                raise DressStageError(self._format_exit_error(exit_errors))
 
             graph.set_last_stage("dress")
             graph.save(resolved_path / "graph.db")
@@ -448,6 +431,25 @@ class DressStage:
             "codex_entries": dict(codex_entries),
             "illustrations": dict(illustrations),
         }
+
+    def _format_exit_error(self, exit_errors: list[str]) -> str:
+        """Build the message body for the stage-exit ``DressStageError``.
+
+        Folds per-item escalations into the contract-failure message so the
+        failure surface points at the batch responses that misbehaved
+        (#1480). Escalations only ENRICH an existing contract failure; the
+        caller decides whether to raise based on ``exit_errors`` alone.
+        """
+        lines = [
+            f"DRESS output contract violated ({len(exit_errors)} error(s)):",
+            *[f"  - {e}" for e in exit_errors],
+        ]
+        if self._escalations:
+            lines.append(
+                f"Plus {len(self._escalations)} batch_llm_calls retry-exhaustion escalation(s):"
+            )
+            lines += [f"  - [{esc.kind}] {esc.item_id}: {esc.detail}" for esc in self._escalations]
+        return "\n".join(lines)
 
     # -------------------------------------------------------------------------
     # Phase 0: Art Direction (discuss/summarize/serialize)

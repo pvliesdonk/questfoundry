@@ -1910,6 +1910,47 @@ class TestDressBatchFailureEscalations:
             # Items already prefixed by graph.get_nodes_by_type → key form:
             assert esc.item_id.startswith("passage::")
 
+    def test_format_exit_error_without_escalations(self) -> None:
+        """Contract failure with no escalations renders just the error list —
+        no ``Plus N escalation(s)`` trailer."""
+        stage = DressStage()
+        msg = stage._format_exit_error(["entity X missing brief", "entity Y missing codex"])
+        assert "DRESS output contract violated (2 error(s)):" in msg
+        assert "  - entity X missing brief" in msg
+        assert "  - entity Y missing codex" in msg
+        assert "Plus" not in msg
+        assert "escalation" not in msg
+
+    def test_format_exit_error_folds_escalations(self) -> None:
+        """When escalations exist alongside contract errors, the folded message
+        names every escalation by ``[kind] item_id: detail``."""
+        from questfoundry.models.dress import DressEscalation
+
+        stage = DressStage()
+        stage._escalations = [
+            DressEscalation(
+                kind="codex_batch_failed",
+                item_id="character::clara_yu",
+                detail="dress_codex_batch failed after retries (RuntimeError: blocked).",
+                upstream_stage="DRESS",
+            ),
+            DressEscalation(
+                kind="briefs_batch_failed",
+                item_id="passage::intro",
+                detail="dress_brief_batch failed after retries (TimeoutError: 30s).",
+                upstream_stage="DRESS",
+            ),
+        ]
+
+        msg = stage._format_exit_error(["entity X missing codex"])
+        # Contract errors come first
+        assert "DRESS output contract violated (1 error(s)):" in msg
+        assert "  - entity X missing codex" in msg
+        # Then the escalation trailer with both items named
+        assert "Plus 2 batch_llm_calls retry-exhaustion escalation(s):" in msg
+        assert "[codex_batch_failed] character::clara_yu: dress_codex_batch failed" in msg
+        assert "[briefs_batch_failed] passage::intro: dress_brief_batch failed" in msg
+
     @pytest.mark.asyncio()
     async def test_briefs_chunk_passage_ids_are_already_prefixed(self) -> None:
         """``eligible_ids`` is built from ``graph.get_nodes_by_type("passage").keys()``,
