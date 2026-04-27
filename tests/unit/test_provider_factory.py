@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import FrozenInstanceError
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -373,12 +374,16 @@ def test_create_chat_model_google_safety_settings_override_preserved() -> None:
     assert mock_init.call_args[1]["safety_settings"] is custom
 
 
-def test_create_chat_model_google_safety_settings_none_falls_back_to_default() -> None:
-    """``safety_settings=None`` is treated as "use our defaults", not as opt-out.
+@pytest.mark.parametrize("falsy_override", [None, {}])
+def test_create_chat_model_google_safety_settings_falsy_falls_back_to_default(
+    falsy_override: Any,
+) -> None:
+    """``safety_settings=None`` and ``safety_settings={}`` both use our defaults.
 
-    Letting ``None`` pass through to ``ChatGoogleGenerativeAI`` would silently
+    Letting either pass through to ``ChatGoogleGenerativeAI`` would silently
     re-enable Gemini's consumer-level thresholds — exactly the failure mode
-    this guard exists to prevent. Same treatment for the empty-dict case.
+    this guard exists to prevent. ``not kwargs.get(...)`` treats both falsy
+    sentinels the same as absence.
     """
     from langchain_google_genai import HarmBlockThreshold, HarmCategory
 
@@ -390,7 +395,7 @@ def test_create_chat_model_google_safety_settings_none_falls_back_to_default() -
             return_value=mock_chat,
         ) as mock_init,
     ):
-        create_chat_model("google", "gemini-2.5-flash", safety_settings=None)
+        create_chat_model("google", "gemini-2.5-flash", safety_settings=falsy_override)
 
     safety_settings = mock_init.call_args[1]["safety_settings"]
     assert safety_settings is not None
