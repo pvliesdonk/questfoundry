@@ -193,8 +193,8 @@ class TestFormatEntityArcContext:
         assert ctx["entity_id"] == "entity::mentor"
         assert ctx["entity_name"] == "The Mentor"
         assert "wise guide" in ctx["entity_description"]
-        # IDs in beat_appearances lines are backtick-wrapped per @prompt-engineer Rule 4
-        # rule 1 — matches the valid_*_ids lists so a model doesn't need to
+        # IDs in beat_appearances lines are backtick-wrapped per @prompt-engineer
+        # Rule 4 — matches the valid_*_ids lists so a model doesn't need to
         # mentally strip backticks when matching IDs across surfaces.
         assert "`beat::intro`" in ctx["beat_appearances"]
         assert "`beat::reveal`" in ctx["beat_appearances"]
