@@ -43,7 +43,13 @@ system: |
   - Do NOT add prose before or after the JSON output
 
   ## Valid IDs
-  Valid beat_ids (use ONLY these): {valid_beat_ids}
+  Valid beat_ids (use ONLY these), grouped by the dilemma each beat
+  belongs to. Beats whose ``belongs_to`` resolves to multiple dilemmas
+  (rare, structural error) and beats with no ``belongs_to`` mapping
+  appear in dedicated buckets.
+
+  {valid_beat_ids}
+
   Total beats: {beat_count}
 
   ## Output Format
