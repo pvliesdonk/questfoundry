@@ -575,9 +575,13 @@ class _PolishLLMPhaseMixin:
                 detail="No beats to annotate",
             )
 
+        # Sort once; reused for the enriched beat summaries and the bullet-list
+        # `valid_beat_ids` block.
+        sorted_beat_ids = sorted(beat_nodes.keys())
+
         # Build enriched beat summaries with entity names
         beat_items: list[ContextItem] = []
-        for bid in sorted(beat_nodes.keys()):
+        for bid in sorted_beat_ids:
             data = beat_nodes[bid]
             line = enrich_beat_line(graph, bid, data, include_entities=True)
             beat_items.append(ContextItem(id=bid, text=line))
@@ -592,7 +596,6 @@ class _PolishLLMPhaseMixin:
         # since the prompt is small and the LLM can handle many beats.
         # Bullet list per ID; small models lose track of flat comma-separated
         # lists for 60+ beats (#1505 — mirrors Phase 1 / 1a / 3 bulletization).
-        sorted_beat_ids = sorted(beat_nodes.keys())
         valid_beat_ids_block = "\n".join(f"- `{b}`" for b in sorted_beat_ids)
 
         context = {
