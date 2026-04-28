@@ -107,12 +107,15 @@ def format_linear_section_context(
     before_context = _format_context_beat(beat_nodes, before_beat, "preceding")
     after_context = _format_context_beat(beat_nodes, after_beat, "following")
 
+    # Bullet list per ID; small models lose track of flat comma-separated lists for 8-15 beats.
+    valid_beat_ids_block = "\n".join(f"- `{b}`" for b in beat_ids) if beat_ids else "(none)"
+
     return {
         "section_id": section_id,
         "beat_details": beat_details or "(none)",
         "before_context": before_context,
         "after_context": after_context,
-        "valid_beat_ids": ", ".join(f"`{b}`" for b in beat_ids) or "(none)",
+        "valid_beat_ids": valid_beat_ids_block,
         "beat_count": str(len(beat_ids)),
     }
 

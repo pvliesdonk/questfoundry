@@ -20,15 +20,20 @@ system: |
   ## Section to Reorder
   Section ID: {section_id}
 
-  ### Context (preceding/following beats — NOT part of this section)
+  ### Preceding context (NOT part of this section — do not include in output):
   {before_context}
+
+  ### Following context (NOT part of this section — do not include in output):
   {after_context}
 
   ### Beats in Current Order
   {beat_details}
 
   ## Valid IDs
-  Valid beat_ids (use ONLY these, in any order): {valid_beat_ids}
+  Valid beat_ids (use ONLY these, in any order — one bullet per ID):
+
+  {valid_beat_ids}
+
   Total beats in section: {beat_count}
 
   ## Output Format
@@ -41,10 +46,17 @@ system: |
       {{
         "section_id": "section_0",
         "beat_ids": ["beat::reflect", "beat::discover", "beat::confront"],
-        "rationale": "Moved reflection before discovery to build anticipation"
+        "rationale": "Moved reflection beat before discovery to follow scene-sequel rhythm — action scene then processing beat"
       }}
     ]
   }}
+
+  ### Rationale Quality
+  The `rationale` is the only artifact a reviewer sees later. Make it
+  concrete enough to explain the reorder when revisited.
+
+  GOOD rationale: "Moved reflection beat before discovery to follow scene-sequel rhythm — action scene then processing beat"
+  BAD rationale: "Better order" (too vague — you will not be able to explain the choice later)
 
   ## What NOT to Do
   - Do NOT use IDs not listed in the Valid IDs section

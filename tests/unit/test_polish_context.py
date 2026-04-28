@@ -44,7 +44,8 @@ class TestFormatLinearSectionContext:
         assert "`beat::b`" in ctx["beat_details"]
         assert "`beat::c`" in ctx["beat_details"]
         assert ctx["beat_count"] == "3"
-        assert ctx["valid_beat_ids"] == "`beat::a`, `beat::b`, `beat::c`"
+        # Bullet-per-line, not flat comma-separated (#1486).
+        assert ctx["valid_beat_ids"] == "- `beat::a`\n- `beat::b`\n- `beat::c`"
 
     def test_with_context_beats(self) -> None:
         graph = Graph.empty()
