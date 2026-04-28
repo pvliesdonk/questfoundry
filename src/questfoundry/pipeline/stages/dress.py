@@ -161,6 +161,46 @@ def _build_dress_error_feedback(
     return "\n".join(parts)
 
 
+def _build_image_renderer_section(provider_spec: str | None) -> str:
+    """Build the renderer-aware hint section for dress_discuss (#1557).
+
+    When `provider_spec` is None (no `--image-provider` set), returns "" so
+    the `{image_renderer_section}` placeholder collapses cleanly. Otherwise
+    looks up checkpoint style metadata via `resolve_checkpoint_style()` and
+    formats a hint block that biases DRESS Phase 0 toward
+    renderer-compatible art direction.
+
+    Args:
+        provider_spec: e.g. ``"a1111/juggernautXL_ragnarokBy"`` or ``"a1111"``
+            or ``None`` when no image provider is selected at DRESS time.
+    """
+    if not provider_spec:
+        return ""
+
+    from questfoundry.providers.checkpoint_styles import resolve_checkpoint_style
+
+    _, _, checkpoint = provider_spec.partition("/")
+    style_info = resolve_checkpoint_style(checkpoint or provider_spec)
+
+    return (
+        "## Image Renderer Constraint (CRITICAL)\n"
+        f"This story's images will be rendered by: {style_info['label']}\n\n"
+        f"This renderer works best with these visual styles: "
+        f"{style_info['style_hints']}\n"
+        f"It CANNOT faithfully produce: {style_info['incompatible_styles']}\n\n"
+        "GOOD art direction given this renderer: "
+        'style="gritty photorealistic urban", medium="digital photo"\n'
+        "BAD art direction given this renderer: "
+        'style="watercolor wash", medium="traditional ink" '
+        "(this renderer is tuned for photorealism; stylised media will "
+        "fight the checkpoint and degrade image quality)\n\n"
+        "Your art direction MUST be compatible with the renderer. If the "
+        "story's tone strongly suggests a medium the renderer cannot "
+        "produce well, choose the closest compatible style and note the "
+        "compromise in `composition_notes`.\n"
+    )
+
+
 class DressStageError(ValueError):
     """Error raised when DRESS stage cannot proceed."""
 
@@ -512,6 +552,7 @@ class DressStage:
             research_tools_section=research_section,
             sandbox_section=load_sandbox_section(),
             mode_section=mode_section,
+            image_renderer_section=_build_image_renderer_section(self._image_provider_spec),
         )
 
         if self._interactive:
