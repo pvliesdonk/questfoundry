@@ -123,13 +123,37 @@ class TestResolveEntityId:
         )
         assert _resolve_entity_id(graph, "the") is None
 
-    def test_ambiguous_subset_returns_none(self) -> None:
-        """Multiple subset matches → return None and log a warning."""
+    def test_ambiguous_subset_returns_none_and_warns(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Multiple subset matches → return None and emit the ambiguous-match warning."""
+        import logging
+
         from questfoundry.pipeline.stages.fill import _resolve_entity_id
 
         graph = self._build_graph_with(
             [
                 ("object", "the_weathered_compass"),
+                ("object", "the_brass_compass"),
+            ]
+        )
+        with caplog.at_level(logging.WARNING, logger="questfoundry.pipeline.stages.fill"):
+            assert _resolve_entity_id(graph, "compass") is None
+        assert any("entity_id_ambiguous_subset_match" in str(r.message) for r in caplog.records)
+
+    def test_ambiguous_subset_across_categories_returns_none(self) -> None:
+        """Two entities in DIFFERENT categories sharing a token → still ambiguous → None.
+
+        Tightens the contract: the resolver collapses the cross-category
+        candidate set before applying the unique-match rule, so an LLM
+        token that matches one entity per category is correctly rejected
+        rather than silently picking the first walked.
+        """
+        from questfoundry.pipeline.stages.fill import _resolve_entity_id
+
+        graph = self._build_graph_with(
+            [
+                ("character", "the_compass_keeper"),
                 ("object", "the_brass_compass"),
             ]
         )
@@ -141,8 +165,11 @@ class TestResolveEntityId:
         graph = self._build_graph_with([("character", "mentor")])
         assert _resolve_entity_id(graph, "phantom_entity") is None
 
-    def test_subset_does_not_cross_categories(self) -> None:
-        """The subset fallback returns the actual node ID with its category prefix."""
+    def test_subset_match_returns_category_prefixed_id(self) -> None:
+        """Two independent unambiguous subset lookups each resolve to the
+        correct category-prefixed graph ID — i.e., a subset hit returns the
+        graph node ID exactly as stored, not a re-derived form.
+        """
         from questfoundry.pipeline.stages.fill import _resolve_entity_id
 
         graph = self._build_graph_with(

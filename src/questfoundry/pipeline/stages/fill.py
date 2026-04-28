@@ -253,8 +253,8 @@ def _resolve_entity_id(graph: Graph, raw_id: str) -> str | None:
 
     Tries all entity category prefixes (character::, location::, etc.)
     and legacy entity:: prefix to find a matching node in the graph.
-    Falls back to a subset-token match when exact lookup misses (#1259):
-    a short LLM-supplied name like ``the_compass`` resolves to graph ID
+    Falls back to a subset-token match when exact lookup misses: a short
+    LLM-supplied name like ``the_compass`` resolves to graph ID
     ``object::the_weathered_compass`` when the LLM tokens are a subset
     of the graph entity's tokens AND exactly one graph entity matches.
 
@@ -283,9 +283,9 @@ def _resolve_entity_id(graph: Graph, raw_id: str) -> str | None:
     if graph.has_node(legacy):
         return legacy
 
-    # Subset-token fallback (#1259). Build a token set from raw_id with
-    # stopwords removed; require at least one non-stopword token so a name
-    # of `the` alone never matches anything.
+    # Subset-token fallback. Build a token set from raw_id with stopwords
+    # removed; require at least one non-stopword token so a name of `the`
+    # alone never matches anything.
     raw_tokens = {tok for tok in raw_id.split("_") if tok and tok not in _ENTITY_NAME_STOPWORDS}
     if not raw_tokens:
         return None
