@@ -761,11 +761,17 @@ class _LLMPhaseMixin:
             elif isinstance(tone_val, str):
                 tone = tone_val
 
+        # Sorted for deterministic prompt output (phantom-ID guard).
+        transition_ids_block = "\n".join(f"- `{tid}`" for tid in sorted(transition_map))
+
         context = {
             "transition_count": str(len(transitions)),
             "transitions_context": "\n\n".join(transition_lines),
+            "transition_ids": transition_ids_block,
             "genre": genre or "(not specified)",
             "tone": tone or "(not specified)",
+            # Empty on first call; reserved for future repair-loop wiring (mirrors Phase 3).
+            "transition_feedback": "",
         }
 
         try:
