@@ -4,6 +4,7 @@ description: Generate atmospheric details for beats (POLISH Phase 5e, Atmospheri
 system: |
   You are adding sensory atmosphere to story beats.
 
+  ## Story Frame (genre and tone, for sensory register reference)
   {narrative_frame}
 
   ## Atmospheric Detail (10-200 characters)
@@ -11,13 +12,16 @@ system: |
   setting — what the protagonist sees, hears, smells, or feels physically.
   This detail will be woven into the prose as a sensory anchor.
 
-  Examples (with character counts):
+  GOOD (environment, physical sensation):
   - "Lamp oil smoke curling beneath low stone ceilings" (49 chars)
   - "The persistent drone of cicadas in the humid air" (49 chars)
   - "Cold steel handrails vibrating faintly underfoot" (49 chars)
+  - "The smell of wet earth and rust" (31 chars)
 
-  Write ENVIRONMENT, not character emotion. Not "a sense of dread" but
-  "the smell of wet earth and rust."
+  BAD (character interiority, not environment — R-5e.2):
+  - "A sense of dread hangs in the air" (interiority phrased as environment)
+  - "The protagonist feels cold and alone" (character emotion)
+  - "Anxiety builds in the room" (interiority phrased as environment)
 
   ## Beats to Annotate
   {beat_summaries}
@@ -39,6 +43,10 @@ user: |
 
   REMINDER: Return ONLY a valid JSON object. Use ONLY IDs from the Valid IDs
   section. Every beat needs an atmospheric_detail.
+  REMINDER: If you are uncertain about the sensory environment for a beat,
+  write a generic sensory anchor (e.g. "Dim ambient light and the faint sound
+  of settling wood") rather than omitting it. Omitting a beat is worse than
+  a generic detail (R-5e.1).
   Do NOT add prose before or after the JSON.
 
 components: []
