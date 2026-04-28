@@ -70,25 +70,61 @@ system: |
   }}
   ```
 
-  ### 5. initial_beats (Initial Beats - {size_beats_per_path} per path)
-  Create {size_beats_per_path} InitialBeat objects PER PATH (e.g., with 3 paths and a "2-4" range, expect 6-12 beats total).
+  ### 5. initial_beats (Y-shape — shared pre-commit + per-path post-commit)
+  Each dilemma is Y-shaped: SHARED pre-commit beats (belong to both paths
+  of the dilemma via `path_id` + `also_belongs_to`) + a COMMIT beat per
+  path (`also_belongs_to: null`) + post-commit consequence beats per path
+  (`also_belongs_to: null`). Target counts: {size_shared_beats_per_dilemma}
+  shared beats per dilemma, {size_post_commit_beats_per_path} post-commit
+  beats per path. A dilemma with 2 explored paths and 1 shared + 1 commit
+  + 2 consequence beats per path produces 1 + 2 * 3 = 7 beats.
+
+  **Use `path_id` + `also_belongs_to`. Do NOT emit the legacy `paths: [...]` list field — it was deprecated in the Y-shape refactor (#1206) and the serializer rejects it.**
+
+  Example A — SHARED pre-commit beat (dual membership):
   ```json
   {{
-    "beat_id": "host_motive_beat_01",
-    "summary": "What happens in this beat",
-    "paths": ["path::host_benevolent_or_selfish__protector"],
+    "beat_id": "host_motive_setup_01",
+    "summary": "The host greets the guest with calculated warmth",
+    "path_id": "path::host_benevolent_or_selfish__protector",
+    "also_belongs_to": ["path::host_benevolent_or_selfish__manipulator"],
     "dilemma_impacts": [
       {{
         "dilemma_id": "dilemma::host_benevolent_or_selfish",
         "effect": "advances",
-        "note": "Explanation of the impact"
+        "note": "Establishes the host's surface charm before the fork"
       }}
     ],
-    "entities": ["character::butler", "character::guest"],
+    "entities": ["character::host", "character::guest"],
+    "location": "location::manor"
+  }}
+  ```
+
+  Example B — COMMIT beat (exclusive to one path, fork point):
+  ```json
+  {{
+    "beat_id": "host_protector_proof_01",
+    "summary": "The host shields the guest from a poisoned drink",
+    "path_id": "path::host_benevolent_or_selfish__protector",
+    "also_belongs_to": null,
+    "dilemma_impacts": [
+      {{
+        "dilemma_id": "dilemma::host_benevolent_or_selfish",
+        "effect": "commits",
+        "note": "The host's intervention locks in the protector answer"
+      }}
+    ],
+    "entities": ["character::host", "character::guest"],
     "location": "location::manor",
     "location_alternatives": ["location::garden"]
   }}
   ```
+
+  POST-COMMIT (aftermath) beats use the same `also_belongs_to: null` shape
+  as Example B, but their `effect` MUST NOT be `commits` — use `advances`,
+  `reveals`, or `complicates` instead. Only the single COMMIT beat per path
+  carries `effect: commits`; subsequent post-commit beats prove the
+  already-committed answer through consequences.
 
   ## Mapping Rules
 
@@ -107,7 +143,11 @@ system: |
   - Copy IDs EXACTLY as shown in the brief, INCLUDING the type prefix
   - Every path must reference a valid dilemma_id (with `dilemma::` prefix) and answer_id
   - Every consequence must reference a valid path_id (with `path::` prefix)
-  - Create {size_beats_per_path} initial_beats PER PATH (not 1 per path!)
+  - Emit {size_shared_beats_per_dilemma} shared pre-commit beats per
+    dilemma (path_id + also_belongs_to both set; effect != commits) AND
+    {size_post_commit_beats_per_path} post-commit beats per path (path_id
+    only, also_belongs_to = null; exactly one with effect = commits per
+    path).
   - Every initial_beat must reference valid path IDs (with `path::` prefix)
   - path_importance must be exactly "major" or "minor" (lowercase)
   - effect must be exactly "advances", "reveals", "commits", or "complicates"

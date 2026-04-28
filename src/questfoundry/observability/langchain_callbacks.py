@@ -4,6 +4,9 @@ Provides callback handlers that integrate with QuestFoundry's logging system,
 including JSONL logging for LLM calls.
 """
 
+# pyright: reportAttributeAccessIssue=false
+# TODO(#1353): langchain API drift — BaseMessage.tool_calls and Generation.message attribute access; tracked in issue #1353
+
 # ruff: noqa: ARG002 - Callback interface methods require unused parameters
 
 from __future__ import annotations
@@ -43,8 +46,12 @@ def _parse_temperature_from_repr(repr_str: str) -> float | None:
     if match:
         try:
             return float(match.group(1))
-        except ValueError:
-            pass
+        except ValueError as e:  # pragma: no cover - regex guarantees numeric, defensive
+            log.debug(
+                "langchain_callback_temperature_parse_failed",
+                error=str(e),
+                extracted_value=match.group(1),
+            )
     return None
 
 

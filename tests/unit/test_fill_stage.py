@@ -7,6 +7,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from pydantic import ValidationError
 
 from questfoundry.graph.graph import Graph
 from questfoundry.models.fill import (
@@ -51,6 +52,25 @@ def mock_model() -> MagicMock:
     return MagicMock()
 
 
+@pytest.fixture(autouse=True)
+def _bypass_seam_validators(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Bypass FILL's new POLISH-output entry validator (#1347) and the
+    FILL-output exit validator (#1348) for all tests in this file. The
+    test fixtures use minimal POLISH graphs that don't satisfy the full
+    contracts on either side; the contract-chaining integration is
+    exercised in test_contract_chaining.py instead.
+    """
+    from questfoundry.graph import (
+        fill_output_validation as _fov,
+    )
+    from questfoundry.graph import (
+        polish_validation as _pv,
+    )
+
+    monkeypatch.setattr(_pv, "validate_polish_output", lambda _g: [])
+    monkeypatch.setattr(_fov, "validate_fill_output", lambda _g: [])
+
+
 class TestFillStageInit:
     def test_default_gate(self) -> None:
         stage = FillStage()
@@ -81,7 +101,7 @@ def _mock_implemented_phases(stage: FillStage) -> None:
             {
                 "type": "voice",
                 "raw_id": "voice",
-                "pov": "third_limited",
+                "pov": "third_person_limited",
                 "tense": "past",
                 "voice_register": "literary",
                 "sentence_rhythm": "varied",
@@ -197,7 +217,7 @@ class TestFillStageExecute:
         g.set_last_stage(last_stage)
         g.create_node(
             "voice::voice",
-            {"type": "voice", "raw_id": "voice", "pov": "third_limited", "tense": "past"},
+            {"type": "voice", "raw_id": "voice", "pov": "third_person_limited", "tense": "past"},
         )
         g.create_node("arc::spine", {"type": "arc", "raw_id": "spine", "arc_type": "spine"})
         g.save(tmp_path / "graph.db")
@@ -228,7 +248,7 @@ class TestFillStageExecute:
         with g.mutation_context(stage="fill", phase="voice"):
             g.create_node(
                 "voice::voice",
-                {"type": "voice", "raw_id": "voice", "pov": "first", "tense": "present"},
+                {"type": "voice", "raw_id": "voice", "pov": "first_person", "tense": "present"},
             )
         g.set_last_stage("fill")
         g.save(tmp_path / "graph.db")
@@ -411,7 +431,8 @@ def _make_voice_output() -> FillPhase0Output:
     """Create a valid FillPhase0Output for mocking."""
     return FillPhase0Output(
         voice=VoiceDocument(
-            pov="third_limited",
+            pov="third_person_limited",
+            pov_character="kay",
             tense="past",
             voice_register="literary",
             sentence_rhythm="varied",
@@ -457,7 +478,7 @@ class TestPhase0Voice:
         # Voice node should be created in graph with story_title
         voice_node = graph.get_node("voice::voice")
         assert voice_node is not None
-        assert voice_node["pov"] == "third_limited"
+        assert voice_node["pov"] == "third_person_limited"
         assert voice_node["tense"] == "past"
         assert voice_node["voice_register"] == "literary"
         assert voice_node["story_title"] == "The Hollow Crown"
@@ -484,7 +505,7 @@ class TestPhase0Voice:
                 stage,
                 "_phase_0a_voice_research",
                 new_callable=AsyncMock,
-                return_value=("Use third_limited past for fantasy.", 2, 300),
+                return_value=("Use third_person_limited past for fantasy.", 2, 300),
             ),
             patch.object(stage, "_fill_llm_call", mock_llm_call),
         ):
@@ -497,7 +518,7 @@ class TestPhase0Voice:
         assert "grow_summary" in context
         assert "scene_types_summary" in context
         assert "research_notes" in context
-        assert "Use third_limited past for fantasy." in context["research_notes"]
+        assert "Use third_person_limited past for fantasy." in context["research_notes"]
 
     @pytest.mark.asyncio
     async def test_includes_research_metrics(self) -> None:
@@ -610,12 +631,12 @@ class TestPhase0aVoiceResearch:
             patch(
                 "questfoundry.agents.summarize_discussion",
                 new_callable=AsyncMock,
-                return_value=("Use third_limited past for dark fantasy.", 200),
+                return_value=("Use third_person_limited past for dark fantasy.", 200),
             ),
         ):
             brief, calls, tokens = await stage._phase_0a_voice_research(graph, MagicMock())
 
-        assert brief == "Use third_limited past for dark fantasy."
+        assert brief == "Use third_person_limited past for dark fantasy."
         assert calls == 4  # 3 discuss + 1 summarize
         assert tokens == 800  # 600 + 200
 
@@ -644,9 +665,14 @@ def _make_prose_graph() -> Graph:
         {
             "type": "voice",
             "raw_id": "voice",
-            "pov": "third_limited",
+            "pov": "third_person_limited",
             "tense": "past",
             "voice_register": "literary",
+            # R-1.7 stamp — Phase 1a's entry assertion requires this. Tests
+            # call Phase 1a directly; in real runs, the stamp is applied by
+            # execute() after the Phase 0 gate decision.
+            "approved_at": "2026-04-23T12:00:00+00:00",
+            "approval_mode": "no_interactive",
         },
     )
     g.create_node(
@@ -887,6 +913,16 @@ class TestPhase1aExpand:
     @pytest.mark.asyncio
     async def test_no_passages_returns_completed(self) -> None:
         graph = Graph.empty()
+        # R-1.7 stamp required by Phase 1a entry assertion.
+        graph.create_node(
+            "voice::voice",
+            {
+                "type": "voice",
+                "raw_id": "voice",
+                "approved_at": "2026-04-23T12:00:00+00:00",
+                "approval_mode": "no_interactive",
+            },
+        )
         stage = FillStage()
         result = await stage._phase_1a_expand(graph, MagicMock())
         assert result.status == "completed"
@@ -1066,6 +1102,108 @@ class TestPhase3Revision:
         result = await stage._phase_3_revision(graph, MagicMock())
         assert result.status == "completed"
         assert result.llm_calls == 0
+
+    @pytest.mark.asyncio
+    async def test_revision_context_and_hints_carry_valid_entity_ids(self) -> None:
+        """The revision call MUST inject `valid_entity_ids` into the prompt
+        context AND pass it as `extra_repair_hints` so the constraint survives
+        context drift on retry. Closes the FILL §fill_phase3_revision audit
+        finding (@prompt-engineer Rule 1 Valid ID Injection)."""
+        graph = _make_reviewed_graph()
+        graph.create_node(
+            "entity::kay",
+            {"type": "entity", "raw_id": "kay", "concept": "A wanderer"},
+        )
+        graph.update_node(
+            "passage::p1",
+            review_flags=[
+                {"passage_id": "p1", "issue": "Voice drift", "issue_type": "voice_drift"}
+            ],
+        )
+        stage = FillStage()
+
+        captured_context: dict[str, Any] = {}
+        captured_hints: list[str] | None = None
+
+        async def mock_llm_call(
+            model: MagicMock,  # noqa: ARG001
+            template_name: str,  # noqa: ARG001
+            context: dict,
+            output_schema: type,  # noqa: ARG001
+            max_retries: int = 3,  # noqa: ARG001
+            *,
+            creative: bool = False,  # noqa: ARG001
+            extra_repair_hints: list[str] | None = None,
+            **kwargs: object,  # noqa: ARG001
+        ) -> tuple:
+            nonlocal captured_context, captured_hints
+            captured_context = context
+            captured_hints = extra_repair_hints
+            return (
+                FillPhase1Output(
+                    passage=FillPassageOutput(passage_id="p1", prose="Revised prose.")
+                ),
+                1,
+                300,
+            )
+
+        stage._fill_llm_call = mock_llm_call  # type: ignore[method-assign]
+        await stage._phase_3_revision(graph, MagicMock())
+
+        # Context contains the prompt-injection variable used by
+        # fill_phase3_revision.yaml's `## Valid Entity IDs` section.
+        assert "valid_entity_ids" in captured_context
+        valid_ids_text = captured_context["valid_entity_ids"]
+        assert "kay" in valid_ids_text  # raw_id of the entity created above
+        assert "`kay`" in valid_ids_text  # backtick-wrapped per @prompt-engineer Rule 4
+
+        # Same constraint also flows as a retry hint so it survives context drift.
+        assert captured_hints is not None
+        assert any("Valid entity IDs" in h and "`kay`" in h for h in captured_hints)
+
+    @pytest.mark.asyncio
+    async def test_revision_with_zero_entities_uses_fallback_string(self) -> None:
+        """When the graph has flagged passages but zero entity nodes, the
+        `valid_entity_ids` injection must fall back to a non-empty placeholder
+        rather than rendering as an empty block (which would confuse small
+        models reading `## Valid Entity IDs\\n\\n` with no content)."""
+        graph = _make_reviewed_graph()
+        # Intentionally NO entity nodes — fixture doesn't create any.
+        graph.update_node(
+            "passage::p1",
+            review_flags=[
+                {"passage_id": "p1", "issue": "Voice drift", "issue_type": "voice_drift"}
+            ],
+        )
+        stage = FillStage()
+
+        captured_context: dict[str, Any] = {}
+
+        async def mock_llm_call(
+            model: MagicMock,  # noqa: ARG001
+            template_name: str,  # noqa: ARG001
+            context: dict,
+            output_schema: type,  # noqa: ARG001
+            max_retries: int = 3,  # noqa: ARG001
+            *,
+            creative: bool = False,  # noqa: ARG001
+            extra_repair_hints: list[str] | None = None,  # noqa: ARG001
+            **kwargs: object,  # noqa: ARG001
+        ) -> tuple:
+            nonlocal captured_context
+            captured_context = context
+            return (
+                FillPhase1Output(
+                    passage=FillPassageOutput(passage_id="p1", prose="Revised prose.")
+                ),
+                1,
+                300,
+            )
+
+        stage._fill_llm_call = mock_llm_call  # type: ignore[method-assign]
+        await stage._phase_3_revision(graph, MagicMock())
+
+        assert captured_context["valid_entity_ids"] == "(no entities defined)"
 
     @pytest.mark.asyncio
     async def test_multiple_flags_batched(self) -> None:
@@ -1287,6 +1425,250 @@ class TestBuildErrorFeedback:
         assert "fix the errors" in feedback.lower()
         assert "keep" not in feedback.lower() or "prose" not in feedback.lower()
 
+    def test_literal_field_failure_lists_allowed_pov_values(self) -> None:
+        """A `voice.pov` content failure must echo the four valid Literal values
+        so a 4B model can self-correct on retry. Closes the FILL repair-gap
+        finding from the 2026-04-25 prompt-vs-spec audit."""
+        from questfoundry.models.fill import FillPhase0Output
+
+        try:
+            FillPhase0Output.model_validate(
+                {
+                    "voice": {
+                        "pov": "third person limited",  # bad — has spaces
+                        "pov_character": "kay",
+                        "tense": "past",
+                        "voice_register": "literary",
+                        "sentence_rhythm": "varied",
+                        "tone_words": ["dark"],
+                    },
+                    "story_title": "The Tower",
+                }
+            )
+            raise AssertionError("expected ValidationError")
+        except ValidationError as exc:
+            feedback = FillStage._build_error_feedback(
+                exc, FillPhase0Output, "content", invalid_fields=["voice.pov"]
+            )
+
+        assert "Allowed values for `voice.pov`:" in feedback
+        for v in (
+            "first_person",
+            "second_person",
+            "third_person_limited",
+            "third_person_omniscient",
+        ):
+            assert f"`{v}`" in feedback
+
+    def test_literal_field_failure_lists_allowed_voice_register_values(self) -> None:
+        """`voice.voice_register` content failure echoes the four valid registers."""
+        from questfoundry.models.fill import FillPhase0Output
+
+        try:
+            FillPhase0Output.model_validate(
+                {
+                    "voice": {
+                        "pov": "third_person_omniscient",
+                        "pov_character": "",
+                        "tense": "past",
+                        "voice_register": "terse",  # bad
+                        "sentence_rhythm": "varied",
+                        "tone_words": ["dark"],
+                    },
+                    "story_title": "T",
+                }
+            )
+            raise AssertionError("expected ValidationError")
+        except ValidationError as exc:
+            feedback = FillStage._build_error_feedback(
+                exc,
+                FillPhase0Output,
+                "content",
+                invalid_fields=["voice.voice_register"],
+            )
+
+        assert "Allowed values for `voice.voice_register`:" in feedback
+        for v in ("formal", "conversational", "literary", "sparse"):
+            assert f"`{v}`" in feedback
+
+    def test_literal_field_failure_lists_allowed_sentence_rhythm_values(self) -> None:
+        """`voice.sentence_rhythm` content failure echoes the three valid rhythms."""
+        from questfoundry.models.fill import FillPhase0Output
+
+        try:
+            FillPhase0Output.model_validate(
+                {
+                    "voice": {
+                        "pov": "third_person_omniscient",
+                        "pov_character": "",
+                        "tense": "past",
+                        "voice_register": "literary",
+                        "sentence_rhythm": "syncopated",  # bad
+                        "tone_words": ["dark"],
+                    },
+                    "story_title": "T",
+                }
+            )
+            raise AssertionError("expected ValidationError")
+        except ValidationError as exc:
+            feedback = FillStage._build_error_feedback(
+                exc,
+                FillPhase0Output,
+                "content",
+                invalid_fields=["voice.sentence_rhythm"],
+            )
+
+        assert "Allowed values for `voice.sentence_rhythm`:" in feedback
+        for v in ("varied", "punchy", "flowing"):
+            assert f"`{v}`" in feedback
+
+    def test_structural_failure_skips_literal_hints_even_with_invalid_fields(self) -> None:
+        """When `_classify_validation_error` returns ('structural', missing, invalid)
+        with a non-empty `invalid` list (mixed missing-field-AND-bad-Literal case),
+        `_build_error_feedback` must NOT emit Allowed-values hints — they would
+        contradict the "fix ONLY the structural issue" instruction. Closes the
+        ambiguity flagged in the #1399 review.
+
+        Uses `BatchedExpandOutput` + `blueprints.0.opening_move` (a real Literal
+        field) so the test actually exercises the `failure_type != "structural"`
+        guard. With a non-Literal path, `_get_literal_values_at_path` would return
+        None regardless and the guard could be silently removed without breaking
+        the test."""
+        from questfoundry.models.fill import BatchedExpandOutput
+
+        error = ValueError("missing field")
+        feedback = FillStage._build_error_feedback(
+            error,
+            BatchedExpandOutput,
+            "structural",
+            invalid_fields=["blueprints.0.opening_move"],  # IS Literal — guard matters
+        )
+        assert "Allowed values for" not in feedback
+        assert "fix only" in feedback.lower()
+
+    def test_none_invalid_fields_omits_literal_hints(self) -> None:
+        """Legacy callers that omit `invalid_fields` (the parameter default) get
+        identical pre-PR feedback output — no Allowed-values block appended."""
+        error = ValueError("min_length")
+        feedback = FillStage._build_error_feedback(
+            error,
+            FillPhase1Output,
+            "content",
+            invalid_fields=None,
+        )
+        assert "Allowed values for" not in feedback
+
+    def test_get_literal_values_at_path_strips_list_index_segments(self) -> None:
+        """The helper must skip numeric segments produced by Pydantic for
+        list-typed validation errors (e.g. `passages.0.entity_updates.1.entity_id`).
+        Without index-stripping the schema walk would bail at "0" and miss the
+        nested Literal lookup entirely."""
+        from questfoundry.models.fill import FillPhase0Output
+        from questfoundry.pipeline.stages.fill import _get_literal_values_at_path
+
+        # voice.pov is Literal — accessed via the bare path
+        direct = _get_literal_values_at_path(FillPhase0Output, "voice.pov")
+        assert direct is not None
+        assert "first_person" in direct
+
+        # Same field with an interleaved spurious numeric segment must resolve
+        # identically (no Pydantic field is named "0" / "1" so the strip is
+        # the only thing keeping the walk alive).
+        with_indices = _get_literal_values_at_path(FillPhase0Output, "voice.0.pov")
+        assert with_indices == direct
+
+    def test_get_literal_values_at_path_returns_none_for_missing_field(self) -> None:
+        """A path that doesn't resolve in the schema returns None silently —
+        downstream code already handles the None branch as 'no hint to append'."""
+        from questfoundry.models.fill import FillPhase0Output
+        from questfoundry.pipeline.stages.fill import _get_literal_values_at_path
+
+        assert _get_literal_values_at_path(FillPhase0Output, "voice.no_such_field") is None
+        assert _get_literal_values_at_path(FillPhase0Output, "no_such_root") is None
+
+    def test_extra_repair_hints_appended_to_feedback(self) -> None:
+        """Caller-supplied hints (e.g. valid entity IDs) appear verbatim in
+        the retry feedback. Mirrors the SEED Phase-1 / DRESS D-2 plumbing."""
+        from questfoundry.models.fill import FillPhase1Output
+
+        hints = [
+            "REMINDER — Valid entity IDs (use ONLY these): `kay`, `marcus`",
+        ]
+        feedback = FillStage._build_error_feedback(
+            ValueError("missing field"),
+            FillPhase1Output,
+            "structural",
+            invalid_fields=None,
+            extra_repair_hints=hints,
+        )
+        assert "REMINDER — Valid entity IDs" in feedback
+        assert "`kay`" in feedback and "`marcus`" in feedback
+
+    def test_extra_repair_hints_default_none_byte_identical(self) -> None:
+        """Legacy callers that omit `extra_repair_hints` get the same feedback
+        the previous build produced. Pinning byte-equality keeps the new
+        parameter from silently changing legacy retry behaviour."""
+        from questfoundry.models.fill import FillPhase1Output
+
+        with_hints_none = FillStage._build_error_feedback(
+            ValueError("min_length"),
+            FillPhase1Output,
+            "content",
+            invalid_fields=None,
+            extra_repair_hints=None,
+        )
+        without_param = FillStage._build_error_feedback(
+            ValueError("min_length"),
+            FillPhase1Output,
+            "content",
+            invalid_fields=None,
+        )
+        assert with_hints_none == without_param
+
+    def test_get_literal_values_at_path_walks_list_of_basemodel(self) -> None:
+        """The helper must step through `list[NestedModel]` annotations to reach
+        a Literal field on the inner model. `BatchedExpandOutput.blueprints` is
+        `list[ExpandBlueprint]`, and `ExpandBlueprint.opening_move` is the
+        Literal we want to surface on a `blueprints.0.opening_move` failure.
+        Without this branch the helper would bail at `blueprints` and the
+        repair message would silently omit the valid set — exactly the
+        repair-loop blindness this PR is fixing."""
+        from questfoundry.models.fill import BatchedExpandOutput
+        from questfoundry.pipeline.stages.fill import _get_literal_values_at_path
+
+        result = _get_literal_values_at_path(BatchedExpandOutput, "blueprints.0.opening_move")
+        assert result == ("dialogue", "action", "sensory_image", "internal_thought")
+
+    def test_non_literal_content_failure_omits_literal_hint(self) -> None:
+        """A `min_length=1` violation on a non-Literal field must not crash and
+        must not append a spurious Allowed-values line."""
+        from questfoundry.models.fill import FillPhase0Output
+
+        try:
+            FillPhase0Output.model_validate(
+                {
+                    "voice": {
+                        "pov": "third_person_omniscient",
+                        "pov_character": "",
+                        "tense": "past",
+                        "voice_register": "literary",
+                        "sentence_rhythm": "varied",
+                        "tone_words": [],  # bad — min_length=1
+                    },
+                    "story_title": "T",
+                }
+            )
+            raise AssertionError("expected ValidationError")
+        except ValidationError as exc:
+            feedback = FillStage._build_error_feedback(
+                exc,
+                FillPhase0Output,
+                "content",
+                invalid_fields=["voice.tone_words"],
+            )
+
+        assert "Allowed values for" not in feedback
+
 
 class TestTwoStepFill:
     """Tests for two-step prose generation (plain text + entity extraction)."""
@@ -1398,7 +1780,7 @@ class TestTwoStepFill:
             {
                 "type": "voice",
                 "raw_id": "voice",
-                "pov": "third_limited",
+                "pov": "third_person_limited",
                 "tense": "past",
                 "voice_register": "literary",
             },
@@ -1730,3 +2112,596 @@ class TestMechanicalQualityGate:
         stage._language = "en"
         result = await stage._phase_1c_mechanical_gate(g, mock_model)
         assert result.status == "completed"
+
+
+class TestVoiceApprovalStamp:
+    """R-1.7: Voice node carries an approval stamp at gate-pass time."""
+
+    @pytest.mark.asyncio
+    async def test_stamp_applied_in_no_interactive_mode(
+        self, mock_model: MagicMock, tmp_path: Path
+    ) -> None:
+        """After Phase 0 gate passes in --no-interactive mode, voice node
+        gets approved_at + approval_mode='no_interactive'."""
+        g = Graph.empty()
+        g.set_last_stage("polish")
+        g.save(tmp_path / "graph.db")
+
+        stage = FillStage(project_path=tmp_path)
+        _mock_implemented_phases(stage)
+        await stage.execute(mock_model, "", interactive=False)
+
+        saved = Graph.load(tmp_path)
+        voice = saved.get_node("voice::voice")
+        assert voice is not None
+        assert voice.get("approval_mode") == "no_interactive"
+        assert voice.get("approved_at"), "approved_at timestamp must be set"
+
+    @pytest.mark.asyncio
+    async def test_stamp_applied_in_interactive_mode(
+        self, mock_model: MagicMock, tmp_path: Path
+    ) -> None:
+        """After Phase 0 gate passes interactively, approval_mode='interactive'."""
+        g = Graph.empty()
+        g.set_last_stage("polish")
+        g.save(tmp_path / "graph.db")
+
+        stage = FillStage(project_path=tmp_path)
+        _mock_implemented_phases(stage)
+        await stage.execute(mock_model, "", interactive=True)
+
+        saved = Graph.load(tmp_path)
+        voice = saved.get_node("voice::voice")
+        assert voice is not None
+        assert voice.get("approval_mode") == "interactive"
+
+    def test_phase_1a_rejects_unstamped_voice(self, tmp_path: Path) -> None:
+        """If Phase 1a runs without the R-1.7 stamp, it raises FillStageError."""
+        g = Graph.empty()
+        g.set_last_stage("polish")
+        # Create voice node WITHOUT the approval stamp
+        g.create_node(
+            "voice::voice",
+            {
+                "type": "voice",
+                "raw_id": "voice",
+                "pov": "third_person_limited",
+                "tense": "past",
+            },
+        )
+        g.save(tmp_path / "graph.db")
+        g = Graph.load(tmp_path)
+
+        stage = FillStage(project_path=tmp_path)
+        with pytest.raises(FillStageError, match="approval stamp missing"):
+            stage._assert_voice_approved(g)
+
+    def test_assert_raises_when_voice_node_missing(self, tmp_path: Path) -> None:
+        """Phase 1a entry assertion raises if voice::voice node doesn't exist."""
+        g = Graph.empty()
+        stage = FillStage(project_path=tmp_path)
+        with pytest.raises(FillStageError, match="Voice node missing at Phase 1a entry"):
+            stage._assert_voice_approved(g)
+
+
+class TestEntityUpdateEscalation:
+    """R-2.14: missing-entity events become escalations, not silent skips."""
+
+    @pytest.mark.asyncio
+    async def test_revision_phase_phantom_entity_appends_escalation(self) -> None:
+        """Drives the actual code path: _phase_3_revision sees an LLM-output
+        entity_update referencing a missing entity, must escalate."""
+        graph = _make_prose_graph()
+        graph.update_node(
+            "passage::p1",
+            review_flags=[{"issue_type": "voice_drift", "detail": "x"}],
+            prose="draft prose",
+        )
+
+        from questfoundry.models.fill import EntityUpdate, FillPassageOutput, FillPhase1Output
+
+        async def mock_llm_call(
+            model: MagicMock,  # noqa: ARG001
+            template_name: str,  # noqa: ARG001
+            context: dict,  # noqa: ARG001
+            output_schema: type,  # noqa: ARG001
+            max_retries: int = 3,  # noqa: ARG001
+            **kwargs: object,  # noqa: ARG001
+        ) -> tuple:
+            # Non-empty prose so the entity_updates branch executes,
+            # plus a phantom entity_id that will fail _resolve_entity_id.
+            return (
+                FillPhase1Output(
+                    passage=FillPassageOutput(
+                        passage_id="p1",
+                        prose="revised prose",
+                        entity_updates=[
+                            EntityUpdate(
+                                entity_id="ghost",
+                                field="disposition",
+                                value="hostile",
+                            )
+                        ],
+                    )
+                ),
+                1,
+                100,
+            )
+
+        stage = FillStage()
+        stage._fill_llm_call = mock_llm_call  # type: ignore[method-assign]
+        await stage._phase_3_revision(graph, MagicMock(), final_cycle=False)
+
+        assert len(stage._escalations) == 1
+        e = stage._escalations[0]
+        assert e.kind == "missing_entity"
+        assert e.passage_id == "passage::p1"
+        assert "ghost" in e.detail
+        assert e.upstream_stage == "SEED"
+
+    @pytest.mark.asyncio
+    async def test_stage_raises_FillContractError_on_escalations(
+        self, mock_model: MagicMock, tmp_path: Path
+    ) -> None:
+        """A non-empty escalations list at stage exit triggers FillContractError."""
+        from questfoundry.graph.fill_validation import FillContractError
+        from questfoundry.models.fill import FillEscalation
+
+        g = Graph.empty()
+        g.set_last_stage("polish")
+        g.save(tmp_path / "graph.db")
+
+        stage = FillStage(project_path=tmp_path)
+        _mock_implemented_phases(stage)
+
+        # Inject an escalation during one of the phases by patching phase_1
+        original = stage._phase_1_generate
+
+        async def _phase_1_with_escalation(graph: Graph, model: MagicMock) -> FillPhaseResult:
+            stage._escalations.append(
+                FillEscalation(
+                    kind="missing_entity",
+                    passage_id="passage::p1",
+                    detail="phantom entity",
+                    upstream_stage="SEED",
+                )
+            )
+            return await original(graph, model)
+
+        stage._phase_1_generate = _phase_1_with_escalation  # type: ignore[method-assign]
+
+        with pytest.raises(FillContractError, match="missing_entity"):
+            await stage.execute(mock_model, "", interactive=False)
+
+
+class TestFillSilentDegradationEscalations:
+    """#1345: LLM failures inside FILL must escalate, not log-and-shrug.
+
+    The previous code caught broad ``Exception`` at three sites
+    (voice research / blueprint validation / entity extraction) and
+    logged WARNING — the stage reported success with degraded output.
+    Each failure mode now collects a FillEscalation so FillContractError
+    surfaces at stage exit (R-2.14, R-5.2).
+    """
+
+    def test_voice_research_failed_kind_accepted(self) -> None:
+        from questfoundry.models.fill import FillEscalation
+
+        e = FillEscalation(
+            kind="voice_research_failed",
+            passage_id="",
+            detail="LLM call timed out",
+            upstream_stage="FILL",
+        )
+        assert e.kind == "voice_research_failed"
+        assert e.upstream_stage == "FILL"
+
+    def test_blueprint_validation_failed_kind_accepted(self) -> None:
+        from questfoundry.models.fill import FillEscalation
+
+        e = FillEscalation(
+            kind="blueprint_validation_failed",
+            passage_id="passage::intro",
+            detail="ExpandBlueprint validation failed: ValidationError(...)",
+            upstream_stage="FILL",
+        )
+        assert e.kind == "blueprint_validation_failed"
+
+    def test_entity_extract_failed_kind_accepted(self) -> None:
+        from questfoundry.models.fill import FillEscalation
+
+        e = FillEscalation(
+            kind="entity_extract_failed",
+            passage_id="passage::trial",
+            detail="Two-step extraction failed: RuntimeError(...)",
+            upstream_stage="FILL",
+        )
+        assert e.kind == "entity_extract_failed"
+
+    def test_self_owned_FILL_upstream_stage_accepted(self) -> None:
+        """FillEscalation.upstream_stage now accepts ``FILL`` for
+        self-owned failures (LLM call drops, schema bugs)."""
+        from pydantic import ValidationError as PydanticValidationError
+
+        from questfoundry.models.fill import FillEscalation
+
+        # Sanity: FILL is allowed
+        FillEscalation(
+            kind="voice_research_failed",
+            passage_id="",
+            detail="x",
+            upstream_stage="FILL",
+        )
+        # And a junk value still rejected
+        with pytest.raises(PydanticValidationError):
+            FillEscalation(
+                kind="voice_research_failed",
+                passage_id="",
+                detail="x",
+                upstream_stage="DREAM",  # type: ignore[arg-type]
+            )
+
+
+class TestFillBatchFailureEscalations:
+    """#1468: batch_llm_calls failures must escalate per-passage, not silent-drop.
+
+    The three batched FILL phases (expand / review / revision) used to bind
+    the errors list to ``_errors`` and discard it. When a batch chunk
+    exhausted retries (e.g. provider safety block — see #1466 for murder3
+    PROHIBITED_CONTENT — or a network error past the connectivity loop), the
+    affected passages got no blueprint / no review / no revision and FILL
+    continued silently. This test class pins the per-passage escalation
+    contract for each phase.
+    """
+
+    def test_three_new_escalation_kinds_accepted(self) -> None:
+        from questfoundry.models.fill import FillEscalation
+
+        for kind in ("expand_batch_failed", "review_batch_failed", "revision_failed"):
+            e = FillEscalation(
+                kind=kind,  # type: ignore[arg-type]
+                passage_id="passage::pid",
+                detail="batch retry exhausted",
+                upstream_stage="FILL",
+            )
+            assert e.kind == kind
+
+    @pytest.mark.asyncio
+    async def test_expand_batch_failure_escalates_each_passage_in_chunk(self) -> None:
+        """Phase 1a: when batch_llm_calls returns errors for a chunk, every
+        passage in that chunk must get an ``expand_batch_failed`` escalation."""
+        from unittest.mock import patch
+
+        from questfoundry.pipeline.stages.fill import FillStage
+
+        captured_chunks: list[list[tuple[list[str], str]]] = []
+
+        async def mock_batch_llm_calls(
+            chunks: list[tuple[list[str], str]],
+            _call_fn,
+            _max_concurrency: int,
+            **_kwargs: object,
+        ):
+            captured_chunks.append(chunks)
+            errors = [
+                (idx, RuntimeError("simulated retry exhaustion")) for idx in range(len(chunks))
+            ]
+            results = [None] * len(chunks)
+            return results, 0, 0, errors
+
+        graph = _make_prose_graph()
+        stage = FillStage()
+        with patch(
+            "questfoundry.pipeline.stages.fill.batch_llm_calls",
+            new=mock_batch_llm_calls,
+        ):
+            await stage._phase_1a_expand(graph, MagicMock())
+
+        assert captured_chunks, "expected _phase_1a_expand to call batch_llm_calls"
+        expected_passage_ids: set[str] = set()
+        for chunk_ids, _arc_id in captured_chunks[0]:
+            for pid in chunk_ids:
+                full_pid = pid if pid.startswith("passage::") else f"passage::{pid}"
+                expected_passage_ids.add(full_pid)
+
+        expand_escalations = [e for e in stage._escalations if e.kind == "expand_batch_failed"]
+        assert len(expand_escalations) == len(expected_passage_ids)
+        assert {e.passage_id for e in expand_escalations} == expected_passage_ids
+        for e in expand_escalations:
+            assert "RuntimeError" in e.detail
+            assert "simulated retry exhaustion" in e.detail
+            assert e.upstream_stage == "FILL"
+
+    @pytest.mark.asyncio
+    async def test_review_batch_failure_escalates_each_passage_in_batch(self) -> None:
+        """Phase 2: when a review batch fails, every passage in that batch
+        must get a ``review_batch_failed`` escalation.
+
+        Phase 2 batches are ``list[list[str]]`` (just passage IDs, no arc
+        tuple), so the unpacking shape differs from Phase 1a — that's the
+        per-phase shape difference this test pins.
+        """
+        from unittest.mock import patch
+
+        from questfoundry.pipeline.stages.fill import FillStage
+
+        captured_batches: list[list[list[str]]] = []
+
+        async def mock_batch_llm_calls(
+            batches: list[list[str]],
+            _call_fn,
+            _max_concurrency: int,
+            **_kwargs: object,
+        ):
+            captured_batches.append(batches)
+            errors = [(idx, RuntimeError("phase2 retry exhaustion")) for idx in range(len(batches))]
+            results = [None] * len(batches)
+            return results, 0, 0, errors
+
+        graph = _make_prose_graph()
+        # _phase_2_review only batches passages that have a non-empty prose
+        # field. Seed both passages so the batching loop produces work.
+        graph.update_node("passage::p1", prose="draft prose for p1")
+        graph.update_node("passage::p2", prose="draft prose for p2")
+        stage = FillStage()
+        with patch(
+            "questfoundry.pipeline.stages.fill.batch_llm_calls",
+            new=mock_batch_llm_calls,
+        ):
+            await stage._phase_2_review(graph, MagicMock())
+
+        assert captured_batches, "expected _phase_2_review to call batch_llm_calls"
+        expected_passage_ids: set[str] = set()
+        for batch_ids in captured_batches[0]:
+            for pid in batch_ids:
+                full_pid = pid if pid.startswith("passage::") else f"passage::{pid}"
+                expected_passage_ids.add(full_pid)
+
+        review_escalations = [e for e in stage._escalations if e.kind == "review_batch_failed"]
+        assert len(review_escalations) == len(expected_passage_ids)
+        assert {e.passage_id for e in review_escalations} == expected_passage_ids
+        for e in review_escalations:
+            assert "RuntimeError" in e.detail
+            assert "phase2 retry exhaustion" in e.detail
+            assert e.upstream_stage == "FILL"
+
+    @pytest.mark.asyncio
+    async def test_revision_failure_escalates_each_failed_passage(self) -> None:
+        """Phase 3: when a per-passage revision call fails, that passage must
+        get a ``revision_failed`` escalation.
+
+        Phase 3 ``passage_items`` is ``list[tuple[str, list[dict]]]`` —
+        unpacking ``(pid, flags)`` rather than the Phase 1a ``(chunk_ids,
+        arc_id)`` or Phase 2 plain list — exercising the third shape variant.
+        """
+        from unittest.mock import patch
+
+        from questfoundry.pipeline.stages.fill import FillStage
+
+        captured_items: list[list[tuple[str, list[dict[str, str]]]]] = []
+
+        async def mock_batch_llm_calls(
+            passage_items: list[tuple[str, list[dict[str, str]]]],
+            _call_fn,
+            _max_concurrency: int,
+            **_kwargs: object,
+        ):
+            captured_items.append(passage_items)
+            errors = [
+                (idx, RuntimeError("phase3 retry exhaustion")) for idx in range(len(passage_items))
+            ]
+            results = [None] * len(passage_items)
+            return results, 0, 0, errors
+
+        graph = _make_prose_graph()
+        # Seed a review flag on p1 so _phase_3_revision finds something to revise.
+        graph.update_node(
+            "passage::p1",
+            review_flags=[{"issue_type": "voice_drift", "issue": "x"}],
+            prose="draft",
+        )
+        stage = FillStage()
+        with patch(
+            "questfoundry.pipeline.stages.fill.batch_llm_calls",
+            new=mock_batch_llm_calls,
+        ):
+            await stage._phase_3_revision(graph, MagicMock(), final_cycle=False)
+
+        assert captured_items, "expected _phase_3_revision to call batch_llm_calls"
+        expected_passage_ids = {
+            (pid if pid.startswith("passage::") else f"passage::{pid}")
+            for pid, _flags in captured_items[0]
+        }
+
+        revision_escalations = [e for e in stage._escalations if e.kind == "revision_failed"]
+        assert len(revision_escalations) == len(expected_passage_ids)
+        assert {e.passage_id for e in revision_escalations} == expected_passage_ids
+        for e in revision_escalations:
+            assert "RuntimeError" in e.detail
+            assert "phase3 retry exhaustion" in e.detail
+            assert e.upstream_stage == "FILL"
+
+
+class TestReviewCycleEscalation:
+    """R-5.2: unresolved review flags after the final cycle become escalations."""
+
+    def test_escalation_field_shape(self) -> None:
+        """FillEscalation.kind enumerates 'unresolved_review_flags'."""
+        from questfoundry.models.fill import FillEscalation
+
+        e = FillEscalation(
+            kind="unresolved_review_flags",
+            passage_id="passage::p3",
+            detail="2 unresolved flags after final cycle",
+            upstream_stage="POLISH",
+        )
+        assert e.kind == "unresolved_review_flags"
+        assert e.upstream_stage == "POLISH"
+
+    @pytest.mark.asyncio
+    async def test_final_cycle_escalates_unresolved_flags(self) -> None:
+        """When _phase_3_revision runs with final_cycle=True and an LLM
+        returns empty prose (so flags can't be cleared), an escalation of
+        kind unresolved_review_flags is appended."""
+        graph = _make_prose_graph()
+        graph.update_node(
+            "passage::p1",
+            review_flags=[
+                {"issue_type": "voice_drift", "detail": "POV slipped"},
+                {"issue_type": "near_duplicate", "detail": "echoes p_opening"},
+            ],
+            prose="some draft prose",
+        )
+
+        from questfoundry.models.fill import FillPassageOutput, FillPhase1Output
+
+        async def mock_llm_call(
+            model: MagicMock,  # noqa: ARG001
+            template_name: str,  # noqa: ARG001
+            context: dict,  # noqa: ARG001
+            output_schema: type,  # noqa: ARG001
+            max_retries: int = 3,  # noqa: ARG001
+            **kwargs: object,  # noqa: ARG001
+        ) -> tuple:
+            # Empty prose → revision can't clear flags; final_cycle path triggers escalation.
+            return (
+                FillPhase1Output(
+                    passage=FillPassageOutput(passage_id="p1", prose="", entity_updates=[])
+                ),
+                1,
+                100,
+            )
+
+        stage = FillStage()
+        stage._fill_llm_call = mock_llm_call  # type: ignore[method-assign]
+        await stage._phase_3_revision(graph, MagicMock(), final_cycle=True)
+
+        assert len(stage._escalations) == 1
+        e = stage._escalations[0]
+        assert e.kind == "unresolved_review_flags"
+        assert e.passage_id == "passage::p1"
+        assert e.upstream_stage == "POLISH"
+
+        # Review flags must be PRESERVED on the passage (not cleared).
+        p1 = graph.get_node("passage::p1")
+        assert p1 is not None
+        assert len(p1.get("review_flags", [])) == 2
+
+    @pytest.mark.asyncio
+    async def test_non_final_cycle_does_not_escalate(self) -> None:
+        """A non-final revision cycle (final_cycle=False) with empty prose
+        does NOT trigger escalation — only the final cycle does."""
+        graph = _make_prose_graph()
+        graph.update_node(
+            "passage::p1",
+            review_flags=[{"issue_type": "voice_drift", "detail": "x"}],
+            prose="draft",
+        )
+
+        from questfoundry.models.fill import FillPassageOutput
+
+        async def mock_llm_call(
+            model: MagicMock,  # noqa: ARG001
+            template_name: str,  # noqa: ARG001
+            context: dict,  # noqa: ARG001
+            output_schema: type,  # noqa: ARG001
+            max_retries: int = 3,  # noqa: ARG001
+            **kwargs: object,  # noqa: ARG001
+        ) -> tuple:
+            return (
+                FillPhase1Output(
+                    passage=FillPassageOutput(passage_id="p1", prose="", entity_updates=[])
+                ),
+                1,
+                100,
+            )
+
+        stage = FillStage()
+        stage._fill_llm_call = mock_llm_call  # type: ignore[method-assign]
+        await stage._phase_3_revision(graph, MagicMock(), final_cycle=False)
+
+        assert stage._escalations == []
+
+
+class TestConvergenceLookahead:
+    """R-2.6: spine convergence lookahead includes branch beat summaries."""
+
+    def test_no_branches_returns_empty_list(self) -> None:
+        """Single-arc story: convergence helper returns empty list."""
+        from questfoundry.graph.fill_context import _format_converging_branches
+
+        g = Graph.empty()
+        g.create_node(
+            "path::canonical", {"type": "path", "raw_id": "canonical", "is_canonical": True}
+        )
+        out = _format_converging_branches(g, "passage::p1", "canonical")
+        assert out == []
+
+    def test_branch_tail_beats_included_at_spine_convergence(
+        self,
+        tmp_path: Path,  # noqa: ARG002
+    ) -> None:
+        """When a branch arc converges at a spine passage, the branch's
+        last branch-exclusive beat summary appears in the output."""
+        from questfoundry.graph.fill_context import _format_converging_branches
+
+        g = Graph.empty()
+        g.create_node("dilemma::d1", {"type": "dilemma", "raw_id": "d1"})
+        # Two paths: spine canonical, branch non-canonical
+        g.create_node(
+            "path::canonical",
+            {"type": "path", "raw_id": "canonical", "is_canonical": True, "dilemma_id": "d1"},
+        )
+        g.create_node(
+            "path::branch",
+            {"type": "path", "raw_id": "branch", "is_canonical": False, "dilemma_id": "d1"},
+        )
+        # Spine beats: shared, then post_spine. Branch beats: shared, branch_only, then post_spine.
+        g.create_node(
+            "beat::shared",
+            {"type": "beat", "raw_id": "shared", "summary": "shared opening", "role": "setup"},
+        )
+        g.create_node(
+            "beat::branch_only",
+            {
+                "type": "beat",
+                "raw_id": "branch_only",
+                "summary": "branch-exclusive moment of doubt",
+                "role": "post_commit",
+            },
+        )
+        g.create_node(
+            "beat::convergence",
+            {
+                "type": "beat",
+                "raw_id": "convergence",
+                "summary": "they meet again",
+                "role": "post_commit",
+            },
+        )
+        # belongs_to edges. convergence is a zero-membership structural beat
+        # so it appears on every arc that reaches it via predecessor.
+        g.add_edge("belongs_to", "beat::shared", "path::canonical")
+        g.add_edge("belongs_to", "beat::shared", "path::branch")
+        g.add_edge("belongs_to", "beat::branch_only", "path::branch")
+        # predecessor edges are child→parent (the "from" beat is the child,
+        # i.e. comes AFTER the "to" parent). Spine: shared → convergence;
+        # branch: shared → branch_only → convergence.
+        g.add_edge("predecessor", "beat::convergence", "beat::shared")
+        g.add_edge("predecessor", "beat::branch_only", "beat::shared")
+        g.add_edge("predecessor", "beat::convergence", "beat::branch_only")
+        # Passages: opening (shared), branch_passage (branch_only), spine_convergence (convergence)
+        g.create_node("passage::opening", {"type": "passage", "raw_id": "opening"})
+        g.create_node("passage::branch_passage", {"type": "passage", "raw_id": "branch_passage"})
+        g.create_node(
+            "passage::spine_convergence", {"type": "passage", "raw_id": "spine_convergence"}
+        )
+        g.add_edge("grouped_in", "beat::shared", "passage::opening")
+        g.add_edge("grouped_in", "beat::branch_only", "passage::branch_passage")
+        g.add_edge("grouped_in", "beat::convergence", "passage::spine_convergence")
+
+        # Spine arc key is "canonical"; branch arc key is "branch" (single-path arcs)
+        out = _format_converging_branches(g, "passage::spine_convergence", "canonical")
+        text = "\n".join(out)
+        assert "Converging Branches" in text
+        assert "branch-exclusive moment of doubt" in text

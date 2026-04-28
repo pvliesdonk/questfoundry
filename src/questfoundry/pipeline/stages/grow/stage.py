@@ -28,6 +28,10 @@ from questfoundry.graph.context_compact import (
     CompactContextConfig,
 )
 from questfoundry.graph.graph import Graph
+from questfoundry.graph.grow_validation import (
+    GrowContractError,
+    validate_grow_output,
+)
 from questfoundry.graph.invariants import assert_predecessor_dag_acyclic
 from questfoundry.graph.mutations import GrowMutationError, GrowValidationError
 from questfoundry.graph.snapshots import save_snapshot
@@ -71,9 +75,7 @@ if TYPE_CHECKING:
 
 
 # Phases that write predecessor edges — DAG acyclicity is asserted after each.
-_PREDECESSOR_PHASES: frozenset[str] = frozenset(
-    {"intra_path_predecessors", "interleave_beats", "narrative_gaps", "pacing_gaps", "atmospheric"}
-)
+_PREDECESSOR_PHASES: frozenset[str] = frozenset({"intra_path_predecessors", "interleave_beats"})
 
 
 class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
@@ -131,11 +133,7 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
         "intersections": "_phase_3_intersections",
         "resolve_temporal_hints": "_phase_resolve_temporal_hints",
         "scene_types": "_phase_4a_scene_types",
-        "narrative_gaps": "_phase_4b_narrative_gaps",
-        "pacing_gaps": "_phase_4c_pacing_gaps",
-        "atmospheric": "_phase_4d_atmospheric",
-        "path_arcs": "_phase_4e_path_arcs",
-        "entity_arcs": "_phase_4f_entity_arcs",
+        "transition_gaps": "_phase_transition_gaps",
         "overlays": "_phase_8c_overlays",
     }
 
@@ -183,6 +181,9 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
                 fn = getattr(_this_module, free_name)
             else:
                 fn = registry.get_function(phase_name)
+
+            if fn is None:
+                raise GrowStageError(f"No function registered for phase {phase_name!r}")
 
             # Inject runtime size_profile for enumerate_arcs
             if phase_name == "enumerate_arcs":
@@ -284,7 +285,7 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
         # is *beyond* SEED (e.g., fill/dress), SEED must have completed. In that case,
         # re-running GROW should rewind all grow mutations to start fresh.
         last_stage = graph.get_last_stage()
-        if last_stage not in ("seed", "grow", "fill", "dress", "ship"):
+        if last_stage not in ("seed", "grow", "polish", "fill", "dress", "ship"):
             raise GrowStageError(
                 f"GROW requires completed SEED stage. Current last_stage: '{last_stage}'. "
                 f"Run SEED before GROW."
@@ -300,9 +301,22 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
                 log.info("rewinding_graph", stage="grow", mutations=n)
             save_snapshot(graph, resolved_path, "grow")
 
+        # SEED Stage Output Contract — validate post-rewind so we
+        # check the base SEED state, not stale GROW mutations from a
+        # previous run (#1347).
+        from questfoundry.graph.seed_validation import validate_seed_output
+
+        entry_errors = validate_seed_output(graph)
+        if entry_errors:
+            raise GrowStageError(
+                f"SEED output validation failed ({len(entry_errors)} "
+                f"error(s)):\n" + "\n".join(f"  - {e}" for e in entry_errors)
+            )
+
         phase_results: list[GrowPhaseResult] = []
         total_llm_calls = 0
         total_tokens = 0
+        gate_rejected = False
 
         for idx, (phase_fn, phase_name) in enumerate(phases):
             if idx < start_idx:
@@ -339,6 +353,7 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
                 graph.rollback_to(phase_name)
                 graph.release(phase_name)
                 graph.save(resolved_path / "graph.db")
+                gate_rejected = True
                 break
 
             graph.release(phase_name)
@@ -348,6 +363,26 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
             if on_phase_progress is not None:
                 on_phase_progress(phase_name, result.status, result.detail)
 
+        # Contract validation only applies to a fully-completed GROW run.
+        # Gate rejection (human review) means GROW was intentionally stopped
+        # mid-run; the partial graph has already been rolled back and saved.
+        if gate_rejected:
+            rejected_result = GrowResult(
+                arc_count=0,
+                state_flag_count=0,
+                overlay_count=0,
+                phases_completed=phase_results,
+                spine_arc_id=None,
+            )
+            return rejected_result.model_dump(), total_llm_calls, total_tokens
+
+        contract_errors = validate_grow_output(graph)
+        if contract_errors:
+            log.error("grow_contract_violated", errors=contract_errors)
+            raise GrowContractError(
+                "GROW stage output contract violated:\n  - " + "\n  - ".join(contract_errors)
+            )
+
         graph.set_last_stage("grow")
         graph.save(resolved_path / "graph.db")
 
@@ -355,9 +390,7 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
         from questfoundry.graph.grow_algorithms import enumerate_arcs
 
         arcs = enumerate_arcs(graph)
-        passage_nodes = graph.get_nodes_by_type("passage")
         state_flag_nodes = graph.get_nodes_by_type("state_flag")
-        choice_nodes = graph.get_nodes_by_type("choice")
         entity_nodes = graph.get_nodes_by_type("entity")
 
         spine_arc_id = None
@@ -370,9 +403,7 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
 
         grow_result = GrowResult(
             arc_count=len(arcs),
-            passage_count=len(passage_nodes),
             state_flag_count=len(state_flag_nodes),
-            choice_count=len(choice_nodes),
             overlay_count=overlay_count,
             phases_completed=phase_results,
             spine_arc_id=spine_arc_id,
@@ -382,7 +413,6 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
             "stage_complete",
             stage="grow",
             arcs=grow_result.arc_count,
-            passages=grow_result.passage_count,
             state_flags=grow_result.state_flag_count,
         )
 

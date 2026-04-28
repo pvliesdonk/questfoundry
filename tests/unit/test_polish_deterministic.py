@@ -60,7 +60,13 @@ class TestComputeBeatGrouping:
         assert all(s.grouping_type == "singleton" for s in specs)
 
     def test_collapse_grouping(self) -> None:
-        """Sequential same-path beats collapse into one passage."""
+        """Sequential beats in a linear run collapse into one passage.
+
+        Under R-4a.3, multi-beat runs are tagged ``grouping_type="collapse"``
+        so Phase 5f's transition-guidance generator continues to fire; single-
+        beat passages remain ``"singleton"``.  The collapse rule itself is
+        DAG-topology driven — path membership is not consulted.
+        """
         graph = Graph.empty()
         graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
         _make_beat(graph, "beat::a", "Search the study")
@@ -73,59 +79,63 @@ class TestComputeBeatGrouping:
         _add_predecessor(graph, "beat::c", "beat::b")
 
         specs = compute_beat_grouping(graph)
-        collapse_specs = [s for s in specs if s.grouping_type == "collapse"]
-        assert len(collapse_specs) == 1
-        assert len(collapse_specs[0].beat_ids) == 3
+        # All three beats form a maximal linear run → exactly one passage.
+        assert len(specs) == 1
+        assert set(specs[0].beat_ids) == {"beat::a", "beat::b", "beat::c"}
+        assert specs[0].grouping_type == "collapse"
 
-    def test_intersection_grouping(self) -> None:
-        """Beats in intersection groups form intersection passages."""
+    def test_singleton_beat_keeps_singleton_grouping_type(self) -> None:
+        """Single-beat passages stay tagged ``singleton`` so Phase 5f's
+        transition-guidance gate does not fire on them (no transition needed
+        within a one-beat passage)."""
+        graph = Graph.empty()
+        graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
+        _make_beat(graph, "beat::solo", "Lone beat")
+        _add_belongs_to(graph, "beat::solo", "path::p1")
+
+        specs = compute_beat_grouping(graph)
+        assert len(specs) == 1
+        assert specs[0].grouping_type == "singleton"
+
+    # DELETED: test_intersection_grouping
+    # Removed as part of cluster #1311 (maximal-linear-collapse, R-4a.3).
+    # Intersection-driven grouping is gone — compute_beat_grouping no longer
+    # consumes intersection_group nodes.  Under the new rule, beats from
+    # different paths with no predecessor relationship each become their own
+    # singleton passage; intersection_group nodes are GROW-internal and are
+    # ignored by POLISH.  The two beats in the old fixture (no predecessor edge
+    # linking them) now correctly produce two separate singleton passages.
+    # See docs/design/procedures/polish.md §R-4a.3, R-4a.4.
+
+    def test_intersection_groups_are_ignored(self) -> None:
+        """R-4a.4: intersection_group nodes are GROW-internal and must not affect
+        POLISH's passage grouping.  Even a well-formed intersection group yields
+        no intersection-typed passage — the DAG topology alone drives grouping."""
         graph = Graph.empty()
         graph.create_node("path::pa", {"type": "path", "raw_id": "pa"})
-        graph.create_node("path::pb", {"type": "path", "raw_id": "pb"})
         _make_beat(graph, "beat::a", "Path A beat")
-        _make_beat(graph, "beat::b", "Path B beat")
         _add_belongs_to(graph, "beat::a", "path::pa")
-        _add_belongs_to(graph, "beat::b", "path::pb")
 
-        # Create intersection group
+        # Well-formed intersection group (correct beat_ids field) — still ignored.
         graph.create_node(
             "intersection_group::ig1",
             {
                 "type": "intersection_group",
                 "raw_id": "ig1",
-                "beat_ids": ["beat::a", "beat::b"],
+                "beat_ids": ["beat::a"],
             },
         )
 
         specs = compute_beat_grouping(graph)
-        intersection_specs = [s for s in specs if s.grouping_type == "intersection"]
-        assert len(intersection_specs) == 1
-        assert set(intersection_specs[0].beat_ids) == {"beat::a", "beat::b"}
+        # Under R-4a.4 no spec is of intersection type; the beat becomes a
+        # singleton passage based on its DAG topology.
+        assert all(s.grouping_type != "intersection" for s in specs)
+        assert any("beat::a" in s.beat_ids for s in specs)
 
-    def test_intersection_grouping_beat_ids_not_node_ids(self) -> None:
-        """Intersection group uses beat_ids field, not node_ids (regression for #1172)."""
-        graph = Graph.empty()
-        graph.create_node("path::pa", {"type": "path", "raw_id": "pa"})
-        _make_beat(graph, "beat::a", "Path A beat")
-        _add_belongs_to(graph, "beat::a", "path::pa")
-
-        # Create intersection group with the WRONG field name (old bug)
-        graph.create_node(
-            "intersection_group::ig_wrong",
-            {
-                "type": "intersection_group",
-                "raw_id": "ig_wrong",
-                "node_ids": ["beat::a"],  # wrong field — producer uses beat_ids
-            },
-        )
-
-        specs = compute_beat_grouping(graph)
-        # With wrong field, intersection group yields no beats → no intersection passage
-        intersection_specs = [s for s in specs if s.grouping_type == "intersection"]
-        assert len(intersection_specs) == 0
-
-    def test_different_paths_dont_collapse(self) -> None:
-        """Sequential beats on different paths don't collapse."""
+    def test_cross_path_linear_beats_collapse(self) -> None:
+        """R-4a.3: two linearly-adjacent beats collapse into one passage even
+        when they belong to different paths.  Path membership is not consulted
+        under the new maximal-linear-collapse rule."""
         graph = Graph.empty()
         graph.create_node("path::pa", {"type": "path", "raw_id": "pa"})
         graph.create_node("path::pb", {"type": "path", "raw_id": "pb"})
@@ -136,8 +146,8 @@ class TestComputeBeatGrouping:
         _add_predecessor(graph, "beat::b", "beat::a")
 
         specs = compute_beat_grouping(graph)
-        # Should be singletons, not collapsed
-        assert all(s.grouping_type == "singleton" for s in specs)
+        assert len(specs) == 1
+        assert set(specs[0].beat_ids) == {"beat::a", "beat::b"}
 
     def test_all_beats_assigned(self) -> None:
         """Every beat is assigned to exactly one passage."""
@@ -160,7 +170,14 @@ class TestComputeBeatGrouping:
         assert all_beats == expected
 
     def test_entities_merged(self) -> None:
-        """Collapsed passage contains union of all beat entities."""
+        """Passage carries the order-preserving union of its member beats' entities.
+
+        Phase 4b's prose-feasibility audit reads ``spec.entities`` to compute
+        entity overlap between a passage and the structural flags active there
+        (see ``compute_prose_feasibility``).  If this isn't merged across the
+        whole run, flags get classified as irrelevant and no variant/residue
+        specs are generated.
+        """
         graph = Graph.empty()
         graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
         _make_beat(graph, "beat::a", "A", entities=["entity::hero"])
@@ -170,15 +187,25 @@ class TestComputeBeatGrouping:
         _add_predecessor(graph, "beat::b", "beat::a")
 
         specs = compute_beat_grouping(graph)
-        collapse_specs = [s for s in specs if s.grouping_type == "collapse"]
-        assert len(collapse_specs) == 1
-        assert set(collapse_specs[0].entities) == {"entity::hero", "entity::mentor"}
+        # Maximal-linear-collapse groups both beats into one passage.
+        assert len(specs) == 1
+        assert set(specs[0].entities) == {"entity::hero", "entity::mentor"}
 
     def test_empty_graph(self) -> None:
         """Empty graph produces no specs."""
         graph = Graph.empty()
         specs = compute_beat_grouping(graph)
         assert specs == []
+
+    # DELETED: test_zero_belongs_to_beats_do_not_collapse
+    # Removed as part of cluster #1311 (maximal-linear-collapse, R-4a.3).
+    # The new R-4a.3 rule collapses beats purely by DAG topology — the
+    # belongs_to set is NOT consulted for collapse eligibility.  Two adjacent
+    # zero-belongs_to beats in a linear DAG WILL collapse into one passage
+    # under the new rule.  The old assertion (they must remain separate) is
+    # directly contradicted by the new spec.
+    # The B2 ruling from issue #1237 that this test locked in is superseded
+    # by the cluster #1311 spec update.
 
 
 class TestComputeProseFeasibility:
@@ -207,7 +234,7 @@ class TestComputeProseFeasibility:
             {"type": "dilemma", "raw_id": "d1", "dilemma_role": "soft", "residue_weight": "light"},
         )
 
-        # Commit beat as ancestor
+        # Commit beat as ancestor, with grants edge to a state_flag node
         _make_beat(
             graph,
             "beat::commit",
@@ -218,6 +245,11 @@ class TestComputeProseFeasibility:
         _add_belongs_to(graph, "beat::commit", "path::brave")
         _add_belongs_to(graph, "beat::target", "path::brave")
         _add_predecessor(graph, "beat::target", "beat::commit")
+        graph.create_node(
+            "state_flag::brave_committed",
+            {"type": "state_flag", "raw_id": "brave_committed"},
+        )
+        graph.add_edge("grants", "beat::commit", "state_flag::brave_committed")
 
         # Overlay for a DIFFERENT entity than the passage's entity (embedded on entity node)
         graph.create_node(
@@ -227,7 +259,7 @@ class TestComputeProseFeasibility:
                 "raw_id": "npc",
                 "overlays": [
                     {
-                        "when": ["dilemma::d1:path::brave"],
+                        "when": ["state_flag::brave_committed"],
                         "details": {"description": "NPC changes"},
                     }
                 ],
@@ -306,8 +338,8 @@ class TestComputeChoiceEdges:
         assert from_passages == {"p_start"}
         assert to_passages == {"p_a", "p_b"}
 
-    def test_no_divergence(self) -> None:
-        """Linear chain produces no choices."""
+    def test_no_divergence_emits_continue_choice(self) -> None:
+        """Linear cross-passage transition emits a `Continue` choice (R-4c.7)."""
         graph = Graph.empty()
         graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
         _make_beat(graph, "beat::a", "A")
@@ -322,7 +354,35 @@ class TestComputeChoiceEdges:
         ]
 
         choices = compute_choice_edges(graph, specs)
-        assert len(choices) == 0
+        assert len(choices) == 1
+        assert choices[0].from_passage == "p_a"
+        assert choices[0].to_passage == "p_b"
+        assert choices[0].label == "Continue"
+        assert choices[0].requires == []
+        assert choices[0].grants == []
+
+    def test_within_passage_transitions_emit_no_choice(self) -> None:
+        """Two beats grouped into a single passage do NOT generate a choice
+        (R-4c.7: within-passage transitions belong to FILL prose).
+        """
+        graph = Graph.empty()
+        graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
+        _make_beat(graph, "beat::a", "A")
+        _make_beat(graph, "beat::b", "B")
+        _add_belongs_to(graph, "beat::a", "path::p1")
+        _add_belongs_to(graph, "beat::b", "path::p1")
+        _add_predecessor(graph, "beat::b", "beat::a")
+
+        specs = [
+            PassageSpec(
+                passage_id="p_collapsed",
+                beat_ids=["beat::a", "beat::b"],
+                summary="collapsed",
+            ),
+        ]
+
+        choices = compute_choice_edges(graph, specs)
+        assert choices == []
 
     def test_grants_from_commit(self) -> None:
         """Choice leading to a commit beat populates grants."""
@@ -352,6 +412,12 @@ class TestComputeChoiceEdges:
         _add_predecessor(graph, "beat::commit_a", "beat::start")
         _add_predecessor(graph, "beat::b", "beat::start")
 
+        # state_flag nodes and grants edges for commit beats
+        graph.create_node(
+            "state_flag::pa_committed", {"type": "state_flag", "raw_id": "pa_committed"}
+        )
+        graph.add_edge("grants", "beat::commit_a", "state_flag::pa_committed")
+
         specs = [
             PassageSpec(passage_id="p_start", beat_ids=["beat::start"], summary="start"),
             PassageSpec(passage_id="p_a", beat_ids=["beat::commit_a"], summary="a"),
@@ -363,6 +429,105 @@ class TestComputeChoiceEdges:
         choice_to_a = [c for c in choices if c.to_passage == "p_a"]
         assert len(choice_to_a) == 1
         assert len(choice_to_a[0].grants) > 0
+
+
+class TestContinueChoiceEdges:
+    """Tests for R-4c.7: cross-passage non-fork transitions emit Continue edges."""
+
+    def test_three_beat_linear_path_emits_two_continue_choices(self) -> None:
+        """A 3-beat linear path with one beat per passage produces 2 Continue choices."""
+        graph = Graph.empty()
+        graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
+        for raw in ("a", "b", "c"):
+            _make_beat(graph, f"beat::{raw}", raw.upper())
+            _add_belongs_to(graph, f"beat::{raw}", "path::p1")
+        _add_predecessor(graph, "beat::b", "beat::a")
+        _add_predecessor(graph, "beat::c", "beat::b")
+
+        specs = [
+            PassageSpec(passage_id="p_a", beat_ids=["beat::a"], summary="a"),
+            PassageSpec(passage_id="p_b", beat_ids=["beat::b"], summary="b"),
+            PassageSpec(passage_id="p_c", beat_ids=["beat::c"], summary="c"),
+        ]
+
+        choices = compute_choice_edges(graph, specs)
+        assert len(choices) == 2
+        for choice in choices:
+            assert choice.label == "Continue"
+            assert choice.requires == []
+            assert choice.grants == []
+        pairs = {(c.from_passage, c.to_passage) for c in choices}
+        assert pairs == {("p_a", "p_b"), ("p_b", "p_c")}
+
+    def test_fork_plus_linear_emits_fork_choices_and_continue(self) -> None:
+        """A Y-fork followed by linear post-commit paths produces fork choices
+        plus Continue choices on each post-commit segment.
+        """
+        graph = Graph.empty()
+        graph.create_node("path::pa", {"type": "path", "raw_id": "pa"})
+        graph.create_node("path::pb", {"type": "path", "raw_id": "pb"})
+        _setup_dilemma(graph, "dilemma::d1", ["path::pa", "path::pb"])
+
+        _make_beat(graph, "beat::start", "Start")
+        _make_beat(
+            graph,
+            "beat::commit_a",
+            "Commit A",
+            dilemma_impacts=[{"dilemma_id": "dilemma::d1", "effect": "commits"}],
+        )
+        _make_beat(
+            graph,
+            "beat::commit_b",
+            "Commit B",
+            dilemma_impacts=[{"dilemma_id": "dilemma::d1", "effect": "commits"}],
+        )
+        _make_beat(graph, "beat::after_a", "After A")
+        _make_beat(graph, "beat::after_b", "After B")
+
+        _add_belongs_to(graph, "beat::start", "path::pa")
+        _add_belongs_to(graph, "beat::start", "path::pb")
+        _add_belongs_to(graph, "beat::commit_a", "path::pa")
+        _add_belongs_to(graph, "beat::commit_b", "path::pb")
+        _add_belongs_to(graph, "beat::after_a", "path::pa")
+        _add_belongs_to(graph, "beat::after_b", "path::pb")
+
+        _add_predecessor(graph, "beat::commit_a", "beat::start")
+        _add_predecessor(graph, "beat::commit_b", "beat::start")
+        _add_predecessor(graph, "beat::after_a", "beat::commit_a")
+        _add_predecessor(graph, "beat::after_b", "beat::commit_b")
+
+        graph.create_node(
+            "state_flag::pa_committed", {"type": "state_flag", "raw_id": "pa_committed"}
+        )
+        graph.create_node(
+            "state_flag::pb_committed", {"type": "state_flag", "raw_id": "pb_committed"}
+        )
+        graph.add_edge("grants", "beat::commit_a", "state_flag::pa_committed")
+        graph.add_edge("grants", "beat::commit_b", "state_flag::pb_committed")
+
+        specs = [
+            PassageSpec(passage_id="p_start", beat_ids=["beat::start"], summary="start"),
+            PassageSpec(passage_id="p_commit_a", beat_ids=["beat::commit_a"], summary="ca"),
+            PassageSpec(passage_id="p_commit_b", beat_ids=["beat::commit_b"], summary="cb"),
+            PassageSpec(passage_id="p_after_a", beat_ids=["beat::after_a"], summary="aa"),
+            PassageSpec(passage_id="p_after_b", beat_ids=["beat::after_b"], summary="ab"),
+        ]
+
+        choices = compute_choice_edges(graph, specs)
+        fork = [c for c in choices if c.label != "Continue"]
+        cont = [c for c in choices if c.label == "Continue"]
+
+        # Two fork choices from start
+        assert len(fork) == 2
+        assert {c.to_passage for c in fork} == {"p_commit_a", "p_commit_b"}
+        assert all(c.from_passage == "p_start" for c in fork)
+
+        # Two Continue choices on the post-commit linear segments
+        assert len(cont) == 2
+        assert {(c.from_passage, c.to_passage) for c in cont} == {
+            ("p_commit_a", "p_after_a"),
+            ("p_commit_b", "p_after_b"),
+        }
 
 
 class TestChoiceEdgesIntersectionMultiBeat:
@@ -496,6 +661,17 @@ class TestChoiceEdgesIntersectionMultiBeat:
         _add_predecessor(graph, "beat::child_X2", "beat::b_p2")
         _add_predecessor(graph, "beat::child_B", "beat::b_p2")
 
+        # state_flag nodes and grants edges for commit beats
+        # child_X1 commits d1 on p1; child_X2 commits d2 on p1 — use distinct IDs
+        graph.create_node(
+            "state_flag::p1_d1_committed", {"type": "state_flag", "raw_id": "p1_d1_committed"}
+        )
+        graph.add_edge("grants", "beat::child_X1", "state_flag::p1_d1_committed")
+        graph.create_node(
+            "state_flag::p1_d2_committed", {"type": "state_flag", "raw_id": "p1_d2_committed"}
+        )
+        graph.add_edge("grants", "beat::child_X2", "state_flag::p1_d2_committed")
+
         # Both child_X1 and child_X2 land in the SAME target passage (passage::X)
         specs = [
             PassageSpec(
@@ -519,10 +695,10 @@ class TestChoiceEdgesIntersectionMultiBeat:
         to_X = [c for c in choices if c.to_passage == "passage::X"]
         assert len(to_X) == 1
 
-        # Grants: b_p1 contributed d1:p1 (from child_X1); b_p2 contributed d2:p1 (from child_X2)
+        # Grants: child_X1 contributed state_flag::p1_d1_committed; child_X2 contributed state_flag::p1_d2_committed
         # Merged union should contain both
         assert len(to_X[0].grants) == 2
-        assert set(to_X[0].grants) == {"dilemma::d1:path::p1", "dilemma::d2:path::p1"}
+        assert set(to_X[0].grants) == {"state_flag::p1_d1_committed", "state_flag::p1_d2_committed"}
 
 
 class TestChoiceEdgesGapBeatChild:
@@ -944,6 +1120,257 @@ class TestChoiceEdgesMultiDilemma:
         )
 
 
+class TestChoiceEdgesYShapeAdvancesChild:
+    """Tests for #1254: Y-shape where commit beat is NOT the immediate child.
+
+    SEED produces: shared_02 → beat_01 (advances) → beat_02 (commits) → beat_03
+    The fork is at shared_02, but the commits effect is on beat_02 (grandchild).
+    compute_choice_edges must detect the fork from path membership and walk
+    deeper for grants.
+    """
+
+    def test_y_shape_with_advances_child_produces_choices(self) -> None:
+        """Shared beat → advances child → commits grandchild must still produce choices."""
+        graph = Graph.empty()
+
+        graph.create_node("path::d1_a", {"type": "path", "raw_id": "d1_a"})
+        graph.create_node("path::d1_b", {"type": "path", "raw_id": "d1_b"})
+        _setup_dilemma(graph, "dilemma::d1", ["path::d1_a", "path::d1_b"])
+
+        # Shared pre-commit beat (dual belongs_to)
+        graph.create_node(
+            "beat::shared_02",
+            {
+                "type": "beat",
+                "raw_id": "shared_02",
+                "summary": "Last shared",
+                "dilemma_impacts": [{"dilemma_id": "dilemma::d1", "effect": "reveals"}],
+            },
+        )
+        _add_belongs_to(graph, "beat::shared_02", "path::d1_a")
+        _add_belongs_to(graph, "beat::shared_02", "path::d1_b")
+
+        # First exclusive beats — advances, NOT commits
+        graph.create_node(
+            "beat::d1_a_01",
+            {
+                "type": "beat",
+                "raw_id": "d1_a_01",
+                "summary": "Path A setup",
+                "dilemma_impacts": [{"dilemma_id": "dilemma::d1", "effect": "advances"}],
+            },
+        )
+        _add_belongs_to(graph, "beat::d1_a_01", "path::d1_a")
+        graph.create_node(
+            "beat::d1_b_01",
+            {
+                "type": "beat",
+                "raw_id": "d1_b_01",
+                "summary": "Path B setup",
+                "dilemma_impacts": [{"dilemma_id": "dilemma::d1", "effect": "advances"}],
+            },
+        )
+        _add_belongs_to(graph, "beat::d1_b_01", "path::d1_b")
+
+        # Commit beats — deeper in the chain
+        graph.create_node(
+            "beat::d1_a_02",
+            {
+                "type": "beat",
+                "raw_id": "d1_a_02",
+                "summary": "Path A commits",
+                "dilemma_impacts": [{"dilemma_id": "dilemma::d1", "effect": "commits"}],
+            },
+        )
+        _add_belongs_to(graph, "beat::d1_a_02", "path::d1_a")
+        graph.create_node(
+            "beat::d1_b_02",
+            {
+                "type": "beat",
+                "raw_id": "d1_b_02",
+                "summary": "Path B commits",
+                "dilemma_impacts": [{"dilemma_id": "dilemma::d1", "effect": "commits"}],
+            },
+        )
+        _add_belongs_to(graph, "beat::d1_b_02", "path::d1_b")
+
+        # Predecessor chain: shared_02 → a_01 → a_02, shared_02 → b_01 → b_02
+        graph.add_edge("predecessor", "beat::d1_a_01", "beat::shared_02")
+        graph.add_edge("predecessor", "beat::d1_b_01", "beat::shared_02")
+        graph.add_edge("predecessor", "beat::d1_a_02", "beat::d1_a_01")
+        graph.add_edge("predecessor", "beat::d1_b_02", "beat::d1_b_01")
+
+        # Passages: shared_02 in its own, each path beat in its own
+        specs = [
+            PassageSpec(
+                passage_id="passage::shared",
+                beat_ids=["beat::shared_02"],
+                grouping_type="single",
+                summary="auto-summary",
+            ),
+            PassageSpec(
+                passage_id="passage::a_setup",
+                beat_ids=["beat::d1_a_01"],
+                grouping_type="single",
+                summary="auto-summary",
+            ),
+            PassageSpec(
+                passage_id="passage::b_setup",
+                beat_ids=["beat::d1_b_01"],
+                grouping_type="single",
+                summary="auto-summary",
+            ),
+            PassageSpec(
+                passage_id="passage::a_commit",
+                beat_ids=["beat::d1_a_02"],
+                grouping_type="single",
+                summary="auto-summary",
+            ),
+            PassageSpec(
+                passage_id="passage::b_commit",
+                beat_ids=["beat::d1_b_02"],
+                grouping_type="single",
+                summary="auto-summary",
+            ),
+        ]
+
+        choices = compute_choice_edges(graph, specs)
+
+        # Filter out R-4c.7 Continue edges; this test asserts the fork shape.
+        fork_choices = [c for c in choices if c.label != "Continue"]
+        assert len(fork_choices) == 2, (
+            f"Expected 2 fork choices, got {len(fork_choices)}: "
+            f"{[(c.from_passage, c.to_passage) for c in fork_choices]}"
+        )
+        to_passages = {c.to_passage for c in fork_choices}
+        assert "passage::a_setup" in to_passages
+        assert "passage::b_setup" in to_passages
+        # All fork choices should originate from the shared passage
+        assert all(c.from_passage == "passage::shared" for c in fork_choices)
+
+    def test_grants_found_via_deep_walk(self) -> None:
+        """Grants should be populated even when commits beat is a grandchild."""
+        graph = Graph.empty()
+
+        graph.create_node("path::d1_a", {"type": "path", "raw_id": "d1_a"})
+        graph.create_node("path::d1_b", {"type": "path", "raw_id": "d1_b"})
+        _setup_dilemma(graph, "dilemma::d1", ["path::d1_a", "path::d1_b"])
+
+        graph.create_node(
+            "beat::shared",
+            {
+                "type": "beat",
+                "raw_id": "shared",
+                "summary": "Shared",
+                "dilemma_impacts": [{"dilemma_id": "dilemma::d1", "effect": "reveals"}],
+            },
+        )
+        _add_belongs_to(graph, "beat::shared", "path::d1_a")
+        _add_belongs_to(graph, "beat::shared", "path::d1_b")
+
+        graph.create_node(
+            "beat::a_01",
+            {
+                "type": "beat",
+                "raw_id": "a_01",
+                "summary": "A advances",
+                "dilemma_impacts": [{"dilemma_id": "dilemma::d1", "effect": "advances"}],
+            },
+        )
+        _add_belongs_to(graph, "beat::a_01", "path::d1_a")
+        graph.create_node(
+            "beat::a_02",
+            {
+                "type": "beat",
+                "raw_id": "a_02",
+                "summary": "A commits",
+                "dilemma_impacts": [{"dilemma_id": "dilemma::d1", "effect": "commits"}],
+            },
+        )
+        _add_belongs_to(graph, "beat::a_02", "path::d1_a")
+
+        graph.create_node(
+            "beat::b_01",
+            {
+                "type": "beat",
+                "raw_id": "b_01",
+                "summary": "B advances",
+                "dilemma_impacts": [{"dilemma_id": "dilemma::d1", "effect": "advances"}],
+            },
+        )
+        _add_belongs_to(graph, "beat::b_01", "path::d1_b")
+        graph.create_node(
+            "beat::b_02",
+            {
+                "type": "beat",
+                "raw_id": "b_02",
+                "summary": "B commits",
+                "dilemma_impacts": [{"dilemma_id": "dilemma::d1", "effect": "commits"}],
+            },
+        )
+        _add_belongs_to(graph, "beat::b_02", "path::d1_b")
+
+        graph.add_edge("predecessor", "beat::a_01", "beat::shared")
+        graph.add_edge("predecessor", "beat::b_01", "beat::shared")
+        graph.add_edge("predecessor", "beat::a_02", "beat::a_01")
+        graph.add_edge("predecessor", "beat::b_02", "beat::b_01")
+
+        # state_flag nodes and grants edges for commit beats
+        graph.create_node(
+            "state_flag::d1_a_committed", {"type": "state_flag", "raw_id": "d1_a_committed"}
+        )
+        graph.add_edge("grants", "beat::a_02", "state_flag::d1_a_committed")
+        graph.create_node(
+            "state_flag::d1_b_committed", {"type": "state_flag", "raw_id": "d1_b_committed"}
+        )
+        graph.add_edge("grants", "beat::b_02", "state_flag::d1_b_committed")
+
+        specs = [
+            PassageSpec(
+                passage_id="passage::shared",
+                beat_ids=["beat::shared"],
+                grouping_type="single",
+                summary="auto-summary",
+            ),
+            PassageSpec(
+                passage_id="passage::a",
+                beat_ids=["beat::a_01"],
+                grouping_type="single",
+                summary="auto-summary",
+            ),
+            PassageSpec(
+                passage_id="passage::b",
+                beat_ids=["beat::b_01"],
+                grouping_type="single",
+                summary="auto-summary",
+            ),
+            PassageSpec(
+                passage_id="passage::a_commit",
+                beat_ids=["beat::a_02"],
+                grouping_type="single",
+                summary="auto-summary",
+            ),
+            PassageSpec(
+                passage_id="passage::b_commit",
+                beat_ids=["beat::b_02"],
+                grouping_type="single",
+                summary="auto-summary",
+            ),
+        ]
+
+        choices = compute_choice_edges(graph, specs)
+
+        # Filter to fork choices; R-4c.7 Continue edges are linear and have no grants.
+        fork_choices = [c for c in choices if c.label != "Continue"]
+        assert len(fork_choices) == 2
+        # Each fork choice should have grants from the commits beat downstream
+        for choice in fork_choices:
+            assert len(choice.grants) > 0, (
+                f"Choice {choice.from_passage}→{choice.to_passage} has no grants; "
+                f"commits beat should have been found via deep walk"
+            )
+
+
 class TestFindFalseBranchCandidates:
     """Tests for Phase 4d: false branch identification."""
 
@@ -1045,99 +1472,6 @@ class TestPolishPlan:
         assert len(plan.warnings) == 1
 
 
-class TestPolishCollapseLinearBeats:
-    """Tests for phase_collapse_linear_beats in POLISH (moved from GROW in #1109)."""
-
-    def test_phase_registered_in_polish(self) -> None:
-        """collapse_linear_beats is registered in the POLISH registry."""
-        from questfoundry.pipeline.stages.polish.registry import get_polish_registry
-
-        registry = get_polish_registry()
-        assert "collapse_linear_beats" in registry
-
-    def test_phase_not_registered_in_grow(self) -> None:
-        """collapse_linear_beats is NOT registered in the GROW registry."""
-        from questfoundry.pipeline.stages.grow.registry import get_registry
-
-        registry = get_registry()
-        assert "collapse_linear_beats" not in registry
-
-    def test_phase_is_deterministic(self) -> None:
-        """collapse_linear_beats is marked deterministic (no LLM calls)."""
-        from questfoundry.pipeline.stages.polish.registry import get_polish_registry
-
-        registry = get_polish_registry()
-        meta = registry.get_meta("collapse_linear_beats")
-        assert meta.is_deterministic is True
-
-    def test_phase_depends_on_character_arcs(self) -> None:
-        """collapse_linear_beats depends on character_arcs so it runs after Phase 3."""
-        from questfoundry.pipeline.stages.polish.registry import get_polish_registry
-
-        registry = get_polish_registry()
-        meta = registry.get_meta("collapse_linear_beats")
-        assert "character_arcs" in meta.depends_on
-
-    def test_plan_computation_depends_on_collapse(self) -> None:
-        """plan_computation depends on collapse_linear_beats."""
-        from questfoundry.pipeline.stages.polish.registry import get_polish_registry
-
-        registry = get_polish_registry()
-        meta = registry.get_meta("plan_computation")
-        assert "collapse_linear_beats" in meta.depends_on
-
-    def test_collapse_runs_before_plan_computation(self) -> None:
-        """Execution order places collapse_linear_beats before plan_computation."""
-        from questfoundry.pipeline.stages.polish.registry import get_polish_registry
-
-        order = get_polish_registry().execution_order()
-        assert order.index("collapse_linear_beats") < order.index("plan_computation")
-
-    def test_phase_collapses_linear_run(self) -> None:
-        """phase_collapse_linear_beats merges a linear 2-beat run."""
-        from questfoundry.pipeline.stages.polish.deterministic import phase_collapse_linear_beats
-
-        graph = Graph.empty()
-        graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
-        for i in range(1, 4):
-            graph.create_node(
-                f"beat::b{i}",
-                {
-                    "type": "beat",
-                    "raw_id": f"b{i}",
-                    "summary": f"Beat {i}",
-                    "dilemma_impacts": [],
-                    "entities": [],
-                    "scene_type": "scene",
-                },
-            )
-            graph.add_edge("belongs_to", f"beat::b{i}", "path::p1")
-        graph.add_edge("predecessor", "beat::b2", "beat::b1")
-        graph.add_edge("predecessor", "beat::b3", "beat::b2")
-
-        # Run the phase (model param is unused for deterministic phases)
-        import asyncio
-
-        result = asyncio.run(
-            phase_collapse_linear_beats(graph, None)  # type: ignore[arg-type]
-        )
-        assert result.status == "completed"
-        assert "Collapsed" in result.detail or "No linear" in result.detail
-
-    def test_phase_no_op_on_empty_graph(self) -> None:
-        """phase_collapse_linear_beats returns completed when no beats exist."""
-        import asyncio
-
-        from questfoundry.pipeline.stages.polish.deterministic import phase_collapse_linear_beats
-
-        graph = Graph.empty()
-        result = asyncio.run(
-            phase_collapse_linear_beats(graph, None)  # type: ignore[arg-type]
-        )
-        assert result.status == "completed"
-        assert result.detail == "No linear beat runs to collapse"
-
-
 # ---------------------------------------------------------------------------
 # Tests for Fix #1153: arc_traversals populated after phase_plan_application
 # ---------------------------------------------------------------------------
@@ -1147,7 +1481,15 @@ class TestArcTraversalsAfterPlanApplication:
     """Phase 6 must populate arc_traversals on the polish_plan node."""
 
     def test_arc_traversals_non_empty_after_phase6(self) -> None:
-        """Minimal two-path graph: phase 4 + phase 6 produce non-empty arc_traversals."""
+        """Minimal Y-fork graph: phase 4 + phase 6 produce non-empty arc_traversals.
+
+        The fixture was updated (cluster #1311 / Task 14) to include a Y-fork so
+        that Phase 4c produces at least one choice edge and does not trigger the
+        zero-choice PolishContractError halt (R-4c.2, Task 10).
+
+        Graph: shared (pa+pb dual belongs_to) → commit_a (pa, commits d1)
+                                               → commit_b (pb, commits d1)
+        """
         import asyncio
 
         from questfoundry.pipeline.stages.polish.deterministic import (
@@ -1157,7 +1499,7 @@ class TestArcTraversalsAfterPlanApplication:
 
         graph = Graph.empty()
 
-        # Two dilemmas, each with two paths
+        # One dilemma with two paths
         graph.create_node("dilemma::d1", {"type": "dilemma", "raw_id": "d1", "status": "explored"})
         graph.create_node("path::pa", {"type": "path", "raw_id": "pa", "dilemma_id": "dilemma::d1"})
         graph.create_node("path::pb", {"type": "path", "raw_id": "pb", "dilemma_id": "dilemma::d1"})
@@ -1182,22 +1524,42 @@ class TestArcTraversalsAfterPlanApplication:
             },
         )
 
-        # Beats on each path
-        for bid, pid in [("beat::a", "path::pa"), ("beat::b", "path::pb")]:
+        # Shared pre-commit beat (dual belongs_to — Y-shape §MEMORY)
+        graph.create_node(
+            "beat::shared",
+            {
+                "type": "beat",
+                "raw_id": "shared",
+                "summary": "Shared beat",
+                "dilemma_impacts": [{"dilemma_id": "dilemma::d1", "effect": "reveals"}],
+                "entities": [],
+                "scene_type": "scene",
+            },
+        )
+        graph.add_edge("belongs_to", "beat::shared", "path::pa")
+        graph.add_edge("belongs_to", "beat::shared", "path::pb")
+
+        # Commit beats — one per path (creates the Y-fork)
+        for bid, pid, sfid in [
+            ("beat::commit_a", "path::pa", "state_flag::d1_pa"),
+            ("beat::commit_b", "path::pb", "state_flag::d1_pb"),
+        ]:
             graph.create_node(
                 bid,
                 {
                     "type": "beat",
                     "raw_id": bid.split("::")[-1],
-                    "summary": f"Beat on {pid}",
-                    "dilemma_impacts": [],
+                    "summary": f"Commit on {pid}",
+                    "dilemma_impacts": [{"dilemma_id": "dilemma::d1", "effect": "commits"}],
                     "entities": [],
                     "scene_type": "scene",
                 },
             )
             graph.add_edge("belongs_to", bid, pid)
+            graph.add_edge("grants", bid, sfid)
+            graph.add_edge("predecessor", bid, "beat::shared")
 
-        # Run Phase 4 (plan computation)
+        # Run Phase 4 (plan computation) — should succeed now that Y-fork exists
         r4 = asyncio.run(phase_plan_computation(graph, None))  # type: ignore[arg-type]
         assert r4.status == "completed"
 
@@ -1246,6 +1608,15 @@ class TestChoiceSpecRequires:
         graph.create_node("path::pc", {"type": "path", "raw_id": "pc", "dilemma_id": "dilemma::d1"})
         graph.create_node("path::pd", {"type": "path", "raw_id": "pd", "dilemma_id": "dilemma::d1"})
         graph.create_node(
+            "state_flag::d1_pa",
+            {
+                "type": "state_flag",
+                "raw_id": "d1_pa",
+                "dilemma_id": "dilemma::d1",
+                "path_id": "path::pa",
+            },
+        )
+        graph.create_node(
             "state_flag::d1_pc",
             {
                 "type": "state_flag",
@@ -1278,6 +1649,8 @@ class TestChoiceSpecRequires:
             dilemma_impacts=[{"dilemma_id": "dilemma::d1", "effect": "commits"}],
         )
         graph.add_edge("belongs_to", "beat::merge", "path::pa")
+        # grants edge: beat::merge activates state_flag::d1_pa (its own path)
+        graph.add_edge("grants", "beat::merge", "state_flag::d1_pa")
         graph.create_node(
             "intersection_group::g1",
             {"type": "intersection_group", "raw_id": "g1", "beat_ids": ["beat::merge"]},
@@ -1295,8 +1668,12 @@ class TestChoiceSpecRequires:
         _add_predecessor(graph, "beat::c", "beat::merge")
         _add_predecessor(graph, "beat::d", "beat::merge")
 
-    def test_divergence_choice_requires_empty(self) -> None:
-        """Choices from non-intersection passages have empty requires."""
+    def test_divergence_choice_requires_empty_no_flags(self) -> None:
+        """R-4c.4: Choices whose target beat has no active flags have empty requires.
+
+        This covers the common divergence case (no state flags exist in the graph
+        at all).  No flags → no soft flags → requires stays empty.
+        """
         graph = Graph.empty()
         graph.create_node("path::pa", {"type": "path", "raw_id": "pa"})
         graph.create_node("path::pb", {"type": "path", "raw_id": "pb"})
@@ -1321,32 +1698,128 @@ class TestChoiceSpecRequires:
         specs = compute_beat_grouping(graph)
         choices = compute_choice_edges(graph, specs)
 
-        # Divergence choices from non-intersection passages should have no requires
+        # No state_flag nodes in graph → no active flags → requires is empty for all
         for c in choices:
-            from_spec = next((s for s in specs if s.passage_id == c.from_passage), None)
-            if from_spec and from_spec.grouping_type != "intersection":
-                assert c.requires == [], f"Expected empty requires for {c.from_passage}"
+            assert c.requires == [], f"Expected empty requires for {c.from_passage}"
 
-    def test_convergence_choice_has_requires(self) -> None:
-        """Choices from intersection passages have a non-empty requires list."""
+    def test_post_convergence_soft_dilemma_choice_has_requires(self) -> None:
+        """R-4c.3: Post-convergence soft-dilemma choices have requires set.
+
+        Structure:
+          beat::commit (d1, commits) → beat::pa (path::pa)
+                                     → beat::pb (path::pb)
+
+        A state_flag for d1 is active at beat::pa and beat::pb (soft dilemma).
+        compute_choice_edges must set requires=[state_flag_id] on those choices.
+        """
         graph = Graph.empty()
-        self._build_convergence_graph(graph)
+
+        # Soft dilemma
+        graph.create_node(
+            "dilemma::d1",
+            {"type": "dilemma", "raw_id": "d1", "dilemma_role": "soft"},
+        )
+        graph.create_node("path::pa", {"type": "path", "raw_id": "pa", "dilemma_id": "dilemma::d1"})
+        graph.create_node("path::pb", {"type": "path", "raw_id": "pb", "dilemma_id": "dilemma::d1"})
+
+        # State flags for each path (active after commit)
+        graph.create_node(
+            "state_flag::sf_pa",
+            {"type": "state_flag", "raw_id": "sf_pa", "dilemma_id": "dilemma::d1"},
+        )
+        graph.create_node(
+            "state_flag::sf_pb",
+            {"type": "state_flag", "raw_id": "sf_pb", "dilemma_id": "dilemma::d1"},
+        )
+
+        # Commit beat (on path::pa — classic Case A divergence)
+        _make_beat(
+            graph,
+            "beat::commit",
+            "Commit",
+            dilemma_impacts=[{"dilemma_id": "dilemma::d1", "effect": "commits"}],
+        )
+        graph.add_edge("belongs_to", "beat::commit", "path::pa")
+        graph.add_edge("grants", "beat::commit", "state_flag::sf_pa")
+
+        # Post-commit beats on each path
+        _make_beat(graph, "beat::pa", "Path A beat")
+        graph.add_edge("belongs_to", "beat::pa", "path::pa")
+
+        _make_beat(graph, "beat::pb", "Path B beat")
+        graph.add_edge("belongs_to", "beat::pb", "path::pb")
+        graph.add_edge("grants", "beat::pb", "state_flag::sf_pb")
+
+        _add_predecessor(graph, "beat::pa", "beat::commit")
+        _add_predecessor(graph, "beat::pb", "beat::commit")
 
         specs = compute_beat_grouping(graph)
         choices = compute_choice_edges(graph, specs)
 
-        passage_id_to_spec = {s.passage_id: s for s in specs}
-        intersection_choices = [
-            c
-            for c in choices
-            if c.from_passage in passage_id_to_spec
-            and passage_id_to_spec[c.from_passage].grouping_type == "intersection"
-        ]
+        assert len(choices) == 2, f"Expected 2 choices, got {len(choices)}: {choices}"
+        for c in choices:
+            # The target beat is a post-commit beat on a soft dilemma path.
+            # compute_active_flags_at_beat returns the granted flags at that beat.
+            # The soft filter should keep them → requires must be non-empty.
+            assert c.requires != [], (
+                f"R-4c.3 violation: choice {c.from_passage!r} → {c.to_passage!r} "
+                f"targets a soft-dilemma post-commit beat but has empty requires"
+            )
 
-        assert intersection_choices, "Expected at least one choice from an intersection passage"
-        assert any(len(c.requires) > 0 for c in intersection_choices), (
-            "Expected at least one intersection choice to have a non-empty requires list"
+    def test_hard_dilemma_choice_has_empty_requires(self) -> None:
+        """R-4c.4: Hard-dilemma choices have empty requires.
+
+        Same divergence structure but dilemma_role == 'hard'.  State flags
+        belonging to hard dilemmas must be filtered out, leaving requires=[].
+        """
+        graph = Graph.empty()
+
+        # Hard dilemma
+        graph.create_node(
+            "dilemma::d1",
+            {"type": "dilemma", "raw_id": "d1", "dilemma_role": "hard"},
         )
+        graph.create_node("path::pa", {"type": "path", "raw_id": "pa", "dilemma_id": "dilemma::d1"})
+        graph.create_node("path::pb", {"type": "path", "raw_id": "pb", "dilemma_id": "dilemma::d1"})
+
+        # State flags belonging to the hard dilemma
+        graph.create_node(
+            "state_flag::sf_pa",
+            {"type": "state_flag", "raw_id": "sf_pa", "dilemma_id": "dilemma::d1"},
+        )
+        graph.create_node(
+            "state_flag::sf_pb",
+            {"type": "state_flag", "raw_id": "sf_pb", "dilemma_id": "dilemma::d1"},
+        )
+
+        _make_beat(
+            graph,
+            "beat::commit",
+            "Commit",
+            dilemma_impacts=[{"dilemma_id": "dilemma::d1", "effect": "commits"}],
+        )
+        graph.add_edge("belongs_to", "beat::commit", "path::pa")
+        graph.add_edge("grants", "beat::commit", "state_flag::sf_pa")
+
+        _make_beat(graph, "beat::pa", "Path A beat")
+        graph.add_edge("belongs_to", "beat::pa", "path::pa")
+
+        _make_beat(graph, "beat::pb", "Path B beat")
+        graph.add_edge("belongs_to", "beat::pb", "path::pb")
+        graph.add_edge("grants", "beat::pb", "state_flag::sf_pb")
+
+        _add_predecessor(graph, "beat::pa", "beat::commit")
+        _add_predecessor(graph, "beat::pb", "beat::commit")
+
+        specs = compute_beat_grouping(graph)
+        choices = compute_choice_edges(graph, specs)
+
+        assert len(choices) == 2, f"Expected 2 choices, got {len(choices)}: {choices}"
+        for c in choices:
+            assert c.requires == [], (
+                f"R-4c.4 violation: choice {c.from_passage!r} → {c.to_passage!r} "
+                f"targets a hard-dilemma beat but has non-empty requires: {c.requires}"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -1363,7 +1836,12 @@ class TestAmbiguousFeasibilityDetection:
         beat_id: str,
         path_id: str,
         dilemma_id: str,
-    ) -> None:
+        state_flag_id: str | None = None,
+    ) -> str:
+        """Create a commit beat with an associated state_flag node and grants edge.
+
+        Returns the state_flag_id used (derived from path_id if not provided).
+        """
         graph.create_node(
             beat_id,
             {
@@ -1376,6 +1854,22 @@ class TestAmbiguousFeasibilityDetection:
             },
         )
         graph.add_edge("belongs_to", beat_id, path_id)
+        # Create state_flag node and grants edge so compute_active_flags_at_beat returns
+        # real state_flag::* node IDs instead of synthetic dilemma::*:path::* strings.
+        if state_flag_id is None:
+            path_raw = path_id.split("::")[-1]
+            state_flag_id = f"state_flag::{path_raw}_committed"
+        if not graph.get_node(state_flag_id):
+            graph.create_node(
+                state_flag_id,
+                {
+                    "type": "state_flag",
+                    "raw_id": state_flag_id.split("::")[-1],
+                    "dilemma_id": dilemma_id,
+                },
+            )
+        graph.add_edge("grants", beat_id, state_flag_id)
+        return state_flag_id
 
     def test_mixed_weights_produces_ambiguous_spec(self) -> None:
         """Passage with one heavy flag and one light flag → ambiguous_specs, NOT in variant or residue."""
@@ -1403,24 +1897,23 @@ class TestAmbiguousFeasibilityDetection:
         graph.create_node("path::ph", {"type": "path", "raw_id": "ph"})
         graph.create_node("path::pl", {"type": "path", "raw_id": "pl"})
 
-        # Entity that appears in the passage
+        # Commit beats first so state_flag nodes exist before entity references them
+        # Chain: commit_h → commit_l → target
+        sf_h = self._make_commit_beat(graph, "beat::commit_h", "path::ph", "dilemma::heavy")
+        sf_l = self._make_commit_beat(graph, "beat::commit_l", "path::pl", "dilemma::light")
+
+        # Entity that appears in the passage — overlays use state_flag node IDs
         graph.create_node(
             "entity::hero",
             {
                 "type": "entity",
                 "raw_id": "hero",
                 "overlays": [
-                    {"when": ["dilemma::heavy:path::ph"], "details": {"mood": "grim"}},
-                    {"when": ["dilemma::light:path::pl"], "details": {"mood": "relieved"}},
+                    {"when": [sf_h], "details": {"mood": "grim"}},
+                    {"when": [sf_l], "details": {"mood": "relieved"}},
                 ],
             },
         )
-
-        # Commit beats (ancestors of the target passage).
-        # Both need to be in the ancestor chain so both flags are active at beat::target.
-        # Chain: commit_h → commit_l → target
-        self._make_commit_beat(graph, "beat::commit_h", "path::ph", "dilemma::heavy")
-        self._make_commit_beat(graph, "beat::commit_l", "path::pl", "dilemma::light")
         _add_predecessor(graph, "beat::commit_l", "beat::commit_h")
 
         # Target beat referencing entity::hero
@@ -1463,20 +1956,22 @@ class TestAmbiguousFeasibilityDetection:
         graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
         graph.create_node("path::p2", {"type": "path", "raw_id": "p2"})
 
+        # Create commit beats first so state_flag IDs are available for overlays
+        sf_p1 = self._make_commit_beat(graph, "beat::c1", "path::p1", "dilemma::d1")
+        sf_p2 = self._make_commit_beat(graph, "beat::c2", "path::p2", "dilemma::d2")
+
         graph.create_node(
             "entity::hero",
             {
                 "type": "entity",
                 "raw_id": "hero",
                 "overlays": [
-                    {"when": ["dilemma::d1:path::p1"], "details": {"mood": "dark"}},
-                    {"when": ["dilemma::d2:path::p2"], "details": {"mood": "grim"}},
+                    {"when": [sf_p1], "details": {"mood": "dark"}},
+                    {"when": [sf_p2], "details": {"mood": "grim"}},
                 ],
             },
         )
 
-        self._make_commit_beat(graph, "beat::c1", "path::p1", "dilemma::d1")
-        self._make_commit_beat(graph, "beat::c2", "path::p2", "dilemma::d2")
         # Chain: c2 → c1 → target so both flags are ancestors of beat::target
         _add_predecessor(graph, "beat::c1", "beat::c2")
 
@@ -1506,18 +2001,20 @@ class TestAmbiguousFeasibilityDetection:
         )
         graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
 
+        # Create commit beat first so state_flag ID is available for overlay
+        sf_p1 = self._make_commit_beat(graph, "beat::c1", "path::p1", "dilemma::d1")
+
         graph.create_node(
             "entity::hero",
             {
                 "type": "entity",
                 "raw_id": "hero",
                 "overlays": [
-                    {"when": ["dilemma::d1:path::p1"], "details": {"mood": "dark"}},
+                    {"when": [sf_p1], "details": {"mood": "dark"}},
                 ],
             },
         )
 
-        self._make_commit_beat(graph, "beat::c1", "path::p1", "dilemma::d1")
         _make_beat(graph, "beat::target", "Target", entities=["entity::hero"])
         graph.add_edge("belongs_to", "beat::target", "path::p1")
         _add_predecessor(graph, "beat::target", "beat::c1")
@@ -1532,6 +2029,50 @@ class TestAmbiguousFeasibilityDetection:
         result = compute_prose_feasibility(graph, [spec])
         assert len(result["ambiguous_specs"]) == 0
         assert len(result["variant_specs"]) == 1  # heavy → variant
+
+    def test_residue_skipped_when_flag_has_no_consequence_mapping(self) -> None:
+        """Single light flag with no derived_from→consequence→path_id wiring →
+        residue spec is skipped (warn + continue), not constructed with empty
+        path_id (#1530).
+        """
+        graph = Graph.empty()
+
+        graph.create_node(
+            "dilemma::d1",
+            {"type": "dilemma", "raw_id": "d1", "residue_weight": "light"},
+        )
+        graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
+
+        # Commit beat creates the state_flag node, but no derived_from edge
+        # to a consequence with a path_id — flag_to_path lookup will miss.
+        sf_p1 = self._make_commit_beat(graph, "beat::c1", "path::p1", "dilemma::d1")
+
+        graph.create_node(
+            "entity::hero",
+            {
+                "type": "entity",
+                "raw_id": "hero",
+                "overlays": [
+                    {"when": [sf_p1], "details": {"mood": "wistful"}},
+                ],
+            },
+        )
+
+        _make_beat(graph, "beat::target", "Target", entities=["entity::hero"])
+        graph.add_edge("belongs_to", "beat::target", "path::p1")
+        _add_predecessor(graph, "beat::target", "beat::c1")
+
+        spec = PassageSpec(
+            passage_id="passage::orphan",
+            beat_ids=["beat::target"],
+            summary="orphan flag passage",
+            entities=["entity::hero"],
+        )
+
+        result = compute_prose_feasibility(graph, [spec])
+        assert result["residue_specs"] == []
+        warnings = result["warnings"]
+        assert any("Residue beat skipped" in w and sf_p1 in w for w in warnings)
 
 
 # ---------------------------------------------------------------------------
@@ -1804,6 +2345,7 @@ class TestAuditOverlayComposition:
                 )
 
         # Create commit beats chained: last→...→first→target
+        # Also create a state_flag node and grants edge for each commit beat.
         prev_beat = None
         for path_id, dilemma_id, beat_id in commit_flags:
             graph.create_node(
@@ -1818,6 +2360,19 @@ class TestAuditOverlayComposition:
                 },
             )
             graph.add_edge("belongs_to", beat_id, path_id)
+            # state_flag: named after path raw ID so callers can predict the ID
+            path_raw = path_id.split("::")[-1]
+            sf_id = f"state_flag::{path_raw}_committed"
+            if not graph.get_node(sf_id):
+                graph.create_node(
+                    sf_id,
+                    {
+                        "type": "state_flag",
+                        "raw_id": f"{path_raw}_committed",
+                        "dilemma_id": dilemma_id,
+                    },
+                )
+            graph.add_edge("grants", beat_id, sf_id)
             if prev_beat is not None:
                 graph.add_edge("predecessor", beat_id, prev_beat)
             prev_beat = beat_id
@@ -1863,11 +2418,12 @@ class TestAuditOverlayComposition:
             ("path::pc", "dilemma::dc", "beat::cc"),
             ("path::pd", "dilemma::dd", "beat::cd"),
         ]
+        # Overlay when-flags use state_flag node IDs (state_flag::{path_raw}_committed)
         overlay_when_lists = [
-            ["dilemma::da:path::pa"],
-            ["dilemma::db:path::pb"],
-            ["dilemma::dc:path::pc"],
-            ["dilemma::dd:path::pd"],
+            ["state_flag::pa_committed"],
+            ["state_flag::pb_committed"],
+            ["state_flag::pc_committed"],
+            ["state_flag::pd_committed"],
         ]
         graph, spec = self._build_graph_with_overlays(overlay_when_lists, commit_flags)
 
@@ -1894,7 +2450,7 @@ class TestAuditOverlayComposition:
         graph.create_node("path::pc", {"type": "path", "raw_id": "pc"})
         graph.create_node("path::pd", {"type": "path", "raw_id": "pd"})
 
-        # One commit beat on path::pa only
+        # One commit beat on path::pa only, with state_flag node and grants edge
         graph.create_node(
             "beat::ca",
             {
@@ -1907,6 +2463,11 @@ class TestAuditOverlayComposition:
             },
         )
         graph.add_edge("belongs_to", "beat::ca", "path::pa")
+        graph.create_node(
+            "state_flag::pa_committed",
+            {"type": "state_flag", "raw_id": "pa_committed", "dilemma_id": "dilemma::d1"},
+        )
+        graph.add_edge("grants", "beat::ca", "state_flag::pa_committed")
 
         # Target beat
         graph.create_node(
@@ -1923,18 +2484,20 @@ class TestAuditOverlayComposition:
         graph.add_edge("belongs_to", "beat::target", "path::pa")
         graph.add_edge("predecessor", "beat::target", "beat::ca")
 
-        # Entity with 4 overlays, each requiring a different path of dilemma::d1
-        # Since they're mutually exclusive (only 1 can be committed), at most 1 active at once
+        # Entity with 4 overlays, each requiring a different path of dilemma::d1.
+        # Overlay when-flags use state_flag node IDs.
+        # Only state_flag::pa_committed is active (beat::ca on path::pa was committed).
+        # state_flag::pb/pc/pd_committed don't exist → 0 active overlays for those → not flagged.
         graph.create_node(
             "entity::hero",
             {
                 "type": "entity",
                 "raw_id": "hero",
                 "overlays": [
-                    {"when": ["dilemma::d1:path::pa"], "details": {}},
-                    {"when": ["dilemma::d1:path::pb"], "details": {}},
-                    {"when": ["dilemma::d1:path::pc"], "details": {}},
-                    {"when": ["dilemma::d1:path::pd"], "details": {}},
+                    {"when": ["state_flag::pa_committed"], "details": {}},
+                    {"when": ["state_flag::pb_committed"], "details": {}},
+                    {"when": ["state_flag::pc_committed"], "details": {}},
+                    {"when": ["state_flag::pd_committed"], "details": {}},
                 ],
             },
         )
@@ -1949,7 +2512,7 @@ class TestAuditOverlayComposition:
         feasibility: dict = {"warnings": []}
         _audit_overlay_composition(graph, [spec], feasibility)
 
-        # Only path::pa was committed → active flag combo is {dilemma::d1:path::pa}
+        # Only path::pa was committed → active flag combo is {state_flag::pa_committed}
         # Only 1 overlay matches that combo → not flagged
         assert feasibility["warnings"] == []
 
@@ -1962,10 +2525,11 @@ class TestAuditOverlayComposition:
             ("path::pb", "dilemma::db", "beat::cb"),
             ("path::pc", "dilemma::dc", "beat::cc"),
         ]
+        # Overlay when-flags use state_flag node IDs (state_flag::{path_raw}_committed)
         overlay_when_lists = [
-            ["dilemma::da:path::pa"],
-            ["dilemma::db:path::pb"],
-            ["dilemma::dc:path::pc"],
+            ["state_flag::pa_committed"],
+            ["state_flag::pb_committed"],
+            ["state_flag::pc_committed"],
         ]
         graph, spec = self._build_graph_with_overlays(overlay_when_lists, commit_flags)
 
@@ -1984,11 +2548,12 @@ class TestAuditOverlayComposition:
             ("path::pc", "dilemma::dc", "beat::cc"),
             ("path::pd", "dilemma::dd", "beat::cd"),
         ]
+        # Overlay when-flags use state_flag node IDs (state_flag::{path_raw}_committed)
         overlay_when_lists = [
-            ["dilemma::da:path::pa"],
-            ["dilemma::db:path::pb"],
-            ["dilemma::dc:path::pc"],
-            ["dilemma::dd:path::pd"],
+            ["state_flag::pa_committed"],
+            ["state_flag::pb_committed"],
+            ["state_flag::pc_committed"],
+            ["state_flag::pd_committed"],
         ]
         graph, spec = self._build_graph_with_overlays(overlay_when_lists, commit_flags)
 
@@ -2242,3 +2807,29 @@ class TestAuditOverlayComposition:
 
         # all_flag_combos is empty (all beats raised ValueError) → passage skipped
         assert not any("structural split" in w for w in feasibility["warnings"])
+
+
+# ---------------------------------------------------------------------------
+# Y-shape collapse guard-rail tests (Task 3.3)
+# ---------------------------------------------------------------------------
+
+
+# DELETED: test_collapse_chain_does_not_join_shared_with_post_commit
+# Removed as part of cluster #1311 (maximal-linear-collapse, R-4a.3).
+# The test asserted Y-shape guard rail 2: a shared pre-commit beat (dual
+# belongs_to) must not collapse into the same passage as its single-belongs_to
+# commit successor.
+#
+# Under the new maximal-linear-collapse rule (R-4a.3), collapse decisions are
+# made purely by DAG topology — the belongs_to set is NOT consulted.  In the
+# `_build_y_shape_for_collapse` fixture, shared_setup → commit_a is a linear
+# chain (commit_a has exactly one predecessor and shared_setup has exactly one
+# successor).  The new algorithm correctly collapses them into one passage.
+#
+# The old guard rail (belongs_to-set mismatch prevents collapse) is superseded.
+# The Y-shape fixture helper (`_build_y_shape_for_collapse`) and the test that
+# used it have both been removed — no active test exercises this shape under
+# the new rule.  If a new structural constraint is needed to keep shared/commit
+# beats separate, it must be specified in docs/design/procedures/polish.md
+# first, then
+# implemented and tested here.

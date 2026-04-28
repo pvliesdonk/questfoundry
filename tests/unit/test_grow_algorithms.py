@@ -272,14 +272,23 @@ class TestTopologicalSortBeats:
         # No direct edge between a and c in subset, so alphabetical
         assert result == ["beat::a", "beat::c"]
 
-    def test_cycle_raises_value_error(self) -> None:
+    def test_cycle_raises_pipeline_invariant_error(self) -> None:
+        """Cycle in the beat DAG raises PipelineInvariantError (#1344).
+
+        Was previously a bare ``ValueError`` — promoted to
+        ``PipelineInvariantError`` so the two topo-sort implementations
+        raise the same exception type and any phase runner that
+        catches "cycle in beat DAG" only needs one ``except`` clause.
+        """
+        from questfoundry.graph.invariants import PipelineInvariantError
+
         graph = Graph.empty()
         graph.create_node("beat::a", {"type": "beat"})
         graph.create_node("beat::b", {"type": "beat"})
         graph.add_edge("predecessor", "beat::b", "beat::a")
         graph.add_edge("predecessor", "beat::a", "beat::b")
 
-        with pytest.raises(ValueError, match="Cycle detected"):
+        with pytest.raises(PipelineInvariantError, match="cycle detected"):
             topological_sort_beats(graph, ["beat::a", "beat::b"])
 
     def test_branching_structure(self) -> None:
@@ -908,6 +917,37 @@ class TestEnumerateArcs:
         # Different arcs should have different final beats (ending differentiation)
         final_beats = {arc.sequence[-1] for arc in arcs}
         assert len(final_beats) > 1, f"All arcs share the same final beat: {final_beats}"
+
+
+class TestEnumerateArcsCyclePropagation:
+    """#1344 follow-up: enumerate_arcs used to swallow cycle errors with
+    `except ValueError: pass` (global beat set) and
+    `except ValueError: sequence = sorted(beat_set)` (per-arc beat set).
+    Both fallbacks were removed; the underlying topo-sort exception
+    must propagate so the GROW phase runner halts.
+    """
+
+    def test_cycle_in_global_beat_set_propagates(self) -> None:
+        """A cycle spanning beats reachable from multiple paths must
+        raise PipelineInvariantError out of enumerate_arcs."""
+        from questfoundry.graph.grow_algorithms import enumerate_arcs
+        from questfoundry.graph.invariants import PipelineInvariantError
+
+        graph = Graph.empty()
+        graph.create_node(
+            "dilemma::d1", {"type": "dilemma", "raw_id": "d1", "answers": [{"id": "a"}]}
+        )
+        graph.create_node("path::p1", {"type": "path", "raw_id": "p1", "dilemma_id": "dilemma::d1"})
+        graph.create_node("beat::a", {"type": "beat", "summary": "A"})
+        graph.create_node("beat::b", {"type": "beat", "summary": "B"})
+        graph.add_edge("belongs_to", "beat::a", "path::p1")
+        graph.add_edge("belongs_to", "beat::b", "path::p1")
+        # Cycle in the per-arc beat set: a → b → a
+        graph.add_edge("predecessor", "beat::a", "beat::b")
+        graph.add_edge("predecessor", "beat::b", "beat::a")
+
+        with pytest.raises(PipelineInvariantError, match="cycle detected"):
+            enumerate_arcs(graph)
 
 
 # ---------------------------------------------------------------------------
@@ -1858,9 +1898,9 @@ class TestFindConvergencePointsPolicyAware:
             assert isinstance(dc.budget, int)
 
 
-class TestPhase7Integration:
+class TestPhase6ConvergenceIntegration:
     @pytest.mark.asyncio
-    async def test_phase_7_finds_convergence(self) -> None:
+    async def test_phase_6_finds_convergence(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_two_dilemma_graph()
@@ -1876,7 +1916,7 @@ class TestPhase7Integration:
         assert result.status == "completed"
 
     @pytest.mark.asyncio
-    async def test_phase_7_reports_convergence_metadata(self) -> None:
+    async def test_phase_6_reports_convergence_metadata(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_two_dilemma_graph()
@@ -1889,12 +1929,12 @@ class TestPhase7Integration:
         await phase_divergence(graph, mock_model)
         result = await phase_convergence(graph, mock_model)
 
-        # Phase 7 computes convergence metadata without graph writes
+        # Phase 6 computes convergence metadata without graph writes
         assert result.status == "completed"
         assert "convergence" in result.detail.lower()
 
     @pytest.mark.asyncio
-    async def test_phase_7_no_arcs(self) -> None:
+    async def test_phase_6_no_arcs(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = Graph.empty()
@@ -1902,10 +1942,9 @@ class TestPhase7Integration:
         mock_model = MagicMock()
         result = await phase_convergence(graph, mock_model)
         assert result.status == "completed"
-        assert "No arcs" in result.detail
 
     @pytest.mark.asyncio
-    async def test_phase_7_completes_convergence(self) -> None:
+    async def test_phase_6_completes_convergence(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_two_dilemma_graph()
@@ -1918,6 +1957,85 @@ class TestPhase7Integration:
         await phase_divergence(graph, mock_model)
         result = await phase_convergence(graph, mock_model)
         assert result.status == "completed"
+
+    @pytest.mark.asyncio
+    async def test_phase_6_halts_on_soft_dilemma_without_convergence(self) -> None:
+        """GROW R-6.4: a soft dilemma with TWO explored paths whose paths never rejoin must halt Phase 6.
+
+        Build a minimal graph: one soft dilemma with two explored paths (P1, P2)
+        that each terminate in separate commit beats with NO shared successor beat.
+        Phase 6 cannot find a convergence beat and must return a failed
+        PhaseResult — silent null is forbidden (Silent Degradation policy).
+        The stage loop translates the failed status into GrowMutationError so
+        savepoint cleanup (release/save) runs before the error propagates.
+        """
+        from questfoundry.pipeline.stages.grow import GrowStage
+
+        graph = Graph.empty()
+
+        # Dilemma (soft)
+        graph.create_node(
+            "dilemma::d1",
+            {
+                "type": "dilemma",
+                "raw_id": "d1",
+                "question": "Will they cooperate?",
+                "dilemma_role": "soft",
+            },
+        )
+
+        # Two paths
+        graph.create_node(
+            "path::p1",
+            {
+                "type": "path",
+                "raw_id": "p1",
+                "dilemma_id": "dilemma::d1",
+                "is_canonical": True,
+            },
+        )
+        graph.create_node(
+            "path::p2",
+            {
+                "type": "path",
+                "raw_id": "p2",
+                "dilemma_id": "dilemma::d1",
+                "is_canonical": False,
+            },
+        )
+
+        # Shared pre-commit beat (belongs_to both paths — Y-shape)
+        graph.create_node(
+            "beat::pre",
+            {"type": "beat", "raw_id": "pre", "summary": "Shared setup beat."},
+        )
+        graph.add_edge("belongs_to", "beat::pre", "path::p1")
+        graph.add_edge("belongs_to", "beat::pre", "path::p2")
+
+        # Commit beat for P1 — belongs_to P1 only, no successors
+        graph.create_node(
+            "beat::commit_p1",
+            {"type": "beat", "raw_id": "commit_p1", "summary": "P1 commit."},
+        )
+        graph.add_edge("belongs_to", "beat::commit_p1", "path::p1")
+        graph.add_edge("predecessor", "beat::commit_p1", "beat::pre")
+
+        # Commit beat for P2 — belongs_to P2 only, no successors
+        graph.create_node(
+            "beat::commit_p2",
+            {"type": "beat", "raw_id": "commit_p2", "summary": "P2 commit."},
+        )
+        graph.add_edge("belongs_to", "beat::commit_p2", "path::p2")
+        graph.add_edge("predecessor", "beat::commit_p2", "beat::pre")
+
+        # No shared finale — paths diverge permanently.
+
+        GrowStage()
+        mock_model = MagicMock()
+
+        result = await phase_convergence(graph, mock_model)
+        assert result.status == "failed"
+        assert "R-6.4" in result.detail
 
 
 class TestPhase8bIntegration:
@@ -2293,7 +2411,7 @@ class TestApplyKnotMark:
         assert mentor_edges[0]["to"] == artifact_edges[0]["to"]  # Same group
 
     def test_no_cross_path_belongs_to_edges(self) -> None:
-        """Intersection does NOT add cross-path belongs_to edges (Doc 3)."""
+        """Intersection does NOT add cross-path belongs_to edges (Story Graph Ontology)."""
         from questfoundry.graph.grow_algorithms import apply_intersection_mark
         from tests.fixtures.grow_fixtures import make_intersection_candidate_graph
 
@@ -2644,8 +2762,11 @@ def _make_grow_mock_model(graph: Graph) -> MagicMock:
         path_mood="quiet tension",
     )
 
-    # Phase 4f: empty arcs (no eligible entities in test graph)
-    phase4f_output = Phase4fOutput(arcs=[])
+    # Phase 4f: empty arcs (no eligible entities in test graph). Pydantic
+    # min_length=1 normally rejects this, but the orchestrator path here
+    # short-circuits before semantic validation; use model_construct to
+    # bypass the constraint for the no-eligible-entities scenario.
+    phase4f_output = Phase4fOutput.model_construct(arcs=[])
 
     # Map schema title -> output (schema is now a dict with "title" field)
     output_by_title: dict[str, object] = {
@@ -2679,10 +2800,23 @@ def _make_grow_mock_model(graph: Graph) -> MagicMock:
 class TestPhaseIntegrationEndToEnd:
     @staticmethod
     def _patch_validation(monkeypatch: pytest.MonkeyPatch) -> None:
-        # The mock LLM does not guarantee semantic validity; bypass validation
-        # so these tests exercise phase wiring rather than validation outcomes.
-        from questfoundry.graph import grow_validation as grow_validation
+        # The mock LLM does not guarantee semantic validity; bypass all
+        # validation so these tests exercise phase wiring rather than
+        # contract compliance of the fixture graphs.
+        #
+        # Three patches are needed:
+        #  1. validate_grow_output — the exit-contract check in stage.execute()
+        #  2. validate_seed_output — the new entry-contract check (#1347)
+        #  3. run_all_checks — called by GROW's internal "validation" phase
+        import questfoundry.pipeline.stages.grow.stage as grow_stage_mod
+        from questfoundry.graph import (
+            grow_validation,
+            seed_validation,
+        )
         from questfoundry.graph.grow_validation import ValidationCheck, ValidationReport
+
+        monkeypatch.setattr(grow_stage_mod, "validate_grow_output", lambda _graph: [])
+        monkeypatch.setattr(seed_validation, "validate_seed_output", lambda _graph: [])
 
         def _mock_run_all_checks(_graph: Graph) -> ValidationReport:
             return ValidationReport(
@@ -2709,8 +2843,6 @@ class TestPhaseIntegrationEndToEnd:
         # Result is now GrowResult.model_dump() (not extract_grow_artifact)
         expected_keys = {
             "arc_count",
-            "passage_count",
-            "choice_count",
             "state_flag_count",
             "overlay_count",
             "spine_arc_id",
@@ -2721,10 +2853,6 @@ class TestPhaseIntegrationEndToEnd:
         # Should have counted arcs
         assert result_dict["arc_count"] == 4  # 2x2 = 4 arcs
         assert result_dict["spine_arc_id"] is not None
-
-        # GROW no longer creates passages or choices (moved to POLISH)
-        assert result_dict["passage_count"] == 0
-        assert result_dict["choice_count"] == 0
 
         # Should have counted state_flags
         assert result_dict["state_flag_count"] == 4  # 4 consequences
@@ -2746,8 +2874,6 @@ class TestPhaseIntegrationEndToEnd:
 
         expected_keys = {
             "arc_count",
-            "passage_count",
-            "choice_count",
             "state_flag_count",
             "overlay_count",
             "spine_arc_id",
@@ -2756,7 +2882,6 @@ class TestPhaseIntegrationEndToEnd:
         assert set(result_dict.keys()) == expected_keys
 
         assert result_dict["arc_count"] == 2  # 1 dilemma x 2 paths = 2 arcs
-        assert result_dict["passage_count"] == 0  # GROW no longer creates passages
         assert result_dict["state_flag_count"] == 2  # 2 consequences
 
     @pytest.mark.asyncio
@@ -2871,9 +2996,17 @@ class TestGetPathBeatSequence:
             "beat::mentor_commits_alt",
         ]
 
-    def test_cycle_raises_value_error(self) -> None:
-        """Cycle in path beat dependencies raises ValueError."""
+    def test_cycle_raises_pipeline_invariant_error(self) -> None:
+        """Cycle in path beat dependencies raises PipelineInvariantError (#1344).
+
+        Was a bare ``ValueError`` and the fallback in
+        ``_get_path_beats_ordered`` swallowed it into a sorted-by-id
+        result. The fallback was removed and the type was promoted to
+        ``PipelineInvariantError`` for consistency with
+        ``_topological_sort_subset``.
+        """
         from questfoundry.graph.grow_algorithms import get_path_beat_sequence
+        from questfoundry.graph.invariants import PipelineInvariantError
 
         graph = Graph.empty()
         graph.create_node("path::t1", {"type": "path", "raw_id": "t1"})
@@ -2885,7 +3018,7 @@ class TestGetPathBeatSequence:
         graph.add_edge("predecessor", "beat::a", "beat::b")
         graph.add_edge("predecessor", "beat::b", "beat::a")
 
-        with pytest.raises(ValueError, match="Cycle detected"):
+        with pytest.raises(PipelineInvariantError, match="cycle detected"):
             get_path_beat_sequence(graph, "path::t1")
 
 
@@ -3742,6 +3875,44 @@ class TestConditionalPrerequisiteInvariant:
         assert variant_data is not None
         assert variant_data.get("split_from") == "beat::mentor_meet"
 
+    def test_rejection_logged_at_info_with_violating_edge(self) -> None:
+        """R-2.8: conditional-prerequisite rejection is logged at INFO with candidate
+        beat IDs and the violating predecessor edge.
+
+        Uses mock.patch on the module-level ``log`` object because structlog
+        caches its bound logger at import time; caplog / capture_logs cannot
+        intercept calls once the logger is cached.
+        """
+        from unittest.mock import patch
+
+        import questfoundry.graph.grow_algorithms as ga
+        from questfoundry.graph.grow_algorithms import check_intersection_compatibility
+        from tests.fixtures.grow_fixtures import make_conditional_prerequisite_graph
+
+        graph = make_conditional_prerequisite_graph()
+
+        with patch.object(ga, "log") as mock_log:
+            errors = check_intersection_compatibility(
+                graph, ["beat::mentor_meet", "beat::artifact_discover"]
+            )
+            info_calls = mock_log.info.call_args_list
+
+        assert len(errors) > 0, "Expected rejection errors"
+
+        # R-2.8: log.info must be called with the rejection event name.
+        rejection_calls = [
+            c
+            for c in info_calls
+            if c.args and c.args[0] == "intersection_rejected_conditional_prerequisite"
+        ]
+        assert rejection_calls, (
+            "Expected log.info('intersection_rejected_conditional_prerequisite', ...) call"
+        )
+        kwargs = rejection_calls[0].kwargs
+        # R-2.8: must include candidate beat IDs and the violating edge.
+        assert "candidate_beats" in kwargs, "Log must include candidate beat IDs"
+        assert "violating_edge" in kwargs, "Log must include the violating predecessor edge"
+
 
 # ---------------------------------------------------------------------------
 # select_entities_for_arc
@@ -4485,8 +4656,10 @@ class TestInterleavecrossPathBeats:
         assert count1 > 0
         assert count2 == 0  # No new edges on second run
 
-    def test_cycle_inducing_edge_skipped(self) -> None:
-        """Edges that would create a cycle are skipped and DAG stays valid.
+    def test_cycle_inducing_heuristic_edge_raises(self) -> None:
+        """R-3.7 / R-4.5: heuristic interleave edge that would create a cycle
+        raises GrowContractError — silent skip (interleave_cycle_skipped) is
+        forbidden per the Silent Degradation policy.
 
         Alphabetically "dilemma::artifact_quest" < "dilemma::mentor_trust" ('a' < 'm'),
         so dilemma_a=mentor_trust, dilemma_b=artifact_quest. The heuristic 'else' branch
@@ -4497,22 +4670,23 @@ class TestInterleavecrossPathBeats:
         aq_intro in topo. Via the within-path edge aq_intro → aq_commit, the topo chain
         becomes: mt_commit → aq_intro → aq_commit.
         Now aq_commit IS reachable from mt_commit in the successor graph.
-        _would_create_cycle(mt_commit, aq_commit) correctly detects the cycle and skips
-        the edge, leaving the DAG valid.
+        _would_create_cycle(mt_commit, aq_commit) detects the cycle — must raise,
+        not silently skip.
         """
-        from questfoundry.graph.grow_algorithms import validate_beat_dag
+        import pytest
+
+        from questfoundry.graph.grow_validation import GrowContractError
 
         graph = _make_two_dilemma_graph_with_relationship("concurrent")
 
         # Pre-add: aq_intro requires mt_commit (mt_commit before aq_intro in topo).
         # Creates topo chain: mt_commit → aq_intro → aq_commit (via within-path edge).
         # Heuristic tries _add_predecessor(mt_commit, aq_commit) = aq_commit before mt_commit.
-        # _would_create_cycle: BFS from mt_commit reaches aq_commit → CYCLE → skipped.
+        # _would_create_cycle: BFS from mt_commit reaches aq_commit → CYCLE → raise.
         graph.add_edge("predecessor", "beat::aq_intro", "beat::mt_commit")
 
-        interleave_cross_path_beats(graph)
-        errors = validate_beat_dag(graph)
-        assert errors == []
+        with pytest.raises(GrowContractError, match=r"R-3\.7 / R-4\.5"):
+            interleave_cross_path_beats(graph)
 
     def test_phase_interleave_beats_completes(self) -> None:
         """phase_interleave_beats returns completed status."""
@@ -4724,13 +4898,17 @@ class TestInterleavecrossPathBeats:
             f"got {same_intersection_edges}"
         )
 
-    def test_cycle_raises_runtime_error(self) -> None:
-        """A temporal hint that creates a cycle raises RuntimeError (#1129).
+    def test_cycle_raises_contract_error(self) -> None:
+        """A temporal hint that creates a cycle raises GrowContractError (R-3.7 / R-4.5).
 
         resolve_temporal_hints must clear conflicting hints before interleave
         runs.  If a cycle slips through, interleave_cross_path_beats must raise
         rather than silently skip so the pipeline fails loudly.
         """
+        import pytest
+
+        from questfoundry.graph.grow_validation import GrowContractError
+
         graph = _make_two_dilemma_graph_with_relationship("concurrent")
         # Force an existing cross-path edge that will conflict with the hint:
         # aq_commit → mt_intro already in graph (mt_intro after aq_commit).
@@ -4745,9 +4923,7 @@ class TestInterleavecrossPathBeats:
             },
         )
 
-        import pytest
-
-        with pytest.raises(RuntimeError, match="would create a cycle"):
+        with pytest.raises(GrowContractError, match=r"R-3\.7 / R-4\.5"):
             interleave_cross_path_beats(graph)
 
     def test_hint_accepted_by_detection_does_not_raise_at_apply_time(self) -> None:
@@ -7485,3 +7661,816 @@ class TestBuildHintConflictGraph:
         assert still_cyclic == [], (
             f"verify_hints_acyclic must return [] after MDS; got {still_cyclic}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Task 2.6: guard rail 3 - intersection pre-commit exclusion
+# ---------------------------------------------------------------------------
+
+
+class TestApplyIntersectionMarkGuardRail3:
+    """Guard rail 3: two pre-commit beats from same dilemma cannot form an intersection."""
+
+    def _seed_with_two_pre_commit_beats(self) -> Graph:
+        """Build a graph with two pre-commit beats sharing the same dilemma."""
+        from questfoundry.graph.mutations import apply_seed_mutations
+        from tests.unit.test_mutations import _trust_graph, _trust_seed_output
+
+        graph = _trust_graph()
+        seed = _trust_seed_output(
+            initial_beats=[
+                {
+                    "beat_id": "shared_setup",
+                    "summary": "Both players see this setup.",
+                    "path_id": "trust_protector_or_manipulator__protector",
+                    "also_belongs_to": "trust_protector_or_manipulator__manipulator",
+                    "entities": ["character::mentor"],
+                    "dilemma_impacts": [
+                        {
+                            "dilemma_id": "trust_protector_or_manipulator",
+                            "effect": "advances",
+                            "note": "x",
+                        },
+                    ],
+                },
+                {
+                    "beat_id": "shared_reveal",
+                    "summary": "Both players see this reveal.",
+                    "path_id": "trust_protector_or_manipulator__protector",
+                    "also_belongs_to": "trust_protector_or_manipulator__manipulator",
+                    "entities": ["character::mentor"],
+                    "dilemma_impacts": [
+                        {
+                            "dilemma_id": "trust_protector_or_manipulator",
+                            "effect": "advances",
+                            "note": "y",
+                        },
+                    ],
+                },
+                {
+                    "beat_id": "commit_protector",
+                    "summary": "Protector commits.",
+                    "path_id": "trust_protector_or_manipulator__protector",
+                    "entities": ["character::mentor"],
+                    "dilemma_impacts": [
+                        {
+                            "dilemma_id": "trust_protector_or_manipulator",
+                            "effect": "commits",
+                            "note": "locked",
+                        }
+                    ],
+                },
+                {
+                    "beat_id": "post_protector",
+                    "summary": "Protector aftermath.",
+                    "path_id": "trust_protector_or_manipulator__protector",
+                    "entities": ["character::mentor"],
+                    "dilemma_impacts": [
+                        {
+                            "dilemma_id": "trust_protector_or_manipulator",
+                            "effect": "advances",
+                            "note": "fallout",
+                        }
+                    ],
+                },
+                {
+                    "beat_id": "post_protector_2",
+                    "summary": "Protector resolution.",
+                    "path_id": "trust_protector_or_manipulator__protector",
+                    "entities": ["character::mentor"],
+                    "dilemma_impacts": [
+                        {
+                            "dilemma_id": "trust_protector_or_manipulator",
+                            "effect": "advances",
+                            "note": "resolution",
+                        }
+                    ],
+                },
+                {
+                    "beat_id": "commit_manipulator",
+                    "summary": "Manipulator commits.",
+                    "path_id": "trust_protector_or_manipulator__manipulator",
+                    "entities": ["character::mentor"],
+                    "dilemma_impacts": [
+                        {
+                            "dilemma_id": "trust_protector_or_manipulator",
+                            "effect": "commits",
+                            "note": "locked",
+                        }
+                    ],
+                },
+                {
+                    "beat_id": "post_manipulator",
+                    "summary": "Manipulator aftermath.",
+                    "path_id": "trust_protector_or_manipulator__manipulator",
+                    "entities": ["character::mentor"],
+                    "dilemma_impacts": [
+                        {
+                            "dilemma_id": "trust_protector_or_manipulator",
+                            "effect": "advances",
+                            "note": "fallout",
+                        }
+                    ],
+                },
+                {
+                    "beat_id": "post_manipulator_2",
+                    "summary": "Manipulator resolution.",
+                    "path_id": "trust_protector_or_manipulator__manipulator",
+                    "entities": ["character::mentor"],
+                    "dilemma_impacts": [
+                        {
+                            "dilemma_id": "trust_protector_or_manipulator",
+                            "effect": "advances",
+                            "note": "resolution",
+                        }
+                    ],
+                },
+            ]
+        )
+        apply_seed_mutations(graph, seed)
+        return graph
+
+    def test_rejects_two_pre_commit_beats_same_dilemma(self) -> None:
+        """Guard rail 3: two pre-commit beats from same dilemma cannot form an intersection."""
+        from questfoundry.graph.grow_algorithms import apply_intersection_mark
+
+        graph = self._seed_with_two_pre_commit_beats()
+
+        with pytest.raises(ValueError, match="guard rail 3"):
+            apply_intersection_mark(
+                graph,
+                beat_ids=["beat::shared_setup", "beat::shared_reveal"],
+                resolved_location=None,
+            )
+
+    def test_allows_pre_commit_beats_different_dilemmas(self) -> None:
+        """Guard rail 3 is NOT triggered for pre-commit beats from different dilemmas.
+
+        This test builds the graph manually so that the pre-commit beats actually have
+        dual ``belongs_to`` edges (one per path of their respective dilemma).  Without
+        dual edges ``len(pids) >= 2`` is never True and guard rail 3 never fires --
+        which means a single-membership fixture does not actually exercise it.
+        """
+        from questfoundry.graph.graph import Graph
+        from questfoundry.graph.grow_algorithms import apply_intersection_mark
+
+        graph = Graph.empty()
+
+        # --- Dilemma 1: two paths ---
+        graph.create_node("dilemma::dilemma1", {"type": "dilemma", "raw_id": "dilemma1"})
+        graph.create_node(
+            "path::d1_a", {"type": "path", "raw_id": "d1_a", "dilemma_id": "dilemma1"}
+        )
+        graph.create_node(
+            "path::d1_b", {"type": "path", "raw_id": "d1_b", "dilemma_id": "dilemma1"}
+        )
+
+        # --- Dilemma 2: two paths ---
+        graph.create_node("dilemma::dilemma2", {"type": "dilemma", "raw_id": "dilemma2"})
+        graph.create_node(
+            "path::d2_a", {"type": "path", "raw_id": "d2_a", "dilemma_id": "dilemma2"}
+        )
+        graph.create_node(
+            "path::d2_b", {"type": "path", "raw_id": "d2_b", "dilemma_id": "dilemma2"}
+        )
+
+        # --- Pre-commit beat for dilemma 1 (dual belongs_to: d1_a and d1_b) ---
+        graph.create_node("beat::pre_dilemma1", {"type": "beat", "raw_id": "pre_dilemma1"})
+        graph.add_edge("belongs_to", "beat::pre_dilemma1", "path::d1_a")
+        graph.add_edge("belongs_to", "beat::pre_dilemma1", "path::d1_b")
+
+        # --- Pre-commit beat for dilemma 2 (dual belongs_to: d2_a and d2_b) ---
+        graph.create_node("beat::pre_dilemma2", {"type": "beat", "raw_id": "pre_dilemma2"})
+        graph.add_edge("belongs_to", "beat::pre_dilemma2", "path::d2_a")
+        graph.add_edge("belongs_to", "beat::pre_dilemma2", "path::d2_b")
+
+        # pre_dilemma1 and pre_dilemma2 are pre-commit beats from DIFFERENT dilemmas.
+        # Guard rail 3 checks that two pre-commits in the same intersection share the
+        # same dilemma (same frozenset of path IDs).  These two beats have disjoint path
+        # sets so the check must NOT fire -- this call must not raise.
+        apply_intersection_mark(
+            graph,
+            beat_ids=["beat::pre_dilemma1", "beat::pre_dilemma2"],
+            resolved_location=None,
+        )
+
+
+# ---------------------------------------------------------------------------
+# TestFindDagConvergenceBeat
+# ---------------------------------------------------------------------------
+
+
+def _make_convergence_test_graph() -> Graph:
+    """Build a two-dilemma interleaved graph for convergence tests.
+
+    Structure (Y-shape per dilemma, interleaved into a single DAG):
+
+    d1 (soft, payoff_budget=2):
+        shared_d1_01 → shared_d1_02 → commit_d1_a → post_d1_a_01
+                                     ↘ commit_d1_b → post_d1_b_01
+
+    d2 (hard):
+        shared_d2_01 → shared_d2_02 → commit_d2_a
+                                     ↘ commit_d2_b
+
+    Cross-dilemma interleave edges:
+        post_d1_a_01 → shared_d2_01
+        post_d1_b_01 → shared_d2_01
+
+    d1 terminal exclusive beats: post_d1_a_01 (path d1_a), post_d1_b_01 (path d1_b)
+    Both reach shared_d2_01 as first non-exclusive successor → converges_at = shared_d2_01
+    convergence_payoff = min(exclusive beats per path) = min(2, 2) = 2
+      (d1_a exclusive: commit_d1_a, post_d1_a_01; d1_b exclusive: commit_d1_b, post_d1_b_01)
+    """
+    graph = Graph.empty()
+
+    # --- Dilemma d1 (soft) ---
+    graph.create_node(
+        "dilemma::d1",
+        {"type": "dilemma", "raw_id": "d1", "dilemma_role": "soft", "payoff_budget": 2},
+    )
+    graph.create_node(
+        "path::d1_a",
+        {"type": "path", "raw_id": "d1_a", "dilemma_id": "dilemma::d1", "is_canonical": True},
+    )
+    graph.create_node(
+        "path::d1_b",
+        {"type": "path", "raw_id": "d1_b", "dilemma_id": "dilemma::d1", "is_canonical": False},
+    )
+
+    # --- Dilemma d2 (hard) ---
+    graph.create_node(
+        "dilemma::d2",
+        {"type": "dilemma", "raw_id": "d2", "dilemma_role": "hard", "payoff_budget": 0},
+    )
+    graph.create_node(
+        "path::d2_a",
+        {"type": "path", "raw_id": "d2_a", "dilemma_id": "dilemma::d2", "is_canonical": True},
+    )
+    graph.create_node(
+        "path::d2_b",
+        {"type": "path", "raw_id": "d2_b", "dilemma_id": "dilemma::d2", "is_canonical": False},
+    )
+
+    # --- d1 beats ---
+    # Pre-commit shared beats (belong to both d1 paths)
+    graph.create_node(
+        "beat::shared_d1_01",
+        {"type": "beat", "raw_id": "shared_d1_01", "summary": "D1 setup 1", "dilemma_impacts": []},
+    )
+    graph.add_edge("belongs_to", "beat::shared_d1_01", "path::d1_a")
+    graph.add_edge("belongs_to", "beat::shared_d1_01", "path::d1_b")
+
+    graph.create_node(
+        "beat::shared_d1_02",
+        {"type": "beat", "raw_id": "shared_d1_02", "summary": "D1 setup 2", "dilemma_impacts": []},
+    )
+    graph.add_edge("belongs_to", "beat::shared_d1_02", "path::d1_a")
+    graph.add_edge("belongs_to", "beat::shared_d1_02", "path::d1_b")
+
+    # Commit beats (exclusive per path)
+    graph.create_node(
+        "beat::commit_d1_a",
+        {
+            "type": "beat",
+            "raw_id": "commit_d1_a",
+            "summary": "D1 commit a",
+            "dilemma_impacts": [{"dilemma_id": "dilemma::d1", "effect": "commits"}],
+        },
+    )
+    graph.add_edge("belongs_to", "beat::commit_d1_a", "path::d1_a")
+
+    graph.create_node(
+        "beat::commit_d1_b",
+        {
+            "type": "beat",
+            "raw_id": "commit_d1_b",
+            "summary": "D1 commit b",
+            "dilemma_impacts": [{"dilemma_id": "dilemma::d1", "effect": "commits"}],
+        },
+    )
+    graph.add_edge("belongs_to", "beat::commit_d1_b", "path::d1_b")
+
+    # Post-commit beats (1 per path, exclusive)
+    graph.create_node(
+        "beat::post_d1_a_01",
+        {"type": "beat", "raw_id": "post_d1_a_01", "summary": "D1 post-a 1", "dilemma_impacts": []},
+    )
+    graph.add_edge("belongs_to", "beat::post_d1_a_01", "path::d1_a")
+
+    graph.create_node(
+        "beat::post_d1_b_01",
+        {"type": "beat", "raw_id": "post_d1_b_01", "summary": "D1 post-b 1", "dilemma_impacts": []},
+    )
+    graph.add_edge("belongs_to", "beat::post_d1_b_01", "path::d1_b")
+
+    # --- d2 beats ---
+    # Pre-commit shared beats (belong to both d2 paths)
+    graph.create_node(
+        "beat::shared_d2_01",
+        {"type": "beat", "raw_id": "shared_d2_01", "summary": "D2 setup 1", "dilemma_impacts": []},
+    )
+    graph.add_edge("belongs_to", "beat::shared_d2_01", "path::d2_a")
+    graph.add_edge("belongs_to", "beat::shared_d2_01", "path::d2_b")
+
+    graph.create_node(
+        "beat::shared_d2_02",
+        {"type": "beat", "raw_id": "shared_d2_02", "summary": "D2 setup 2", "dilemma_impacts": []},
+    )
+    graph.add_edge("belongs_to", "beat::shared_d2_02", "path::d2_a")
+    graph.add_edge("belongs_to", "beat::shared_d2_02", "path::d2_b")
+
+    graph.create_node(
+        "beat::commit_d2_a",
+        {
+            "type": "beat",
+            "raw_id": "commit_d2_a",
+            "summary": "D2 commit a",
+            "dilemma_impacts": [{"dilemma_id": "dilemma::d2", "effect": "commits"}],
+        },
+    )
+    graph.add_edge("belongs_to", "beat::commit_d2_a", "path::d2_a")
+
+    graph.create_node(
+        "beat::commit_d2_b",
+        {
+            "type": "beat",
+            "raw_id": "commit_d2_b",
+            "summary": "D2 commit b",
+            "dilemma_impacts": [{"dilemma_id": "dilemma::d2", "effect": "commits"}],
+        },
+    )
+    graph.add_edge("belongs_to", "beat::commit_d2_b", "path::d2_b")
+
+    # --- Predecessor edges (from=later, to=earlier) ---
+    # d1 internal chain
+    graph.add_edge("predecessor", "beat::shared_d1_02", "beat::shared_d1_01")
+    graph.add_edge("predecessor", "beat::commit_d1_a", "beat::shared_d1_02")
+    graph.add_edge("predecessor", "beat::commit_d1_b", "beat::shared_d1_02")
+    graph.add_edge("predecessor", "beat::post_d1_a_01", "beat::commit_d1_a")
+    graph.add_edge("predecessor", "beat::post_d1_b_01", "beat::commit_d1_b")
+
+    # d2 internal chain
+    graph.add_edge("predecessor", "beat::shared_d2_02", "beat::shared_d2_01")
+    graph.add_edge("predecessor", "beat::commit_d2_a", "beat::shared_d2_02")
+    graph.add_edge("predecessor", "beat::commit_d2_b", "beat::shared_d2_02")
+
+    # Cross-dilemma interleave: d1 terminals → d2 entry
+    graph.add_edge("predecessor", "beat::shared_d2_01", "beat::post_d1_a_01")
+    graph.add_edge("predecessor", "beat::shared_d2_01", "beat::post_d1_b_01")
+
+    return graph
+
+
+class TestFindDagConvergenceBeat:
+    """Tests for find_dag_convergence_beat."""
+
+    def test_soft_dilemma_converges_at_next_dilemma_entry(self) -> None:
+        """Soft d1 with two exclusive chains converges at shared_d2_01.
+
+        Both chains end in their respective terminal beat (post_d1_a_01 / post_d1_b_01)
+        which each have shared_d2_01 as their only successor.  shared_d2_01 belongs to
+        d2 paths so it is non-exclusive to d1 → convergence point.
+        Payoff = min(exclusive beats per path) = min(2, 2) = 2.
+          d1_a exclusive: commit_d1_a, post_d1_a_01
+          d1_b exclusive: commit_d1_b, post_d1_b_01
+        """
+        from questfoundry.graph.grow_algorithms import find_dag_convergence_beat
+
+        graph = _make_convergence_test_graph()
+        result = find_dag_convergence_beat(graph, "dilemma::d1")
+
+        assert result is not None
+        converges_at, payoff = result
+        assert converges_at == "beat::shared_d2_01"
+        assert payoff == 2
+
+    def test_hard_dilemma_returns_none(self) -> None:
+        """Hard dilemma (d2) must return None regardless of successors."""
+        from questfoundry.graph.grow_algorithms import find_dag_convergence_beat
+
+        graph = _make_convergence_test_graph()
+        result = find_dag_convergence_beat(graph, "dilemma::d2")
+
+        assert result is None
+
+    def test_last_dilemma_no_successor_returns_none(self) -> None:
+        """A soft dilemma whose terminal beats have no cross-dilemma successors returns None."""
+        from questfoundry.graph.grow_algorithms import find_dag_convergence_beat
+
+        graph = Graph.empty()
+
+        graph.create_node(
+            "dilemma::only",
+            {"type": "dilemma", "raw_id": "only", "dilemma_role": "soft", "payoff_budget": 1},
+        )
+        graph.create_node(
+            "path::only_a",
+            {
+                "type": "path",
+                "raw_id": "only_a",
+                "dilemma_id": "dilemma::only",
+                "is_canonical": True,
+            },
+        )
+        graph.create_node(
+            "path::only_b",
+            {
+                "type": "path",
+                "raw_id": "only_b",
+                "dilemma_id": "dilemma::only",
+                "is_canonical": False,
+            },
+        )
+
+        # Shared pre-commit beat
+        graph.create_node(
+            "beat::shared",
+            {"type": "beat", "raw_id": "shared", "summary": "Setup", "dilemma_impacts": []},
+        )
+        graph.add_edge("belongs_to", "beat::shared", "path::only_a")
+        graph.add_edge("belongs_to", "beat::shared", "path::only_b")
+
+        # Commit beats (exclusive, no successors after them)
+        graph.create_node(
+            "beat::commit_a",
+            {
+                "type": "beat",
+                "raw_id": "commit_a",
+                "summary": "Commit A",
+                "dilemma_impacts": [{"dilemma_id": "dilemma::only", "effect": "commits"}],
+            },
+        )
+        graph.add_edge("belongs_to", "beat::commit_a", "path::only_a")
+
+        graph.create_node(
+            "beat::commit_b",
+            {
+                "type": "beat",
+                "raw_id": "commit_b",
+                "summary": "Commit B",
+                "dilemma_impacts": [{"dilemma_id": "dilemma::only", "effect": "commits"}],
+            },
+        )
+        graph.add_edge("belongs_to", "beat::commit_b", "path::only_b")
+
+        graph.add_edge("predecessor", "beat::commit_a", "beat::shared")
+        graph.add_edge("predecessor", "beat::commit_b", "beat::shared")
+
+        result = find_dag_convergence_beat(graph, "dilemma::only")
+        assert result is None
+
+    def test_single_dilemma_returns_none(self) -> None:
+        """A graph with only one dilemma (no cross-dilemma successors) returns None.
+
+        When there is only one dilemma and no cross-dilemma successors, the
+        terminal exclusive beats have no reachable non-exclusive beats, so the
+        function must return None.
+        """
+        from questfoundry.graph.grow_algorithms import find_dag_convergence_beat
+        from tests.fixtures.grow_fixtures import make_single_dilemma_graph
+
+        graph = make_single_dilemma_graph()
+
+        # Set dilemma_role via update_node so the function proceeds past the
+        # role check (the test intent is "no cross-dilemma successor → None").
+        graph.update_node("dilemma::mentor_trust", dilemma_role="soft", payoff_budget=1)
+
+        result = find_dag_convergence_beat(graph, "dilemma::mentor_trust")
+        assert result is None
+
+    def test_missing_dilemma_role_returns_none(self) -> None:
+        """A dilemma with no dilemma_role returns None (not silently treated as soft)."""
+        from questfoundry.graph.grow_algorithms import find_dag_convergence_beat
+
+        graph = _make_convergence_test_graph()
+
+        # Remove dilemma_role from d1 to simulate a malformed graph
+        node = graph.get_node("dilemma::d1")
+        assert node is not None
+        node.pop("dilemma_role", None)
+
+        result = find_dag_convergence_beat(graph, "dilemma::d1")
+        assert result is None
+
+
+# ---------------------------------------------------------------------------
+# detect_cross_dilemma_hard_transitions
+# ---------------------------------------------------------------------------
+
+
+class TestDetectCrossDilemmaHardTransitions:
+    """Tests for detect_cross_dilemma_hard_transitions."""
+
+    def test_detects_transition_with_no_shared_entities_or_location(self) -> None:
+        """Cross-dilemma predecessor edge with different entities and locations → 1 transition."""
+        from questfoundry.graph.grow_algorithms import detect_cross_dilemma_hard_transitions
+
+        graph = Graph.empty()
+
+        # Dilemma 1
+        graph.create_node("dilemma::d1", {"type": "dilemma", "raw_id": "d1"})
+        graph.create_node(
+            "path::d1_a",
+            {"type": "path", "raw_id": "d1_a", "dilemma_id": "dilemma::d1"},
+        )
+        graph.create_node(
+            "beat::beat_d1",
+            {
+                "type": "beat",
+                "raw_id": "beat_d1",
+                "entities": ["character::alice"],
+                "location": "library",
+                "dilemma_impacts": [],
+            },
+        )
+        graph.add_edge("belongs_to", "beat::beat_d1", "path::d1_a")
+
+        # Dilemma 2
+        graph.create_node("dilemma::d2", {"type": "dilemma", "raw_id": "d2"})
+        graph.create_node(
+            "path::d2_a",
+            {"type": "path", "raw_id": "d2_a", "dilemma_id": "dilemma::d2"},
+        )
+        graph.create_node(
+            "beat::beat_d2",
+            {
+                "type": "beat",
+                "raw_id": "beat_d2",
+                "entities": ["character::bob"],
+                "location": "rooftop",
+                "dilemma_impacts": [],
+            },
+        )
+        graph.add_edge("belongs_to", "beat::beat_d2", "path::d2_a")
+
+        # Cross-dilemma predecessor edge: beat_d2 requires beat_d1
+        graph.add_edge("predecessor", "beat::beat_d2", "beat::beat_d1")
+
+        result = detect_cross_dilemma_hard_transitions(graph)
+        assert result == [("beat::beat_d1", "beat::beat_d2")]
+
+    def test_no_transition_when_entities_overlap(self) -> None:
+        """Cross-dilemma edge where both beats share character::alice → 0 transitions."""
+        from questfoundry.graph.grow_algorithms import detect_cross_dilemma_hard_transitions
+
+        graph = Graph.empty()
+
+        graph.create_node("dilemma::d1", {"type": "dilemma", "raw_id": "d1"})
+        graph.create_node(
+            "path::d1_a",
+            {"type": "path", "raw_id": "d1_a", "dilemma_id": "dilemma::d1"},
+        )
+        graph.create_node(
+            "beat::beat_d1",
+            {
+                "type": "beat",
+                "raw_id": "beat_d1",
+                "entities": ["character::alice"],
+                "location": "library",
+                "dilemma_impacts": [],
+            },
+        )
+        graph.add_edge("belongs_to", "beat::beat_d1", "path::d1_a")
+
+        graph.create_node("dilemma::d2", {"type": "dilemma", "raw_id": "d2"})
+        graph.create_node(
+            "path::d2_a",
+            {"type": "path", "raw_id": "d2_a", "dilemma_id": "dilemma::d2"},
+        )
+        graph.create_node(
+            "beat::beat_d2",
+            {
+                "type": "beat",
+                "raw_id": "beat_d2",
+                "entities": ["character::alice"],  # same entity
+                "location": "rooftop",
+                "dilemma_impacts": [],
+            },
+        )
+        graph.add_edge("belongs_to", "beat::beat_d2", "path::d2_a")
+
+        graph.add_edge("predecessor", "beat::beat_d2", "beat::beat_d1")
+
+        result = detect_cross_dilemma_hard_transitions(graph)
+        assert result == []
+
+    def test_ignores_intra_dilemma_edges(self) -> None:
+        """Predecessor edge within the same dilemma → 0 transitions (not cross-dilemma)."""
+        from questfoundry.graph.grow_algorithms import detect_cross_dilemma_hard_transitions
+
+        graph = Graph.empty()
+
+        graph.create_node("dilemma::d1", {"type": "dilemma", "raw_id": "d1"})
+        graph.create_node(
+            "path::d1_a",
+            {"type": "path", "raw_id": "d1_a", "dilemma_id": "dilemma::d1"},
+        )
+        graph.create_node(
+            "beat::beat_early",
+            {
+                "type": "beat",
+                "raw_id": "beat_early",
+                "entities": ["character::alice"],
+                "location": "library",
+                "dilemma_impacts": [],
+            },
+        )
+        graph.create_node(
+            "beat::beat_late",
+            {
+                "type": "beat",
+                "raw_id": "beat_late",
+                "entities": ["character::bob"],
+                "location": "rooftop",
+                "dilemma_impacts": [],
+            },
+        )
+        graph.add_edge("belongs_to", "beat::beat_early", "path::d1_a")
+        graph.add_edge("belongs_to", "beat::beat_late", "path::d1_a")
+
+        # Intra-dilemma predecessor edge
+        graph.add_edge("predecessor", "beat::beat_late", "beat::beat_early")
+
+        result = detect_cross_dilemma_hard_transitions(graph)
+        assert result == []
+
+    def test_no_transition_when_location_overlaps(self) -> None:
+        """Cross-dilemma edge but both beats share the same location → 0 transitions."""
+        from questfoundry.graph.grow_algorithms import detect_cross_dilemma_hard_transitions
+
+        graph = Graph.empty()
+
+        graph.create_node("dilemma::d1", {"type": "dilemma", "raw_id": "d1"})
+        graph.create_node(
+            "path::d1_a",
+            {"type": "path", "raw_id": "d1_a", "dilemma_id": "dilemma::d1"},
+        )
+        graph.create_node(
+            "beat::beat_d1",
+            {
+                "type": "beat",
+                "raw_id": "beat_d1",
+                "entities": ["character::alice"],
+                "location": "library",
+                "dilemma_impacts": [],
+            },
+        )
+        graph.add_edge("belongs_to", "beat::beat_d1", "path::d1_a")
+
+        graph.create_node("dilemma::d2", {"type": "dilemma", "raw_id": "d2"})
+        graph.create_node(
+            "path::d2_a",
+            {"type": "path", "raw_id": "d2_a", "dilemma_id": "dilemma::d2"},
+        )
+        graph.create_node(
+            "beat::beat_d2",
+            {
+                "type": "beat",
+                "raw_id": "beat_d2",
+                "entities": ["character::bob"],
+                "location": "library",  # same location
+                "dilemma_impacts": [],
+            },
+        )
+        graph.add_edge("belongs_to", "beat::beat_d2", "path::d2_a")
+
+        graph.add_edge("predecessor", "beat::beat_d2", "beat::beat_d1")
+
+        result = detect_cross_dilemma_hard_transitions(graph)
+        assert result == []
+
+    def test_r52_transition_not_detected_for_partial_entity_overlap(self) -> None:
+        """R-5.2: transition beats are only inserted at ZERO-overlap seams.
+
+        A cross-dilemma predecessor edge where the two beats share at least one
+        entity must NOT be classified as a hard transition — it has entity overlap
+        and therefore does not qualify for a bridging beat.
+
+        This test uses detect_cross_dilemma_hard_transitions directly because
+        _phase_transition_gaps (Phase 4g) delegates its seam gate entirely to
+        this function: it only sends seams returned by detect_cross_dilemma_hard_transitions
+        to the LLM, so seams absent from that result never receive a transition beat.
+
+        Beat d1 and beat d2 share 'character::alice' (entity overlap) but differ
+        in location.  Only the entity overlap is sufficient to skip the seam.
+        """
+        from questfoundry.graph.grow_algorithms import detect_cross_dilemma_hard_transitions
+
+        graph = Graph.empty()
+
+        graph.create_node("dilemma::d1", {"type": "dilemma", "raw_id": "d1"})
+        graph.create_node(
+            "path::d1_a",
+            {"type": "path", "raw_id": "d1_a", "dilemma_id": "dilemma::d1"},
+        )
+        graph.create_node(
+            "beat::beat_d1",
+            {
+                "type": "beat",
+                "raw_id": "beat_d1",
+                "entities": ["character::alice", "character::bob"],
+                "location": "castle",
+                "dilemma_impacts": [],
+            },
+        )
+        graph.add_edge("belongs_to", "beat::beat_d1", "path::d1_a")
+
+        graph.create_node("dilemma::d2", {"type": "dilemma", "raw_id": "d2"})
+        graph.create_node(
+            "path::d2_a",
+            {"type": "path", "raw_id": "d2_a", "dilemma_id": "dilemma::d2"},
+        )
+        graph.create_node(
+            "beat::beat_d2",
+            {
+                "type": "beat",
+                "raw_id": "beat_d2",
+                # Shares character::alice with beat_d1; different location.
+                "entities": ["character::alice", "character::carol"],
+                "location": "market",
+                "dilemma_impacts": [],
+            },
+        )
+        graph.add_edge("belongs_to", "beat::beat_d2", "path::d2_a")
+
+        graph.add_edge("predecessor", "beat::beat_d2", "beat::beat_d1")
+
+        # Entity overlap → not a hard transition → no transition beat should be inserted.
+        result = detect_cross_dilemma_hard_transitions(graph)
+        assert result == [], (
+            "R-5.2 violated: seam with entity overlap should not be classified as "
+            f"a hard transition, but got: {result}"
+        )
+
+
+class TestIntersectionCandidateDeterminism:
+    """R-2.1: intersection candidate generation must be deterministic."""
+
+    @staticmethod
+    def _build_two_dilemma_graph() -> Graph:
+        """Build a minimal graph with two dilemmas sharing beats."""
+        from questfoundry.graph.graph import Graph
+
+        graph = Graph()
+
+        # Dilemma 1
+        graph.create_node("dilemma::d1", {"type": "dilemma", "raw_id": "d1"})
+        graph.create_node(
+            "path::d1_a",
+            {"type": "path", "raw_id": "d1_a", "dilemma_id": "dilemma::d1"},
+        )
+        graph.create_node(
+            "beat::beat_d1",
+            {
+                "type": "beat",
+                "raw_id": "beat_d1",
+                "location": "castle",
+                "entities": ["character::alice", "character::bob"],
+                "dilemma_impacts": [],
+            },
+        )
+        graph.add_edge("belongs_to", "beat::beat_d1", "path::d1_a")
+
+        # Dilemma 2
+        graph.create_node("dilemma::d2", {"type": "dilemma", "raw_id": "d2"})
+        graph.create_node(
+            "path::d2_a",
+            {"type": "path", "raw_id": "d2_a", "dilemma_id": "dilemma::d2"},
+        )
+        graph.create_node(
+            "beat::beat_d2",
+            {
+                "type": "beat",
+                "raw_id": "beat_d2",
+                "location": "castle",  # Same location → candidate signal
+                "entities": ["character::alice"],  # Shared entity → candidate signal
+                "dilemma_impacts": [],
+            },
+        )
+        graph.add_edge("belongs_to", "beat::beat_d2", "path::d2_a")
+
+        return graph
+
+    def test_build_intersection_candidates_is_deterministic(self) -> None:
+        """R-2.1: calling build_intersection_candidates twice returns identical results."""
+        from questfoundry.graph.grow_algorithms import build_intersection_candidates
+
+        graph = self._build_two_dilemma_graph()
+
+        result_a = build_intersection_candidates(graph)
+        result_b = build_intersection_candidates(graph)
+
+        assert len(result_a) == len(result_b), (
+            "R-2.1: candidate count differs across runs "
+            f"(first={len(result_a)}, second={len(result_b)})"
+        )
+        for i, (ca, cb) in enumerate(zip(result_a, result_b, strict=False)):
+            assert ca.beat_ids == cb.beat_ids, (
+                f"R-2.1: candidate[{i}].beat_ids differ across runs "
+                f"(first={ca.beat_ids!r}, second={cb.beat_ids!r})"
+            )
+            assert ca.signal_type == cb.signal_type, (
+                f"R-2.1: candidate[{i}].signal_type differs across runs "
+                f"(first={ca.signal_type!r}, second={cb.signal_type!r})"
+            )

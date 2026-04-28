@@ -13,12 +13,16 @@ LLM phases use direct structured output: context from graph state →
 single LLM call → validate → retry (max 3).
 """
 
+# pyright: reportPossiblyUnboundVariable=false
+# TODO(#1319): cleanup during M-FILL-spec compliance work; tracked in epic #1319
+
 from __future__ import annotations
 
 import re
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any, Literal, TypeVar, get_args, get_origin
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, ValidationError
@@ -70,11 +74,13 @@ from questfoundry.graph.fill_context import (
     get_arc_passage_order,
     get_spine_arc_key,
 )
+from questfoundry.graph.fill_validation import FillContractError
 from questfoundry.graph.graph import Graph
 from questfoundry.graph.snapshots import save_snapshot
 from questfoundry.models.fill import (
     BatchedExpandOutput,
     ExpandBlueprint,
+    FillEscalation,
     FillExtractOutput,
     FillPhase0Output,
     FillPhase1Output,
@@ -122,6 +128,65 @@ _SLIDING_WINDOW_SIZES: dict[str, int] = {
 _STRUCTURAL_ERROR_TYPES = frozenset(
     {"missing", "missing_argument", "type_error", "extra_forbidden"}
 )
+
+
+def _get_literal_values_at_path(
+    model_cls: type[BaseModel], field_path: str
+) -> tuple[Any, ...] | None:
+    """Walk a Pydantic model by dotted path and return the Literal values for that field.
+
+    Used by ``_build_error_feedback`` to echo allowed enum values on retry so
+    a small model that emits an out-of-set value (e.g. ``pov: "third person
+    limited"`` for the ``Literal["first_person", "second_person", ...]``
+    field) sees the valid set in the next attempt.
+
+    Only direct ``Literal[...]`` fields are recognised. ``Optional[Literal[...]]``
+    is intentionally not supported — no current FILL field uses that shape and
+    YAGNI per CLAUDE.md (don't add code for hypothetical future requirements).
+    Add a test case alongside any future field that needs the union form.
+
+    Args:
+        model_cls: The top-level Pydantic schema (e.g. FillPhase0Output).
+        field_path: Dotted path from `_classify_validation_error` (e.g.
+            ``"voice.pov"``).
+
+    Returns:
+        Tuple of allowed literal values if the field's annotation is a direct
+        ``Literal[...]``, else ``None``.
+    """
+    # Strip list-index segments produced by Pydantic for list-typed errors
+    # (e.g. "passages.0.entity_updates.1.entity_id" -> "passages.entity_updates.entity_id"
+    # for schema traversal). Numeric segments map to "the item type", so we
+    # skip them and continue with the next named field.
+    parts = [p for p in field_path.split(".") if p and not p.isdigit()]
+
+    current_cls: type[BaseModel] | None = model_cls
+    annotation: Any = None
+    for i, part in enumerate(parts):
+        if current_cls is None:
+            return None
+        field_info = current_cls.model_fields.get(part)
+        if field_info is None:
+            return None
+        annotation = field_info.annotation
+
+        # Step into a nested BaseModel for the next segment, or into the item
+        # type of a list[BaseModel].
+        if i < len(parts) - 1:
+            inner: type[BaseModel] | None = None
+            args = getattr(annotation, "__args__", ())
+            if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+                inner = annotation
+            else:
+                for arg in args:
+                    if isinstance(arg, type) and issubclass(arg, BaseModel):
+                        inner = arg
+                        break
+            current_cls = inner
+
+    if annotation is None or get_origin(annotation) is not Literal:
+        return None
+    return get_args(annotation)
 
 
 def _classify_validation_error(
@@ -273,6 +338,9 @@ class FillStage:
         self._on_llm_start: LLMCallbackFn | None = None
         self._on_llm_end: LLMCallbackFn | None = None
         self._on_connectivity_error: ConnectivityRetryFn | None = None
+        # Escalations collected during the run; raised as FillContractError at stage exit
+        # if non-empty (R-2.14, R-5.2 — see fill_validation.FillContractError).
+        self._escalations: list[FillEscalation] = []
 
     # Type for async phase functions: (Graph, BaseChatModel) -> FillPhaseResult
     PhaseFunc = Callable[["Graph", "BaseChatModel"], Awaitable[FillPhaseResult]]
@@ -369,6 +437,8 @@ class FillStage:
         self._lang_instruction = get_output_language_instruction(self._language)
         self._two_step = kwargs.get("two_step", True)
         self._on_connectivity_error = kwargs.get("on_connectivity_error")
+        # Reset escalations for this run; previous runs' escalations don't carry over.
+        self._escalations = []
         log.info("stage_start", stage="fill", interactive=interactive)
 
         phases = self._phase_order()
@@ -405,6 +475,18 @@ class FillStage:
                 log.info("rewinding_graph", stage="fill", mutations=n)
             save_snapshot(graph, resolved_path, "fill")
 
+        # POLISH Stage Output Contract — validate post-rewind so the
+        # check sees the base POLISH state, not stale FILL mutations
+        # from an earlier run (#1347).
+        from questfoundry.graph.polish_validation import validate_polish_output
+
+        entry_errors = validate_polish_output(graph)
+        if entry_errors:
+            raise FillStageError(
+                f"POLISH output validation failed ({len(entry_errors)} "
+                f"error(s)):\n" + "\n".join(f"  - {e}" for e in entry_errors)
+            )
+
         phase_results: list[FillPhaseResult] = []
         total_llm_calls = 0
         total_tokens = 0
@@ -440,10 +522,32 @@ class FillStage:
             graph.release(phase_name)
             log.debug("phase_complete", phase=phase_name, status=result.status)
 
+            # R-1.7: stamp the Voice node with approval_mode + approved_at once
+            # the gate has approved Phase 0. The stamp records *that* approval
+            # happened (and which mode) so Phase 1a can assert a precondition
+            # rather than implicitly trusting the gate.
+            if phase_name == "voice":
+                self._stamp_voice_approval(graph, interactive=interactive)
+
             if on_phase_progress is not None:
                 on_phase_progress(phase_name, result.status, result.detail)
 
         if completed_normally:
+            # FILL Stage Output Contract — validate before stamping
+            # last_stage so a malformed artifact is owned by FILL, not
+            # discovered downstream (#1348). Escalations checked
+            # separately below — those are LLM-failure escalations and
+            # share FillStageError to keep the caller-side handling
+            # uniform.
+            from questfoundry.graph.fill_output_validation import validate_fill_output
+
+            exit_errors = validate_fill_output(graph)
+            if exit_errors:
+                raise FillStageError(
+                    f"FILL output contract violated ({len(exit_errors)} "
+                    f"error(s)):\n" + "\n".join(f"  - {e}" for e in exit_errors)
+                )
+
             graph.set_last_stage("fill")
             graph.save(resolved_path / "graph.db")
 
@@ -456,9 +560,31 @@ class FillStage:
             stage="fill",
             total_passages=total_passages,
             passages_with_prose=passages_with_prose,
+            escalation_count=len(self._escalations),
         )
 
-        # Return summary for validation (graph is the source of truth)
+        # R-2.14, R-5.2: if any escalations were collected (missing entities,
+        # unresolved review flags after final cycle), halt loudly at stage exit
+        # rather than returning a "completed" status with hidden quality issues.
+        # The full escalation list rides on the raised exception's
+        # ``.escalations`` attribute for caller rendering.
+        if self._escalations:
+            kinds = sorted({e.kind for e in self._escalations})
+            log.error(
+                "fill_contract_failed",
+                escalation_count=len(self._escalations),
+                kinds=kinds,
+            )
+            raise FillContractError(
+                f"FILL stage halted with {len(self._escalations)} escalation(s) "
+                f"({', '.join(kinds)}). See the .escalations attribute on this "
+                f"exception for the full list.",
+                escalations=self._escalations,
+            )
+
+        # Return summary for validation (graph is the source of truth).
+        # No `escalations` key — when the stage returns normally,
+        # ``self._escalations`` is empty by construction.
         return (
             {
                 "total_passages": total_passages,
@@ -482,6 +608,7 @@ class FillStage:
         max_retries: int = 3,
         *,
         creative: bool = False,
+        extra_repair_hints: list[str] | None = None,
     ) -> tuple[T, int, int]:
         """Call LLM with structured output and retry on validation failure.
 
@@ -497,6 +624,8 @@ class FillStage:
             creative: Use the discuss-phase model (creative temperature) instead
                 of the serialize model. Enable for prose generation where lexical
                 diversity matters.
+            extra_repair_hints: Hint blocks appended verbatim to retry feedback
+                so caller-known IDs/constraints survive context drift.
 
         Returns:
             Tuple of (validated_result, llm_calls, tokens_used).
@@ -577,7 +706,13 @@ class FillStage:
                 )
 
                 if attempt < max_retries - 1:
-                    error_msg = self._build_error_feedback(e, output_schema, failure_type)
+                    error_msg = self._build_error_feedback(
+                        e,
+                        output_schema,
+                        failure_type,
+                        invalid_fields=invalid,
+                        extra_repair_hints=extra_repair_hints,
+                    )
                     messages = list(base_messages)
                     messages.append(HumanMessage(content=error_msg))
 
@@ -591,6 +726,8 @@ class FillStage:
         error: Exception,
         output_schema: type[BaseModel],
         failure_type: str = "unknown",
+        invalid_fields: list[str] | None = None,
+        extra_repair_hints: list[str] | None = None,
     ) -> str:
         """Build structured error feedback for LLM retry.
 
@@ -599,10 +736,21 @@ class FillStage:
         and fix only the structural issue. This prevents the model from
         rewriting good prose into something safer/shorter during retries.
 
+        For content failures on Literal fields (e.g.,
+        ``VoiceDocument.pov``), the feedback also echoes the allowed values
+        per CLAUDE.md §repair-loop quality. Without this, a 4B model that
+        outputs ``pov: "third person limited"`` sees only "value is not a
+        valid enumeration member" with no list of what IS valid — repair-loop
+        blindness, the murder1 failure shape generalised to FILL.
+
         Args:
             error: The validation error.
             output_schema: The expected schema.
             failure_type: Classification from _classify_validation_error.
+            invalid_fields: Dotted field paths flagged as content failures by
+                _classify_validation_error. Used to look up Literal values.
+            extra_repair_hints: Hint blocks appended verbatim after the standard
+                error text so caller-known IDs/constraints survive context drift.
 
         Returns:
             Formatted error feedback string.
@@ -620,6 +768,31 @@ class FillStage:
             )
         else:
             parts.append("\nPlease fix the errors and try again.")
+
+        # Per @prompt-engineer Rule 1 / §repair-loop quality: echo allowed Literal values
+        # for any invalid Literal-typed field so the model can self-correct
+        # instead of guessing again. Skipped on structural failures because
+        # those carry the "fix ONLY the structural issue" instruction above —
+        # appending enum hints alongside that would contradict it for the
+        # mixed missing-field-AND-bad-Literal case.
+        if invalid_fields and failure_type != "structural":
+            literal_hints: list[str] = []
+            for field_path in invalid_fields:
+                values = _get_literal_values_at_path(output_schema, field_path)
+                if values is not None:
+                    # Backtick-wrap each value for consistency with the SEED
+                    # repair-feedback pattern (serialize.py) and the prompts
+                    # themselves (@prompt-engineer Rule 4).
+                    formatted = ", ".join(f"`{v}`" for v in values)
+                    literal_hints.append(f"Allowed values for `{field_path}`: {formatted}")
+            if literal_hints:
+                parts.append("\n" + "\n".join(literal_hints))
+
+        # Caller-supplied hint blocks (valid IDs etc.) — appended verbatim so
+        # the model sees the constraint re-stated in the same human-message
+        # it's correcting against. Mirrors the DRESS Cluster D-2 plumbing.
+        if extra_repair_hints:
+            parts.append("\n" + "\n\n".join(extra_repair_hints))
 
         return "\n".join(parts)
 
@@ -748,7 +921,7 @@ class FillStage:
         if self._interactive:
             mode_section = ""
         else:
-            raw_mode_section = getattr(template, "non_interactive_section", None)
+            raw_mode_section = template.extra.get("non_interactive_section")
             if raw_mode_section is None:
                 log.warning(
                     "template_missing_field",
@@ -830,7 +1003,12 @@ class FillStage:
         total_llm_calls = 0
         total_tokens = 0
 
-        # Phase 0a: Research voice guidance (graceful degradation on failure)
+        # Phase 0a: Research voice guidance.
+        # Voice research is degradation, not corruption: prose is still
+        # generatable without the research notes. We escalate (option 2 of
+        # the audit recommendation, #1345) rather than raising so the
+        # whole stage's failure picture surfaces at exit; FillContractError
+        # then halts SHIP with the full set of issues.
         research_notes = ""
         try:
             research_notes, research_calls, research_tokens = await self._phase_0a_voice_research(
@@ -838,8 +1016,20 @@ class FillStage:
             )
             total_llm_calls += research_calls
             total_tokens += research_tokens
-        except Exception:
-            log.warning("voice_research_failed", exc_info=True)
+        except Exception as exc:
+            log.error("voice_research_failed", exc_info=True)
+            self._escalations.append(
+                FillEscalation(
+                    kind="voice_research_failed",
+                    passage_id="",
+                    detail=(
+                        f"Voice research LLM call failed: {exc!r}. FILL will exit "
+                        f"with FillContractError at stage end; rerun FILL or fix "
+                        f"the provider configuration to proceed."
+                    ),
+                    upstream_stage="FILL",
+                )
+            )
 
         context = {
             "dream_vision": format_dream_vision(graph),
@@ -937,6 +1127,50 @@ class FillStage:
 
     _EXPAND_BATCH_SIZE = 8
 
+    def _stamp_voice_approval(self, graph: Graph, *, interactive: bool) -> None:
+        """Stamp the Voice node with approval mode + timestamp (R-1.7).
+
+        Called from execute() after the Phase 0 gate decision is non-reject.
+        Records *that* approval happened — interactive review or
+        ``--no-interactive`` pre-approval — so downstream phases can assert
+        the precondition rather than implicitly trusting the gate.
+        """
+        voice_data = graph.get_node("voice::voice")
+        if voice_data is None:
+            # Phase 0 always creates the node before this stamp runs;
+            # if it's missing the gate logic itself is broken.
+            raise FillStageError(
+                "Voice node missing at gate-pass time — Phase 0 did not "
+                "create voice::voice. R-1.7 stamp cannot be applied."
+            )
+        approval_mode = "interactive" if interactive else "no_interactive"
+        graph.update_node(
+            "voice::voice",
+            approved_at=datetime.now(UTC).isoformat(),
+            approval_mode=approval_mode,
+        )
+        log.info("voice_approved", approval_mode=approval_mode)
+
+    def _assert_voice_approved(self, graph: Graph) -> None:
+        """Assert the Voice node carries the R-1.7 approval stamp.
+
+        Called at Phase 1a entry to fail loudly if Phase 0 is somehow
+        bypassed without an approval — covers wiring bugs that would
+        otherwise let prose generation start without recorded consent.
+        """
+        voice_data = graph.get_node("voice::voice")
+        if voice_data is None:
+            raise FillStageError(
+                "Voice node missing at Phase 1a entry — Phase 0 did not run. "
+                "FILL requires Phase 0 voice creation + approval before prose generation."
+            )
+        if not voice_data.get("approved_at") or not voice_data.get("approval_mode"):
+            raise FillStageError(
+                "Voice approval stamp missing (R-1.7). Phase 0 ran but the "
+                "gate-pass stamp (approved_at + approval_mode) was not applied. "
+                "Re-run FILL from voice phase."
+            )
+
     async def _phase_1a_expand(
         self,
         graph: Graph,
@@ -952,6 +1186,9 @@ class FillStage:
         from random import Random
 
         from questfoundry.pipeline.craft_constraints import select_constraint
+
+        # R-1.7: refuse to start prose generation without the Phase 0 approval stamp.
+        self._assert_voice_approved(graph)
 
         generation_order = self._get_generation_order(graph)
         if not generation_order:
@@ -1068,12 +1305,42 @@ class FillStage:
 
             return [bp.model_dump() for bp in output.blueprints], llm_calls, tokens
 
-        results, total_llm_calls, total_tokens, _errors = await batch_llm_calls(
+        results, total_llm_calls, total_tokens, errors = await batch_llm_calls(
             chunks,
             _expand_chunk,
             self._max_concurrency,
             on_connectivity_error=self._on_connectivity_error,
         )
+
+        # Per-passage escalation: failed chunks have no blueprint; downstream Phase 1 prose lacks it.
+        for idx, exc in errors:
+            chunk_ids, _arc_id = chunks[idx]
+            for affected_pid in chunk_ids:
+                full_pid = (
+                    affected_pid
+                    if affected_pid.startswith("passage::")
+                    else f"passage::{affected_pid}"
+                )
+                log.warning(
+                    "expand_batch_failed_escalated",
+                    passage_id=full_pid,
+                    exc_type=type(exc).__name__,
+                    exc_msg=str(exc),
+                )
+                self._escalations.append(
+                    FillEscalation(
+                        kind="expand_batch_failed",
+                        passage_id=full_pid,
+                        detail=(
+                            f"fill_phase1_expand chunk failed after retries "
+                            f"({type(exc).__name__}: {exc}). Passage has no "
+                            "expand-phase blueprint; downstream Phase 1 prose "
+                            "will be generated without the blueprint context "
+                            "and may be lower quality."
+                        ),
+                        upstream_stage="FILL",
+                    )
+                )
 
         # Store blueprints on passage nodes
         blueprints_created = 0
@@ -1087,13 +1354,29 @@ class FillStage:
                 full_pid = f"passage::{clean_id}"
                 if not graph.has_node(full_pid):
                     continue
-                # Validate blueprint before persisting
+                # Validate blueprint before persisting. Failure is per-passage
+                # and bounded — escalate (option 2 of audit recommendation,
+                # #1345) so the full set surfaces at stage exit instead of
+                # the user discovering each broken passage one-by-one in
+                # downstream phases.
                 try:
                     validated = ExpandBlueprint.model_validate(bp_dict)
                     graph.update_node(full_pid, blueprint=validated.model_dump())
                     blueprints_created += 1
-                except Exception:
-                    log.warning("blueprint_validation_failed", passage_id=full_pid)
+                except Exception as exc:
+                    log.error("blueprint_validation_failed", passage_id=full_pid, exc_info=True)
+                    self._escalations.append(
+                        FillEscalation(
+                            kind="blueprint_validation_failed",
+                            passage_id=full_pid,
+                            detail=(
+                                f"ExpandBlueprint validation failed: {exc!r}. "
+                                f"Passage will fall back to default expansion — "
+                                f"likely produces lower-quality prose."
+                            ),
+                            upstream_stage="FILL",
+                        )
+                    )
                     continue
 
         log.info(
@@ -1147,6 +1430,22 @@ class FillStage:
                 arc_passage_orders[arc_id] = arc_order
                 arc_passage_indices[arc_id] = {pid: i for i, pid in enumerate(arc_order)}
 
+        # Pre-compute graph-wide traversals once for the lookahead helper.
+        # format_lookahead_context is called per-passage; without these
+        # caches it would recompute compute_passage_traversals and
+        # compute_arc_traversals on every call (O(N²) over the passage
+        # set). The cached dicts are stable for the duration of Phase 1
+        # generate — POLISH froze the DAG before FILL started, and FILL
+        # mutates only prose / extracted entity fields, not the structural
+        # nodes/edges these traversals depend on.
+        from questfoundry.graph.algorithms import (
+            compute_arc_traversals,
+            compute_passage_traversals,
+        )
+
+        cached_passage_traversals = compute_passage_traversals(graph)
+        cached_arc_beat_sequences = compute_arc_traversals(graph)
+
         for passage_id, arc_id in generation_order:
             passage = graph.get_node(passage_id)
             if not passage:
@@ -1193,7 +1492,13 @@ class FillStage:
                 "entity_arc_context": format_entity_arc_context(graph, passage_id, arc_id),
                 "sliding_window": format_sliding_window(graph, arc_id, current_idx, window_size),
                 "continuity_warning": format_continuity_warning(graph, arc_id, current_idx),
-                "lookahead": format_lookahead_context(graph, passage_id, arc_id),
+                "lookahead": format_lookahead_context(
+                    graph,
+                    passage_id,
+                    arc_id,
+                    passage_traversals=cached_passage_traversals,
+                    arc_beat_sequences=cached_arc_beat_sequences,
+                ),
                 "path_arcs": format_path_arc_context(graph, passage_id, arc_id),
                 "vocabulary_note": vocabulary_note,
                 "ending_guidance": format_ending_guidance(
@@ -1204,6 +1509,7 @@ class FillStage:
                 ),
                 "residue_obligations": format_residue_weight_obligations(graph, passage_id),
                 "shadow_context": format_shadow_context(graph, passage_id, arc_id),
+                "narrative_function": narrative_function,
                 "introduction_guidance": format_introduction_guidance(
                     first_names,
                     arc_hints=compute_arc_hints(graph, first_eids, arc_id),
@@ -1268,11 +1574,32 @@ class FillStage:
                         total_llm_calls += ex_calls
                         total_tokens += ex_tokens
                         entity_updates = extract_out.entity_updates
-                    except (ValidationError, ValueError, RuntimeError):
-                        log.warning(
+                    except Exception as exc:
+                        # Catch broadly (matching the voice-research and
+                        # blueprint-validation sites above): transport-level
+                        # failures (httpx.TimeoutException, asyncio.TimeoutError,
+                        # provider-specific exceptions) must escalate too, not
+                        # propagate unhandled and crash the per-passage loop.
+                        # Per-passage and bounded — escalate (option 2 of audit
+                        # recommendation, #1345). Without entity updates the
+                        # entity state diverges from the generated prose; the
+                        # user must see this at stage exit, not silently.
+                        log.error(
                             "entity_extract_failed",
                             passage_id=passage_id,
                             exc_info=True,
+                        )
+                        self._escalations.append(
+                            FillEscalation(
+                                kind="entity_extract_failed",
+                                passage_id=passage_id,
+                                detail=(
+                                    f"Two-step entity extraction failed: {exc!r}. "
+                                    f"Entity state diverges from generated prose "
+                                    f"for this passage."
+                                ),
+                                upstream_stage="FILL",
+                            )
                         )
             else:
                 entity_updates = passage_output.entity_updates
@@ -1282,7 +1609,7 @@ class FillStage:
             is_spine = _is_spine_arc(graph, arc_id) if arc_id else False
 
             if entity_updates and not is_spine and arc_id is not None:
-                log.warning(
+                log.debug(
                     "entity_update_non_spine",
                     passage_id=passage_id,
                     arc_id=arc_id,
@@ -1299,10 +1626,27 @@ class FillStage:
                         **{update.field: update.value},
                     )
                 else:
-                    log.warning(
-                        "entity_update_skipped",
+                    # R-2.14: a missing entity is a structural problem (phantom ID
+                    # or graph inconsistency) — collect for end-of-stage escalation
+                    # rather than silently skip.
+                    log.error(
+                        "entity_update_missing_entity",
                         entity_id=update.entity_id,
-                        reason="entity not found in graph",
+                        passage_id=passage_id,
+                        field=update.field,
+                    )
+                    self._escalations.append(
+                        FillEscalation(
+                            kind="missing_entity",
+                            passage_id=passage_id,
+                            detail=(
+                                f"Entity update referenced unknown entity "
+                                f"{update.entity_id!r} (field={update.field!r}). "
+                                f"Likely a phantom ID from prose generation or a "
+                                f"graph inconsistency."
+                            ),
+                            upstream_stage="SEED",
+                        )
                     )
 
             # Spoke label updates: single-call mode only (two-step doesn't extract these)
@@ -1542,12 +1886,41 @@ class FillStage:
                 FillPhase2Output,
             )
 
-        results, total_llm_calls, total_tokens, _errors = await batch_llm_calls(
+        results, total_llm_calls, total_tokens, errors = await batch_llm_calls(
             batches,
             _review_batch,
             self._max_concurrency,
             on_connectivity_error=self._on_connectivity_error,
         )
+
+        # Per-passage escalation: failed review batches silently skip review (no flags ≠ "passed review").
+        for idx, exc in errors:
+            for affected_pid in batches[idx]:
+                full_pid = (
+                    affected_pid
+                    if affected_pid.startswith("passage::")
+                    else f"passage::{affected_pid}"
+                )
+                log.warning(
+                    "review_batch_failed_escalated",
+                    passage_id=full_pid,
+                    exc_type=type(exc).__name__,
+                    exc_msg=str(exc),
+                )
+                self._escalations.append(
+                    FillEscalation(
+                        kind="review_batch_failed",
+                        passage_id=full_pid,
+                        detail=(
+                            f"fill_phase2_review batch failed after retries "
+                            f"({type(exc).__name__}: {exc}). Passage was not "
+                            "reviewed for prose-quality issues — any "
+                            "flat_prose / blueprint_bleed / continuity issues "
+                            "will not be flagged for revision."
+                        ),
+                        upstream_stage="FILL",
+                    )
+                )
 
         for output in results:
             if output is None:
@@ -1641,6 +2014,21 @@ class FillStage:
             if node:
                 passage_data[passage_id] = node
 
+        # Valid entity IDs (raw, sorted, backtick-wrapped per @prompt-engineer Rule 4).
+        # Hoisted out of the per-passage closure since entities don't change
+        # during revision — matches the pre-computation pattern above.
+        valid_entity_id_list = sorted(
+            enode.get("raw_id", strip_scope_prefix(eid))
+            for eid, enode in graph.get_nodes_by_type("entity").items()
+        )
+        valid_entity_ids = (
+            "\n".join(f"- `{rid}`" for rid in valid_entity_id_list) or "(no entities defined)"
+        )
+        revision_repair_hints = [
+            "REMINDER — Valid entity IDs for `entity_updates[].entity_id` "
+            f"(use ONLY these — raw IDs, no scope prefix):\n{valid_entity_ids}",
+        ]
+
         # Each passage's revision chain is independent of other passages,
         # but flags within one passage must be sequential (chained).
         passage_items = list(flagged_passages.items())
@@ -1680,6 +2068,7 @@ class FillStage:
                     if arc_id
                     else ""
                 ),
+                "valid_entity_ids": valid_entity_ids,
                 "output_language_instruction": self._lang_instruction,
             }
 
@@ -1689,6 +2078,7 @@ class FillStage:
                 context,
                 FillPhase1Output,
                 creative=True,
+                extra_repair_hints=revision_repair_hints,
             )
 
             if output.passage.prose:
@@ -1703,12 +2093,36 @@ class FillStage:
                 tokens,
             )
 
-        results, total_llm_calls, total_tokens, _errors = await batch_llm_calls(
+        results, total_llm_calls, total_tokens, errors = await batch_llm_calls(
             passage_items,
             _revise_passage,
             self._max_concurrency,
             on_connectivity_error=self._on_connectivity_error,
         )
+
+        # Per-passage escalation: failed revision keeps old flagged-as-broken prose with no fix.
+        for idx, exc in errors:
+            raw_pid, _flags = passage_items[idx]
+            full_pid = raw_pid if raw_pid.startswith("passage::") else f"passage::{raw_pid}"
+            log.warning(
+                "revision_failed_escalated",
+                passage_id=full_pid,
+                exc_type=type(exc).__name__,
+                exc_msg=str(exc),
+            )
+            self._escalations.append(
+                FillEscalation(
+                    kind="revision_failed",
+                    passage_id=full_pid,
+                    detail=(
+                        f"fill_phase3_revision call failed after retries "
+                        f"({type(exc).__name__}: {exc}). Passage retains its "
+                        "original prose with the prior phase-2 review flags "
+                        "unaddressed."
+                    ),
+                    upstream_stage="FILL",
+                )
+            )
 
         # Apply results to graph (sequential — graph mutations not thread-safe)
         for item in results:
@@ -1732,10 +2146,27 @@ class FillStage:
                         if entity_id:
                             graph.update_node(entity_id, **{update.field: update.value})
                         else:
-                            log.warning(
-                                "entity_update_skipped",
+                            # R-2.14: missing entity from revision-cycle update —
+                            # same escalation as Phase 1 (see above).
+                            log.error(
+                                "entity_update_missing_entity",
                                 entity_id=update.entity_id,
-                                reason="entity not found in graph",
+                                passage_id=passage_id,
+                                field=update.field,
+                                phase="revision",
+                            )
+                            self._escalations.append(
+                                FillEscalation(
+                                    kind="missing_entity",
+                                    passage_id=passage_id,
+                                    detail=(
+                                        f"Revision-cycle entity update referenced "
+                                        f"unknown entity {update.entity_id!r} "
+                                        f"(field={update.field!r}). Likely a phantom "
+                                        f"ID or graph inconsistency."
+                                    ),
+                                    upstream_stage="SEED",
+                                )
                             )
                 else:
                     log.warning(
@@ -1750,18 +2181,34 @@ class FillStage:
             if all_addressed:
                 graph.update_node(passage_id, review_flags=[])
             elif final_cycle:
-                # Exhausted all revision cycles — escalate as upstream problem.
+                # R-5.2: Exhausted all revision cycles with unresolved flags —
+                # collect for end-of-stage escalation rather than ship low-quality
+                # prose with only a WARNING in the logs.
                 # Preserve review_flags on the passage (do NOT clear them).
                 # Re-fetch after possible prose update above to avoid stale data.
                 current_node = graph.get_node(passage_id) or {}
                 remaining = current_node.get("review_flags", [])
                 issue_types = [f.get("issue_type", "unknown") for f in remaining]
-                log.warning(
+                log.error(
                     "upstream_escalation",
                     passage_id=passage_id,
                     remaining_flags=len(remaining),
                     issue_types=issue_types,
                     reason="revision exhausted after 2 cycles; problem likely upstream (POLISH/GROW)",
+                )
+                self._escalations.append(
+                    FillEscalation(
+                        kind="unresolved_review_flags",
+                        passage_id=passage_id,
+                        detail=(
+                            f"Passage retains {len(remaining)} unresolved review "
+                            f"flag(s) after the final revision cycle "
+                            f"(issue_types={issue_types}). Persistent quality "
+                            f"problems indicate an upstream issue (POLISH grouping, "
+                            f"GROW structure, or SEED design)."
+                        ),
+                        upstream_stage="POLISH",
+                    )
                 )
 
         # Count escalated passages from results (avoids redundant graph reads)

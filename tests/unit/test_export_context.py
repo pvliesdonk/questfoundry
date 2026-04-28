@@ -2,10 +2,24 @@
 
 from __future__ import annotations
 
+import logging
+
 import pytest
 
 from questfoundry.export.context import build_export_context
 from questfoundry.graph.graph import Graph
+
+_CONTEXT_LOGGER = "questfoundry.export.context"
+
+
+def _has_event(caplog: pytest.LogCaptureFixture, event: str) -> bool:
+    """Return True if any captured record's message contains ``event``.
+
+    Mirrors the project convention (see test_polish_llm_phases.py et al.):
+    use ``caplog.records`` rather than ``caplog.text`` so the assertion
+    survives processor-chain or formatter changes in the structlog setup.
+    """
+    return any(event in str(r.message) for r in caplog.records)
 
 
 def _minimal_graph() -> Graph:
@@ -35,33 +49,25 @@ def _minimal_graph() -> Graph:
             "prose": "You flee into the forest.",
         },
     )
-    g.create_node(
-        "choice::intro_to_a",
-        {
-            "type": "choice",
-            "from_passage": "passage::intro",
-            "to_passage": "passage::choice_a",
-            "label": "Enter the castle",
-            "requires_codewords": [],
-            "grants": ["codeword::entered_castle"],
-        },
+    # Choices are stored as graph edges (POLISH writes them via
+    # `graph.add_edge("choice", ...)`) — see #1532 for the regression
+    # where the export context read non-existent choice nodes instead.
+    g.add_edge(
+        "choice",
+        "passage::intro",
+        "passage::choice_a",
+        label="Enter the castle",
+        requires_codewords=[],
+        grants=["codeword::entered_castle"],
     )
-    g.create_node(
-        "choice::intro_to_b",
-        {
-            "type": "choice",
-            "from_passage": "passage::intro",
-            "to_passage": "passage::choice_b",
-            "label": "Flee to the forest",
-            "requires_codewords": [],
-            "grants": [],
-        },
+    g.add_edge(
+        "choice",
+        "passage::intro",
+        "passage::choice_b",
+        label="Flee to the forest",
+        requires_codewords=[],
+        grants=[],
     )
-    # Edges for choice connectivity
-    g.add_edge("choice_from", "choice::intro_to_a", "passage::intro")
-    g.add_edge("choice_to", "choice::intro_to_a", "passage::choice_a")
-    g.add_edge("choice_from", "choice::intro_to_b", "passage::intro")
-    g.add_edge("choice_to", "choice::intro_to_b", "passage::choice_b")
     return g
 
 
@@ -141,6 +147,41 @@ class TestBuildExportContext:
         assert len(ctx.passages) == 3
         assert len(ctx.choices) == 2
 
+    def test_choices_read_from_edges_not_nodes(self) -> None:
+        # Regression for #1532: POLISH stores choices as edges, not nodes.
+        # The earlier _extract_choices read non-existent choice nodes and
+        # silently produced 0 choices, leaving every export with no
+        # navigable links.
+        g = _minimal_graph()
+        # Sanity: graph really has zero choice nodes and non-zero choice edges.
+        assert g.get_nodes_by_type("choice") == {}
+        assert len(g.get_edges(edge_type="choice")) == 2
+        ctx = build_export_context(g, "regression-1532")
+        assert len(ctx.choices) == 2
+        labels = {c.label for c in ctx.choices}
+        assert labels == {"Enter the castle", "Flee to the forest"}
+
+    def test_choice_requires_round_trips_polish_edge_key(self) -> None:
+        # Regression for #1532 follow-up: POLISH writes the gate-condition
+        # key as `"requires"` (see _create_choice_edge in
+        # pipeline/stages/polish/deterministic.py:1430). The export must read
+        # the same key — the prior fallback chain (requires_state_flags →
+        # requires_codewords → []) silently dropped POLISH's gate values.
+        g = Graph()
+        g.create_node("passage::a", {"type": "passage", "raw_id": "a", "prose": "."})
+        g.create_node("passage::b", {"type": "passage", "raw_id": "b", "prose": "."})
+        g.add_edge(
+            "choice",
+            "passage::a",
+            "passage::b",
+            label="Open the gate",
+            requires=["state_flag::has_key"],  # POLISH's actual key name
+            grants=[],
+        )
+        ctx = build_export_context(g, "test")
+        assert len(ctx.choices) == 1
+        assert ctx.choices[0].requires_codewords == ["state_flag::has_key"]
+
     def test_start_passage_detected(self) -> None:
         g = _minimal_graph()
         ctx = build_export_context(g, "test")
@@ -160,33 +201,23 @@ class TestBuildExportContext:
                 "prose": "You look around.",
             },
         )
-        g.create_node(
-            "choice::intro_to_spoke_0",
-            {
-                "type": "choice",
-                "from_passage": "passage::intro",
-                "to_passage": "passage::spoke_0",
-                "label": "Look around",
-                "requires_codewords": [],
-                "grants": [],
-            },
+        g.add_edge(
+            "choice",
+            "passage::intro",
+            "passage::spoke_0",
+            label="Look around",
+            requires_codewords=[],
+            grants=[],
         )
-        g.add_edge("choice_from", "choice::intro_to_spoke_0", "passage::intro")
-        g.add_edge("choice_to", "choice::intro_to_spoke_0", "passage::spoke_0")
-        g.create_node(
-            "choice::spoke_0_return",
-            {
-                "type": "choice",
-                "from_passage": "passage::spoke_0",
-                "to_passage": "passage::intro",
-                "label": "Return",
-                "is_return": True,
-                "requires_codewords": [],
-                "grants": [],
-            },
+        g.add_edge(
+            "choice",
+            "passage::spoke_0",
+            "passage::intro",
+            label="Return",
+            is_return=True,
+            requires_codewords=[],
+            grants=[],
         )
-        g.add_edge("choice_from", "choice::spoke_0_return", "passage::spoke_0")
-        g.add_edge("choice_to", "choice::spoke_0_return", "passage::intro")
 
         ctx = build_export_context(g, "test")
         start_passages = [p for p in ctx.passages if p.is_start]
@@ -360,3 +391,181 @@ class TestBuildExportContext:
         ctx = build_export_context(g, "test", language="nl")
 
         assert ctx.language == "nl"
+
+
+class TestCodewordPlayabilityWarning:
+    """R-1.7: codeword count > 10 must trigger a WARNING."""
+
+    @staticmethod
+    def _add_soft_dilemma_with_n_flags(g: Graph, n: int) -> None:
+        g.create_node(
+            "dilemma::wide",
+            {"type": "dilemma", "raw_id": "wide", "dilemma_role": "soft"},
+        )
+        for i in range(n):
+            g.create_node(
+                f"state_flag::flag_{i}",
+                {
+                    "type": "state_flag",
+                    "raw_id": f"flag_{i}",
+                    "dilemma_id": "dilemma::wide",
+                    "codeword_type": "granted",
+                },
+            )
+
+    def test_at_threshold_no_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Exactly 10 codewords sits at the limit — no warning yet."""
+        g = _minimal_graph()
+        self._add_soft_dilemma_with_n_flags(g, 10)
+
+        with caplog.at_level(logging.WARNING, logger=_CONTEXT_LOGGER):
+            ctx = build_export_context(g, "test")
+
+        assert len(ctx.codewords) == 10
+        assert not _has_event(caplog, "codeword_count_exceeds_threshold")
+
+    def test_above_threshold_warns(self, caplog: pytest.LogCaptureFixture) -> None:
+        """11 codewords exceeds the playability threshold — must warn (R-1.7)."""
+        g = _minimal_graph()
+        self._add_soft_dilemma_with_n_flags(g, 11)
+
+        with caplog.at_level(logging.WARNING, logger=_CONTEXT_LOGGER):
+            ctx = build_export_context(g, "test")
+
+        assert len(ctx.codewords) == 11
+        assert _has_event(caplog, "codeword_count_exceeds_threshold")
+
+    def test_zero_codewords_no_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        g = _minimal_graph()
+        with caplog.at_level(logging.WARNING, logger=_CONTEXT_LOGGER):
+            ctx = build_export_context(g, "test")
+        assert ctx.codewords == []
+        assert not _has_event(caplog, "codeword_count_exceeds_threshold")
+
+
+class TestPartialDressWarning:
+    """R-3.9: art_direction missing required fields must warn (graceful, not silent)."""
+
+    def test_complete_art_direction_no_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        g = _minimal_graph()
+        g.create_node(
+            "art_direction::main",
+            {
+                "type": "art_direction",
+                "style": "watercolor",
+                "medium": "digital painting",
+                "palette": ["blue", "gold"],
+                "composition_notes": "wide framing",
+                "negative_defaults": "no text overlays",
+                "aspect_ratio": "16:9",
+            },
+        )
+        with caplog.at_level(logging.WARNING, logger=_CONTEXT_LOGGER):
+            ctx = build_export_context(g, "test")
+
+        assert ctx.art_direction is not None
+        assert not _has_event(caplog, "art_direction_partial")
+
+    def test_missing_palette_warns(self, caplog: pytest.LogCaptureFixture) -> None:
+        g = _minimal_graph()
+        g.create_node(
+            "art_direction::main",
+            {
+                "type": "art_direction",
+                "style": "watercolor",
+                "medium": "digital painting",
+                # palette omitted
+                "composition_notes": "wide framing",
+                "negative_defaults": "no text overlays",
+                "aspect_ratio": "16:9",
+            },
+        )
+        with caplog.at_level(logging.WARNING, logger=_CONTEXT_LOGGER):
+            ctx = build_export_context(g, "test")
+
+        # Partial data still propagates (graceful degradation)
+        assert ctx.art_direction is not None
+        assert _has_event(caplog, "art_direction_partial")
+        assert _has_event(caplog, "palette")
+
+    def test_blank_string_field_counts_as_missing(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Whitespace-only style is as bad as missing — both warn."""
+        g = _minimal_graph()
+        g.create_node(
+            "art_direction::main",
+            {
+                "type": "art_direction",
+                "style": "   ",
+                "medium": "digital painting",
+                "palette": ["blue"],
+                "composition_notes": "wide framing",
+                "negative_defaults": "no text overlays",
+                "aspect_ratio": "16:9",
+            },
+        )
+        with caplog.at_level(logging.WARNING, logger=_CONTEXT_LOGGER):
+            build_export_context(g, "test")
+
+        assert _has_event(caplog, "art_direction_partial")
+        assert _has_event(caplog, "'style'")
+
+    def test_multiple_missing_fields_all_reported(self, caplog: pytest.LogCaptureFixture) -> None:
+        """When several fields are missing, the warning must list ALL of them.
+
+        Otherwise the user fixes one, reruns DRESS, hits the warning again
+        for the next field — fragile and unfriendly.
+        """
+        g = _minimal_graph()
+        # Only style + medium present; the other four fields all missing
+        g.create_node(
+            "art_direction::main",
+            {"type": "art_direction", "style": "ink", "medium": "digital"},
+        )
+        with caplog.at_level(logging.WARNING, logger=_CONTEXT_LOGGER):
+            build_export_context(g, "test")
+
+        assert _has_event(caplog, "art_direction_partial")
+        for missing in ("palette", "composition_notes", "negative_defaults", "aspect_ratio"):
+            assert _has_event(caplog, missing), f"missing field {missing!r} not in warning"
+
+    def test_no_art_direction_node_no_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        """DRESS skipped entirely → art_direction=None, no partial warning (R-3.8)."""
+        g = _minimal_graph()
+        with caplog.at_level(logging.WARNING, logger=_CONTEXT_LOGGER):
+            ctx = build_export_context(g, "test")
+        assert ctx.art_direction is None
+        assert not _has_event(caplog, "art_direction_partial")
+
+
+class TestVoiceExtraction:
+    """R-3.3 prep: ExportContext exposes the FILL voice document so the
+    HTML exporter (and future format-specific styling) can react to it.
+    """
+
+    def test_voice_node_extracted(self) -> None:
+        g = _minimal_graph()
+        g.create_node(
+            "voice::voice",
+            {
+                "type": "voice",
+                "raw_id": "voice",
+                "story_title": "The Test",
+                "pov": "third_person_limited",
+                "tense": "past",
+                "voice_register": "literary",
+                "sentence_rhythm": "flowing",
+                "tone_words": ["wry"],
+            },
+        )
+        ctx = build_export_context(g, "test")
+        assert ctx.voice is not None
+        assert ctx.voice["voice_register"] == "literary"
+        assert ctx.voice["sentence_rhythm"] == "flowing"
+        # Internal-only fields stripped
+        assert "type" not in ctx.voice
+        assert "raw_id" not in ctx.voice
+
+    def test_no_voice_node_returns_none(self) -> None:
+        g = _minimal_graph()
+        ctx = build_export_context(g, "test")
+        assert ctx.voice is None

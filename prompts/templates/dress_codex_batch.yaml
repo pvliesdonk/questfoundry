@@ -4,13 +4,15 @@ description: Generate codex entries for a batch of entities
 system: |
   You are creating encyclopedia (codex) entries for entities in an interactive fiction story.
   Codex entries are player-facing — written in-world, revealing information as the player
-  unlocks codewords through gameplay.
+  accumulates state flags through gameplay. (SHIP later projects a subset of state flags
+  as player-visible "codewords" for the gamebook export, but DRESS gates internally on
+  state flag IDs — see dress.md R-3.7.)
 
   ## Creative Vision
   {vision_context}
 
-  ## Available Codewords
-  {codewords}
+  ## Available State Flags
+  {state_flags}
 
   ## Output Schema
   Return a JSON object with an "entities" array. Each element must have:
@@ -20,17 +22,35 @@ system: |
   **entries** (list of objects):
   - title: Short display title for this entry (e.g., character name, location name, faction name)
   - rank: Display order (1 = base knowledge, higher = deeper revelation)
-  - visible_when: List of codeword IDs that must be unlocked to see this entry (empty for rank 1)
+  - visible_when: List of state flag IDs that must all be present to see this entry (empty for rank 1)
   - content: Diegetic text — written in the story's voice, not meta-commentary
 
   {output_language_instruction}
 
+  ## Spoiler Direction (R-3.6, CRITICAL)
+
+  The DIRECTION of a spoiler is what matters. **Rank 1 may be deliberately
+  vague; rank 2+ may fully reveal — but rank 1 MUST NOT leak information
+  that rank 2+ is supposed to gate.** The lower-ranked (earlier-visible)
+  entry must not prematurely disclose content whose reveal is gated behind
+  a higher-ranked tier.
+
+  GOOD (rank 1 vague, rank 2 reveals):
+  - Rank 1 (always visible): "A traveling scholar who offers guidance — though some who travel with him say his counsel cuts deeper than expected."
+  - Rank 2 (gated behind `state_flag::met_aldric`): "Aldric is the traitor who betrayed your mentor."
+
+  BAD (rank 1 leaks the rank-2 reveal):
+  - Rank 1 (always visible): "A mysterious scholar who secretly knows your true identity."
+  - Rank 2 (gated behind `state_flag::met_aldric`): "Aldric is the traitor who betrayed your mentor." → Rank 1 already disclosed the deception angle that rank 2 was supposed to surface.
+
+  Apply this per-entity: for EACH entity in the batch, before writing each rank, ask: "Could this entry be read by a player who has not yet earned the state flags for any higher-ranked tier, and would it spoil what a higher-ranked entry was meant to reveal?" If yes, rewrite the lower-ranked entry to be vaguer. Apply between every adjacent rank pair (1↔2, 2↔3, 3↔4, etc.) — not just rank 1 vs rank 2.
+
   ## Rules
   - Rank 1 entry MUST have empty visible_when (always visible to player)
-  - Higher rank entries should require relevant codewords
+  - Higher rank entries should require relevant state flags
   - Content must be diegetic — written as if it exists in the story world
-  - Do NOT spoil future plot events — each tier reveals only what the player has earned
-  - Codeword IDs in visible_when MUST be from the available codewords list
+  - Apply Spoiler Direction (R-3.6) above — rank 1 must NOT leak rank 2+ reveals
+  - State flag IDs in visible_when MUST be from the Available State Flags list above
   - Each rank must be unique per entity — no duplicate rank numbers
   - Return ONLY valid JSON. No prose before or after.
 
@@ -39,7 +59,7 @@ user: |
   {entities_batch}
 
   Create codex entries for ALL {entity_count} entities listed above.
-  CRITICAL: Use ONLY codeword IDs from the available list. Rank 1 must have empty visible_when.
+  CRITICAL: Use ONLY state flag IDs from the Available State Flags list. Rank 1 must have empty visible_when.
   Return a JSON object with an "entities" array containing one element per entity.
 
 components: []

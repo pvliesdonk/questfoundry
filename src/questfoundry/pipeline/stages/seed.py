@@ -14,6 +14,8 @@ Requires BRAINSTORM stage to have completed (reads brainstorm from graph).
 
 from __future__ import annotations
 
+import inspect
+from collections import Counter
 from pathlib import Path  # noqa: TC003 - used at runtime for Graph.load()
 from typing import TYPE_CHECKING, Any
 
@@ -186,11 +188,15 @@ class SeedStage:
         """
         self.project_path = project_path
 
-    def _get_brainstorm_context(self, project_path: Path) -> str:
+    def _get_brainstorm_context(self, project_path: Path, *, graph: Graph | None = None) -> str:
         """Load and format brainstorm from graph.
 
         Args:
             project_path: Path to project directory.
+            graph: Pre-loaded graph to reuse. If None, loads from
+                ``project_path``. The keyword exists so ``execute()``
+                can avoid a second I/O round-trip when the graph is
+                already in hand from the entry-validation step.
 
         Returns:
             Formatted brainstorm context string.
@@ -198,7 +204,8 @@ class SeedStage:
         Raises:
             SeedStageError: If brainstorm not found in graph.
         """
-        graph = Graph.load(project_path)
+        if graph is None:
+            graph = Graph.load(project_path)
 
         # Check for entities (indicates brainstorm completed)
         # Get dilemma nodes from graph
@@ -287,8 +294,27 @@ class SeedStage:
         total_llm_calls = 0
         total_tokens = 0
 
-        # Load brainstorm context from graph
-        brainstorm_context = self._get_brainstorm_context(resolved_path)
+        # Load the graph once and reuse it for both the entry validation
+        # and the brainstorm-context build.
+        graph = Graph.load(resolved_path)
+
+        # BRAINSTORM Stage Output Contract: validate the upstream artifact
+        # before SEED phases consume it. Catches missing entities,
+        # incomplete dilemmas, and other contract violations at the seam
+        # rather than at the downstream-failure site (#1347). The deferred
+        # local import matches the pattern used by GROW/FILL/DRESS/SHIP
+        # entry validators so test bypass uses an autouse fixture.
+        from questfoundry.graph.brainstorm_validation import validate_brainstorm_output
+
+        entry_errors = validate_brainstorm_output(graph)
+        if entry_errors:
+            raise SeedStageError(
+                f"BRAINSTORM output validation failed ({len(entry_errors)} "
+                f"error(s)):\n" + "\n".join(f"  - {e}" for e in entry_errors)
+            )
+
+        # Load brainstorm context from the same graph instance.
+        brainstorm_context = self._get_brainstorm_context(resolved_path, graph=graph)
         log.debug("seed_brainstorm_loaded", context_length=len(brainstorm_context))
 
         # Get language instruction (empty string for English)
@@ -336,8 +362,11 @@ class SeedStage:
         if unload_after_discuss is not None:
             await unload_after_discuss()
 
-        # Load graph once for summarize manifest and serialize validation
-        graph = Graph.load(resolved_path)
+        # Reuse the graph loaded for entry validation. Discuss runs LLM
+        # calls with research-only tools (corpus search, etc.) and does
+        # not mutate the graph, so the same in-memory instance is fresh
+        # enough for the summarize manifest and serialize validation
+        # that follow.
 
         # Outer loop: conversation-level retry for semantic errors
         # Each iteration runs summarize -> serialize; on semantic errors,
@@ -465,7 +494,7 @@ class SeedStage:
         # the arc limit.  Soft/flavor dilemmas add mid-story variety without
         # multiplying endings.
         original_arc_count = compute_arc_count(result.artifact)
-        size_profile = kwargs.get("size_profile") or get_size_profile("standard")
+        size_profile = kwargs.get("size_profile") or get_size_profile("medium")
         max_arcs = size_profile.max_arcs
         pruned_artifact = prune_to_arc_limit(
             result.artifact,
@@ -521,25 +550,40 @@ class SeedStage:
         # Convert to dict for return
         artifact_data = pruned_artifact.model_dump()
 
+        # R-6.4: Record human approval on the Path Freeze artifact.
+        # Non-interactive runs imply human pre-approval at invocation time.
+        # Interactive runs must explicitly approve via the prompt below.
+        if not interactive:
+            artifact_data["human_approved_paths"] = True
+        else:
+            # Minimal approval gate — full R-6.4 loop-back UX deferred.
+            # See follow-up issue for per-phase loop-back UI.
+            approval_prompt = "SEED Path Freeze: approve and continue to GROW? (y/n): "
+            if on_assistant_message is not None:
+                _ret = on_assistant_message(approval_prompt)
+                if inspect.iscoroutine(_ret):
+                    await _ret  # pyright: ignore[reportGeneralTypeIssues]
+            if user_input_fn is not None:
+                response = (await user_input_fn()) or ""
+                if response.strip().lower().startswith("y"):
+                    artifact_data["human_approved_paths"] = True
+                else:
+                    log.info("seed_paths_rejected_by_human")
+                    raise SeedStageError("Path Freeze rejected by human — re-run SEED to revise.")
+            else:
+                # interactive=True but no user_input_fn — test/headless mode.
+                log.warning(
+                    "seed_approval_fallback_no_input_fn",
+                    reason="interactive=True but no user_input_fn; auto-approving",
+                )
+                artifact_data["human_approved_paths"] = True
+
         # Log summary statistics
         entity_count = len(artifact_data.get("entities", []))
         path_count = len(artifact_data.get("paths", []))
         beat_count = len(artifact_data.get("initial_beats", []))
 
-        # Advisory warning: check beats-per-path ratio
-        if path_count > 0:
-            avg_beats = beat_count / path_count
-            if avg_beats < 3:
-                log.warning(
-                    "seed_low_beat_count",
-                    total_beats=beat_count,
-                    paths=path_count,
-                    avg_per_path=round(avg_beats, 1),
-                    message=(
-                        f"Average {avg_beats:.1f} beats/path (expected ~4). "
-                        f"Some models under-produce beats due to brevity optimization."
-                    ),
-                )
+        _log_beat_summary_stats(artifact_data)
 
         log.info(
             "seed_stage_completed",
@@ -552,6 +596,62 @@ class SeedStage:
         )
 
         return artifact_data, total_llm_calls, total_tokens
+
+
+def _log_beat_summary_stats(artifact_data: dict[str, Any]) -> None:
+    """Advisory warnings about Y-shape beat counts.
+
+    Under Y-shape, beats come in two kinds:
+    - Shared pre-commit beats (``also_belongs_to`` set) — only multi-path
+      dilemmas need them; they form the chain that diverges into per-path
+      commit beats. Single-path soft dilemmas (locked-dilemma shadow) have
+      no Y-divergence and need no shared beat.
+    - Post-commit beats (``also_belongs_to`` null) — one per path, including
+      the commit and its consequences.
+
+    A healthy SEED output has ~1-2 shared beats per *multi-path* dilemma
+    and ~2-3 post-commit beats per path. Warn below these thresholds.
+    """
+    beats = artifact_data.get("initial_beats", [])
+    paths = artifact_data.get("paths", [])
+    path_count = len(paths)
+
+    # Multi-path dilemmas are the only ones that need shared pre-commit beats
+    # — single-path soft dilemmas have no Y-divergence to set up.
+    paths_per_dilemma = Counter(p.get("dilemma_id") for p in paths if p.get("dilemma_id"))
+    multi_path_dilemmas = sum(1 for n in paths_per_dilemma.values() if n >= 2)
+
+    shared = [b for b in beats if b.get("also_belongs_to")]
+    post_commit = [b for b in beats if not b.get("also_belongs_to")]
+
+    shared_avg = (len(shared) / multi_path_dilemmas) if multi_path_dilemmas else 0.0
+    post_avg = (len(post_commit) / path_count) if path_count else 0.0
+
+    if multi_path_dilemmas > 0 and shared_avg < 1.0:
+        log.warning(
+            "seed_low_shared_beat_count",
+            shared_beats=len(shared),
+            multi_path_dilemmas=multi_path_dilemmas,
+            shared_avg=round(shared_avg, 2),
+            message=(
+                f"{shared_avg:.1f} shared pre-commit beats per multi-path "
+                f"dilemma (expected ≥1). Every multi-path dilemma should "
+                f"set up the choice with at least one shared beat before "
+                f"the commit. Single-path soft dilemmas are excluded."
+            ),
+        )
+    if post_avg < 2.0 and path_count > 0:
+        log.warning(
+            "seed_low_post_commit_beat_count",
+            post_commit_beats=len(post_commit),
+            paths=path_count,
+            post_avg=round(post_avg, 2),
+            message=(
+                f"{post_avg:.1f} post-commit beats/path (expected ≥2). "
+                f"Every path needs the commit beat plus at least one "
+                f"consequence beat to prove the answer."
+            ),
+        )
 
 
 # Factory function to create stage with project path

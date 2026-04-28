@@ -97,15 +97,50 @@ dilemmas_prompt: |
   Note: `explored` and `unexplored` contain raw answer IDs (no prefix) since
   they are local to each dilemma.
 
-  ## DEFAULT ANSWER RULE (MOST IMPORTANT RULE)
+  ## MINIMUM BRANCHING REQUIREMENT (HARD CONSTRAINT — READ FIRST)
+
+  At least 2 dilemmas MUST have ALL their answers in `explored` (nothing in `unexplored`).
+  This is required for the story to have meaningful branching. A story with fewer than
+  2 fully-explored dilemmas produces a near-linear story and WILL BE REJECTED by validation.
+
+  BAD (rejected): only default answers explored → no real branching → pipeline fails
+  ```json
+  {"dilemma_id": "dilemma::host_benevolent_or_selfish", "explored": ["protector"], "unexplored": ["manipulator"]},
+  {"dilemma_id": "dilemma::artifact_safe_or_dangerous", "explored": ["safe"], "unexplored": ["dangerous"]}
+  ```
+  GOOD (valid): 2 dilemmas fully explored → 4 arcs → passes
+  ```json
+  {"dilemma_id": "dilemma::host_benevolent_or_selfish", "explored": ["protector", "manipulator"], "unexplored": []},
+  {"dilemma_id": "dilemma::artifact_safe_or_dangerous", "explored": ["safe", "dangerous"], "unexplored": []}
+  ```
+
+  ## DEFAULT ANSWER RULE
   In the manifest, one answer per dilemma is marked `(default)`.
   `(default)` = the canonical story spine. It MUST ALWAYS be in `explored`.
   You may NEVER put the `(default)` answer in `unexplored`.
+  The alternative (non-default) answer MAY ALSO be in `explored` — and for binary
+  dilemmas (2 answers), it SHOULD be in `explored` most of the time.
 
   EXAMPLE: answers are [`reliable` (default), `falsified`]
-  - CORRECT: `"explored": ["reliable", "falsified"], "unexplored": []`
-  - CORRECT: `"explored": ["reliable"], "unexplored": ["falsified"]`
+  - CORRECT: `"explored": ["reliable", "falsified"], "unexplored": []`  ← PREFERRED for binary
+  - ALSO CORRECT: `"explored": ["reliable"], "unexplored": ["falsified"]`  ← only if you must limit scope
   - WRONG:   `"explored": ["falsified"], "unexplored": ["reliable"]`  <-- default NOT in explored!
+
+  ## When to Leave an Answer Unexplored
+
+  "Soft" dilemmas (only the default explored) add flavor without adding branching arcs.
+  Use them sparingly — at most 30-50% of your dilemmas. The rest MUST be fully explored
+  to drive branching. Leaving the alternative unexplored is a deliberate scope reduction,
+  not a default behavior.
+
+  GOOD branching distribution for 8 dilemmas:
+  - 4 fully explored (both answers in `explored`): creates 8 branching arcs
+  - 4 default-only (only default in `explored`): adds 4 flavor arcs
+  - TOTAL: 12 arcs, 8 branching — passes validation, rich story
+
+  BAD distribution for 8 dilemmas:
+  - 0 fully explored: 8 arcs total, all default-only, no branching
+  - 0 arcs with real choices → FAILS validation
 
   ## Rules
   - dilemma_id must include the `dilemma::` prefix and match EXACTLY an ID from the manifest
@@ -122,47 +157,6 @@ dilemmas_prompt: |
   WRONG: `explored: ["opt_a"]` but path uses `answer_id: "opt_b"`
   RIGHT: `explored: ["opt_a", "opt_b"]` and paths use those exact IDs
 
-  ## Tension Balance: How Many Answers to Explore
-
-  Exploring more answers creates more paths, more branching, and a larger story.
-  Leaving answers unexplored creates dramatic shadows — tensions that are felt
-  but never resolved, adding subtext and replayability.
-
-  GOOD tension balance:
-  - Dilemma with 2 answers: explore BOTH (2 paths). This is the default —
-    binary dilemmas are designed to create two-path branching.
-  - Dilemma with 3+ answers: explore 2, leave 1 unexplored. The unexplored
-    answer becomes an intriguing "road not taken" that enriches the narrative.
-
-  BAD tension balance:
-  - Exploring ALL answers of every dilemma: creates too many paths, dilutes
-    each path's narrative weight. The story becomes wide but shallow.
-  - Exploring only 1 answer per dilemma: eliminates meaningful branching.
-    Players have no real choice, defeating the purpose of the dilemma.
-  - Leaving ALL answers unexplored: no paths are created. The dilemma has
-    no gameplay impact.
-
-  GUIDELINE: Aim for 2-4 total paths. For a vignette scope, 2 paths is
-  ideal. For a full story, 3-4 paths provide rich branching without
-  overwhelming the GROW stage.
-
-  ## MINIMUM BRANCHING REQUIREMENT (HARD CONSTRAINT)
-
-  At least 2 dilemmas MUST have BOTH answers in `explored`. A story where fewer
-  than 2 dilemmas are fully explored produces a linear story with no real player
-  choices and WILL BE REJECTED.
-
-  BAD (rejected): only 1 dilemma has both answers explored → 1 arc → pipeline fails
-  ```json
-  {"dilemma_id": "dilemma::host_benevolent_or_selfish", "explored": ["protector"], "unexplored": ["manipulator"]},
-  {"dilemma_id": "dilemma::artifact_safe_or_dangerous", "explored": ["safe"], "unexplored": ["dangerous"]}
-  ```
-  GOOD (valid): 2 dilemmas fully explored → 4 arcs → passes
-  ```json
-  {"dilemma_id": "dilemma::host_benevolent_or_selfish", "explored": ["protector", "manipulator"], "unexplored": []},
-  {"dilemma_id": "dilemma::artifact_safe_or_dangerous", "explored": ["safe", "dangerous"], "unexplored": []}
-  ```
-
   ## What NOT to Do
   - Do NOT include the same dilemma_id more than once — each dilemma must appear EXACTLY once
   - Do NOT skip dilemmas because they aren't mentioned in the brief
@@ -171,6 +165,13 @@ dilemmas_prompt: |
   - Do NOT leave `explored` empty if you plan to create paths for that dilemma
   - Do NOT omit the `dilemma::` prefix from dilemma_id
   - Do NOT put the `(default)` answer in `unexplored` — it MUST be in `explored`
+  - Do NOT explore only the default answer for every dilemma — that produces no branching
+
+  ## FINAL CHECK before returning
+  Count how many of your dilemmas have ALL answers in `explored` (nothing in `unexplored`).
+  If that count is less than 2, GO BACK and fully explore at least 2 dilemmas
+  by moving ALL their answers from `unexplored` into `explored`.
+  A story with fewer than 2 fully-explored dilemmas is REJECTED by validation.
 
   ## Output
   Return ONLY valid JSON with the "dilemmas" array.
@@ -398,234 +399,105 @@ consequences_prompt: |
   Return ONLY valid JSON with the "consequences" array.
 
 # Section 5: Initial Beats
-beats_prompt: |
-  You are generating INITIAL BEATS for a SEED stage.
+shared_beats_prompt: |
+  You are generating SHARED PRE-COMMIT BEATS for one dilemma.
 
-  ## Generation Requirements (CRITICAL)
-  Generate {size_beats_per_path} initial beats PER PATH.
-  Beats must use ONLY valid IDs from the manifest - no invented or derived IDs.
+  ## YOUR DILEMMA (MEMORIZE THIS)
 
-  ## CRITICAL: ID CONSTRAINTS (read first!)
+  Dilemma ID: `{dilemma_id}`
+  Question: {dilemma_question}
 
-  The brief contains valid ID lists. You MUST copy IDs exactly from these lists:
-  - `## VALID PATH IDs` - use ONLY these in `path_id` field
-  - `### Entity IDs` - use ONLY these in `entities` and `location` fields
+  ## YOUR TWO EXPLORED PATHS
 
-  ## PATH ID vs DILEMMA ID: THE CRITICAL DISTINCTION
+  These beats MUST belong to BOTH of these paths:
+  - `path_id` (primary):     `{path_id}`
+  - `also_belongs_to` (sibling): `{also_belongs_to}`
 
-  SHAPE RECOGNITION (memorize this):
-  - **Path IDs** are HIERARCHICAL: `path::dilemma_name__answer` (contains `__` double underscore)
-  - **Dilemma IDs** are BINARY questions: `dilemma::subject_optionA_or_optionB` (contains `_or_`)
-  - **Entity IDs** have CATEGORY prefix: `character::name`, `location::place`, `object::item`
+  ## What Are Shared Pre-Commit Beats?
+  In QuestFoundry v5, every dilemma is Y-shaped:
+    - SHARED pre-commit beats: experienced by every player regardless of
+      which answer they later choose. These beats set up the choice from
+      a neutral stance — advance tension, reveal truths, complicate. They
+      belong to BOTH explored paths of the dilemma.
+    - A single COMMIT beat: the fork where one path splits into two.
+    - Per-path post-commit beats: prove one answer. (Generated by a separate call.)
 
-  WRONG: Using `dilemma::...` in the `path_id` field
-  RIGHT: Using `path::...` in the `path_id` field
+  This call generates ONLY the shared pre-commit beats. Do NOT generate
+  commit beats or post-commit beats here.
 
-  WRONG: Using `path::...` in the `dilemma_impacts.dilemma_id` field
-  RIGHT: Using `dilemma::...` in the `dilemma_impacts.dilemma_id` field
+  ## Generation Requirements
+  For the dilemma under construction: generate {size_shared_beats_per_dilemma} shared
+  pre-commit beats (1–2 is the sweet spot for most stories).
 
-  If you see `__` (double underscore), it's a PATH. If you see `_or_`, it's a DILEMMA.
-
-  WRONG examples that WILL FAIL:
-  - `"clock_distortion"` - NOT a valid path (derived from concept)
-  - `"the_garden"` - WRONG, use `"garden"` (no prefix)
-  - `"murder_intent"` - This is a dilemma ID, not a path ID
-  - `"seed_of_stillness"` as dilemma_id - WRONG, this is an entity (no `_or_` = not a dilemma)
+  Each shared beat:
+    - **MUST have `also_belongs_to` = `{also_belongs_to}` (the sibling path above) — REQUIRED.** This is the single most-frequently-missed field; setting it correctly is what makes the beat a "shared" beat. Omitting it converts the beat to a single-path beat and breaks the Y-shape.
+    - MUST have `path_id` = `{path_id}` (the primary path above).
+    - MUST have `effect` in {{advances, reveals, complicates}}. NEVER `commits`.
+    - MUST reference the current dilemma in `dilemma_impacts[0].dilemma_id`.
+    - SHOULD explore the dilemma's central tension without privileging either answer.
 
   ## Schema
-  Return a JSON object with an "initial_beats" array:
   ```json
-  {
+  {{
     "initial_beats": [
-      {
-        "beat_id": "unique_beat_id",
-        "summary": "What happens in this beat",
-        "path_id": "path::[your_path_id]",
+      {{
+        "beat_id": "shared_setup_dilemma_name_01",
+        "summary": "A beat that sets up the choice without committing to either answer.",
+        "path_id": "{path_id}",
+        "also_belongs_to": "{also_belongs_to}",
         "dilemma_impacts": [
-          {
-            "dilemma_id": "dilemma::[your_dilemma_id]",
+          {{
+            "dilemma_id": "{dilemma_id}",
             "effect": "advances",
-            "note": "Explanation of the impact"
-          }
+            "note": "Explanation of what this beat advances."
+          }}
         ],
-        "entities": ["character::[character_id]", "location::[location_id]"],
-        "location": "location::[location_id]",
-        "location_alternatives": ["location::[other_location]"],
-        "temporal_hint": {
-          "relative_to": "dilemma::[other_dilemma_id]",
-          "position": "before_commit"
-        }
-      }
+        "entities": ["character::some_character"],
+        "location": "location::some_location",
+        "location_alternatives": []
+      }}
     ]
-  }
+  }}
   ```
 
-  **Use IDs from YOUR story's manifest** - the examples above show the FORMAT only.
+  ## WHAT NOT TO DO
+  - Do NOT set `effect: commits` on any shared beat.
+  - Do NOT leave `also_belongs_to` null — set it to `{also_belongs_to}`.
+  - Do NOT set `also_belongs_to` to a path from a DIFFERENT dilemma
+    (same-dilemma constraint; Story Graph Ontology Part 8 guard rail 1).
+  - Do NOT omit a shared beat for this dilemma — every Y-shape needs at least one.
+  - Do NOT use path IDs from other dilemmas.
 
-  ## location_alternatives — GROW intersection hint (IMPORTANT)
-
-  GROW uses `location_alternatives` to find beats from DIFFERENT paths that could
-  share a scene at the same physical location. If your beat at `location::harbor`
-  lists `location_alternatives: ["location::market_district"]`, GROW knows this
-  beat could be relocated to the market district and thus co-occur with a path-B
-  beat that is already set there.
-
-  Think of it as: "Where ELSE could this scene plausibly take place without
-  breaking its logic?" List every location from the Entity IDs that would make
-  narrative sense as an alternative setting. Leave it empty ONLY when the beat
-  is so specific to its primary location that no other setting could work.
-
-  EXAMPLE (format — use your story's actual location IDs):
-  A beat where two characters argue about a stolen document is set at
-  `location::archive_hall`. It could equally happen at `location::council_chamber`
-  or `location::private_study` — so list those as alternatives. A beat where a
-  character jumps from a specific cliff has no viable alternative location, so
-  leave `location_alternatives` empty.
-
-  ```json
-  "location": "location::archive_hall",
-  "location_alternatives": ["location::council_chamber", "location::private_study"]
+  ### `also_belongs_to` type contrast
+  This field is the most-frequently-missed value. Type rules:
   ```
-
-  The brief includes a "### Sibling paths (for location intersection reasoning)"
-  section with sibling path descriptions. Use those descriptions to infer where
-  their beats are likely set, then list those inferred locations as alternatives
-  when the narrative allows — that is exactly where GROW looks for intersections.
-
-  ## Rules
-  - effect must be exactly "advances", "reveals", "commits", or "complicates"
-  - All ID fields must use the correct type (see FIELD → ID TYPE MAPPING below)
-  - location can be null
-  - location_alternatives: list every plausible alternative location; empty ONLY
-    when the beat is physically inseparable from its primary location
-  - Generate {size_beats_per_path} beats for EACH path in the VALID PATH IDs list
-  - dilemma_impacts MUST use dilemma IDs from the Dilemma IDs list — NOT entity names
-  - temporal_hint: for EACH beat, ask: "Does this beat's pacing depend on where another
-    dilemma stands?" Add a temporal_hint whenever EITHER condition is true:
-    (a) This beat reveals information that another dilemma's commit point depends on —
-        the player must see this beat BEFORE they face that dilemma's decision.
-    (b) This beat's emotional impact (grief, triumph, dread) lands better because of
-        where another dilemma's key moment falls — e.g., the relief hits harder
-        AFTER the other dilemma's tension resolves.
-    EXAMPLE: Story has dilemma::protect_secret and dilemma::trust_the_stranger.
-    A beat on path::trust_the_stranger__reveal where the stranger confesses a past
-    crime should carry:
-      `"temporal_hint": {"relative_to": "dilemma::protect_secret", "position": "before_commit"}`
-    because the player needs to know about the stranger's past BEFORE they decide
-    whether to protect the secret on the other dilemma.
-    - `relative_to` MUST be a dilemma ID that is DIFFERENT from the beat's own parent dilemma.
-      BAD: beat belongs to `dilemma::memory_vial_viewed_or_disowned` and sets
-           `relative_to: "dilemma::memory_vial_viewed_or_disowned"` ← SAME dilemma, FORBIDDEN.
-      GOOD: beat belongs to `dilemma::memory_vial_viewed_or_disowned` and sets
-            `relative_to: "dilemma::shattered_compass_points_or_fails"` ← different dilemma, correct.
-      If you cannot think of a DIFFERENT dilemma to relate this beat to, omit temporal_hint entirely.
-    - `position` must be: `before_commit`, `after_commit`, `before_introduce`, or `after_introduce`
-    - Omit only when the beat's placement is genuinely independent of all other dilemmas
-
-  ## DILEMMA IMPACT CONSTRAINT (MOST IMPORTANT RULE)
-
-  Every beat belongs to a path. Every path has a PARENT DILEMMA (shown in the
-  PATH → DILEMMA MAPPING in your brief). The beat's dilemma_impacts MUST include
-  the parent dilemma of the beat's path.
-
-  RULE: Look up the beat's path in PATH → DILEMMA MAPPING. Use THAT dilemma_id.
-
-  EXAMPLE (format only - use YOUR story's IDs):
-  - If path `path::keeper_faithful_or_corrupt__faithful` maps to `dilemma::keeper_faithful_or_corrupt`
-  - Then ALL beats in that path MUST have a dilemma_impact with
-    `dilemma_id: "dilemma::keeper_faithful_or_corrupt"`
-
-  WRONG: Picking a dilemma because it "feels related" to the beat's content.
-  WRONG: Using the same dilemma for all beats regardless of path.
-  RIGHT: Using the PATH → DILEMMA MAPPING to find the correct dilemma.
-
-  A beat MAY have additional dilemma_impacts for other dilemmas, but the FIRST
-  dilemma_impact MUST be the path's parent dilemma.
-
-  ## COMMITS BEATS REQUIREMENT (CRITICAL)
-
-  Each path MUST have at least one beat with `effect: "commits"` — and that
-  commits beat MUST reference the path's OWN parent dilemma (from the mapping).
-
-  WRONG: All commits beats using the same dilemma_id.
-  RIGHT: Each path's commits beat uses that path's own parent dilemma.
-
-  EXAMPLE (format only):
-  - Path `path::keeper_faithful_or_corrupt__faithful` → commits beat uses `dilemma::keeper_faithful_or_corrupt`
-  - Path `path::artifact_natural_or_crafted__natural` → commits beat uses `dilemma::artifact_natural_or_crafted`
-  - Each path resolves ITS OWN dilemma, not someone else's.
-
-  ## CONSEQUENCE BEAT REQUIREMENT (HARD CONSTRAINT)
-
-  Every path MUST have at least one beat AFTER the commits beat — a consequence
-  beat showing what the choice led to. A path that ends at commits has no payoff
-  and WILL BE REJECTED.
-
-  BAD (rejected): path ends at commits — no consequence shown
-  `[{effect: "advances"}, {effect: "commits"}]` ← pipeline fails
-
-  GOOD (valid): aftermath beat follows the decision
-  `[{effect: "advances"}, {effect: "commits"}, {effect: "advances"}]` ← passes
-
-  ## FIELD → ID TYPE MAPPING (prevents all ID confusion)
-
-  Each field accepts ONLY one type of ID. Copy from the correct manifest section:
-
-  | Field | Prefix | Source List | Shape |
-  |-------|--------|-------------|-------|
-  | `path_id` | `path::` | VALID PATH IDs | hierarchical: `dilemma__answer` |
-  | `dilemma_impacts.dilemma_id` | `dilemma::` | Dilemma IDs | long: `subject_X_or_Y` |
-  | `entities[]` | `character::`, `object::`, `faction::` | Entity IDs (non-locations) | varies |
-  | `location` | `location::` | Entity IDs (locations only) | varies |
-
-  Path IDs are hierarchical (dilemma__answer). Dilemma IDs are binary questions.
-
-  ## HOW TO TELL DILEMMA IDs FROM ENTITY IDs (CRITICAL)
-
-  Dilemma IDs ALWAYS contain `_or_` in their name (e.g., `host_benevolent_or_selfish`).
-  Entity IDs NEVER contain `_or_`.
-
-  If an ID does NOT have `_or_` in it, it is an ENTITY — not a dilemma.
-  Do NOT use entity IDs like `seed_of_stillness` as dilemma_ids — `_of_` is NOT `_or_`.
-
-  Do NOT put a path ID in dilemma_impacts or a dilemma ID in paths.
-  Do NOT put a location in entities or a non-location in location.
-  Do NOT invent IDs - copy exactly from the manifest.
-
-  ## BEAT COUNT PRESERVATION (CRITICAL)
-
-  If you receive validation feedback about invalid IDs, DO NOT reduce your beat count.
-  Fix ONLY the invalid ID references using the table above.
-  Your beat count should stay at {size_beats_per_path} beats per path.
-
-  ## What NOT to Do
-  - Do NOT use entity IDs as dilemma_ids (entity IDs lack `_or_`)
-  - Do NOT derive path IDs from dilemma names or concepts
-  - Do NOT add prefixes like "the_" to entity IDs
-  - Do NOT generate fewer than 2 beats per path
-  - Do NOT reference IDs not in the manifest lists
+  GOOD: "also_belongs_to": "{also_belongs_to}"        ← plain string, copy exactly
+  BAD:  "also_belongs_to": null                       ← rejected — this is a SHARED beat
+  BAD:  "also_belongs_to": ["{also_belongs_to}"]      ← rejected — must be a string, not a list
+  BAD:  (field omitted entirely)                      ← rejected — field is REQUIRED
+  ```
 
   ## FINAL CHECK (verify before output)
-  Before returning JSON, check each beat one by one:
-  1. Every `path_id` appears in VALID PATH IDs (hierarchical format)
-  2. Every `dilemma_impacts.dilemma_id` appears in Dilemma IDs (long binary questions)
-  3. Every `dilemma_impacts.dilemma_id` contains `_or_` — if it doesn't, you used an entity ID by mistake
-  4. For EACH beat: look up the beat's `path_id` in PATH → DILEMMA MAPPING.
-     Does the beat's dilemma_impacts include that mapped dilemma? If NO, fix it.
-  5. For EACH path: does at least one of its beats have `effect: "commits"`
-     with that path's parent dilemma? If NO, add or fix one.
-  6. Every `entities` item appears in Entity IDs (characters, objects, factions)
-  7. `location` is a location-category entity from Entity IDs
-  8. No invented IDs - copy-paste from the manifest, don't retype
+  For EACH beat you generate:
+  1. `path_id` is `{path_id}`
+  2. `also_belongs_to` is `{also_belongs_to}`
+  3. `dilemma_impacts[0].dilemma_id` is `{dilemma_id}`
+  4. `effect` is NOT `commits`
 
   ## Output
   Return ONLY valid JSON with the "initial_beats" array.
 
-# Section 5b: Per-Path Initial Beats (used by per-path serialization)
+# Section 5b: Per-Path Post-Commit Beats (Y-shape — one call per path)
 # This prompt generates beats for a single path with a fixed dilemma_id.
 # The path_id, dilemma_id, and entity context are injected at runtime.
 per_path_beats_prompt: |
-  You are generating INITIAL BEATS for ONE SPECIFIC PATH.
+  You are generating POST-COMMIT PER-PATH BEATS for a single path.
+
+  ## What Are Post-Commit Per-Path Beats?
+  This path has already been set up by shared pre-commit beats. Your job
+  is to generate the COMMIT beat (where this path forks from the sibling)
+  plus the aftermath beats that prove THIS answer. All beats in this call
+  are single-membership — `also_belongs_to` MUST be null.
 
   ## YOUR PATH ID (MEMORIZE THIS)
 
@@ -678,7 +550,7 @@ per_path_beats_prompt: |
   4. Include at least one beat with `effect: "commits"` for `{dilemma_id}`
 
   ## Schema
-  Return a JSON object with an "initial_beats" array of {size_beats_per_path} beats:
+  Return a JSON object with an "initial_beats" array of {size_post_commit_beats_per_path} beats:
   ```json
   {{
     "initial_beats": [
@@ -686,6 +558,7 @@ per_path_beats_prompt: |
         "beat_id": "{path_name}_beat_01",
         "summary": "What happens in this beat",
         "path_id": "{path_id}",
+        "also_belongs_to": null,
         "dilemma_impacts": [
           {{
             "dilemma_id": "{dilemma_id}",
@@ -693,13 +566,14 @@ per_path_beats_prompt: |
             "note": "Explanation"
           }}
         ],
-        "entities": ["character::character_id"],
-        "location": "location::location_id",
-        "location_alternatives": ["location::other_location_if_scene_could_move_there"],
+        "entities": ["character::actual_character_id"],
+        "location": "location::actual_location_id",
+        "location_alternatives": ["location::another_actual_location_id"],
         "temporal_hint": {{
-          "relative_to": "dilemma::[other_dilemma_id]",
+          "relative_to": "dilemma::another_actual_dilemma_id",
           "position": "before_commit"
         }}
+        // ↑ Replace `actual_*` / `another_actual_*` with REAL IDs from your story's manifest. Square-bracket placeholders like `[other_dilemma_id]` are NOT template syntax — emitting them literally will fail validation.
       }}
     ]
   }}
@@ -738,7 +612,7 @@ per_path_beats_prompt: |
   Valid positions: `before_commit`, `after_commit`, `before_introduce`, `after_introduce`
 
   ## Rules
-  - Generate exactly {size_beats_per_path} beats for path `{path_id}`
+  - Generate exactly {size_post_commit_beats_per_path} beats for path `{path_id}`
   - Beat IDs MUST start with `{path_name}_beat_` (e.g., `{path_name}_beat_01`)
   - EVERY beat must have `path_id: "{path_id}"`
   - EVERY beat must have at least one dilemma_impact for `{dilemma_id}`
@@ -778,17 +652,21 @@ per_path_beats_prompt: |
   - Do NOT make commits the last beat — a consequence beat MUST follow it
   - Do NOT use IDs not in the manifest
   - Do NOT put the dilemma ID in the `path_id` field (see COMMON MISTAKE above)
+  - Do NOT set `also_belongs_to` — these are post-commit beats, single-membership only
 
   ## FINAL VERIFICATION (check before outputting)
 
   For EACH beat you generate, verify:
   1. `path_id` is `{path_id}`
   2. `dilemma_impacts[0].dilemma_id` is `{dilemma_id}`
+  3. `also_belongs_to` is `null` (these are POST-COMMIT beats, exclusive
+     to one path — never shared)
 
   If you see a dilemma ID in your `path_id` value, YOU MADE A MISTAKE. Fix it.
+  If `also_belongs_to` is anything other than `null`, YOU MADE A MISTAKE. Fix it.
 
   ## Output
-  Return ONLY valid JSON with the "initial_beats" array ({size_beats_per_path} beats).
+  Return ONLY valid JSON with the "initial_beats" array ({size_post_commit_beats_per_path} beats).
 
 # Section 7: Dilemma Convergence Analysis (post-prune)
 dilemma_analyses_prompt: |
@@ -1021,7 +899,9 @@ dilemma_analyses_prompt: |
      classify the strongest dilemma as hard. If more than 3 are hard:
      demote the weakest to soft.
   2. SOFT count is the majority.
-  3. FLAVOR count is 0-2.
+  3. Every entry has `dilemma_role` set to exactly `hard` or `soft` —
+     no other values are accepted (R-7.1). The legacy `flavor` role was
+     removed; never emit it.
   4. At most 2 have `ending_salience: "high"`.
   5. Every dilemma with `ending_tone` set also has `ending_salience: "high"`.
   6. At most 2 have `residue_weight: "heavy"`.
@@ -1041,16 +921,16 @@ dilemma_analyses_prompt: |
   ## Output
   Return ONLY valid JSON with the "dilemma_analyses" array. Classify ALL dilemmas.
 
-# Section 8: Dilemma Ordering Relationships (post-prune, Doc 3)
+# Section 8: Dilemma Ordering Relationships (post-prune, Story Graph Ontology)
 dilemma_relationships_prompt: |
-  You are classifying the temporal ordering between ALL dilemma pairs for a SEED stage.
+  You are classifying the temporal ordering of relevant dilemma pairs for a SEED stage.
 
-  Each dilemma pair has a structural relationship that affects how GROW
-  interleaves their beats. You MUST classify EVERY pair listed in the Context.
-  `concurrent` is the default when no structural nesting or sequencing exists,
-  but you must still include the pair with `ordering: "concurrent"` — do NOT
-  skip it. An empty list means NOTHING was classified and is only correct when
-  the Context says "fewer than 2 surviving dilemmas."
+  Each ordering edge tells GROW how to interleave the beats of two dilemmas.
+  Declare an edge **only when the relationship matters** — pairs that share
+  entities, have a causal dependency, or have explicit authorial ordering
+  intent. Pairs you don't classify default to implicit `concurrent` (free
+  interleaving with no temporal hints), so omitting an unambiguous pair is
+  the right move; do not pad the output to make it exhaustive.
 
   ## Ordering Types
 
@@ -1059,9 +939,11 @@ dilemma_relationships_prompt: |
     wraps the mentor's betrayal subplot (B) — the mystery is present from the
     start and resolves at the climax, while the betrayal plays out in the middle."
   - **concurrent**: Neither wraps the other. Both are active simultaneously,
-    interleaving but without nesting. Use this when no clear nesting or
-    sequencing exists. Example: "both the romance and the political intrigue
-    develop in parallel."
+    interleaving but without nesting. Declare this *explicitly* only when the
+    pair shares entities or has causal interaction worth recording — otherwise
+    leave it out. Example: "the romance and the political intrigue both
+    revolve around the council, so their beats must alternate to keep both
+    threads visible."
   - **serial**: A resolves (commits and converges) before B introduces. The
     dilemmas never structurally interact. Example: "the escape subplot resolves
     in Act 1 before the revenge plot begins in Act 2."
@@ -1069,23 +951,42 @@ dilemma_relationships_prompt: |
   NOTE: shared_entity is NOT an ordering type — it is derived automatically
   from entity anchoring in the graph. Do NOT classify pairs as shared_entity.
 
+  ## What to Classify
+
+  - **Relevant pairs (default candidates):** every pair listed under "Relevant
+    Pairs" in the Context. Pick `wraps`, `concurrent`, or `serial` based on
+    the dilemmas' details. Skipping a relevant pair is acceptable only if you
+    have no signal — but normally these pairs are listed precisely *because*
+    they share entities, so an explicit ordering helps GROW.
+  - **Other pairs (optional):** every pair under "Other Pairs" is opt-in.
+    Include one only when the dilemma details reveal a causal dependency or
+    authorial ordering intent that GROW would otherwise miss. Padding this
+    section with `concurrent` defaults adds no information and is wasteful.
+
   ## What NOT to Do
-  - Do NOT skip any pair — every pair in "All Dilemma Pairs" must appear in output
-  - Do NOT use ordering values other than wraps, concurrent, serial
-  - Do NOT classify shared characters/locations as ordering — that is derived
-  - Do NOT return an empty array unless the Context says fewer than 2 dilemmas
+
+  - Do NOT mechanically classify every pair from both sections — empty arrays
+    and partial classifications are valid outputs.
+  - Do NOT use ordering values other than `wraps`, `concurrent`, `serial`.
+  - Do NOT classify shared characters/locations as `shared_entity` — that is
+    derived from `anchored_to` edges, not an ordering relationship.
 
   GOOD: "The central mystery wraps the betrayal subplot — it introduces first
-  and resolves last."
-  BAD: "Both dilemmas involve the mentor" (that is shared_entity, derived from
-  anchored_to edges, not an ordering relationship).
+  and resolves last." (relevant pair, justified)
+  GOOD: Returning `[]` when only one entity-sharing pair has a clear ordering
+  and the rest are independent.
+  GOOD: Including an "Other Pairs" entry as `serial` because Dilemma B's
+  resolution unlocks a fact that Dilemma A depends on.
+  BAD: Adding a `concurrent` entry for every "Other Pairs" entry just to be
+  thorough — that is the over-application R-8.2 explicitly discourages.
 
   ## Context
 
   {candidate_pairs_context}
 
   ## Schema
-  Return a JSON object with a "dilemma_relationships" array — one entry per pair:
+  Return a JSON object with a "dilemma_relationships" array. Include zero or
+  more entries — only the pairs you actually classified:
   ```json
   {{
     "dilemma_relationships": [
@@ -1100,7 +1001,8 @@ dilemma_relationships_prompt: |
   }}
   ```
 
-  If the Context says "No candidate pairs — fewer than 2 surviving dilemmas", return:
+  If the Context says "No candidate pairs — fewer than 2 surviving dilemmas",
+  or if you have no ordering signal worth recording, return:
   ```json
   {{
     "dilemma_relationships": []
@@ -1108,15 +1010,9 @@ dilemma_relationships_prompt: |
   ```
 
   ## Rules
-  - Classify EVERY pair from the "All Dilemma Pairs" list in the Context
-  - Use canonical ordering: dilemma_a < dilemma_b (alphabetically)
-  - `ordering` must be exactly one of: `wraps`, `concurrent`, `serial`
-  - `reasoning` must explain the temporal (not thematic) relationship
-  - Output must contain one entry per pair — no pairs may be omitted
-
-  ## FINAL CHECK
-  Count the pairs listed under "All Dilemma Pairs" in the Context.
-  Your output MUST contain that exact number of entries.
+  - Use canonical ordering: dilemma_a < dilemma_b (alphabetically).
+  - `ordering` must be exactly one of: `wraps`, `concurrent`, `serial`.
+  - `reasoning` must explain the temporal (not thematic) relationship.
 
   ## Output
   Return ONLY valid JSON with the "dilemma_relationships" array.

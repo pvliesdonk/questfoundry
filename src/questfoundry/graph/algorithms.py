@@ -12,6 +12,7 @@ from itertools import product
 from typing import TYPE_CHECKING, Any
 
 from questfoundry.graph.context import normalize_scoped_id
+from questfoundry.graph.invariants import PipelineInvariantError
 from questfoundry.observability.logging import get_logger
 
 if TYPE_CHECKING:
@@ -24,20 +25,22 @@ def compute_active_flags_at_beat(graph: Graph, beat_id: str) -> set[frozenset[st
     """Compute all valid state flag combinations at a beat position.
 
     Returns a set of frozensets, where each frozenset is one possible
-    combination of active state flags at this beat's position in the DAG.
+    combination of active ``state_flag::*`` node IDs at this beat's
+    position in the DAG.
 
-    A "state flag" here is a string identifier derived from a commit beat's
-    dilemma/path membership. When a player reaches beat B, they have
-    necessarily traversed some subset of commit beats. This function
-    computes all valid subsets respecting mutual exclusivity (cannot
-    have committed to both paths of the same dilemma).
+    When a player reaches beat B, they have necessarily traversed some
+    subset of commit beats. Each commit beat has ``grants`` edges to
+    ``state_flag::*`` nodes. This function resolves those real node IDs
+    (not synthetic dilemma:path strings) so that downstream consumers
+    (prose feasibility, overlays) can cross-reference against entity
+    overlay ``when`` fields, which also use ``state_flag::*`` IDs.
 
     Algorithm:
         1. Build predecessor adjacency and reverse-BFS from beat_id
            to find all ancestor beats (including beat_id itself).
         2. Filter ancestors to commit beats (effect="commits").
-        3. Group commit beats by dilemma, using belongs_to path as flag.
-        4. Compute Cartesian product of per-dilemma flag options.
+        3. Resolve each commit beat's ``grants`` edges to state_flag node IDs.
+        4. Group by dilemma and compute Cartesian product (mutual exclusivity).
 
     Args:
         graph: Graph containing beat DAG with predecessor edges.
@@ -78,54 +81,65 @@ def compute_active_flags_at_beat(graph: Graph, beat_id: str) -> set[frozenset[st
         ancestors.add(current)
         queue.extend(parents.get(current, []))
 
-    # Step 3: Find commit beats among ancestors and group by dilemma
-    # A commit beat has dilemma_impacts with effect="commits"
-    belongs_to_edges = graph.get_edges(edge_type="belongs_to")
-    beat_to_path: dict[str, str] = {}
-    for edge in belongs_to_edges:
-        from_id = edge["from"]
-        if from_id in beat_nodes:
-            if from_id in beat_to_path:
-                # Entry contract (validate_grow_output) enforces exactly-one belongs_to
-                # per beat, so this should never happen on valid GROW output.
-                msg = f"Beat {from_id!r} has multiple belongs_to edges"
-                raise ValueError(msg)
-            beat_to_path[from_id] = edge["to"]
+    # Step 3: Find commit beats among ancestors and resolve their state flags.
+    #
+    # Each commit beat has a ``grants`` edge to a ``state_flag::*`` node.
+    # We use those real node IDs (not synthetic dilemma:path strings) so that
+    # downstream consumers (prose feasibility, overlays) can cross-reference
+    # state flags against entity overlay ``when`` fields, which also use
+    # ``state_flag::*`` IDs.
+    #
+    # Group by dilemma so the Cartesian product respects mutual exclusivity:
+    # a player can only be on one path per dilemma.
+
+    # Build beat → grants targets (state flag IDs) from grants edges.
+    beat_grants: dict[str, list[str]] = {}
+    for edge in graph.get_edges(edge_type="grants"):
+        beat_grants.setdefault(edge["from"], []).append(edge["to"])
 
     # Include beat_id itself as a candidate (it may be a commit beat)
     candidates = ancestors | {beat_id}
 
-    # dilemma_id → list of state flag identifiers from different paths
+    # dilemma_id → list of state_flag node IDs (one per path of that dilemma)
     dilemma_flags: dict[str, list[str]] = {}
 
     for candidate_id in candidates:
         candidate_data = beat_nodes[candidate_id]
         impacts = candidate_data.get("dilemma_impacts", [])
         for impact in impacts:
-            if impact.get("effect") == "commits":
-                dilemma_id = impact.get("dilemma_id", "")
-                path_id = beat_to_path.get(candidate_id, "")
-                if dilemma_id and path_id:
-                    # State flag: "{dilemma_id}:{path_id}"
-                    flag = f"{dilemma_id}:{path_id}"
-                    dilemma_flags.setdefault(dilemma_id, []).append(flag)
+            if impact.get("effect") != "commits":
+                continue
+            dilemma_id = impact.get("dilemma_id", "")
+            if not dilemma_id:
+                continue
+            # Resolve to actual state_flag node IDs via grants edges.
+            flag_ids = beat_grants.get(candidate_id, [])
+            if not flag_ids:
+                log.warning(
+                    "commit_beat_no_grants",
+                    beat_id=candidate_id,
+                    dilemma_id=dilemma_id,
+                )
+                continue
+            if len(flag_ids) > 1:
+                log.warning(
+                    "commit_beat_multiple_grants",
+                    beat_id=candidate_id,
+                    dilemma_id=dilemma_id,
+                    flag_ids=flag_ids,
+                )
+            for flag_id in flag_ids:
+                dilemma_flags.setdefault(dilemma_id, []).append(flag_id)
 
     if not dilemma_flags:
         return {frozenset()}
 
     # Step 4: Deduplicate flags per dilemma and compute Cartesian product
-    # For each dilemma, the player can only be on one path, so each dilemma
-    # contributes exactly one flag (or none if not yet committed).
-    # We include "no flag for this dilemma" as an option only if the
-    # beat is NOT downstream of a commit for that dilemma. But since
-    # we only collected flags from ancestors that ARE commits, having
-    # a flag means the dilemma IS committed. We just need unique flags.
     per_dilemma_options: list[list[str]] = []
     for _dilemma_id, flags in sorted(dilemma_flags.items()):
         unique_flags = sorted(set(flags))
         per_dilemma_options.append(unique_flags)
 
-    # Cartesian product: one flag per committed dilemma
     result: set[frozenset[str]] = set()
     for combo in product(*per_dilemma_options):
         result.add(frozenset(combo))
@@ -140,45 +154,32 @@ def arc_key_for_paths(
     """Build a canonical arc key from path node IDs.
 
     Arc keys are sorted path ``raw_id`` values joined by ``"+"``.
-    This is the shared formula used by :func:`compute_arc_traversals`,
-    :func:`~questfoundry.graph.fill_context.get_spine_arc_key`, and
-    ``_resolve_arc_key``.
-
-    Args:
-        path_nodes: Mapping of path node ID → path data (must contain ``raw_id``).
-        path_ids: List of path node IDs to include in the key.
-
-    Returns:
-        Arc key string (e.g. ``"alpha+beta"``).
     """
     raw_ids = sorted(str(path_nodes.get(pid, {}).get("raw_id", pid)) for pid in path_ids)
     return "+".join(raw_ids)
 
 
 def compute_arc_traversals(graph: Graph) -> dict[str, list[str]]:
-    """Compute arc traversals from graph structure without stored Arc nodes.
+    """Compute arc traversals by walking the beat DAG.
 
-    Replicates the logic of ``enumerate_arcs()`` in ``grow_algorithms.py``
-    but as a pure read-only computation. For each Cartesian product
-    combination of paths across dilemmas, collects all beats belonging
-    to those paths and topologically sorts them.
+    Each arc is a specific combination of path choices (one per dilemma).
+    The traversal walks the DAG from the root beat following successor
+    edges.  At each beat:
+    - **One successor** → follow it.
+    - **Multiple successors** → fork.  Follow successors whose path
+      membership overlaps the arc's selected paths, or that have no
+      ``belongs_to`` (zero-membership transition/gap beats).
+      Successors on other paths are pruned.
 
-    The arc key is the sorted path raw_ids joined by ``"+"``, matching
-    the ``arc_id`` convention used by stored Arc nodes.
-
-    Algorithm:
-        1. Build dilemma → paths mapping from path node ``dilemma_id``.
-        2. Build path → beat set mapping from ``belongs_to`` edges.
-        3. Compute Cartesian product of paths (one per dilemma).
-        4. For each combination, union the beat sets and topologically sort.
+    See Story Graph Ontology Part 3 "Total Order Per Arc".
 
     Args:
         graph: Graph containing dilemma, path, and beat nodes with
             ``belongs_to`` and ``predecessor`` edges.
 
     Returns:
-        Dict mapping arc key (``"path_a+path_b"``) to topologically sorted
-        list of beat IDs. Returns empty dict if no dilemmas or paths exist.
+        Dict mapping arc key to topologically sorted list of beat IDs.
+        Returns empty dict if no dilemmas or paths exist.
     """
     path_nodes = graph.get_nodes_by_type("path")
     dilemma_nodes = graph.get_nodes_by_type("dilemma")
@@ -186,7 +187,7 @@ def compute_arc_traversals(graph: Graph) -> dict[str, list[str]]:
     if not dilemma_nodes or not path_nodes:
         return {}
 
-    # Step 1: Build dilemma → paths mapping
+    # Build dilemma → paths mapping
     dilemma_paths: dict[str, list[str]] = defaultdict(list)
     for path_id, path_data in path_nodes.items():
         dilemma_id = path_data.get("dilemma_id")
@@ -198,47 +199,79 @@ def compute_arc_traversals(graph: Graph) -> dict[str, list[str]]:
     if not dilemma_paths:
         return {}
 
-    # Sort paths within each dilemma for determinism
     for paths in dilemma_paths.values():
         paths.sort()
 
     sorted_dilemmas = sorted(dilemma_paths.keys())
     path_lists = [dilemma_paths[did] for did in sorted_dilemmas]
 
-    # Step 2: Build path → beat set mapping via belongs_to edges
-    path_beat_sets: dict[str, set[str]] = defaultdict(set)
-    belongs_to_edges = graph.get_edges(edge_type="belongs_to")
+    # Build beat → path set
     beat_nodes = graph.get_nodes_by_type("beat")
-    for edge in belongs_to_edges:
-        beat_id = edge["from"]
-        path_id = edge["to"]
-        if beat_id in beat_nodes and path_id in path_nodes:
-            path_beat_sets[path_id].add(beat_id)
+    beat_path_set: dict[str, set[str]] = {}
+    for edge in graph.get_edges(edge_type="belongs_to"):
+        bid = edge["from"]
+        pid = edge["to"]
+        if bid in beat_nodes and pid in path_nodes:
+            beat_path_set.setdefault(bid, set()).add(pid)
 
-    # Step 3: Build predecessor adjacency for topological sort
-    # successors_all: parent → [children] (prerequisite → dependents)
-    predecessor_edges = graph.get_edges(edge_type="predecessor")
+    # Build successor adjacency from predecessor edges
     successors_all: dict[str, list[str]] = {bid: [] for bid in beat_nodes}
-    for edge in predecessor_edges:
-        from_id = edge["from"]  # dependent (child)
-        to_id = edge["to"]  # prerequisite (parent)
-        if from_id in beat_nodes and to_id in beat_nodes:
-            successors_all[to_id].append(from_id)
+    predecessors_all: dict[str, list[str]] = {bid: [] for bid in beat_nodes}
+    for edge in graph.get_edges(edge_type="predecessor"):
+        child = edge["from"]
+        parent = edge["to"]
+        if child in beat_nodes and parent in beat_nodes:
+            successors_all[parent].append(child)
+            predecessors_all[child].append(parent)
 
-    # Step 4: Cartesian product of paths, build traversals
+    roots = [bid for bid in beat_nodes if not predecessors_all[bid]]
+
+    # For each arc, walk the DAG from root
     result: dict[str, list[str]] = {}
     for combo in product(*path_lists):
         path_combo = list(combo)
+        arc_path_set = set(path_combo)
         path_raw_ids = sorted(path_nodes[pid].get("raw_id", pid) for pid in path_combo)
         arc_key = "+".join(path_raw_ids)
 
-        # Collect beats from all selected paths
-        beat_set: set[str] = set()
-        for pid in path_combo:
-            beat_set.update(path_beat_sets.get(pid, set()))
+        # BFS walk: at each beat, follow successors that match this arc.
+        # One successor → follow. Multiple → follow those on arc's paths
+        # or with zero belongs_to. Prune the rest.
+        reachable: set[str] = set()
+        queue = list(roots)
+        visited: set[str] = set()
 
-        # Topological sort within the beat subset
-        sequence = _topological_sort_subset(beat_set, successors_all)
+        while queue:
+            bid = queue.pop(0)
+            if bid in visited:
+                continue
+            visited.add(bid)
+            reachable.add(bid)
+
+            for succ in successors_all[bid]:
+                if succ in visited:
+                    continue
+                succ_paths = beat_path_set.get(succ)
+                if not succ_paths:
+                    # Zero-membership (transition/gap) → always follow
+                    queue.append(succ)
+                elif succ_paths & arc_path_set:
+                    # Successor's paths overlap with arc → follow
+                    queue.append(succ)
+                # else: successor is on a different path → prune
+
+        # Prune zero-membership beats (transition/gap) whose successors
+        # are all outside reachable — bridges to paths not in this arc.
+        to_remove = {
+            bid
+            for bid in reachable
+            if not beat_path_set.get(bid)  # zero-membership only
+            and successors_all[bid]
+            and not any(s in reachable for s in successors_all[bid])
+        }
+        reachable -= to_remove
+
+        sequence = _topological_sort_subset(reachable, successors_all)
         result[arc_key] = sequence
 
     return result
@@ -276,17 +309,14 @@ def compute_passage_traversals(graph: Graph) -> dict[str, list[str]]:
     # Fallback: passage_from edges (legacy, passage→beat)
     if not beat_to_passages:
         for edge in graph.get_edges(edge_type="passage_from"):
-            # passage_from: from=passage, to=beat
             beat_to_passages[edge["to"]].append(edge["from"])
 
     result: dict[str, list[str]] = {}
     for arc_key, beat_sequence in arc_traversals.items():
-        passages: list[str] = []
         seen: set[str] = set()
+        passages: list[str] = []
         for beat_id in beat_sequence:
-            # Sort passage IDs for determinism when multiple passages
-            # share the same beat.
-            for passage_id in sorted(beat_to_passages.get(beat_id, [])):
+            for passage_id in beat_to_passages.get(beat_id, []):
                 if passage_id not in seen:
                     seen.add(passage_id)
                     passages.append(passage_id)
@@ -295,52 +325,61 @@ def compute_passage_traversals(graph: Graph) -> dict[str, list[str]]:
     return result
 
 
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
+
+
 def _topological_sort_subset(
     beat_set: set[str],
     successors_all: dict[str, list[str]],
 ) -> list[str]:
-    """Topologically sort a subset of beats using Kahn's algorithm.
+    """Topologically sort a subset of beats using successor edges.
 
-    Uses alphabetical tie-breaking for determinism. Falls back to
-    sorted order if a cycle is detected.
+    Uses Kahn's algorithm restricted to beats in ``beat_set``.
 
-    Args:
-        beat_set: Set of beat IDs to sort.
-        successors_all: Successor adjacency for all beats in the full graph.
-
-    Returns:
-        Topologically sorted list of beat IDs.
+    Raises:
+        PipelineInvariantError: If the subgraph contains a cycle. A cycle
+            in the beat DAG is a structural-invariant violation per
+            CLAUDE.md §Anti-Patterns and POLISH R-4c.1; producing a
+            sorted-by-id fallback would silently corrupt downstream
+            beat ordering. Callers must fix the upstream cycle, not
+            tolerate it.
     """
     if not beat_set:
         return []
 
-    # Build in-degree restricted to the subset
+    # Build in-degree map restricted to subset
     in_degree: dict[str, int] = dict.fromkeys(beat_set, 0)
-    for bid in beat_set:
-        for succ in successors_all.get(bid, []):
-            if succ in beat_set:
-                in_degree[succ] += 1
+    for parent in beat_set:
+        for child in successors_all.get(parent, []):
+            if child in beat_set:
+                in_degree[child] = in_degree.get(child, 0) + 1
 
-    import heapq
-
-    queue = [bid for bid, deg in in_degree.items() if deg == 0]
-    heapq.heapify(queue)
+    queue_sorted = sorted(bid for bid, deg in in_degree.items() if deg == 0)
     result: list[str] = []
 
-    while queue:
-        node = heapq.heappop(queue)
-        result.append(node)
-        for succ in successors_all.get(node, []):
-            if succ in beat_set:
-                in_degree[succ] -= 1
-                if in_degree[succ] == 0:
-                    heapq.heappush(queue, succ)
+    while queue_sorted:
+        bid = queue_sorted.pop(0)
+        result.append(bid)
+        for child in successors_all.get(bid, []):
+            if child in in_degree:
+                in_degree[child] -= 1
+                if in_degree[child] == 0:
+                    # Insert in sorted position for determinism
+                    import bisect
 
-    if len(result) != len(beat_set):
-        log.warning(
-            "cycle_detected_in_beat_subset",
-            remaining=sorted(beat_set - set(result)),
+                    bisect.insort(queue_sorted, child)
+
+    if len(result) < len(beat_set):
+        unprocessed = sorted(beat_set - set(result))
+        msg = (
+            f"Beat DAG cycle detected in topological sort: "
+            f"{len(unprocessed)} beat(s) could not be ordered: "
+            f"{', '.join(repr(b) for b in unprocessed[:5])}"
+            f"{' …' if len(unprocessed) > 5 else ''}. "
+            f"This is a structural invariant violation — fix the cycle upstream."
         )
-        return sorted(beat_set)
+        raise PipelineInvariantError(msg)
 
     return result

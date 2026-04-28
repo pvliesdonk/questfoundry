@@ -27,7 +27,11 @@ class TestValidatePhase3Output:
     def test_valid_output_no_errors(self) -> None:
         result = Phase3Output(
             intersections=[
-                IntersectionProposal(beat_ids=["beat::b1", "beat::b2"], rationale="test"),
+                IntersectionProposal(
+                    beat_ids=["beat::b1", "beat::b2"],
+                    resolved_location="market square",
+                    rationale="test",
+                ),
             ]
         )
         errors = validate_phase3_output(
@@ -41,6 +45,7 @@ class TestValidatePhase3Output:
             intersections=[
                 IntersectionProposal(
                     beat_ids=["beat::b1", "beat::b2", "beat::b3", "beat::b4"],
+                    resolved_location="market square",
                     rationale="too big",
                 )
             ]
@@ -56,7 +61,11 @@ class TestValidatePhase3Output:
     def test_invalid_beat_id(self) -> None:
         result = Phase3Output(
             intersections=[
-                IntersectionProposal(beat_ids=["beat::b1", "beat::phantom"], rationale="test"),
+                IntersectionProposal(
+                    beat_ids=["beat::b1", "beat::phantom"],
+                    resolved_location="market square",
+                    rationale="test",
+                ),
             ]
         )
         errors = validate_phase3_output(
@@ -69,8 +78,16 @@ class TestValidatePhase3Output:
     def test_beat_reused_across_intersections(self) -> None:
         result = Phase3Output(
             intersections=[
-                IntersectionProposal(beat_ids=["beat::b1", "beat::b2"], rationale="intersection1"),
-                IntersectionProposal(beat_ids=["beat::b2", "beat::b3"], rationale="intersection2"),
+                IntersectionProposal(
+                    beat_ids=["beat::b1", "beat::b2"],
+                    resolved_location="market square",
+                    rationale="intersection1",
+                ),
+                IntersectionProposal(
+                    beat_ids=["beat::b2", "beat::b3"],
+                    resolved_location="council chamber",
+                    rationale="intersection2",
+                ),
             ]
         )
         errors = validate_phase3_output(
@@ -85,8 +102,16 @@ class TestValidatePhase3Output:
     def test_both_invalid_and_reused(self) -> None:
         result = Phase3Output(
             intersections=[
-                IntersectionProposal(beat_ids=["beat::b1", "beat::bad"], rationale="intersection1"),
-                IntersectionProposal(beat_ids=["beat::b1", "beat::b2"], rationale="intersection2"),
+                IntersectionProposal(
+                    beat_ids=["beat::b1", "beat::bad"],
+                    resolved_location="market square",
+                    rationale="intersection1",
+                ),
+                IntersectionProposal(
+                    beat_ids=["beat::b1", "beat::b2"],
+                    resolved_location="council chamber",
+                    rationale="intersection2",
+                ),
             ]
         )
         errors = validate_phase3_output(
@@ -462,7 +487,10 @@ class TestValidatePhase4fOutput:
         assert "entity::e2" in errors[0].available
 
     def test_empty_arcs(self) -> None:
-        result = Phase4fOutput(arcs=[])
+        # Pydantic min_length=1 rejects empty arcs at construction. Bypass
+        # validation here to assert the semantic validator is not the layer
+        # that catches it (defense-in-depth check).
+        result = Phase4fOutput.model_construct(arcs=[])
         errors = validate_phase4f_output(
             result,
             valid_entity_ids={"entity::e1"},
@@ -535,7 +563,13 @@ class TestCountEntries:
 
     def test_counts_intersections(self) -> None:
         result = Phase3Output(
-            intersections=[IntersectionProposal(beat_ids=["b1", "b2"], rationale="test")]
+            intersections=[
+                IntersectionProposal(
+                    beat_ids=["b1", "b2"],
+                    resolved_location="market square",
+                    rationale="test",
+                )
+            ]
         )
         assert count_entries(result) == 1
 

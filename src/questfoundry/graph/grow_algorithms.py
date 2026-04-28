@@ -309,8 +309,17 @@ def topological_sort_beats(
         queue = sorted(queue + new_ready, key=_sort_key)
 
     if len(result) != len(beat_set):
-        remaining = beat_set - set(result)
-        raise ValueError(f"Cycle detected in beat subset: {sorted(remaining)}")
+        from questfoundry.graph.invariants import PipelineInvariantError
+
+        remaining = sorted(beat_set - set(result))
+        msg = (
+            f"Beat DAG cycle detected during topological sort: "
+            f"{len(remaining)} beat(s) could not be ordered: "
+            f"{', '.join(repr(b) for b in remaining[:5])}"
+            f"{' …' if len(remaining) > 5 else ''}. "
+            f"This is a structural invariant violation — fix the cycle upstream."
+        )
+        raise PipelineInvariantError(msg)
 
     return result
 
@@ -667,15 +676,17 @@ def enumerate_arcs(graph: Graph, *, max_arc_count: int | None = None) -> list[Ar
         all_beats.update(beats)
 
     reference_positions: dict[str, int] | None = None
-    try:
-        global_sequence = topological_sort_beats(
-            graph,
-            list(all_beats),
-            priority_beats=shared,
-        )
-        reference_positions = {bid: idx for idx, bid in enumerate(global_sequence)}
-    except ValueError:
-        pass  # Fallback: no reference if global beat set has cycles
+    # A cycle in the beat DAG is a structural-invariant violation per
+    # CLAUDE.md §Anti-Patterns; both call sites below now propagate the
+    # ValueError to the phase runner instead of degrading silently to
+    # sorted-by-id order. The previous fallbacks shipped wrong narrative
+    # order to downstream POLISH/FILL with no surfaced signal.
+    global_sequence = topological_sort_beats(
+        graph,
+        list(all_beats),
+        priority_beats=shared,
+    )
+    reference_positions = {bid: idx for idx, bid in enumerate(global_sequence)}
 
     # Cartesian product of paths
     arcs: list[Arc] = []
@@ -689,15 +700,12 @@ def enumerate_arcs(graph: Graph, *, max_arc_count: int | None = None) -> list[Ar
         for pid in path_combo:
             beat_set.update(path_beat_sets.get(pid, set()))
 
-        try:
-            sequence = topological_sort_beats(
-                graph,
-                list(beat_set),
-                priority_beats=shared,
-                reference_positions=reference_positions,
-            )
-        except ValueError:
-            sequence = sorted(beat_set)  # Fallback for cycles
+        sequence = topological_sort_beats(
+            graph,
+            list(beat_set),
+            priority_beats=shared,
+            reference_positions=reference_positions,
+        )
 
         arcs.append(
             Arc(
@@ -1202,6 +1210,253 @@ def find_convergence_points(
     return result
 
 
+def find_dag_convergence_beat(
+    graph: Graph,
+    dilemma_id: str,
+    dilemma_paths: set[str] | None = None,
+) -> tuple[str, int] | None:
+    """Find the convergence beat for a soft dilemma from the interleaved beat DAG.
+
+    For a soft dilemma, the convergence beat is the earliest beat reachable from
+    ALL terminal exclusive beats of the dilemma that is NOT exclusive to this
+    dilemma.
+
+    Algorithm:
+    1. Return ``None`` if ``dilemma_role`` is absent or ``"hard"``, or if the
+       dilemma has fewer than 2 explored paths.
+    2. Find terminal exclusive beats: beats whose ``belongs_to`` paths are a
+       subset of this dilemma's paths, AND that have no successor that is also
+       exclusive to this dilemma.  A path may have multiple terminals (e.g.
+       when cross-dilemma beats from a ``wraps`` relationship split the
+       exclusive chain); all terminals participate in the BFS.
+    3. BFS forward from **every** terminal beat across all paths.
+    4. Collect the non-exclusive beats reachable from each terminal.
+    5. Intersect all reachable sets; pick the beat with the lowest maximum BFS
+       distance across all terminal runs (alphabetical tiebreak for ties).
+    6. ``convergence_payoff`` = minimum count of single-path-exclusive beats
+       (commit + post-commit) across paths.
+    7. Return ``(converges_at, convergence_payoff)`` or ``None``.
+
+    Args:
+        graph: The interleaved beat DAG.
+        dilemma_id: Scoped dilemma ID (e.g. ``"dilemma::d1"``).
+        dilemma_paths: Pre-computed set of path IDs for this dilemma.  When
+            ``None``, looked up from the graph.  Passing this avoids repeated
+            full-graph scans when calling in a loop over dilemmas.
+
+    Returns:
+        ``(converges_at_beat_id, convergence_payoff)`` for soft dilemmas that
+        converge, ``None`` otherwise.
+    """
+    dilemma_id = normalize_scoped_id(dilemma_id.split("::")[-1], "dilemma")
+
+    dilemma_node = graph.get_node(dilemma_id)
+    if dilemma_node is None:
+        return None
+
+    dilemma_role = dilemma_node.get("dilemma_role")
+    if dilemma_role is None:
+        log.error("convergence_dilemma_role_missing", dilemma_id=dilemma_id)
+        return None
+    if dilemma_role == "hard":
+        return None
+
+    # Collect this dilemma's path IDs (use pre-computed set if provided)
+    if dilemma_paths is None:
+        path_nodes = graph.get_nodes_by_type("path")
+        dilemma_paths = set()
+        for path_id, path_data in path_nodes.items():
+            raw_did = path_data.get("dilemma_id", "")
+            scoped_did = normalize_scoped_id(raw_did.split("::")[-1], "dilemma") if raw_did else ""
+            if scoped_did == dilemma_id:
+                dilemma_paths.add(path_id)
+
+    if len(dilemma_paths) < 2:
+        return None
+
+    # Build belongs_to index: beat_id → set of path_ids
+    belongs_to_edges = graph.get_edges(edge_type="belongs_to")
+    beat_paths: dict[str, set[str]] = {}
+    for edge in belongs_to_edges:
+        beat_id = edge["from"]
+        path_id = edge["to"]
+        beat_paths.setdefault(beat_id, set()).add(path_id)
+
+    # Build successor index: beat_id → list[beat_id]
+    # predecessor edge: from=later_beat, to=earlier_beat
+    # successors of X = all beats where to_id == X
+    predecessor_edges = graph.get_edges(edge_type="predecessor")
+    successors_of: dict[str, list[str]] = {}
+    for edge in predecessor_edges:
+        later_beat = edge["from"]  # the beat that comes after
+        earlier_beat = edge["to"]  # the prerequisite
+        successors_of.setdefault(earlier_beat, []).append(later_beat)
+
+    # Helper: is a beat exclusive to this dilemma?
+    def _is_exclusive(beat_id: str) -> bool:
+        """Return True if beat's belongs_to paths are a non-empty subset of dilemma_paths."""
+        bpaths = beat_paths.get(beat_id, set())
+        return bool(bpaths) and bpaths.issubset(dilemma_paths)
+
+    # Find all exclusive beats
+    beat_nodes = graph.get_nodes_by_type("beat")
+    exclusive_beats: set[str] = {bid for bid in beat_nodes if _is_exclusive(bid)}
+
+    # Find terminal exclusive beats per path:
+    # a beat is terminal if none of its successors are also exclusive to this dilemma
+    terminal_by_path: dict[str, list[str]] = {pid: [] for pid in dilemma_paths}
+    for beat_id in exclusive_beats:
+        succ_exclusive = [s for s in successors_of.get(beat_id, []) if s in exclusive_beats]
+        if not succ_exclusive:
+            # This is a terminal exclusive beat; add it to each path it belongs to
+            for path_id in beat_paths.get(beat_id, set()):
+                if path_id in dilemma_paths:
+                    terminal_by_path[path_id].append(beat_id)
+
+    # Gather ALL terminal exclusive beats across all paths (not one per path).
+    # A path may have multiple terminals when cross-dilemma beats from wraps
+    # relationships split the exclusive chain.  The convergence beat must be
+    # reachable from every terminal.
+    all_terminals: list[str] = []
+    exclusive_count_per_path: dict[str, int] = {}
+    for path_id in dilemma_paths:
+        terminals = terminal_by_path[path_id]
+        if not terminals:
+            return None
+        all_terminals.extend(terminals)
+        # Count single-path-exclusive beats (commit + post-commit): beats that
+        # belong to exactly this one path.  Shared pre-commit beats (belonging
+        # to all dilemma paths) are NOT counted.
+        exclusive_count_per_path[path_id] = sum(
+            1 for bid in exclusive_beats if beat_paths.get(bid) == {path_id}
+        )
+
+    convergence_payoff = min(exclusive_count_per_path.values()) if exclusive_count_per_path else 0
+
+    # BFS forward from each terminal beat, collecting non-exclusive reachable beats
+    # with their BFS distance (level) from the terminal.
+    def _bfs_distances(start: str) -> dict[str, int]:
+        """Return mapping of non-exclusive reachable beat → BFS level from start."""
+        distances: dict[str, int] = {}
+        frontier: deque[tuple[str, int]] = deque([(start, 0)])
+        visited: set[str] = set()
+        while frontier:
+            current, level = frontier.popleft()
+            if current in visited:
+                continue
+            visited.add(current)
+            if current != start and not _is_exclusive(current):
+                distances[current] = level
+            # Continue BFS regardless (exclusive beats can be intermediate nodes)
+            for successor in successors_of.get(current, []):
+                if successor not in visited:
+                    frontier.append((successor, level + 1))
+        return distances
+
+    distance_maps = [_bfs_distances(t) for t in all_terminals]
+
+    if not distance_maps:
+        return None
+
+    # Intersect: only beats reachable from ALL terminals
+    common = set(distance_maps[0].keys())
+    for dm in distance_maps[1:]:
+        common = common & dm.keys()
+
+    if not common:
+        return None
+
+    # Pick earliest common beat: minimum max-distance across all terminal BFS runs
+    # (i.e., the beat that is reached earliest when considering all paths).
+    # Alphabetical tiebreak within equal max-distances.
+    def _sort_key(beat_id: str) -> tuple[int, str]:
+        max_dist = max(dm[beat_id] for dm in distance_maps)
+        return (max_dist, beat_id)
+
+    converges_at = min(common, key=_sort_key)
+    return converges_at, convergence_payoff
+
+
+def detect_cross_dilemma_hard_transitions(graph: Graph) -> list[tuple[str, str]]:
+    """Find cross-dilemma predecessor edges where beats share no entities AND no location.
+
+    A "hard transition" is a predecessor edge between beats from different dilemmas
+    that lack any narrative continuity signal (shared entity or shared location).
+    These are candidates for bridging beats or intersection groups.
+
+    Algorithm:
+    1. Build beat → dilemma mapping via belongs_to → path → dilemma_id.
+    2. For each predecessor edge (from=later_beat, to=earlier_beat):
+       - Skip if beats share any dilemma (intra-dilemma edge).
+       - Skip if beats share any entity (entity overlap).
+       - Skip if beats share the same location.
+       - Otherwise → hard transition: append (earlier_beat, later_beat).
+    3. Return sorted list.
+
+    Args:
+        graph: Graph containing beat, path, and dilemma nodes.
+
+    Returns:
+        Sorted list of (earlier_beat_id, later_beat_id) tuples for hard transitions.
+    """
+    # Step 1: Build beat → dilemma set mapping via belongs_to → path → dilemma_id
+    path_nodes = graph.get_nodes_by_type("path")
+    dilemma_nodes = graph.get_nodes_by_type("dilemma")
+
+    path_to_dilemma: dict[str, str] = {}
+    for path_id, path_data in path_nodes.items():
+        did = path_data.get("dilemma_id")
+        if did:
+            prefixed = normalize_scoped_id(did, "dilemma")
+            if prefixed in dilemma_nodes:
+                path_to_dilemma[path_id] = prefixed
+
+    beat_dilemmas: dict[str, set[str]] = {}
+    for edge in graph.get_edges(edge_type="belongs_to"):
+        beat_id = edge["from"]
+        path_id = edge["to"]
+        if path_id in path_to_dilemma:
+            beat_dilemmas.setdefault(beat_id, set()).add(path_to_dilemma[path_id])
+
+    # Step 2: Check each predecessor edge for hard transitions
+    beat_nodes = graph.get_nodes_by_type("beat")
+    hard_transitions: list[tuple[str, str]] = []
+
+    for edge in graph.get_edges(edge_type="predecessor"):
+        later_beat = edge["from"]
+        earlier_beat = edge["to"]
+
+        # Skip if either beat is not a known beat node
+        if later_beat not in beat_nodes or earlier_beat not in beat_nodes:
+            continue
+
+        later_dilemmas = beat_dilemmas.get(later_beat, set())
+        earlier_dilemmas = beat_dilemmas.get(earlier_beat, set())
+
+        # Skip intra-dilemma edges (beats share at least one dilemma)
+        if later_dilemmas & earlier_dilemmas:
+            continue
+
+        # Skip if beats share any entity (using entities list in beat data)
+        later_data = beat_nodes[later_beat]
+        earlier_data = beat_nodes[earlier_beat]
+
+        later_entities = {strip_scope_prefix(e) for e in later_data.get("entities", [])}
+        earlier_entities = {strip_scope_prefix(e) for e in earlier_data.get("entities", [])}
+        if later_entities & earlier_entities:
+            continue
+
+        # Skip if beats share the same location (normalize to handle scope prefix)
+        later_loc = strip_scope_prefix(later_data.get("location") or "")
+        earlier_loc = strip_scope_prefix(earlier_data.get("location") or "")
+        if later_loc and earlier_loc and later_loc == earlier_loc:
+            continue
+
+        hard_transitions.append((earlier_beat, later_beat))
+
+    return sorted(hard_transitions)
+
+
 # ---------------------------------------------------------------------------
 # Phase 3: Intersection Detection
 # ---------------------------------------------------------------------------
@@ -1444,7 +1699,7 @@ def _group_by_location(
         primary = beat_data.get("location")
         if primary:
             location_beats[primary].append(beat_id)
-        # Read flexibility edges (Doc 3) instead of location_alternatives property.
+        # Read flexibility edges (Story Graph Ontology) instead of location_alternatives property.
         # NOTE: No role filter applied — currently only role="location" flexibility
         # edges exist (written by mutations.py). If other roles are added (e.g.,
         # role="entity"), this query must filter by role="location".
@@ -1872,6 +2127,15 @@ def check_intersection_compatibility(
                                 continue
 
                     missing = sorted(union_paths - prereq_paths)
+                    # R-2.8: log rejection at INFO with candidate IDs + violating edge.
+                    log.info(
+                        "intersection_rejected_conditional_prerequisite",
+                        candidate_beats=sorted(beat_ids),
+                        violating_edge=f"{from_id!r} → {to_id!r}",
+                        prereq_paths=sorted(prereq_paths),
+                        post_intersection_paths=sorted(union_paths),
+                        missing_paths=missing,
+                    )
                     errors.append(
                         GrowValidationError(
                             field_path="intersection.conditional_prerequisite",
@@ -1923,7 +2187,7 @@ def resolve_intersection_location(graph: Graph, beat_ids: list[str]) -> str | No
         locs = set()
         if primary:
             locs.add(primary)
-        # Read flexibility edges (Doc 3) instead of location_alternatives property
+        # Read flexibility edges (Story Graph Ontology) instead of location_alternatives property
         for edge in graph.get_edges(from_id=bid, edge_type="flexibility"):
             locs.add(edge["to"])
         all_locations.append(locs)
@@ -1957,7 +2221,7 @@ def apply_intersection_mark(
     shared_entities: list[str] | None = None,
     rationale: str | None = None,
 ) -> None:
-    """Mark beats as co-occurring in an intersection group (Doc 3, Part 4).
+    """Mark beats as co-occurring in an intersection group (Story Graph Ontology, Part 4).
 
     Creates an ``intersection_group`` node and links each participating
     beat to it via ``intersection`` edges.  Each beat keeps its single
@@ -1970,6 +2234,32 @@ def apply_intersection_mark(
         shared_entities: Entity IDs shared between the intersecting beats.
         rationale: One-sentence explanation of why these beats form a natural scene.
     """
+    # Guard rail 3 (Story Graph Ontology §8 "Path Membership"):
+    # an intersection group must not contain two pre-commit beats from the same
+    # dilemma -- those beats already co-occur by definition.
+    beat_path_ids: dict[str, set[str]] = {}
+    for bid in beat_ids:
+        for e in graph.get_edges(from_id=bid, edge_type="belongs_to"):
+            beat_path_ids.setdefault(bid, set()).add(e["to"])
+    pre_commits = [bid for bid, pids in beat_path_ids.items() if len(pids) >= 2]
+    if len(pre_commits) >= 2:
+        # Check whether any two share the exact same path set (same dilemma).
+        # Binary Y-shape: same frozenset of path IDs implies same dilemma
+        # (pre-commit beats of a dilemma belong to exactly its two explored paths).
+        # Non-binary dilemmas (3+ paths) would require explicit dilemma_id comparison.
+        seen: dict[frozenset[str], str] = {}
+        for bid in pre_commits:
+            key = frozenset(beat_path_ids[bid])
+            if key in seen:
+                msg = (
+                    "guard rail 3: intersection group would contain two "
+                    f"pre-commit beats from the same dilemma ({seen[key]!r}, {bid!r}). "
+                    "Pre-commit beats of the same dilemma already co-occur; "
+                    "declaring them as an intersection is forbidden."
+                )
+                raise ValueError(msg)
+            seen[key] = bid
+
     # Derive a stable group ID from the sorted beat IDs
     sorted_ids = sorted(beat_ids)
     raw_group_id = "--".join(strip_scope_prefix(b) for b in sorted_ids)
@@ -2101,6 +2391,9 @@ def insert_gap_beat(
     summary: str,
     scene_type: str,
     dilemma_impacts: list[dict[str, Any]] | None = None,
+    *,
+    role: str = "gap_beat",
+    created_by: str = "POLISH",
 ) -> str:
     """Insert a new gap beat into the graph between existing beats.
 
@@ -2119,6 +2412,12 @@ def insert_gap_beat(
         summary: Summary text for the new beat.
         scene_type: Scene type tag for the new beat.
         dilemma_impacts: List of dilemma impact dicts (dilemma_id, effect, note).
+        role: Beat role tag. Defaults to ``"gap_beat"`` (POLISH Phase 1a per
+            spec R-1a.1). Pacing-correction beats override this with
+            ``"micro_beat"`` per POLISH Phase 2 R-2.7.
+        created_by: Stage that created this beat. Defaults to ``"POLISH"``
+            since both narrative-gap insertion and pacing-correction
+            insertion are POLISH responsibilities post-migration.
 
     Returns:
         The new beat's node ID.
@@ -2159,7 +2458,9 @@ def insert_gap_beat(
     # Infer transition style based on context
     transition_style = _infer_transition_style(after_node, before_node)
 
-    # Create the beat node with enriched context
+    # Create the beat node with enriched context.
+    # ``role`` and ``created_by`` are required by spec R-1a.1 (narrative gaps)
+    # and R-2.7 (pacing-correction); FILL's structural-beat handling reads them.
     graph.create_node(
         beat_id,
         {
@@ -2169,6 +2470,8 @@ def insert_gap_beat(
             "scene_type": scene_type,
             "paths": [path_id.removeprefix("path::")],
             "is_gap_beat": True,
+            "role": role,
+            "created_by": created_by,
             # Enrichment fields for transition handling
             "entities": entities,
             "location": location,
@@ -2296,7 +2599,7 @@ def select_entities_for_arc(
             continue
         entity_type = entity_node.get("entity_type", "")
         if not entity_type:
-            log.warning("entity_missing_type", entity_id=eid)
+            log.error("entity_missing_type", entity_id=eid)
             continue
         if entity_type in ("object", "location"):
             # Objects/locations always eligible with 1+ appearance
@@ -2331,15 +2634,12 @@ def _get_path_beats_ordered(
     beats = path_beats_map.get(path_id, [])
     if not beats:
         return []
-    try:
-        return topological_sort_beats(graph, beats)
-    except ValueError:
-        log.warning(
-            "interleave_path_cycle_fallback",
-            path_id=path_id,
-            beats=beats,
-        )
-        return sorted(beats)  # Fallback to alphabetical on cycle (should not happen)
+    # Cycle on the per-path beat subgraph is a structural-invariant
+    # violation — the comment used to read "should not happen", but the
+    # fallback was shipping degraded order to interleave anyway. Per
+    # CLAUDE.md §Anti-Patterns we now propagate the failure so the phase
+    # runner halts and the bug is visible.
+    return topological_sort_beats(graph, beats)
 
 
 def _commits_beats_for_dilemma(
@@ -3463,8 +3763,8 @@ def interleave_cross_path_beats(graph: Graph) -> int:
       hints, commit beats of one dilemma are ordered before commit beats of the
       other to ensure pacing.
 
-    Hint-induced edges that would create a cycle raise RuntimeError (resolve_temporal_hints
-    must prevent this).  Heuristic-induced cycles are soft-skipped (benign tiebreak conflicts).
+    Any edge that would create a cycle raises GrowContractError (R-3.7 / R-4.5).
+    resolve_temporal_hints must prevent hint-induced cycles before this phase runs.
 
     Args:
         graph: Graph containing beat, path, and dilemma nodes with relationship edges.
@@ -3557,14 +3857,16 @@ def interleave_cross_path_beats(graph: Graph) -> int:
             from_beat: Beat that requires to_beat.
             to_beat: Beat that becomes a prerequisite.
             from_hint: True when the edge is requested by a temporal hint (LLM
-                output validated by resolve_temporal_hints).  Hint-induced cycles
-                are hard errors — resolve_temporal_hints should have cleared them.
-                Heuristic-induced cycles are soft-skipped (the heuristic is an
-                arbitrary tiebreak, so a conflict with an existing hint edge is
-                expected and benign).
+                output validated by resolve_temporal_hints).
 
         Returns:
             True if edge was added.
+
+        Raises:
+            GrowContractError: If the edge would create a cycle.  Per R-3.7 /
+                R-4.5, any cycle at interleave time is a hard pipeline failure —
+                Phase 3 was supposed to guarantee acyclicity.  Silent skip
+                (``interleave_cycle_skipped``) is forbidden.
         """
         nonlocal created
         if from_beat == to_beat:
@@ -3587,22 +3889,27 @@ def interleave_cross_path_beats(graph: Graph) -> int:
             )
             return False
         if _would_create_cycle(from_beat, to_beat, successors, beat_set):
-            if from_hint:
-                # Hint-induced cycles must have been cleared by resolve_temporal_hints.
-                # Reaching here means that phase failed its invariant.
-                raise RuntimeError(
-                    f"interleave_cross_path_beats: temporal hint on {from_beat!r} "
-                    f"requests edge {from_beat!r} → {to_beat!r} which would create "
-                    f"a cycle. resolve_temporal_hints should have prevented this."
-                )
-            # Heuristic-induced cycles are benign: the heuristic is an arbitrary
-            # tiebreak and may conflict with existing hint-established ordering.
-            log.debug(
-                "interleave_heuristic_cycle_skipped",
+            # Per R-3.7 / R-4.5: any cycle detected at interleave time is a
+            # hard pipeline failure — Silent Degradation policy forbids silent
+            # skip.  Hint-induced cycles should have been cleared by
+            # resolve_temporal_hints; heuristic-induced cycles indicate that
+            # Phase 3's acyclicity guarantee was not upheld.
+            from questfoundry.graph.grow_validation import (
+                GrowContractError,  # local to avoid circular import
+            )
+
+            source = "temporal hint" if from_hint else "heuristic"
+            log.error(
+                "interleave_cycle_skipped",
                 from_beat=from_beat,
                 to_beat=to_beat,
+                source=source,
             )
-            return False
+            raise GrowContractError(
+                f"R-3.7 / R-4.5: interleave would close a cycle "
+                f"({from_beat!r} → {to_beat!r}, source={source!r}). "
+                f"Phase 3's acyclicity guarantee was violated. Halting."
+            )
         graph.add_edge("predecessor", from_beat, to_beat)
         existing_predecessors.add((from_beat, to_beat))
         successors[to_beat].add(from_beat)

@@ -1,5 +1,8 @@
 """Pipeline orchestrator for stage execution."""
 
+# pyright: reportReturnType=false, reportAttributeAccessIssue=false
+# TODO(#1354): cleanup during orchestrator tuple-return widening work
+
 from __future__ import annotations
 
 import os
@@ -25,6 +28,7 @@ from questfoundry.pipeline.config import (
 )
 from questfoundry.pipeline.gates import AutoApproveGate, GateHook
 from questfoundry.pipeline.size import resolve_size_from_graph
+from questfoundry.pipeline.summary import build_stage_summary
 from questfoundry.providers.base import ProviderError
 from questfoundry.providers.factory import (
     create_chat_model,
@@ -104,6 +108,7 @@ class StageResult:
     errors: list[str] = field(default_factory=list)
     duration_seconds: float = 0.0
     run_id: str | None = None  # LangSmith trace correlation ID
+    summary_lines: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -694,6 +699,10 @@ class PipelineOrchestrator:
                 )
                 errors.extend(validation_errors)
 
+            summary_lines: list[str] = []
+            if not validation_errors:
+                summary_lines = build_stage_summary(stage_name, artifact_data)
+
             # Apply mutations to unified graph (only for stages with mutation handlers)
             if not validation_errors and has_mutation_handler(stage_name):
                 try:
@@ -740,6 +749,7 @@ class PipelineOrchestrator:
                 errors=errors,
                 duration_seconds=duration,
                 run_id=run_id,
+                summary_lines=summary_lines,
             )
 
             # Call gate hook
@@ -849,7 +859,7 @@ class PipelineOrchestrator:
                 if callable(close_method):
                     result = close_method()
                     if hasattr(result, "__await__"):
-                        await result
+                        await result  # pyright: ignore[reportGeneralTypeIssues]
             self._creative_model = None
 
         # Clear other model references

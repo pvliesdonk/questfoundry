@@ -8,34 +8,42 @@ system: |
   Condense the conversation into a **prose brief** that captures all discussed story elements.
   Write in natural language paragraphs and bullet points - NOT structured data fields.
 
-  ### Characters (list all discussed)
+  ### Characters (`entity_category: "character"`, list all discussed)
   Describe each character discussed:
   - Who they are and their role in the story
   - Key traits, motivations, or secrets
   - Any relationships or conflicts mentioned
+  - If a specific name was established in discussion, include it. If only a role was discussed, omit the name from the summary — the serializer will create a descriptive name from the entity's role (e.g., "The Mentor", "The Archive").
 
-  ### Locations (list all discussed)
+  ### Locations (`entity_category: "location"`, list all discussed)
   Describe each location discussed:
   - What the place is and its atmosphere
   - Why it matters to the story
   - Any secrets or special features
+  - If a specific name was established, include it. Otherwise omit the name — the serializer will create a descriptive name from the entity's role.
 
-  ### Objects (list all discussed)
+  ### Objects (`entity_category: "object"`, list all discussed)
   Describe significant objects discussed:
   - What the object is
   - Why it's important (clue, macguffin, symbol, etc.)
+  - If a specific name was established, include it. Otherwise omit the name — the serializer will create a descriptive name from the entity's role.
 
-  ### Factions (if any)
+  ### Factions (`entity_category: "faction"`, if any)
   Describe any groups or organizations:
   - What they are and their goals
   - Key members or relationships
+  - If a specific name was established, include it. Otherwise omit the name — the serializer will create a descriptive name from the entity's role.
 
   ### Dramatic Dilemmas (list all discussed)
   For each dilemma, describe in prose:
   - The central question or conflict
   - The two possible answers/outcomes (one being the "default path")
-  - **Central entity IDs**: List the exact entity IDs involved (e.g., "[character_id], [location_id]")
-  - Why this dilemma matters thematically
+  - **Central entity IDs (REQUIRED for EVERY dilemma — MUST be non-empty)**: list ≥1 namespaced ID as backtick-wrapped tokens (e.g., `` `character::mentor`, `location::archive` ``). Do NOT use bracket-list notation like `[character_id]` — that's Python repr, not human-readable text.
+
+    GOOD: `` `character::elara_thorne`, `object::silver_locket` `` (≥1 namespaced entity ID)
+    BAD: *(omitted)* — the serializer cannot fill `central_entity_ids` and the dilemma will be rejected per R-3.6.
+    BAD: `(none)` or `[]` — empty anchor is invalid; every dilemma must reference at least one entity.
+  - Why this dilemma matters thematically. R-3.1 makes `why_it_matters` REQUIRED — non-empty for every dilemma. If it wasn't discussed explicitly, synthesize a plausible 1–2 sentence rationale from the dilemma's question, central entities, and the story's themes. Do NOT leave it blank, write a placeholder string, or use a sentinel like `[NOT DISCUSSED]` — the validator does not detect those, and they propagate verbatim into SEED/GROW/FILL.
 
   ## NO DELEGATION (CRITICAL)
   You are writing the summary, not suggesting how to write it.
@@ -55,6 +63,7 @@ system: |
   - Be specific about which answer is the "default path"
   - IMPORTANT: For each dilemma, list the central entity IDs exactly as defined in the entities section
   - If something wasn't discussed, don't invent it
+  - SELF-CHECK before finishing: for EVERY dilemma you wrote, confirm there is at least one backtick-wrapped entity ID listed. If a dilemma's central entities were only described in prose ("this dilemma involves the silver locket"), convert those references to namespaced IDs now using the entity IDs from the Characters/Locations/Objects/Factions sections above.
   {output_language_instruction}
 
   ## Output Format

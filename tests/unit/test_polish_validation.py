@@ -12,19 +12,18 @@ from questfoundry.models.polish import (
     ChoiceSpec,
     PassageSpec,
     PolishResult,
-    ResidueSpec,
     VariantSpec,
 )
 from questfoundry.pipeline.stages.polish.deterministic import (
     _create_choice_edge,
     _create_passage_node,
-    _create_residue_beat_and_passage,
     _create_variant_passage,
 )
 
 
 def _make_beat(graph: Graph, beat_id: str, summary: str = "A beat", **kwargs: object) -> None:
     """Helper to create a beat node."""
+    polish_created_roles = frozenset({"micro_beat", "residue_beat", "false_branch_beat"})
     data = {
         "type": "beat",
         "raw_id": beat_id.split("::")[-1],
@@ -34,19 +33,33 @@ def _make_beat(graph: Graph, beat_id: str, summary: str = "A beat", **kwargs: ob
         "scene_type": "scene",
     }
     data.update(kwargs)
+    # Add created_by attribution for POLISH-created beats (R-2.5)
+    role = data.get("role", "")
+    if role in polish_created_roles and "created_by" not in data:
+        data["created_by"] = "POLISH"
     graph.create_node(beat_id, data)
 
 
 def _build_valid_graph() -> Graph:
-    """Build a minimal valid passage graph for testing."""
+    """Build a minimal valid passage graph for testing.
+
+    Graph shape: beat::start diverges into beat::end and beat::alt_end,
+    forming a Y-fork.  This makes beat::start a genuine divergence point
+    (out-degree 2), so the passage boundary between passage::start and
+    the two successor passages is valid under R-4a.4 maximal-linear-collapse.
+    """
     graph = Graph.empty()
     graph.create_node("path::pa", {"type": "path", "raw_id": "pa"})
 
     _make_beat(graph, "beat::start", "Start")
     _make_beat(graph, "beat::end", "End")
+    _make_beat(graph, "beat::alt_end", "Alt end")
+    # beat::start → beat::end and beat::start → beat::alt_end (Y-fork)
     graph.add_edge("predecessor", "beat::end", "beat::start")
+    graph.add_edge("predecessor", "beat::alt_end", "beat::start")
 
-    # Create passages
+    # Create passages — each branch is its own passage; passage::start
+    # ends at the divergence point which has out-degree 2 (valid boundary).
     _create_passage_node(
         graph,
         PassageSpec(passage_id="passage::start", beat_ids=["beat::start"], summary="Start"),
@@ -55,11 +68,21 @@ def _build_valid_graph() -> Graph:
         graph,
         PassageSpec(passage_id="passage::end", beat_ids=["beat::end"], summary="End"),
     )
+    _create_passage_node(
+        graph,
+        PassageSpec(passage_id="passage::alt_end", beat_ids=["beat::alt_end"], summary="Alt end"),
+    )
 
-    # Add a choice edge
+    # Add choice edges
     _create_choice_edge(
         graph,
         ChoiceSpec(from_passage="passage::start", to_passage="passage::end", label="Continue"),
+    )
+    _create_choice_edge(
+        graph,
+        ChoiceSpec(
+            from_passage="passage::start", to_passage="passage::alt_end", label="Alt continue"
+        ),
     )
 
     return graph
@@ -235,22 +258,6 @@ class TestValidatePolishOutputResidue:
 
         errors = validate_polish_output(graph)
         assert any("bad_residue" in e and "precedes" in e for e in errors)
-
-    def test_proper_residue_passes(self) -> None:
-        graph = _build_valid_graph()
-
-        _create_residue_beat_and_passage(
-            graph,
-            ResidueSpec(
-                target_passage_id="passage::start",
-                residue_id="residue::r1",
-                flag="flag1",
-                content_hint="Mood",
-            ),
-        )
-
-        errors = validate_polish_output(graph)
-        assert errors == [], f"Unexpected validation errors: {errors}"
 
 
 class TestPolishResult:
@@ -517,9 +524,8 @@ class TestDivergencesHaveChoices:
         graph.add_edge("belongs_to", "beat::a", "path::pa")
         graph.add_edge("belongs_to", "beat::b", "path::pb")
 
-        # next/branch edges making beat::div a divergence point
-        graph.add_edge("branch", "beat::div", "beat::a")
-        graph.add_edge("branch", "beat::div", "beat::b")
+        graph.add_edge("predecessor", "beat::a", "beat::div")
+        graph.add_edge("predecessor", "beat::b", "beat::div")
 
         # Group all beats into passages
         _create_passage_node(
@@ -561,8 +567,8 @@ class TestDivergencesHaveChoices:
         graph.add_edge("belongs_to", "beat::a", "path::pa")
         graph.add_edge("belongs_to", "beat::b", "path::pb")
 
-        graph.add_edge("branch", "beat::div", "beat::a")
-        graph.add_edge("branch", "beat::div", "beat::b")
+        graph.add_edge("predecessor", "beat::a", "beat::div")
+        graph.add_edge("predecessor", "beat::b", "beat::div")
 
         _create_passage_node(
             graph,

@@ -39,11 +39,13 @@ class TestFormatLinearSectionContext:
         )
 
         assert ctx["section_id"] == "section_0"
-        assert "beat::a" in ctx["beat_details"]
-        assert "beat::b" in ctx["beat_details"]
-        assert "beat::c" in ctx["beat_details"]
+        # Beat IDs in beat_details lines are backtick-wrapped per @prompt-engineer Rule 4.
+        assert "`beat::a`" in ctx["beat_details"]
+        assert "`beat::b`" in ctx["beat_details"]
+        assert "`beat::c`" in ctx["beat_details"]
         assert ctx["beat_count"] == "3"
-        assert ctx["valid_beat_ids"] == "beat::a, beat::b, beat::c"
+        # Bullet-per-line, not flat comma-separated (#1486).
+        assert ctx["valid_beat_ids"] == "- `beat::a`\n- `beat::b`\n- `beat::c`"
 
     def test_with_context_beats(self) -> None:
         graph = Graph.empty()
@@ -67,6 +69,30 @@ class TestFormatLinearSectionContext:
         assert "start/end" in ctx["before_context"]
         assert "start/end" in ctx["after_context"]
 
+    def test_empty_section_falls_back_to_none(self) -> None:
+        """Empty `beat_ids` MUST render `(none)` for both `beat_details` and
+        `valid_beat_ids` per the consistent empty-fallback pattern across
+        polish_context render functions."""
+        graph = Graph.empty()
+        ctx = format_linear_section_context(graph, "section_0", [], None, None)
+        assert ctx["beat_details"] == "(none)"
+        assert ctx["valid_beat_ids"] == "(none)"
+        assert ctx["beat_count"] == "0"
+
+    def test_section_beat_with_entities_renders_backticks(self) -> None:
+        """A section beat whose `entities` field is populated renders the
+        entity list with backticks per @prompt-engineer Rule 4 — never as a
+        Python repr-style bracket list. Covers the linear-section
+        equivalent of `test_pacing_beat_with_entities_renders_backticks`."""
+        graph = Graph.empty()
+        _make_beat(graph, "beat::a", "Hero acts", entities=["entity::hero"])
+
+        ctx = format_linear_section_context(graph, "s0", ["beat::a"], None, None)
+
+        assert "entities: `entity::hero`" in ctx["beat_details"]
+        # No bracket-format leak per @prompt-engineer Rule 4.
+        assert "entities=[" not in ctx["beat_details"]
+
     def test_dilemma_impacts_shown(self) -> None:
         graph = Graph.empty()
         _make_beat(
@@ -79,7 +105,10 @@ class TestFormatLinearSectionContext:
         ctx = format_linear_section_context(graph, "s0", ["beat::commit"], None, None)
 
         assert "commits" in ctx["beat_details"]
-        assert "dilemma::d1" in ctx["beat_details"]
+        # Dilemma IDs are backtick-wrapped within the impacts: clause.
+        assert "`dilemma::d1`" in ctx["beat_details"]
+        # No bracket-format leaks per @prompt-engineer Rule 4.
+        assert "impacts=[" not in ctx["beat_details"]
 
 
 class TestFormatPacingContext:
@@ -103,14 +132,36 @@ class TestFormatPacingContext:
         ctx = format_pacing_context(graph, flags)
 
         assert "consecutive_scene" in ctx["pacing_issues"]
-        assert "beat::a" in ctx["pacing_issues"]
-        assert "entity::hero" in ctx["valid_entity_ids"]
+        # Beat IDs and path IDs backtick-wrapped per @prompt-engineer Rule 4.
+        assert "`beat::a`" in ctx["pacing_issues"]
+        assert "Path: `path::p1`" in ctx["pacing_issues"]
+        # valid_entity_ids backtick-wrapped, with `(none)` fallback.
+        assert "`entity::hero`" in ctx["valid_entity_ids"]
         assert ctx["entity_count"] == "1"
 
     def test_no_flags(self) -> None:
         graph = Graph.empty()
         ctx = format_pacing_context(graph, [])
         assert "No pacing issues" in ctx["pacing_issues"]
+        # No entities → valid_entity_ids falls back to `(none)`.
+        assert ctx["valid_entity_ids"] == "(none)"
+
+    def test_pacing_beat_with_entities_renders_backticks(self) -> None:
+        """A pacing flag whose beats reference entities renders the entity
+        list with backticks per @prompt-engineer Rule 4 — never as a Python
+        repr-style bracket list."""
+        graph = Graph.empty()
+        _make_beat(graph, "beat::a", "Hero acts", entities=["entity::hero"])
+        graph.create_node("entity::hero", {"type": "entity", "raw_id": "hero", "name": "Hero"})
+
+        flags = [
+            {"issue_type": "consecutive_scene", "beat_ids": ["beat::a"], "path_id": "path::p1"}
+        ]
+        ctx = format_pacing_context(graph, flags)
+
+        assert "entities: `entity::hero`" in ctx["pacing_issues"]
+        # No bracket-format leaking through (@prompt-engineer Rule 4).
+        assert "entities=[" not in ctx["pacing_issues"]
 
 
 class TestFormatEntityArcContext:
@@ -143,9 +194,17 @@ class TestFormatEntityArcContext:
         assert ctx["entity_id"] == "entity::mentor"
         assert ctx["entity_name"] == "The Mentor"
         assert "wise guide" in ctx["entity_description"]
-        assert "beat::intro" in ctx["beat_appearances"]
-        assert "beat::reveal" in ctx["beat_appearances"]
-        assert "path::brave" in ctx["path_ids"]
+        # IDs in beat_appearances lines are backtick-wrapped per @prompt-engineer
+        # Rule 4 — matches the valid_*_ids lists so a model doesn't need to
+        # mentally strip backticks when matching IDs across surfaces.
+        assert "`beat::intro`" in ctx["beat_appearances"]
+        assert "`beat::reveal`" in ctx["beat_appearances"]
+        assert "(path: `path::brave`)" in ctx["beat_appearances"]
+        # Same backtick convention for the standalone ID lists.
+        assert "`path::brave`" in ctx["path_ids"]
+        # Grouped Valid IDs block: one bullet per path with its beats.
+        # `path::brave` owns both `beat::intro` and `beat::reveal`.
+        assert "- `path::brave` → `beat::intro`, `beat::reveal`" in ctx["valid_path_beats"]
 
     def test_entity_with_overlays(self) -> None:
         graph = Graph.empty()
@@ -171,7 +230,158 @@ class TestFormatEntityArcContext:
         ctx = format_entity_arc_context(graph, "entity::npc", ["beat::b1"])
 
         assert "hostile" in ctx["overlay_data"]
-        assert "dilemma::d1:path::p1" in ctx["overlay_data"]
+        # Flag IDs are backtick-wrapped per @prompt-engineer Rule 4 — matches the
+        # DRESS overlay renderer (closes #1406).
+        assert "`dilemma::d1:path::p1`" in ctx["overlay_data"]
+
+    def test_entity_overlay_list_values_render_human_readable(self) -> None:
+        """List-valued details render as comma-joined strings (e.g. `umm, well`)
+        — never as Python repr (`['umm', 'well']`) per @prompt-engineer Rule 4.
+        Pinned because this is exactly the bracket-format the rule forbids."""
+        graph = Graph.empty()
+        graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
+        graph.create_node(
+            "entity::npc",
+            {
+                "type": "entity",
+                "raw_id": "npc",
+                "name": "NPC",
+                "overlays": [
+                    {
+                        "when": ["state_flag::met_npc"],
+                        "details": {"speech_tics": ["umm", "well"]},
+                    }
+                ],
+            },
+        )
+        _make_beat(graph, "beat::b1", "Meet NPC", entities=["entity::npc"])
+        graph.add_edge("belongs_to", "beat::b1", "path::p1")
+
+        ctx = format_entity_arc_context(graph, "entity::npc", ["beat::b1"])
+        assert "speech_tics: umm, well" in ctx["overlay_data"]
+        # Belt-and-braces: explicitly assert the bracket-format is GONE.
+        assert "['umm', 'well']" not in ctx["overlay_data"]
+
+    def test_id_lists_fall_back_to_none_when_empty(self) -> None:
+        """Empty source sets MUST render as `(none)` rather than an empty
+        string so the prompt never receives a bare empty injection. Matches
+        the existing `anchored_dilemmas` fallback pattern; pinned because
+        empty-input behaviour is otherwise easy to regress silently."""
+        graph = Graph.empty()
+        graph.create_node(
+            "entity::loner",
+            {"type": "entity", "raw_id": "loner", "name": "Loner", "description": ""},
+        )
+        # No beats, no paths, no anchored_to edges.
+
+        ctx = format_entity_arc_context(graph, "entity::loner", [])
+        assert ctx["path_ids"] == "(none)"
+        assert ctx["valid_path_beats"] == "  (none)"
+        assert ctx["anchored_dilemmas"] == "(none)"
+        # `beat_appearances` uses the same fallback (with the indent the
+        # rendered lines normally carry) so the prompt never receives an
+        # empty injection.
+        assert ctx["beat_appearances"] == "  (none)"
+
+    def test_valid_path_beats_excludes_paths_entity_does_not_appear_on(self) -> None:
+        """The grouped `valid_path_beats` block MUST be scoped to paths where
+        the entity actually appears (closes #1410). Showing the broader
+        story-wide list confused models into inventing arcs on paths the
+        entity is never in."""
+        graph = Graph.empty()
+        # Two paths exist in the story.
+        graph.create_node("path::story_a", {"type": "path", "raw_id": "story_a"})
+        graph.create_node("path::story_b", {"type": "path", "raw_id": "story_b"})
+        graph.create_node(
+            "entity::loner",
+            {"type": "entity", "raw_id": "loner", "name": "Loner", "description": "x"},
+        )
+        # Entity appears only on path_a (via beat::b1).
+        _make_beat(graph, "beat::b1", "Loner appears", entities=["entity::loner"])
+        graph.add_edge("belongs_to", "beat::b1", "path::story_a")
+
+        ctx = format_entity_arc_context(graph, "entity::loner", ["beat::b1"])
+        # `path_ids` shows only the entity's path.
+        assert ctx["path_ids"] == "`path::story_a`"
+        # The grouped block lists the entity's path + its beat, NOT story_b.
+        assert "- `path::story_a` → `beat::b1`" in ctx["valid_path_beats"]
+        assert "story_b" not in ctx["valid_path_beats"]
+
+    def test_valid_path_beats_lists_y_shape_precommit_under_each_path(self) -> None:
+        """Y-shape pre-commit beats have multi-`belongs_to` (one edge per path
+        of their dilemma). The grouped `valid_path_beats` block MUST list such
+        a beat under EACH of its paths — that's how the LLM knows the beat is
+        legal for both `pivots` entries."""
+        graph = Graph.empty()
+        graph.create_node(
+            "path::canon",
+            {"type": "path", "raw_id": "canon", "dilemma_id": "dilemma::trust"},
+        )
+        graph.create_node(
+            "path::alt",
+            {"type": "path", "raw_id": "alt", "dilemma_id": "dilemma::trust"},
+        )
+        graph.create_node(
+            "entity::mentor",
+            {"type": "entity", "raw_id": "mentor", "name": "Mentor", "description": "guide"},
+        )
+        # `beat::shared` is a Y-shape pre-commit beat (multi-belongs_to)
+        # where the mentor appears.
+        _make_beat(graph, "beat::shared", "Mentor speaks", entities=["entity::mentor"])
+        graph.add_edge("belongs_to", "beat::shared", "path::canon")
+        graph.add_edge("belongs_to", "beat::shared", "path::alt")
+
+        ctx = format_entity_arc_context(graph, "entity::mentor", ["beat::shared"])
+        # The pre-commit beat surfaces under BOTH paths in the grouped block.
+        assert "- `path::alt` → `beat::shared`" in ctx["valid_path_beats"]
+        assert "- `path::canon` → `beat::shared`" in ctx["valid_path_beats"]
+
+    def test_anchored_dilemmas_backtick_wrapped(self) -> None:
+        """Dilemmas the entity is `anchored_to` are backtick-wrapped per
+        @prompt-engineer Rule 4 — same convention as overlay flag IDs and the
+        valid_*_ids lists."""
+        graph = Graph.empty()
+        graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
+        graph.create_node(
+            "entity::mentor",
+            {"type": "entity", "raw_id": "mentor", "name": "Mentor", "description": "guide"},
+        )
+        graph.create_node("dilemma::trust", {"type": "dilemma", "raw_id": "trust"})
+        graph.add_edge("anchored_to", "entity::mentor", "dilemma::trust")
+        _make_beat(graph, "beat::b1", "Meet mentor", entities=["entity::mentor"])
+        graph.add_edge("belongs_to", "beat::b1", "path::p1")
+
+        ctx = format_entity_arc_context(graph, "entity::mentor", ["beat::b1"])
+        assert ctx["anchored_dilemmas"] == "`dilemma::trust`"
+
+    def test_entity_overlay_details_sorted_for_determinism(self) -> None:
+        """Detail keys MUST be iterated in sorted order so the rendered string
+        is byte-identical across runs regardless of dict insertion order."""
+        graph = Graph.empty()
+        graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
+        graph.create_node(
+            "entity::npc",
+            {
+                "type": "entity",
+                "raw_id": "npc",
+                "name": "NPC",
+                "overlays": [
+                    {
+                        "when": ["state_flag::met_npc"],
+                        # Inserted in non-alphabetical order intentionally.
+                        "details": {"voice": "soft", "demeanor": "warm"},
+                    }
+                ],
+            },
+        )
+        _make_beat(graph, "beat::b1", "Meet NPC", entities=["entity::npc"])
+        graph.add_edge("belongs_to", "beat::b1", "path::p1")
+
+        ctx = format_entity_arc_context(graph, "entity::npc", ["beat::b1"])
+        # `demeanor` sorts before `voice` alphabetically.
+        d_idx = ctx["overlay_data"].index("demeanor: warm")
+        v_idx = ctx["overlay_data"].index("voice: soft")
+        assert d_idx < v_idx
 
     def test_entity_not_found(self) -> None:
         """Missing entity returns empty fields gracefully."""
@@ -182,3 +392,30 @@ class TestFormatEntityArcContext:
 
         assert ctx["entity_id"] == "entity::missing"
         assert ctx["entity_name"] == "entity::missing"
+
+
+def test_format_entity_context_lists_all_paths_for_pre_commit_beat() -> None:
+    """Pre-commit beats with dual belongs_to show both paths in appearance lines."""
+    graph = Graph.empty()
+    graph.create_node("entity::mentor", {"type": "entity", "name": "Mentor", "description": "x"})
+    graph.create_node("path::trust__a", {"type": "path", "raw_id": "trust__a"})
+    graph.create_node("path::trust__b", {"type": "path", "raw_id": "trust__b"})
+    graph.create_node(
+        "beat::shared",
+        {
+            "type": "beat",
+            "summary": "Shared setup.",
+            "scene_type": "scene",
+            "raw_id": "shared",
+            "dilemma_impacts": [],
+            "entities": ["entity::mentor"],
+        },
+    )
+    graph.add_edge("belongs_to", "beat::shared", "path::trust__a")
+    graph.add_edge("belongs_to", "beat::shared", "path::trust__b")
+    graph.add_edge("appears", "entity::mentor", "beat::shared")
+
+    ctx = format_entity_arc_context(graph, "entity::mentor", ["beat::shared"])
+    beat_appearances = ctx["beat_appearances"]
+    assert "path::trust__a" in beat_appearances
+    assert "path::trust__b" in beat_appearances

@@ -7,7 +7,10 @@ from unittest.mock import MagicMock
 import pytest
 
 from questfoundry.graph.graph import Graph
-from questfoundry.pipeline.stages.grow.deterministic import phase_intra_path_predecessors
+from questfoundry.pipeline.stages.grow.deterministic import (
+    phase_convergence,
+    phase_intra_path_predecessors,
+)
 
 
 def _make_mock_model() -> MagicMock:
@@ -132,27 +135,43 @@ class TestPhaseIntraPathPredecessors:
         assert len(edges) == 0
 
     @pytest.mark.asyncio
-    async def test_shared_beat_excluded_from_chaining(self) -> None:
-        """A beat belonging to two paths is excluded from intra-path chaining.
+    async def test_y_shape_shared_beats_included_in_chain(self) -> None:
+        """Y-shape shared pre-commit beats participate in intra-path chaining.
 
-        beat::shared belongs to both path::a and path::b.  Only path-exclusive
-        beats (beat::a_only, beat::b_only) should be chained.  beat::shared
-        must not appear in any predecessor edge created by this phase.
+        Regression for #1248: shared beats (dual belongs_to) were excluded
+        from chaining, leaving them as disconnected floating nodes.
+
+        With two shared setup beats and one exclusive beat per path, the
+        expected chain per path is:
+            shared_01 → shared_02 → exclusive_beat
+
+        Processing both paths creates the Y-fork:
+            shared_01 → shared_02 → a_beat_01
+                                  → b_beat_01
         """
         graph = Graph.empty()
 
-        graph.create_node("path::a", {"type": "path", "raw_id": "a"})
-        graph.create_node("path::b", {"type": "path", "raw_id": "b"})
-        graph.create_node("beat::shared", {"type": "beat", "raw_id": "shared"})
-        graph.create_node("beat::a_only", {"type": "beat", "raw_id": "a_only"})
-        graph.create_node("beat::b_only", {"type": "beat", "raw_id": "b_only"})
+        graph.create_node(
+            "path::a",
+            {"type": "path", "raw_id": "a", "dilemma_id": "dilemma::d1"},
+        )
+        graph.create_node(
+            "path::b",
+            {"type": "path", "raw_id": "b", "dilemma_id": "dilemma::d1"},
+        )
+        graph.create_node("beat::shared_setup_01", {"type": "beat", "raw_id": "shared_setup_01"})
+        graph.create_node("beat::shared_setup_02", {"type": "beat", "raw_id": "shared_setup_02"})
+        graph.create_node("beat::a_beat_01", {"type": "beat", "raw_id": "a_beat_01"})
+        graph.create_node("beat::b_beat_01", {"type": "beat", "raw_id": "b_beat_01"})
 
-        # shared belongs to BOTH paths
-        graph.add_edge("belongs_to", "beat::shared", "path::a")
-        graph.add_edge("belongs_to", "beat::shared", "path::b")
-        # exclusive beats
-        graph.add_edge("belongs_to", "beat::a_only", "path::a")
-        graph.add_edge("belongs_to", "beat::b_only", "path::b")
+        # Shared beats belong to BOTH paths (Y-shape dual belongs_to)
+        graph.add_edge("belongs_to", "beat::shared_setup_01", "path::a")
+        graph.add_edge("belongs_to", "beat::shared_setup_01", "path::b")
+        graph.add_edge("belongs_to", "beat::shared_setup_02", "path::a")
+        graph.add_edge("belongs_to", "beat::shared_setup_02", "path::b")
+        # Exclusive beats
+        graph.add_edge("belongs_to", "beat::a_beat_01", "path::a")
+        graph.add_edge("belongs_to", "beat::b_beat_01", "path::b")
 
         result = await phase_intra_path_predecessors(graph, _make_mock_model())
 
@@ -161,17 +180,13 @@ class TestPhaseIntraPathPredecessors:
         edges = graph.get_edges(edge_type="predecessor")
         edge_pairs = {(e["from"], e["to"]) for e in edges}
 
-        # No edge should involve beat::shared (it is shared, not exclusive)
-        for from_id, to_id in edge_pairs:
-            assert from_id != "beat::shared", (
-                f"shared beat appeared as successor in edge {from_id}->{to_id}"
-            )
-            assert to_id != "beat::shared", (
-                f"shared beat appeared as predecessor in edge {from_id}->{to_id}"
-            )
-
-        # Each path has only 1 exclusive beat → no chain can be formed → 0 edges
-        assert len(edges) == 0
+        # Shared chain: shared_02 comes after shared_01
+        assert ("beat::shared_setup_02", "beat::shared_setup_01") in edge_pairs
+        # Y-fork: both exclusive beats come after shared_02
+        assert ("beat::a_beat_01", "beat::shared_setup_02") in edge_pairs
+        assert ("beat::b_beat_01", "beat::shared_setup_02") in edge_pairs
+        # 3 unique edges (shared→shared is created once, idempotent on second path)
+        assert len(edge_pairs) == 3
 
     @pytest.mark.asyncio
     async def test_no_paths_returns_completed(self) -> None:
@@ -184,133 +199,360 @@ class TestPhaseIntraPathPredecessors:
         assert "No path nodes" in result.detail
 
     @pytest.mark.asyncio
-    async def test_dead_end_resolved_by_intra_path_edges(self) -> None:
-        """Verify the root-cause scenario: dead-end detection passes after intra-path edges.
+    async def test_yfork_postcondition_fails_when_commit_beat_missing_for_one_path(
+        self,
+    ) -> None:
+        """R-1.4: phase must return failed when a pre-commit beat has a commit-beat
+        successor for only one of its two paths.
 
-        Without intra-path edges: if cross-path interleave adds predecessor(beat_b, beat_a)
-        and the arc picks a *different* answer on the destination dilemma (excluding beat_b),
-        beat_a has a successor (beat_b) outside its arc but none within — dead end.
-
-        With intra-path edges: beat_a has beat_a2 as its in-path successor, so even if
-        beat_b is outside the arc, beat_a is not a dead end within the arc.
+        Setup:
+        - dilemma d1, paths a and b.
+        - shared_02 is a pre-commit beat belonging to both paths.
+        - a_commit belongs to path a only, has 'commits' impact.
+        - b_commit belongs to path b only, has 'commits' impact.
+        - A pre-existing reverse edge predecessor(shared_02, b_commit) blocks the
+          phase from wiring b_commit as a successor of shared_02.
+        - After the phase runs, shared_02 has a commit successor only for path a.
+        - The postcondition must fire and return status='failed'.
         """
-        from questfoundry.graph.polish_validation import _check_arc_traversal_completeness
-
         graph = Graph.empty()
 
-        # d1: two paths (d1_yes has 2 beats, d1_no has no beats)
+        graph.create_node("dilemma::d1", {"type": "dilemma", "raw_id": "d1"})
         graph.create_node(
-            "dilemma::d1",
-            {"type": "dilemma", "raw_id": "d1", "dilemma_role": "hard"},
+            "path::a",
+            {"type": "path", "raw_id": "a", "dilemma_id": "dilemma::d1"},
         )
         graph.create_node(
-            "path::d1_yes",
-            {"type": "path", "raw_id": "d1_yes", "dilemma_id": "dilemma::d1", "is_canonical": True},
-        )
-        graph.create_node(
-            "path::d1_no",
-            {"type": "path", "raw_id": "d1_no", "dilemma_id": "dilemma::d1", "is_canonical": False},
+            "path::b",
+            {"type": "path", "raw_id": "b", "dilemma_id": "dilemma::d1"},
         )
 
-        # d2: two paths; d2_yes has a beat that follows d1_yes_beat_01 via cross-path edge.
-        # d2_no has a different beat. This means arc (d1_yes + d2_no) excludes d2_yes_beat_01.
+        # Shared pre-commit beat: belongs to BOTH paths, no commits impact.
         graph.create_node(
-            "dilemma::d2",
-            {"type": "dilemma", "raw_id": "d2", "dilemma_role": "soft"},
-        )
-        graph.create_node(
-            "path::d2_yes",
-            {"type": "path", "raw_id": "d2_yes", "dilemma_id": "dilemma::d2", "is_canonical": True},
-        )
-        graph.create_node(
-            "path::d2_no",
-            {"type": "path", "raw_id": "d2_no", "dilemma_id": "dilemma::d2", "is_canonical": False},
-        )
-
-        # Two beats on path d1_yes
-        graph.create_node(
-            "beat::d1_yes_beat_01",
+            "beat::shared_02",
             {
                 "type": "beat",
-                "raw_id": "d1_yes_beat_01",
-                "summary": "First beat",
-                "dilemma_impacts": [{"dilemma_id": "dilemma::d1", "effect": "setup"}],
+                "raw_id": "shared_02",
+                "dilemma_impacts": [],
             },
         )
+        graph.add_edge("belongs_to", "beat::shared_02", "path::a")
+        graph.add_edge("belongs_to", "beat::shared_02", "path::b")
+
+        # Commit beat for path a — will get wired normally.
         graph.create_node(
-            "beat::d1_yes_beat_02",
+            "beat::a_commit",
             {
                 "type": "beat",
-                "raw_id": "d1_yes_beat_02",
-                "summary": "Second beat (commits)",
+                "raw_id": "a_commit",
                 "dilemma_impacts": [{"dilemma_id": "dilemma::d1", "effect": "commits"}],
             },
         )
-        graph.add_edge("belongs_to", "beat::d1_yes_beat_01", "path::d1_yes")
-        graph.add_edge("belongs_to", "beat::d1_yes_beat_02", "path::d1_yes")
+        graph.add_edge("belongs_to", "beat::a_commit", "path::a")
 
-        # d2_yes beat — linked by cross-path predecessor to d1_yes_beat_01
+        # Commit beat for path b — blocked by a reverse edge so the phase cannot
+        # wire it as a successor of shared_02.
         graph.create_node(
-            "beat::d2_yes_beat_01",
+            "beat::b_commit",
             {
                 "type": "beat",
-                "raw_id": "d2_yes_beat_01",
-                "summary": "D2 yes path beat",
-                "dilemma_impacts": [{"dilemma_id": "dilemma::d2", "effect": "commits"}],
+                "raw_id": "b_commit",
+                "dilemma_impacts": [{"dilemma_id": "dilemma::d1", "effect": "commits"}],
             },
         )
-        graph.add_edge("belongs_to", "beat::d2_yes_beat_01", "path::d2_yes")
+        graph.add_edge("belongs_to", "beat::b_commit", "path::b")
 
-        # d2_no beat — distinct from d2_yes_beat_01
-        graph.create_node(
-            "beat::d2_no_beat_01",
-            {
-                "type": "beat",
-                "raw_id": "d2_no_beat_01",
-                "summary": "D2 no path beat",
-                "dilemma_impacts": [{"dilemma_id": "dilemma::d2", "effect": "commits"}],
-            },
-        )
-        graph.add_edge("belongs_to", "beat::d2_no_beat_01", "path::d2_no")
+        # Pre-existing reverse edge: shared_02 as successor of b_commit.
+        # This blocks the phase from adding predecessor(b_commit, shared_02)
+        # (which would create the Y-fork), so shared_02 never gains b_commit
+        # as a commit-beat successor.
+        graph.add_edge("predecessor", "beat::shared_02", "beat::b_commit")
 
-        # Cross-path edge: d2_yes_beat_01 follows d1_yes_beat_01
-        # (simulating what interleave_cross_path_beats would create)
-        graph.add_edge("predecessor", "beat::d2_yes_beat_01", "beat::d1_yes_beat_01")
-
-        beat_nodes = graph.get_nodes_by_type("beat")
-
-        # Without intra-path edges:
-        # Arc (d1_yes + d2_no) has beats {d1_yes_beat_01, d1_yes_beat_02, d2_no_beat_01}.
-        # d1_yes_beat_01 has child d2_yes_beat_01 (NOT in this arc) but no child in the arc.
-        # d1_yes_beat_02 has no children at all → not a dead end (it's the terminal beat).
-        # So d1_yes_beat_01 is a dead end in arc d1_yes + d2_no.
-        errors_before: list[str] = []
-        _check_arc_traversal_completeness(graph, beat_nodes, errors_before)
-        dead_end_errors_before = [
-            e for e in errors_before if "dead-end" in e and "d1_yes_beat_01" in e
-        ]
-        assert dead_end_errors_before, (
-            f"Expected dead-end error for d1_yes_beat_01 before intra-path edges. "
-            f"Got errors: {errors_before}"
-        )
-
-        # Now add the intra-path predecessor edge
         result = await phase_intra_path_predecessors(graph, _make_mock_model())
-        assert result.status == "completed"
 
-        # Verify intra-path edge was created: d1_yes_beat_02 → d1_yes_beat_01
-        edges = graph.get_edges(edge_type="predecessor")
-        edge_pairs = {(e["from"], e["to"]) for e in edges}
-        assert ("beat::d1_yes_beat_02", "beat::d1_yes_beat_01") in edge_pairs
-
-        # After adding intra-path edges: d1_yes_beat_01 has d1_yes_beat_02 as its
-        # in-arc successor in arc (d1_yes + d2_no), so it is no longer a dead end.
-        errors_after: list[str] = []
-        _check_arc_traversal_completeness(graph, beat_nodes, errors_after)
-        dead_end_errors_after = [
-            e for e in errors_after if "dead-end" in e and "d1_yes_beat_01" in e
-        ]
-        assert not dead_end_errors_after, (
-            f"Expected no dead-end errors for d1_yes_beat_01 after intra-path edges, "
-            f"got: {dead_end_errors_after}"
+        assert result.status == "failed", (
+            f"Expected 'failed' (R-1.4 Y-fork postcondition), got {result.status!r}: "
+            f"{result.detail}"
         )
+        assert "R-1.4" in result.detail
+        assert "b_commit" in result.detail or "path::b" in result.detail
+
+
+# ---------------------------------------------------------------------------
+# TestPhaseConvergencePersistence
+# ---------------------------------------------------------------------------
+
+
+def _make_convergence_fixture() -> Graph:
+    """Build a two-dilemma interleaved graph for phase_convergence persistence tests.
+
+    Structure (Y-shape per dilemma, interleaved into a single DAG):
+
+    d1 (soft, payoff_budget=2):
+        shared_d1_01 → shared_d1_02 → d1_a_beat_01 → d1_a_beat_02
+                                     ↘ d1_b_beat_01 → d1_b_beat_02
+
+    d2 (hard, payoff_budget=3):
+        shared_d2_01 → shared_d2_02 → d2_a_beat_01
+                                     ↘ d2_b_beat_01
+
+    Cross-dilemma interleave edges (d1 terminals → d2 entry):
+        d1_a_beat_02 → shared_d2_01
+        d1_b_beat_02 → shared_d2_01
+
+    d1 terminal exclusive beats: d1_a_beat_02 (path d1_a), d1_b_beat_02 (path d1_b)
+    Both reach shared_d2_01 as first non-exclusive successor → converges_at = shared_d2_01
+    convergence_payoff = min(exclusive beats per path) = min(2, 2) = 2
+      (d1_a exclusive: d1_a_beat_01, d1_a_beat_02; d1_b exclusive: d1_b_beat_01, d1_b_beat_02)
+
+    d2 is hard → not processed by phase_convergence.
+    """
+    graph = Graph.empty()
+
+    # --- Dilemma d1 (soft) ---
+    graph.create_node(
+        "dilemma::d1",
+        {"type": "dilemma", "raw_id": "d1", "dilemma_role": "soft", "payoff_budget": 2},
+    )
+    graph.create_node(
+        "path::d1_a",
+        {"type": "path", "raw_id": "d1_a", "dilemma_id": "dilemma::d1", "is_canonical": True},
+    )
+    graph.create_node(
+        "path::d1_b",
+        {"type": "path", "raw_id": "d1_b", "dilemma_id": "dilemma::d1", "is_canonical": False},
+    )
+
+    # --- Dilemma d2 (hard) ---
+    graph.create_node(
+        "dilemma::d2",
+        {"type": "dilemma", "raw_id": "d2", "dilemma_role": "hard", "payoff_budget": 3},
+    )
+    graph.create_node(
+        "path::d2_a",
+        {"type": "path", "raw_id": "d2_a", "dilemma_id": "dilemma::d2", "is_canonical": True},
+    )
+    graph.create_node(
+        "path::d2_b",
+        {"type": "path", "raw_id": "d2_b", "dilemma_id": "dilemma::d2", "is_canonical": False},
+    )
+
+    # Dilemma relationship: d1 concurrent with d2
+    graph.add_edge("concurrent", "dilemma::d1", "dilemma::d2")
+
+    # --- d1 beats ---
+    # Shared pre-commit beats (belong to both d1 paths)
+    graph.create_node(
+        "beat::shared_d1_01",
+        {"type": "beat", "raw_id": "shared_d1_01", "summary": "D1 setup 1", "dilemma_impacts": []},
+    )
+    graph.add_edge("belongs_to", "beat::shared_d1_01", "path::d1_a")
+    graph.add_edge("belongs_to", "beat::shared_d1_01", "path::d1_b")
+
+    graph.create_node(
+        "beat::shared_d1_02",
+        {"type": "beat", "raw_id": "shared_d1_02", "summary": "D1 setup 2", "dilemma_impacts": []},
+    )
+    graph.add_edge("belongs_to", "beat::shared_d1_02", "path::d1_a")
+    graph.add_edge("belongs_to", "beat::shared_d1_02", "path::d1_b")
+
+    # Exclusive beats per d1 path (2 per path: commit + post-commit)
+    graph.create_node(
+        "beat::d1_a_beat_01",
+        {
+            "type": "beat",
+            "raw_id": "d1_a_beat_01",
+            "summary": "D1 path-a commit",
+            "dilemma_impacts": [{"dilemma_id": "dilemma::d1", "effect": "commits"}],
+        },
+    )
+    graph.add_edge("belongs_to", "beat::d1_a_beat_01", "path::d1_a")
+
+    graph.create_node(
+        "beat::d1_a_beat_02",
+        {
+            "type": "beat",
+            "raw_id": "d1_a_beat_02",
+            "summary": "D1 path-a post",
+            "dilemma_impacts": [],
+        },
+    )
+    graph.add_edge("belongs_to", "beat::d1_a_beat_02", "path::d1_a")
+
+    graph.create_node(
+        "beat::d1_b_beat_01",
+        {
+            "type": "beat",
+            "raw_id": "d1_b_beat_01",
+            "summary": "D1 path-b commit",
+            "dilemma_impacts": [{"dilemma_id": "dilemma::d1", "effect": "commits"}],
+        },
+    )
+    graph.add_edge("belongs_to", "beat::d1_b_beat_01", "path::d1_b")
+
+    graph.create_node(
+        "beat::d1_b_beat_02",
+        {
+            "type": "beat",
+            "raw_id": "d1_b_beat_02",
+            "summary": "D1 path-b post",
+            "dilemma_impacts": [],
+        },
+    )
+    graph.add_edge("belongs_to", "beat::d1_b_beat_02", "path::d1_b")
+
+    # --- d2 beats ---
+    # Shared pre-commit beats (belong to both d2 paths)
+    graph.create_node(
+        "beat::shared_d2_01",
+        {"type": "beat", "raw_id": "shared_d2_01", "summary": "D2 setup 1", "dilemma_impacts": []},
+    )
+    graph.add_edge("belongs_to", "beat::shared_d2_01", "path::d2_a")
+    graph.add_edge("belongs_to", "beat::shared_d2_01", "path::d2_b")
+
+    graph.create_node(
+        "beat::shared_d2_02",
+        {"type": "beat", "raw_id": "shared_d2_02", "summary": "D2 setup 2", "dilemma_impacts": []},
+    )
+    graph.add_edge("belongs_to", "beat::shared_d2_02", "path::d2_a")
+    graph.add_edge("belongs_to", "beat::shared_d2_02", "path::d2_b")
+
+    graph.create_node(
+        "beat::d2_a_beat_01",
+        {
+            "type": "beat",
+            "raw_id": "d2_a_beat_01",
+            "summary": "D2 path-a commit",
+            "dilemma_impacts": [{"dilemma_id": "dilemma::d2", "effect": "commits"}],
+        },
+    )
+    graph.add_edge("belongs_to", "beat::d2_a_beat_01", "path::d2_a")
+
+    graph.create_node(
+        "beat::d2_b_beat_01",
+        {
+            "type": "beat",
+            "raw_id": "d2_b_beat_01",
+            "summary": "D2 path-b commit",
+            "dilemma_impacts": [{"dilemma_id": "dilemma::d2", "effect": "commits"}],
+        },
+    )
+    graph.add_edge("belongs_to", "beat::d2_b_beat_01", "path::d2_b")
+
+    # --- Predecessor edges (from=later, to=earlier) ---
+    # d1 internal chain
+    graph.add_edge("predecessor", "beat::shared_d1_02", "beat::shared_d1_01")
+    graph.add_edge("predecessor", "beat::d1_a_beat_01", "beat::shared_d1_02")
+    graph.add_edge("predecessor", "beat::d1_b_beat_01", "beat::shared_d1_02")
+    graph.add_edge("predecessor", "beat::d1_a_beat_02", "beat::d1_a_beat_01")
+    graph.add_edge("predecessor", "beat::d1_b_beat_02", "beat::d1_b_beat_01")
+
+    # d2 internal chain
+    graph.add_edge("predecessor", "beat::shared_d2_02", "beat::shared_d2_01")
+    graph.add_edge("predecessor", "beat::d2_a_beat_01", "beat::shared_d2_02")
+    graph.add_edge("predecessor", "beat::d2_b_beat_01", "beat::shared_d2_02")
+
+    # Cross-dilemma interleave: d1 terminals → d2 entry
+    graph.add_edge("predecessor", "beat::shared_d2_01", "beat::d1_a_beat_02")
+    graph.add_edge("predecessor", "beat::shared_d2_01", "beat::d1_b_beat_02")
+
+    # Consequence nodes (one per path) — required for enumerate_arcs via has_consequence
+    graph.create_node("consequence::c_d1_a", {"type": "consequence", "raw_id": "c_d1_a"})
+    graph.create_node("consequence::c_d1_b", {"type": "consequence", "raw_id": "c_d1_b"})
+    graph.create_node("consequence::c_d2_a", {"type": "consequence", "raw_id": "c_d2_a"})
+    graph.create_node("consequence::c_d2_b", {"type": "consequence", "raw_id": "c_d2_b"})
+    graph.add_edge("has_consequence", "path::d1_a", "consequence::c_d1_a")
+    graph.add_edge("has_consequence", "path::d1_b", "consequence::c_d1_b")
+    graph.add_edge("has_consequence", "path::d2_a", "consequence::c_d2_a")
+    graph.add_edge("has_consequence", "path::d2_b", "consequence::c_d2_b")
+
+    graph.set_last_stage("grow")
+    return graph
+
+
+class TestPhaseConvergencePersistence:
+    """Tests for phase_convergence: convergence data persisted on dilemma nodes."""
+
+    @pytest.mark.asyncio
+    async def test_soft_dilemma_gets_converges_at(self) -> None:
+        """Soft d1 gets converges_at and convergence_payoff written to graph.
+
+        Both exclusive chains of d1 (d1_a_beat_02, d1_b_beat_02) have
+        shared_d2_01 as their first non-exclusive successor, so that is the
+        convergence point.  Payoff = min(2, 2) = 2.
+        """
+        graph = _make_convergence_fixture()
+
+        result = await phase_convergence(graph, _make_mock_model())
+
+        assert result.status == "completed"
+        assert "1 dilemma" in result.detail  # 1 soft dilemma persisted
+
+        d1_node = graph.get_node("dilemma::d1")
+        assert d1_node is not None
+        assert d1_node.get("converges_at") == "beat::shared_d2_01"
+        assert d1_node.get("convergence_payoff") == 2
+
+    @pytest.mark.asyncio
+    async def test_hard_dilemma_no_converges_at(self) -> None:
+        """Hard d2 is skipped; converges_at is absent (or None) on the node."""
+        graph = _make_convergence_fixture()
+
+        await phase_convergence(graph, _make_mock_model())
+
+        d2_node = graph.get_node("dilemma::d2")
+        assert d2_node is not None
+        # Hard dilemma must not have converges_at set by phase_convergence
+        assert d2_node.get("converges_at") is None
+
+    @pytest.mark.asyncio
+    async def test_single_path_soft_dilemma_skipped_no_halt(self) -> None:
+        """Single-path soft Dilemma is skipped per GROW R-6.4 single-path scope.
+
+        Per the GROW spec change codifying R-6.4's two-path scope, a soft
+        Dilemma with only one explored path is the legitimate locked-dilemma
+        shadow pattern (SEED Phase 2 R-2.2). Phase 6 must skip it without
+        halting; `converges_at` and `convergence_payoff` stay null per
+        Phase 6 §Output Contract item 3.
+
+        Regression test for the projects/murder2/ failure: SEED produced
+        `dilemma::locket_planted_or_dropped` with `dilemma_role: "soft"`
+        and `explored: ["planted"]` only. Pre-fix, GROW Phase 6 halted
+        on this single-path soft dilemma. Post-fix, the dilemma is
+        skipped and the run completes.
+        """
+        graph = Graph.empty()
+
+        # Create one soft dilemma with only ONE explored path (the other is shadow)
+        graph.create_node(
+            "dilemma::single_soft",
+            {
+                "type": "dilemma",
+                "raw_id": "single_soft",
+                "dilemma_role": "soft",
+                "payoff_budget": 2,
+            },
+        )
+        graph.create_node(
+            "path::single_soft_a",
+            {
+                "type": "path",
+                "raw_id": "single_soft_a",
+                "dilemma_id": "dilemma::single_soft",
+                "is_canonical": True,
+            },
+        )
+        # No second path — `b` was deliberately left as shadow.
+
+        result = await phase_convergence(graph, _make_mock_model())
+
+        # Phase must NOT halt — single-path soft is legitimate
+        assert result.status == "completed", (
+            f"Expected completed, got {result.status}: {result.detail}"
+        )
+        # converges_at and convergence_payoff stay null on the dilemma node
+        # (no second path to converge with)
+        d_node = graph.get_node("dilemma::single_soft")
+        assert d_node is not None
+        assert d_node.get("converges_at") is None
+        assert d_node.get("convergence_payoff") is None

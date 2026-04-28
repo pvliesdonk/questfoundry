@@ -6,9 +6,9 @@ downstream stages use the resolved SizeProfile to coordinate entity counts,
 arc limits, beat counts, and prompt guidance.
 
 Presets:
-    vignette: Tight single-thread story (5-15 passages)
+    micro: Tight single-thread story (5-15 passages)
     short: Modest branching (15-30 passages)
-    standard: Full branching, current default (30-60 passages)
+    medium: Full branching, current default (30-60 passages)
     long: Extensive branching (60-120 passages)
 """
 
@@ -49,9 +49,11 @@ class SizeProfile:
     entities_min: int
     entities_max: int
 
-    # Beat structure
-    beats_per_path_min: int
-    beats_per_path_max: int
+    # Y-shape beat structure (shared pre-commit + per-path post-commit)
+    shared_beats_per_dilemma_min: int
+    shared_beats_per_dilemma_max: int
+    post_commit_beats_per_path_min: int
+    post_commit_beats_per_path_max: int
     convergence_points_min: int
     convergence_points_max: int
 
@@ -84,8 +86,8 @@ class SizeProfile:
 
 
 PRESETS: dict[str, SizeProfile] = {
-    "vignette": SizeProfile(
-        preset="vignette",
+    "micro": SizeProfile(
+        preset="micro",
         max_arcs=2,
         fully_explored=1,
         characters_min=2,
@@ -98,8 +100,10 @@ PRESETS: dict[str, SizeProfile] = {
         dilemmas_max=3,
         entities_min=5,
         entities_max=10,
-        beats_per_path_min=2,
-        beats_per_path_max=3,
+        shared_beats_per_dilemma_min=1,
+        shared_beats_per_dilemma_max=1,
+        post_commit_beats_per_path_min=1,
+        post_commit_beats_per_path_max=2,
         convergence_points_min=0,
         convergence_points_max=1,
         est_passages_min=5,
@@ -123,8 +127,10 @@ PRESETS: dict[str, SizeProfile] = {
         dilemmas_max=5,
         entities_min=10,
         entities_max=18,
-        beats_per_path_min=2,
-        beats_per_path_max=4,
+        shared_beats_per_dilemma_min=1,
+        shared_beats_per_dilemma_max=2,
+        post_commit_beats_per_path_min=1,
+        post_commit_beats_per_path_max=2,
         convergence_points_min=1,
         convergence_points_max=2,
         est_passages_min=15,
@@ -134,8 +140,8 @@ PRESETS: dict[str, SizeProfile] = {
         tone_words_min=3,
         tone_words_max=4,
     ),
-    "standard": SizeProfile(
-        preset="standard",
+    "medium": SizeProfile(
+        preset="medium",
         max_arcs=16,
         fully_explored=4,
         characters_min=5,
@@ -148,8 +154,10 @@ PRESETS: dict[str, SizeProfile] = {
         dilemmas_max=8,
         entities_min=15,
         entities_max=25,
-        beats_per_path_min=2,
-        beats_per_path_max=4,
+        shared_beats_per_dilemma_min=1,
+        shared_beats_per_dilemma_max=2,
+        post_commit_beats_per_path_min=2,
+        post_commit_beats_per_path_max=3,
         convergence_points_min=1,
         convergence_points_max=2,
         est_passages_min=30,
@@ -173,8 +181,10 @@ PRESETS: dict[str, SizeProfile] = {
         dilemmas_max=10,
         entities_min=20,
         entities_max=35,
-        beats_per_path_min=3,
-        beats_per_path_max=5,
+        shared_beats_per_dilemma_min=1,
+        shared_beats_per_dilemma_max=2,
+        post_commit_beats_per_path_min=2,
+        post_commit_beats_per_path_max=3,
         convergence_points_min=2,
         convergence_points_max=4,
         est_passages_min=60,
@@ -189,11 +199,11 @@ PRESETS: dict[str, SizeProfile] = {
 VALID_PRESETS = frozenset(PRESETS.keys())
 
 
-def get_size_profile(preset: str = "standard") -> SizeProfile:
+def get_size_profile(preset: str = "medium") -> SizeProfile:
     """Resolve a preset name to a SizeProfile.
 
     Args:
-        preset: One of "vignette", "short", "standard", "long".
+        preset: One of "micro", "short", "medium", "long".
 
     Returns:
         The corresponding SizeProfile with all coordinated parameters.
@@ -212,7 +222,7 @@ def resolve_size_from_graph(graph: Graph) -> SizeProfile:
     """Read story_size from the DREAM vision node and resolve to a SizeProfile.
 
     Looks up the vision node's ``scope.story_size`` field. Falls back to
-    ``"standard"`` if the vision node, scope, or story_size field is missing
+    ``"medium"`` if the vision node, scope, or story_size field is missing
     (backward compatibility with projects created before size presets).
 
     Args:
@@ -223,10 +233,10 @@ def resolve_size_from_graph(graph: Graph) -> SizeProfile:
     """
     vision = graph.get_node("vision") or {}
     scope = vision.get("scope") or {}
-    story_size = scope.get("story_size", "standard")
+    story_size = scope.get("story_size", "medium")
 
     if story_size not in PRESETS:
-        story_size = "standard"
+        story_size = "medium"
 
     return get_size_profile(story_size)
 
@@ -235,7 +245,7 @@ def size_template_vars(profile: SizeProfile | None = None) -> dict[str, str]:
     """Build template variable dict from a size profile.
 
     Returns a dict mapping ``{size_*}`` template variable names to formatted
-    range strings. Falls back to ``standard`` preset if no profile is given.
+    range strings. Falls back to ``medium`` preset if no profile is given.
 
     Args:
         profile: Size profile to extract ranges from. Defaults to standard.
@@ -243,14 +253,15 @@ def size_template_vars(profile: SizeProfile | None = None) -> dict[str, str]:
     Returns:
         Dict with keys like ``size_characters``, ``size_dilemmas``, etc.
     """
-    p = profile or get_size_profile("standard")
+    p = profile or get_size_profile("medium")
     return {
         "size_characters": p.range_str("characters"),
         "size_locations": p.range_str("locations"),
         "size_objects": p.range_str("objects"),
         "size_dilemmas": p.range_str("dilemmas"),
         "size_entities": p.range_str("entities"),
-        "size_beats_per_path": p.range_str("beats_per_path"),
+        "size_shared_beats_per_dilemma": p.range_str("shared_beats_per_dilemma"),
+        "size_post_commit_beats_per_path": p.range_str("post_commit_beats_per_path"),
         "size_convergence_points": p.range_str("convergence_points"),
         "size_est_passages": p.range_str("est_passages"),
         "size_est_words": p.range_str("est_words"),

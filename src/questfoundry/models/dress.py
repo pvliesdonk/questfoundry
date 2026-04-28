@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from questfoundry.models.pipeline import PhaseResult
 
@@ -79,7 +79,10 @@ class CodexEntry(BaseModel):
     """Player-facing encyclopedia entry for an entity.
 
     Multiple entries per entity enable spoiler graduation: players see
-    more as they unlock codewords. Linked to entity via HasEntry edge.
+    more as they accumulate state flags through gameplay. Linked to
+    entity via HasEntry edge. (SHIP later projects a subset of state
+    flags as player-visible "codewords" for the gamebook export, but
+    DRESS gates internally on state flag IDs — see dress.md R-3.7.)
     """
 
     title: str = Field(
@@ -89,7 +92,7 @@ class CodexEntry(BaseModel):
     rank: int = Field(ge=1, description="Display order (1 = base knowledge, higher = deeper)")
     visible_when: list[str] = Field(
         default_factory=list,
-        description="Codeword IDs that must all be present to unlock this tier",
+        description="State flag IDs that must all be present to unlock this tier (see dress.md R-3.7)",
     )
     content: str = Field(min_length=1, description="Diegetic content — in-world voice, no spoilers")
 
@@ -233,6 +236,54 @@ class BatchedCodexOutput(BaseModel):
     entities: list[BatchedCodexItem] = Field(min_length=1)
 
 
+class SpoilerLeak(BaseModel):
+    """One spoiler-direction violation between two ranks of one entity."""
+
+    lower_rank: int = Field(
+        ge=1,
+        description="Rank of the entry that prematurely discloses information",
+    )
+    higher_rank: int = Field(
+        ge=2,
+        description="Rank of the entry whose reveal was leaked",
+    )
+    leaked_content: str = Field(
+        min_length=1,
+        description="Short quote or paraphrase of the leaked information",
+    )
+
+    @model_validator(mode="after")
+    def _check_rank_ordering(self) -> SpoilerLeak:
+        # R-3.6's spoiler direction is strictly low → high. An LLM that
+        # returns lower_rank ≥ higher_rank has either inverted the
+        # arguments or invented a self-referential leak; either way the
+        # downstream retry feedback would be nonsensical, so reject at
+        # validation time so the LLM repair loop fixes it.
+        if self.lower_rank >= self.higher_rank:
+            msg = (
+                f"SpoilerLeak: lower_rank ({self.lower_rank}) must be "
+                f"strictly less than higher_rank ({self.higher_rank})"
+            )
+            raise ValueError(msg)
+        return self
+
+
+class SpoilerCheckResult(BaseModel):
+    """Result of an LLM spoiler check on one entity's codex entries (R-3.6)."""
+
+    has_leak: bool = Field(
+        description="True if any lower-ranked entry leaks higher-ranked content",
+    )
+    leaks: list[SpoilerLeak] = Field(
+        default_factory=list,
+        description="Detected spoiler violations (empty if has_leak is False)",
+    )
+    reason: str = Field(
+        default="",
+        description="Brief LLM explanation; populated when has_leak is True",
+    )
+
+
 # ---------------------------------------------------------------------------
 # Stage result
 # ---------------------------------------------------------------------------
@@ -244,6 +295,41 @@ class DressPhaseResult(PhaseResult):
     Inherits all fields from PhaseResult. Allows DRESS-specific
     fields to be added without affecting other stages.
     """
+
+
+class DressEscalation(BaseModel):
+    """A DRESS escalation event collected during the run.
+
+    Mirrors ``FillEscalation``: when a ``batch_llm_calls`` invocation
+    exhausts retries on an item, the stage records a per-item
+    escalation rather than silently dropping the item via the
+    ``_errors`` underscore-discard convention. ``DressStage.execute``
+    folds these into the ``DressStageError`` raised at exit so the
+    failure surface points at the batch responses that misbehaved
+    (not just the missing artifacts caught by the output contract).
+    """
+
+    kind: Literal[
+        "briefs_batch_failed",
+        "codex_batch_failed",
+        "distill_batch_failed",
+    ] = Field(description="Which DRESS phase produced this escalation.")
+    item_id: str = Field(
+        description=(
+            "Affected item ID. ``passage::*`` for briefs, prefixed entity ID "
+            "(e.g. ``character::clara_yu``) for codex, ``brief::*`` for distill. "
+            "Empty string only when the failure is not item-scoped."
+        ),
+    )
+    detail: str = Field(
+        description="Human-readable description of the specific failure (exception type + message).",
+    )
+    upstream_stage: Literal["DRESS", "DREAM", "BRAINSTORM", "GROW"] = Field(
+        description=(
+            "Which stage owns the fix. ``DRESS`` for self-owned LLM-call "
+            "failures (rerun DRESS or adjust provider settings)."
+        ),
+    )
 
 
 class DressResult(BaseModel):

@@ -1,8 +1,10 @@
 """POLISH validation functions.
 
-Entry contract validation (validate_grow_output) checks GROW's output
-before POLISH begins. Exit validation (validate_polish_output) checks
-the passage graph after Phase 6 application.
+Exit validation (validate_polish_output) checks the passage graph after
+Phase 6 application.
+
+Entry contract validation (validate_grow_output) lives in
+``grow_validation.py`` — GROW owns its own output contract.
 
 Passage-layer checks (reachability, gates, routing, prose neutrality,
 arc divergence, etc.) moved here from grow_validation.py. They run
@@ -15,7 +17,6 @@ import re
 from collections import Counter, deque
 from typing import TYPE_CHECKING, Any
 
-from questfoundry.graph.algorithms import compute_arc_traversals
 from questfoundry.graph.context import get_primary_beat, normalize_scoped_id
 from questfoundry.graph.grow_validation import (
     build_exempt_passages,
@@ -30,224 +31,22 @@ from questfoundry.graph.validation_types import ValidationCheck, ValidationRepor
 if TYPE_CHECKING:
     from questfoundry.graph.graph import Graph
 
+__all__ = [
+    "PolishContractError",
+    "validate_polish_output",
+]
+
 _ROUTING_APPLIED_NODE_ID = "meta::routing_applied"
 
-# ---------------------------------------------------------------------------
-# Entry contract validation (POLISH input — checks GROW output)
-# ---------------------------------------------------------------------------
 
+class PolishContractError(ValueError):
+    """Raised when POLISH Phase 7 validation reports contract errors.
 
-def validate_grow_output(graph: Graph) -> list[str]:
-    """Verify GROW's output meets POLISH's input contract.
-
-    Args:
-        graph: Graph containing GROW stage output.
-
-    Returns:
-        List of error strings. Empty means valid.
+    Mirrors ``GrowContractError`` — a dedicated exception type for
+    stage-exit contract failures so callers can distinguish them from
+    generic ``ValueError`` noise.  Callers receive the formatted error
+    list in the exception message.
     """
-    errors: list[str] = []
-
-    # 1. Beat nodes exist with summaries and dilemma_impacts
-    beat_nodes = graph.get_nodes_by_type("beat")
-    if not beat_nodes:
-        errors.append("No beat nodes found in graph")
-    else:
-        for beat_id, beat_data in beat_nodes.items():
-            if not beat_data.get("summary"):
-                errors.append(f"Beat {beat_id} missing summary")
-            # Accept both plural "dilemma_impacts" and legacy singular "dilemma_impact"
-            # from older GROW outputs that used the singular key.
-            if "dilemma_impacts" not in beat_data and "dilemma_impact" not in beat_data:
-                errors.append(f"Beat {beat_id} missing dilemma_impacts")
-
-    # 2. No cycles in predecessor DAG
-    if beat_nodes:
-        _check_predecessor_cycles(graph, beat_nodes, errors)
-
-    # 3. Every beat has exactly one belongs_to edge
-    belongs_to_edges = graph.get_edges(edge_type="belongs_to")
-    beats_with_path: dict[str, list[str]] = {}
-    for edge in belongs_to_edges:
-        from_id = edge["from"]
-        to_id = edge["to"]
-        if from_id in beat_nodes:
-            beats_with_path.setdefault(from_id, []).append(to_id)
-
-    for beat_id in beat_nodes:
-        paths = beats_with_path.get(beat_id, [])
-        if len(paths) == 0:
-            errors.append(f"Beat {beat_id} has no belongs_to edge (no path assignment)")
-        elif len(paths) > 1:
-            errors.append(
-                f"Beat {beat_id} has {len(paths)} belongs_to edges (must have exactly 1): {', '.join(paths)}"
-            )
-
-    # 4. State flag nodes exist for explored dilemmas
-    dilemma_nodes = graph.get_nodes_by_type("dilemma")
-    explored_dilemmas = {
-        did
-        for did, ddata in dilemma_nodes.items()
-        # GROW may omit status for dilemmas it fully explored; treat None as "explored".
-        if ddata.get("status") in ("explored", None)
-    }
-    # Build consequence → state_flag map via derived_from edges (Doc 3 Part 9).
-    # state_flag nodes have no dilemma_id field; the association is:
-    #   state_flag --derived_from--> consequence <--has_consequence-- path.dilemma_id
-    _flagged_consequences: set[str] = {
-        edge["to"] for edge in graph.get_edges(edge_type="derived_from")
-    }
-    # Build consequence → dilemma lookup via has_consequence edges + path.dilemma_id
-    _path_nodes = graph.get_nodes_by_type("path")
-    _cons_to_dilemma: dict[str, str] = {}
-    for edge in graph.get_edges(edge_type="has_consequence"):
-        path_data = _path_nodes.get(edge["from"], {})
-        raw_did = path_data.get("dilemma_id", "")
-        if raw_did:
-            linked_did = normalize_scoped_id(raw_did, "dilemma")
-            _cons_to_dilemma[edge["to"]] = linked_did
-
-    dilemmas_with_flags: set[str] = set()
-    for cons_id in _flagged_consequences:
-        linked_dilemma = _cons_to_dilemma.get(cons_id)
-        if linked_dilemma:
-            dilemmas_with_flags.add(linked_dilemma)
-
-    for dilemma_id in explored_dilemmas:
-        if dilemma_id not in dilemmas_with_flags:
-            errors.append(f"Explored dilemma {dilemma_id} has no state flag nodes")
-
-    # 5. Dilemma nodes have dilemma_role set
-    for dilemma_id, dilemma_data in dilemma_nodes.items():
-        if not dilemma_data.get("dilemma_role"):
-            errors.append(f"Dilemma {dilemma_id} missing dilemma_role (hard/soft)")
-
-    # 6. Every computed arc traversal is complete (no dead ends)
-    _check_arc_traversal_completeness(graph, beat_nodes, errors)
-
-    # 7. Intersection groups reference beats from different paths only
-    intersection_groups = graph.get_nodes_by_type("intersection_group")
-    for group_id, group_data in intersection_groups.items():
-        _check_intersection_group_paths(
-            graph, group_id, group_data, beat_nodes, beats_with_path, errors
-        )
-
-    return errors
-
-
-def _check_arc_traversal_completeness(
-    graph: Graph,
-    beat_nodes: dict[str, dict[str, Any]],
-    errors: list[str],
-) -> None:
-    """Verify every arc traversal terminates at a beat with no arc-internal successors.
-
-    A "dead end" is a beat in the middle of an arc that has successors in the
-    full beat DAG but none within the arc's own beat set. This indicates GROW
-    produced an incomplete arc where beats belonging to the arc's paths were
-    not connected forward.
-
-    Args:
-        graph: Graph containing the beat DAG.
-        beat_nodes: Dict of beat node ID → data (pre-fetched).
-        errors: Mutable list to append error strings to.
-    """
-    arc_traversals = compute_arc_traversals(graph)
-    if not arc_traversals:
-        return  # No dilemmas/paths — skip
-
-    # Build full children adjacency from predecessor edges
-    # predecessor edge: from=child, to=parent  →  children[parent].append(child)
-    predecessor_edges = graph.get_edges(edge_type="predecessor")
-    children_all: dict[str, list[str]] = {bid: [] for bid in beat_nodes}
-    for edge in predecessor_edges:
-        from_id = edge["from"]
-        to_id = edge["to"]
-        if from_id in beat_nodes and to_id in beat_nodes:
-            children_all[to_id].append(from_id)
-
-    for arc_key, beat_sequence in arc_traversals.items():
-        arc_beat_set = set(beat_sequence)
-
-        for beat_id in beat_sequence:
-            beat_children = children_all.get(beat_id, [])
-            children_in_arc = [c for c in beat_children if c in arc_beat_set]
-
-            # A dead end: beat has successors globally but none within this arc
-            if not children_in_arc and beat_children:
-                errors.append(
-                    f"Arc '{arc_key}' has dead-end beat {beat_id!r}: "
-                    f"beat has successors {beat_children} outside the arc "
-                    f"but no successors within the arc's beat set"
-                )
-
-
-def _check_predecessor_cycles(
-    graph: Graph,
-    beat_nodes: dict[str, dict[str, Any]],
-    errors: list[str],
-) -> None:
-    """Check for cycles in predecessor edges using Kahn's algorithm."""
-    predecessor_edges = graph.get_edges(edge_type="predecessor")
-
-    # Build adjacency: predecessor edges mean "from depends on to"
-    # i.e., edge from A to B means "A's predecessor is B" (B comes before A)
-    in_degree: dict[str, int] = dict.fromkeys(beat_nodes, 0)
-    adj: dict[str, list[str]] = {bid: [] for bid in beat_nodes}
-
-    for edge in predecessor_edges:
-        from_id = edge["from"]
-        to_id = edge["to"]
-        if from_id in beat_nodes and to_id in beat_nodes:
-            in_degree[from_id] += 1
-            adj[to_id].append(from_id)
-
-    queue = [bid for bid, deg in in_degree.items() if deg == 0]
-    visited = 0
-
-    while queue:
-        node = queue.pop()
-        visited += 1
-        for neighbor in adj[node]:
-            in_degree[neighbor] -= 1
-            if in_degree[neighbor] == 0:
-                queue.append(neighbor)
-
-    if visited != len(beat_nodes):
-        cycle_members = [bid for bid, deg in in_degree.items() if deg > 0]
-        errors.append(
-            f"Cycle detected in predecessor DAG among {len(cycle_members)} beats: "
-            f"{', '.join(sorted(cycle_members)[:5])}" + ("..." if len(cycle_members) > 5 else "")
-        )
-
-
-def _check_intersection_group_paths(
-    graph: Graph,  # noqa: ARG001
-    group_id: str,
-    group_data: dict[str, Any],
-    beat_nodes: dict[str, dict[str, Any]],
-    beats_with_path: dict[str, list[str]],
-    errors: list[str],
-) -> None:
-    """Check that an intersection group's beats come from different paths."""
-    # Intersection group nodes store beat IDs in beat_ids field
-    beat_ids = group_data.get("beat_ids", [])
-    if not beat_ids:
-        errors.append(f"Intersection group {group_id} has empty beat_ids")
-        return
-
-    paths_seen: set[str] = set()
-    for beat_id in beat_ids:
-        if beat_id not in beat_nodes:
-            continue
-        beat_paths = beats_with_path.get(beat_id, [])
-        for path_id in beat_paths:
-            if path_id in paths_seen:
-                errors.append(
-                    f"Intersection group {group_id} has multiple beats from the same path {path_id}"
-                )
-                return
-            paths_seen.add(path_id)
 
 
 # ---------------------------------------------------------------------------
@@ -295,12 +94,19 @@ def validate_polish_output(graph: Graph) -> list[str]:
     _check_variant_integrity(passage_nodes, graph, errors)
     _check_choice_integrity(graph, errors)
     _check_residue_ordering(graph, errors)
-    _check_arc_metadata_edges(graph, errors)
+    _check_residue_mapping_strategy(graph, errors)
+    _check_has_choice_edges(graph, errors)
+    _check_post_convergence_requires(graph, errors)
+    _check_no_character_arc_metadata_nodes(graph, errors)
+    _check_passage_maximal_linear_collapse(graph, errors)
     _check_arc_completeness(graph, errors)
     _check_divergences_have_choices(graph, beat_to_passages, errors)
     _check_no_overlapping_requires(graph, errors)
     _check_variant_requires_non_empty(passage_nodes, graph, errors)
     _check_no_unresolved_splits(graph, errors)
+    _check_polish_beat_attribution(graph, errors)
+    _check_false_branch_role_name(graph, errors)
+    _check_choice_label_distinctness(graph, errors)
 
     # TODO: check_all_endings_reachable and check_gate_satisfiability use the old
     # choice_from/choice_to edge model and are DEAD — see issue #1165 for migration.
@@ -317,9 +123,15 @@ def _check_beat_grouping(
     for beat_id in beat_nodes:
         passages = beat_to_passages.get(beat_id, [])
         if len(passages) == 0:
-            # Skip micro/residue/sidetrack beats — they may not exist yet at validation time
+            # ``micro_beat`` is the only legitimately exempt role:
+            # ``_insert_micro_beat`` intentionally does not create a
+            # ``grouped_in`` edge (pacing beats are folded into adjacent
+            # passages during Phase 6 apply).  ``residue_beat`` and
+            # ``false_branch_beat`` are always grouped at creation time
+            # (``_apply_residue_*`` and ``_apply_sidetrack`` both emit
+            # ``grouped_in`` edges), so they must NOT be exempt here.
             role = beat_nodes[beat_id].get("role", "")
-            if role not in ("micro_beat", "sidetrack_beat"):  # residue_beat no longer exempt
+            if role != "micro_beat":
                 errors.append(f"Beat {beat_id} not grouped into any passage")
         elif len(passages) > 1:
             errors.append(f"Beat {beat_id} grouped into {len(passages)} passages: {passages}")
@@ -340,6 +152,66 @@ def _check_passage_beats(
             errors.append(f"Passage {passage_id} has no beats (no grouped_in edges)")
 
 
+def _check_polish_beat_attribution(graph: Graph, errors: list[str]) -> None:
+    """R-2.5: beats created by POLISH carry a ``created_by: POLISH`` attribution.
+
+    Beats with roles micro_beat, residue_beat, or false_branch_beat
+    are created by POLISH. Their node data dict must include the created_by
+    attribution for pipeline stage-attribution tracking.
+    """
+    polish_created_roles = frozenset({"micro_beat", "residue_beat", "false_branch_beat"})
+    beat_nodes = graph.get_nodes_by_type("beat")
+    for bid, bdata in sorted(beat_nodes.items()):
+        role = bdata.get("role", "")
+        if role in polish_created_roles and bdata.get("created_by") != "POLISH":
+            errors.append(
+                f"R-2.5: beat {bid!r} has role={role!r} (POLISH-created) but "
+                f"missing 'created_by: POLISH' attribution"
+            )
+
+
+def _check_false_branch_role_name(graph: Graph, errors: list[str]) -> None:
+    """R-5.10: false-branch beats (Phase 6 cosmetic sidetracks) must use
+    ``role: "false_branch_beat"``. The legacy ``sidetrack_beat`` role is
+    pre-audit nomenclature drift and is forbidden.
+    """
+    beat_nodes = graph.get_nodes_by_type("beat")
+    for bid, bdata in sorted(beat_nodes.items()):
+        if bdata.get("role") == "sidetrack_beat":
+            errors.append(
+                f"R-5.10: beat {bid!r} uses legacy role 'sidetrack_beat'; "
+                "spec requires 'false_branch_beat'"
+            )
+
+
+def _check_choice_label_distinctness(graph: Graph, errors: list[str]) -> None:
+    """R-5.2: labels are distinct within a source passage (case-insensitive).
+
+    Validates the passage graph's choice edges — each source passage's
+    outgoing choice labels must not collide case-insensitively.  Phase 5a's
+    LLM prompt + the Phase 5a label-collision WARNING are the primary
+    enforcement; this validator is the postcondition.
+    """
+    choice_edges = graph.get_edges(edge_type="choice")
+    labels_by_source: dict[str, dict[str, list[str]]] = {}
+    for edge in choice_edges:
+        from_p = edge["from"]
+        label = edge.get("label") or ""
+        if not label:
+            continue
+        bucket = labels_by_source.setdefault(from_p, {})
+        bucket.setdefault(label.lower(), []).append(edge["to"])
+
+    for from_p, label_map in sorted(labels_by_source.items()):
+        for lower_label, targets in sorted(label_map.items()):
+            if len(targets) > 1:
+                errors.append(
+                    f"R-5.2: passage {from_p!r} has {len(targets)} choices with "
+                    f"label {lower_label!r} (case-insensitive collision): "
+                    f"targets={sorted(targets)}"
+                )
+
+
 def _check_start_passage(
     passage_beats: dict[str, list[str]],
     beat_nodes: dict[str, dict[str, Any]],
@@ -348,10 +220,10 @@ def _check_start_passage(
 ) -> None:
     """Exactly one start passage must exist (containing the earliest beat)."""
     # Find root beats (no predecessor edges pointing TO them)
-    # Exclude synthetic beats (micro_beat, residue_beat, sidetrack_beat) —
+    # Exclude synthetic beats (micro_beat, residue_beat, false_branch_beat) —
     # they're added fresh by Phase 6 with no predecessor edges
     predecessor_edges = graph.get_edges(edge_type="predecessor")
-    _synthetic_roles = {"micro_beat", "residue_beat", "sidetrack_beat"}
+    _synthetic_roles = {"micro_beat", "residue_beat", "false_branch_beat"}
     beats_with_parents: set[str] = set()
     for edge in predecessor_edges:
         if edge["from"] in beat_nodes:
@@ -515,17 +387,25 @@ def _check_divergences_have_choices(
     errors: list[str],
 ) -> None:
     """Beats with 2+ children on different paths must live in a passage with 2+ outgoing choices."""
-    # Find beats that have 2+ outgoing next/branch edges leading to beats on different paths
+    beat_nodes = graph.get_nodes_by_type("beat")
     belongs_to_edges = graph.get_edges(edge_type="belongs_to")
-    beat_to_path: dict[str, str] = {}
+    _accum: dict[str, set[str]] = {}
     for edge in belongs_to_edges:
-        beat_to_path[edge["from"]] = edge["to"]
+        if edge["from"] in beat_nodes:
+            _accum.setdefault(edge["from"], set()).add(edge["to"])
+    beat_to_paths: dict[str, frozenset[str]] = {bid: frozenset(ps) for bid, ps in _accum.items()}
 
-    next_edges = graph.get_edges(edge_type="next")
-    branch_edges = graph.get_edges(edge_type="branch")
+    # Build children index from predecessor edges. ``predecessor(B, A)`` means
+    # B requires A — A is the parent, B is the child. Earlier versions of this
+    # function read ``next``/``branch`` edges that no code in the codebase ever
+    # produced, leaving this validator inert (#1199).
+    predecessor_edges = graph.get_edges(edge_type="predecessor")
     children_by_beat: dict[str, list[str]] = {}
-    for edge in next_edges + branch_edges:
-        children_by_beat.setdefault(edge["from"], []).append(edge["to"])
+    for edge in predecessor_edges:
+        parent = edge["to"]
+        child = edge["from"]
+        if parent in beat_nodes and child in beat_nodes:
+            children_by_beat.setdefault(parent, []).append(child)
 
     # Build passage -> outgoing choice count
     choice_edges = graph.get_edges(edge_type="choice")
@@ -536,10 +416,14 @@ def _check_divergences_have_choices(
     for beat_id, children in children_by_beat.items():
         if len(children) < 2:
             continue
-        # Check if children are on different paths
-        child_paths = {beat_to_path.get(c) for c in children}
-        child_paths.discard(None)
-        if len(child_paths) < 2:
+        # Exclude the non-divergence case: a pre-commit parent with a single
+        # pre-commit child (shared-beat chain) — both have the same dual path
+        # set. Only a parent whose children have DIFFERING single-membership
+        # (commit beats) is a divergence point.
+        child_path_sets = {beat_to_paths.get(c, frozenset()) for c in children}
+        # Discard beats with no path assignment — they don't indicate divergence.
+        child_path_sets.discard(frozenset())
+        if len(child_path_sets) < 2:
             continue
         # This beat is a divergence point — its passage must have 2+ outgoing choices
         passages = beat_to_passages.get(beat_id, [])
@@ -626,16 +510,227 @@ def _check_no_unresolved_splits(
             )
 
 
-def _check_arc_metadata_edges(
-    graph: Graph,
-    errors: list[str],
-) -> None:
-    """Every character_arc_metadata node must have a has_arc_metadata edge from an entity."""
-    arc_nodes = graph.get_nodes_by_type("character_arc_metadata")
-    for arc_id in arc_nodes:
-        edges = graph.get_edges(edge_type="has_arc_metadata", to_id=arc_id)
-        if not edges:
-            errors.append(f"Arc metadata node {arc_id} has no has_arc_metadata edge from entity")
+def _check_no_character_arc_metadata_nodes(graph: Graph, errors: list[str]) -> None:
+    """R-3.3: arc metadata is stored as annotation on Entity nodes, never as separate nodes.
+
+    - No node may have type ``character_arc_metadata``.
+    - No ``has_arc_metadata`` edge may exist.
+    - Every Entity with ≥2 ``appears`` edges (arc-worthy) must carry a
+      ``character_arc`` data dict with ``start``, ``pivots``, ``end_per_path``.
+    """
+    for nid, _ndata in graph.get_nodes_by_type("character_arc_metadata").items():
+        errors.append(
+            f"R-3.3: node {nid!r} has forbidden type 'character_arc_metadata'; "
+            "arc metadata must be stored on the Entity node itself"
+        )
+    for edge in graph.get_edges(edge_type="has_arc_metadata"):
+        errors.append(
+            f"R-3.3: forbidden 'has_arc_metadata' edge {edge['from']!r} → "
+            f"{edge['to']!r}; arc metadata is an entity annotation, not a "
+            "separate node"
+        )
+
+    # Arc-worthy entities need a character_arc annotation.  R-3.1 defines
+    # arc-worthy as "2+ beat appearances", so only count beat-directed
+    # ``appears`` edges — DRESS may also populate entity→passage ``appears``
+    # edges, which would otherwise inflate the count.
+    beat_ids = set(graph.get_nodes_by_type("beat").keys())
+    appears_edges = graph.get_edges(edge_type="appears")
+    appearance_count: dict[str, int] = {}
+    for edge in appears_edges:
+        if edge["to"] in beat_ids:
+            appearance_count[edge["from"]] = appearance_count.get(edge["from"], 0) + 1
+
+    entity_nodes = graph.get_nodes_by_type("entity")
+    for entity_id, entity_data in sorted(entity_nodes.items()):
+        if appearance_count.get(entity_id, 0) < 2:
+            continue
+        arc = entity_data.get("character_arc")
+        if not isinstance(arc, dict):
+            errors.append(
+                f"R-3.3: entity {entity_id!r} has {appearance_count[entity_id]} beat "
+                "appearances but no 'character_arc' annotation on its data dict"
+            )
+            continue
+        for required in ("start", "pivots", "end_per_path"):
+            if required not in arc:
+                errors.append(
+                    f"R-3.3: entity {entity_id!r} 'character_arc' annotation "
+                    f"missing required field {required!r}"
+                )
+
+
+def _check_passage_maximal_linear_collapse(graph: Graph, errors: list[str]) -> None:
+    """R-4a.3 (maximal-linear-collapse): a passage's beats form a maximal linear run.
+
+    For each passage:
+      - Member beats form a linear run: each interior beat has exactly one
+        in-passage predecessor and one in-passage successor.
+      - Passage boundaries sit at DAG divergences/convergences or terminals:
+        the first beat's in-degree ≠ 1 or its predecessor has out-degree ≠ 1;
+        the last beat's out-degree ≠ 1 or its successor has in-degree ≠ 1.
+
+    See docs/design/procedures/polish.md §R-4a.3 (maximal-linear-collapse).
+    """
+    beat_nodes = graph.get_nodes_by_type("beat")
+    passage_nodes = graph.get_nodes_by_type("passage")
+    pred_edges = graph.get_edges(edge_type="predecessor")
+    grouped_in = graph.get_edges(edge_type="grouped_in")
+
+    successors: dict[str, set[str]] = {}
+    predecessors: dict[str, set[str]] = {}
+    for edge in pred_edges:
+        # Convention: predecessor edges point successor → predecessor
+        successor, predecessor = edge["from"], edge["to"]
+        successors.setdefault(predecessor, set()).add(successor)
+        predecessors.setdefault(successor, set()).add(predecessor)
+
+    beat_to_passage: dict[str, str] = {}
+    passage_beats: dict[str, set[str]] = {}
+    for edge in grouped_in:
+        beat_id, passage_id = edge["from"], edge["to"]
+        if beat_id in beat_nodes and passage_id in passage_nodes:
+            beat_to_passage[beat_id] = passage_id
+            passage_beats.setdefault(passage_id, set()).add(beat_id)
+
+    for passage_id, beats in sorted(passage_beats.items()):
+        # Interior linearity: each beat's in-passage predecessors and
+        # successors are ≤ 1.
+        for bid in beats:
+            in_passage_preds = predecessors.get(bid, set()) & beats
+            in_passage_succs = successors.get(bid, set()) & beats
+            if len(in_passage_preds) > 1:
+                errors.append(
+                    f"R-4a.3: passage {passage_id!r} contains beat {bid!r} with "
+                    f"{len(in_passage_preds)} in-passage predecessors — not a "
+                    "linear run"
+                )
+            if len(in_passage_succs) > 1:
+                errors.append(
+                    f"R-4a.3: passage {passage_id!r} contains beat {bid!r} with "
+                    f"{len(in_passage_succs)} in-passage successors — not a "
+                    "linear run"
+                )
+
+        # Boundary check: the passage's first beat starts at a real boundary
+        # (in-degree ≠ 1 OR its predecessor has out-degree ≠ 1).
+        starts = [b for b in beats if not (predecessors.get(b, set()) & beats)]
+        ends = [b for b in beats if not (successors.get(b, set()) & beats)]
+        if len(starts) != 1 or len(ends) != 1:
+            errors.append(
+                f"R-4a.3: passage {passage_id!r} is not a single linear run "
+                f"(starts={len(starts)}, ends={len(ends)})"
+            )
+            continue
+
+        first, last = starts[0], ends[0]
+        # First beat: if it has exactly one predecessor and that predecessor
+        # has out-degree 1, the run should have started earlier.
+        first_preds = predecessors.get(first, set())
+        if len(first_preds) == 1:
+            only_pred = next(iter(first_preds))
+            if len(successors.get(only_pred, set())) == 1 and only_pred in beat_to_passage:
+                errors.append(
+                    f"R-4a.3: passage {passage_id!r} starts at {first!r} but its "
+                    f"predecessor {only_pred!r} has out-degree 1 — grouping "
+                    "stopped mid-linear-run"
+                )
+
+        # Last beat: mirror.
+        last_succs = successors.get(last, set())
+        if len(last_succs) == 1:
+            only_succ = next(iter(last_succs))
+            if len(predecessors.get(only_succ, set())) == 1 and only_succ in beat_to_passage:
+                errors.append(
+                    f"R-4a.3: passage {passage_id!r} ends at {last!r} but its "
+                    f"successor {only_succ!r} has in-degree 1 — grouping "
+                    "stopped mid-linear-run"
+                )
+
+
+_VALID_MAPPING_STRATEGIES = frozenset({"residue_passage_with_variants", "parallel_passages"})
+
+
+def _check_residue_mapping_strategy(graph: Graph, errors: list[str]) -> None:
+    """R-5.7, R-5.8: every residue passage records its chosen mapping strategy.
+
+    Residue passages are identified by a ``residue_for`` field pointing to
+    their target shared passage.  Each must have ``mapping_strategy`` set
+    to one of the two legal values.  See docs/design/procedures/polish.md
+    §R-5.7/R-5.8.
+    """
+    for pid, pdata in sorted(graph.get_nodes_by_type("passage").items()):
+        if not pdata.get("residue_for"):
+            continue
+        strategy = pdata.get("mapping_strategy")
+        if strategy is None:
+            errors.append(
+                f"R-5.8: residue passage {pid!r} missing required 'mapping_strategy' field"
+            )
+            continue
+        if strategy not in _VALID_MAPPING_STRATEGIES:
+            errors.append(
+                f"R-5.8: residue passage {pid!r} has invalid mapping_strategy "
+                f"{strategy!r} (expected one of "
+                f"{sorted(_VALID_MAPPING_STRATEGIES)})"
+            )
+
+
+def _check_has_choice_edges(graph: Graph, errors: list[str]) -> None:
+    """R-4c.2 (belt-and-suspenders): zero choice edges in the passage graph
+    indicates a SEED/GROW bug — Phase 4c should already have raised.  This
+    check catches silent regressions where Phase 4c produced zero choices
+    but did not halt.
+    """
+    choice_edges = graph.get_edges(edge_type="choice")
+    if not choice_edges:
+        errors.append(
+            "R-4c.2: zero choice edges in passage graph — SEED/GROW DAG "
+            "has no Y-forks; Phase 4c should have halted"
+        )
+
+
+def _check_post_convergence_requires(graph: Graph, errors: list[str]) -> None:
+    """R-4c.3 / R-4c.4: post-convergence soft-dilemma choices carry ``requires``.
+
+    For each choice edge whose target passage's primary beat is the
+    ``converges_at`` beat of a soft dilemma, the choice edge MUST have a
+    non-empty ``requires`` list (R-4c.3).  If the target beat belongs only to
+    hard dilemmas, ``requires`` must be empty (R-4c.4) — but since hard
+    dilemmas have ``converges_at: null``, they are excluded from this check
+    by construction.
+
+    This post-hoc check catches the primary regression symptom: a choice edge
+    whose target is exactly at a soft-dilemma convergence point but has no
+    flag gate.  It does not re-run the full active-flags computation (that
+    would duplicate Phase 4c logic); it catches the simplest violation.
+    """
+    dilemma_nodes = graph.get_nodes_by_type("dilemma")
+
+    # Collect the convergence beats of all soft dilemmas.
+    soft_convergence_beats: set[str] = set()
+    for _did, ddata in dilemma_nodes.items():
+        if ddata.get("dilemma_role") == "soft":
+            conv = ddata.get("converges_at")
+            if conv:
+                soft_convergence_beats.add(conv)
+
+    if not soft_convergence_beats:
+        return  # No soft dilemmas with convergence → nothing to gate
+
+    choice_edges = graph.get_edges(edge_type="choice")
+    for edge in choice_edges:
+        to_passage = edge["to"]
+        target_beat = get_primary_beat(graph, to_passage) or ""
+        if not target_beat or target_beat not in soft_convergence_beats:
+            continue
+        requires: list[str] = edge.get("requires") or []
+        if not requires:
+            errors.append(
+                f"R-4c.3: choice {edge['from']!r} → {to_passage!r} targets "
+                f"soft-dilemma convergence beat {target_beat!r} but has empty "
+                "'requires' — flag gate missing"
+            )
 
 
 # ---------------------------------------------------------------------------

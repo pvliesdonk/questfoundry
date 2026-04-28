@@ -35,6 +35,19 @@ def _add_predecessor(graph: Graph, child: str, parent: str) -> None:
     graph.add_edge("predecessor", child, parent)
 
 
+def _add_grants(graph: Graph, beat_id: str, state_flag_id: str, dilemma_id: str = "") -> None:
+    """Create a state_flag node and grants edge from a commit beat."""
+    if not graph.get_node(state_flag_id):
+        data: dict[str, str] = {
+            "type": "state_flag",
+            "raw_id": state_flag_id.split("::")[-1],
+        }
+        if dilemma_id:
+            data["dilemma_id"] = dilemma_id
+        graph.create_node(state_flag_id, data)
+    graph.add_edge("grants", beat_id, state_flag_id)
+
+
 class TestComputeActiveFlagsNoPredecessors:
     """Tests with no commit beat ancestors."""
 
@@ -95,11 +108,12 @@ class TestComputeActiveFlagsSingleDilemma:
         _make_beat(graph, "beat::after", "After commitment", [])
 
         _add_belongs_to(graph, "beat::commit_brave", "path::brave")
+        _add_grants(graph, "beat::commit_brave", "state_flag::brave_committed")
         _add_belongs_to(graph, "beat::after", "path::brave")
         _add_predecessor(graph, "beat::after", "beat::commit_brave")
 
         result = compute_active_flags_at_beat(graph, "beat::after")
-        assert result == {frozenset({"dilemma::courage:path::brave"})}
+        assert result == {frozenset({"state_flag::brave_committed"})}
 
     def test_commit_beat_itself_has_own_flag(self) -> None:
         """A commit beat includes its own flag in the result."""
@@ -117,9 +131,10 @@ class TestComputeActiveFlagsSingleDilemma:
             [{"dilemma_id": "dilemma::bravery", "effect": "commits"}],
         )
         _add_belongs_to(graph, "beat::the_commit", "path::bold")
+        _add_grants(graph, "beat::the_commit", "state_flag::bold_committed")
 
         result = compute_active_flags_at_beat(graph, "beat::the_commit")
-        assert result == {frozenset({"dilemma::bravery:path::bold"})}
+        assert result == {frozenset({"state_flag::bold_committed"})}
 
     def test_deep_chain(self) -> None:
         """Commit at start of a long chain is still found."""
@@ -137,6 +152,7 @@ class TestComputeActiveFlagsSingleDilemma:
             [{"dilemma_id": "dilemma::d1", "effect": "commits"}],
         )
         _add_belongs_to(graph, "beat::b0", "path::p1")
+        _add_grants(graph, "beat::b0", "state_flag::p1_committed")
 
         # Chain: b0 → b1 → b2 → b3 → b4
         for i in range(1, 5):
@@ -145,7 +161,7 @@ class TestComputeActiveFlagsSingleDilemma:
             _add_predecessor(graph, f"beat::b{i}", f"beat::b{i - 1}")
 
         result = compute_active_flags_at_beat(graph, "beat::b4")
-        assert result == {frozenset({"dilemma::d1:path::p1"})}
+        assert result == {frozenset({"state_flag::p1_committed"})}
 
 
 class TestComputeActiveFlagsTwoDilemmas:
@@ -194,7 +210,9 @@ class TestComputeActiveFlagsTwoDilemmas:
 
         # Path assignments
         _add_belongs_to(graph, "beat::commit_d1_a", "path::path_a")
+        _add_grants(graph, "beat::commit_d1_a", "state_flag::path_a_committed")
         _add_belongs_to(graph, "beat::commit_d2_x", "path::path_x")
+        _add_grants(graph, "beat::commit_d2_x", "state_flag::path_x_committed")
         _add_belongs_to(graph, "beat::final", "path::path_a")
 
         # Ordering
@@ -208,7 +226,7 @@ class TestComputeActiveFlagsTwoDilemmas:
         graph = self._build_two_dilemma_graph()
 
         result = compute_active_flags_at_beat(graph, "beat::final")
-        expected = {frozenset({"dilemma::d1:path::path_a", "dilemma::d2:path::path_x"})}
+        expected = {frozenset({"state_flag::path_a_committed", "state_flag::path_x_committed"})}
         assert result == expected
 
     def test_commit_beat_includes_own_and_ancestor_flags(self) -> None:
@@ -217,7 +235,7 @@ class TestComputeActiveFlagsTwoDilemmas:
 
         result = compute_active_flags_at_beat(graph, "beat::commit_d2_x")
         # commit_d2_x is downstream of commit_d1_a, and IS itself a commit
-        expected = {frozenset({"dilemma::d1:path::path_a", "dilemma::d2:path::path_x"})}
+        expected = {frozenset({"state_flag::path_a_committed", "state_flag::path_x_committed"})}
         assert result == expected
 
 
@@ -258,18 +276,20 @@ class TestComputeActiveFlagsBranching:
 
         _add_belongs_to(graph, "beat::start", "path::pa")
         _add_belongs_to(graph, "beat::a", "path::pa")
+        _add_grants(graph, "beat::a", "state_flag::pa_committed")
         _add_belongs_to(graph, "beat::b", "path::pb")
+        _add_grants(graph, "beat::b", "state_flag::pb_committed")
 
         _add_predecessor(graph, "beat::a", "beat::start")
         _add_predecessor(graph, "beat::b", "beat::start")
 
         # Beat A only sees path_a's commit
         result_a = compute_active_flags_at_beat(graph, "beat::a")
-        assert result_a == {frozenset({"dilemma::d1:path::pa"})}
+        assert result_a == {frozenset({"state_flag::pa_committed"})}
 
         # Beat B only sees path_b's commit
         result_b = compute_active_flags_at_beat(graph, "beat::b")
-        assert result_b == {frozenset({"dilemma::d1:path::pb"})}
+        assert result_b == {frozenset({"state_flag::pb_committed"})}
 
     def test_shared_beat_downstream_of_two_paths(self) -> None:
         """A shared beat downstream of commits from different paths of same dilemma.
@@ -306,7 +326,9 @@ class TestComputeActiveFlagsBranching:
         _make_beat(graph, "beat::shared", "Shared beat", [])
 
         _add_belongs_to(graph, "beat::commit_a", "path::pa")
+        _add_grants(graph, "beat::commit_a", "state_flag::pa_committed")
         _add_belongs_to(graph, "beat::commit_b", "path::pb")
+        _add_grants(graph, "beat::commit_b", "state_flag::pb_committed")
         _add_belongs_to(graph, "beat::shared", "path::pa")  # doesn't matter which
 
         _add_predecessor(graph, "beat::shared", "beat::commit_a")
@@ -315,8 +337,8 @@ class TestComputeActiveFlagsBranching:
         result = compute_active_flags_at_beat(graph, "beat::shared")
         # Two possible flag sets: one for path_a, one for path_b
         expected = {
-            frozenset({"dilemma::d1:path::pa"}),
-            frozenset({"dilemma::d1:path::pb"}),
+            frozenset({"state_flag::pa_committed"}),
+            frozenset({"state_flag::pb_committed"}),
         }
         assert result == expected
 
@@ -360,6 +382,7 @@ class TestComputeActiveFlagsCartesianProduct:
             [{"dilemma_id": "dilemma::d1", "effect": "commits"}],
         )
         _add_belongs_to(graph, "beat::d1_pa", "path::pa")
+        _add_grants(graph, "beat::d1_pa", "state_flag::pa_committed")
 
         _make_beat(
             graph,
@@ -368,6 +391,7 @@ class TestComputeActiveFlagsCartesianProduct:
             [{"dilemma_id": "dilemma::d1", "effect": "commits"}],
         )
         _add_belongs_to(graph, "beat::d1_pb", "path::pb")
+        _add_grants(graph, "beat::d1_pb", "state_flag::pb_committed")
 
         # Merge point
         _make_beat(graph, "beat::merge", "Merge point", [])
@@ -383,6 +407,7 @@ class TestComputeActiveFlagsCartesianProduct:
             [{"dilemma_id": "dilemma::d2", "effect": "commits"}],
         )
         _add_belongs_to(graph, "beat::d2_px", "path::px")
+        _add_grants(graph, "beat::d2_px", "state_flag::px_committed")
         _add_predecessor(graph, "beat::d2_px", "beat::merge")
 
         _make_beat(
@@ -392,6 +417,7 @@ class TestComputeActiveFlagsCartesianProduct:
             [{"dilemma_id": "dilemma::d2", "effect": "commits"}],
         )
         _add_belongs_to(graph, "beat::d2_py", "path::py")
+        _add_grants(graph, "beat::d2_py", "state_flag::py_committed")
         _add_predecessor(graph, "beat::d2_py", "beat::merge")
 
         # Final convergence point
@@ -404,10 +430,10 @@ class TestComputeActiveFlagsCartesianProduct:
 
         # 2 options for d1 x 2 options for d2 = 4 combinations
         expected = {
-            frozenset({"dilemma::d1:path::pa", "dilemma::d2:path::px"}),
-            frozenset({"dilemma::d1:path::pa", "dilemma::d2:path::py"}),
-            frozenset({"dilemma::d1:path::pb", "dilemma::d2:path::px"}),
-            frozenset({"dilemma::d1:path::pb", "dilemma::d2:path::py"}),
+            frozenset({"state_flag::pa_committed", "state_flag::px_committed"}),
+            frozenset({"state_flag::pa_committed", "state_flag::py_committed"}),
+            frozenset({"state_flag::pb_committed", "state_flag::px_committed"}),
+            frozenset({"state_flag::pb_committed", "state_flag::py_committed"}),
         }
         assert result == expected
         assert len(result) == 4
@@ -722,11 +748,21 @@ class TestComputeArcTraversalsDilemmaIdNormalization:
         assert result == {"p1": ["beat::b1"]}
 
 
-class TestComputeArcTraversalsCycleFallback:
-    """Tests for cycle detection fallback in _topological_sort_subset."""
+class TestComputeArcTraversalsCyclicBeatsExcluded:
+    """Cyclic beats are unreachable from roots and the walk-based
+    ``compute_arc_traversals`` simply doesn't visit them — so the
+    fact that ``_topological_sort_subset`` would now raise on a
+    cyclic subset (#1344) doesn't fire here. GROW validates the
+    DAG is acyclic, so cycles should not occur in production at all.
+    """
 
-    def test_cyclic_predecessors_falls_back_to_sorted(self) -> None:
-        """When beats form a cycle, falls back to sorted order."""
+    def test_cyclic_predecessors_excluded_from_walk(self) -> None:
+        """Beats in a cycle have no root entry point and are not reached by the walk.
+
+        GROW validates the DAG is acyclic, so cycles should not occur in
+        production.  If they do, the walk simply doesn't reach them — they
+        are excluded from the arc traversal.
+        """
         graph = Graph.empty()
         _make_dilemma(graph, "dilemma::d1")
         _make_path(graph, "path::p1", "d1")
@@ -735,13 +771,41 @@ class TestComputeArcTraversalsCycleFallback:
         _add_belongs_to(graph, "beat::a", "path::p1")
         _add_belongs_to(graph, "beat::b", "path::p1")
 
-        # Create a cycle: a → b → a
+        # Create a cycle: a → b → a (no root → unreachable)
         graph.add_edge("predecessor", "beat::a", "beat::b")
         graph.add_edge("predecessor", "beat::b", "beat::a")
 
         result = compute_arc_traversals(graph)
-        # Cycle fallback returns sorted order
-        assert result == {"p1": ["beat::a", "beat::b"]}
+        # Cyclic beats are unreachable — empty traversal
+        assert result == {"p1": []}
+
+
+class TestTopologicalSortSubsetRaisesOnCycle:
+    """Direct cycle in the subset must raise PipelineInvariantError (#1344).
+
+    Production callers filter to reachable beats before calling, so this
+    raise primarily catches programmer error in future callers — but the
+    behaviour must be loud either way per CLAUDE.md §Anti-Patterns.
+    """
+
+    def test_cyclic_subset_raises(self) -> None:
+        from questfoundry.graph.algorithms import _topological_sort_subset
+        from questfoundry.graph.invariants import PipelineInvariantError
+
+        # 3-node cycle a → b → c → a, all in subset
+        beat_set = {"a", "b", "c"}
+        successors = {"a": ["b"], "b": ["c"], "c": ["a"]}
+        with pytest.raises(PipelineInvariantError, match="cycle detected"):
+            _topological_sort_subset(beat_set, successors)
+
+    def test_acyclic_subset_returns_topo_order(self) -> None:
+        """Sanity: clean subset still produces a valid topological order."""
+        from questfoundry.graph.algorithms import _topological_sort_subset
+
+        beat_set = {"a", "b", "c"}
+        successors = {"a": ["b"], "b": ["c"], "c": []}
+        result = _topological_sort_subset(beat_set, successors)
+        assert result.index("a") < result.index("b") < result.index("c")
 
 
 # ---------------------------------------------------------------------------
@@ -930,3 +994,93 @@ class TestComputePassageTraversalsFallback:
         result = compute_passage_traversals(graph)
         # Should use grouped_in only, ignoring passage_from
         assert result == {"alpha": ["passage::p1"]}
+
+
+# ---------------------------------------------------------------------------
+# Task 2.7: compute_active_flags_at_beat handles dual belongs_to (Y-shape)
+# ---------------------------------------------------------------------------
+
+
+class TestComputeActiveFlagsDualBelongsTo:
+    """Tests for Y-shape pre-commit beats with dual belongs_to edges."""
+
+    def test_dual_belongs_to_pre_commit_ancestor_does_not_raise(self) -> None:
+        """Pre-commit ancestors with dual belongs_to do not crash flag derivation."""
+        graph = Graph.empty()
+        # Manually construct a minimal Y-shape:
+        # shared_setup (pre-commit, dual) -> commit_a (commits trust, path A)
+        # shared_setup                    -> commit_b (commits trust, path B)
+        graph.create_node("path::trust__a", {"type": "path", "dilemma_id": "trust"})
+        graph.create_node("path::trust__b", {"type": "path", "dilemma_id": "trust"})
+        graph.create_node(
+            "beat::shared_setup",
+            {
+                "type": "beat",
+                "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
+            },
+        )
+        graph.create_node(
+            "beat::commit_a",
+            {
+                "type": "beat",
+                "dilemma_impacts": [{"dilemma_id": "trust", "effect": "commits"}],
+            },
+        )
+        graph.create_node(
+            "beat::commit_b",
+            {
+                "type": "beat",
+                "dilemma_impacts": [{"dilemma_id": "trust", "effect": "commits"}],
+            },
+        )
+        graph.add_edge("belongs_to", "beat::shared_setup", "path::trust__a")
+        graph.add_edge("belongs_to", "beat::shared_setup", "path::trust__b")
+        graph.add_edge("belongs_to", "beat::commit_a", "path::trust__a")
+        _add_grants(graph, "beat::commit_a", "state_flag::trust__a_committed")
+        graph.add_edge("belongs_to", "beat::commit_b", "path::trust__b")
+        _add_grants(graph, "beat::commit_b", "state_flag::trust__b_committed")
+        graph.add_edge("predecessor", "beat::commit_a", "beat::shared_setup")
+        graph.add_edge("predecessor", "beat::commit_b", "beat::shared_setup")
+
+        # Flags at beat::commit_a should not raise and should yield exactly one
+        # flag: state_flag::trust__a_committed.
+        flags = compute_active_flags_at_beat(graph, "beat::commit_a")
+        assert flags == {frozenset({"state_flag::trust__a_committed"})}
+
+    def test_dual_belongs_to_pre_commit_ancestor_commit_b_path(self) -> None:
+        """Flags at commit_b resolve to path B, not path A."""
+        graph = Graph.empty()
+        graph.create_node("path::trust__a", {"type": "path", "dilemma_id": "trust"})
+        graph.create_node("path::trust__b", {"type": "path", "dilemma_id": "trust"})
+        graph.create_node(
+            "beat::shared_setup",
+            {
+                "type": "beat",
+                "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
+            },
+        )
+        graph.create_node(
+            "beat::commit_a",
+            {
+                "type": "beat",
+                "dilemma_impacts": [{"dilemma_id": "trust", "effect": "commits"}],
+            },
+        )
+        graph.create_node(
+            "beat::commit_b",
+            {
+                "type": "beat",
+                "dilemma_impacts": [{"dilemma_id": "trust", "effect": "commits"}],
+            },
+        )
+        graph.add_edge("belongs_to", "beat::shared_setup", "path::trust__a")
+        graph.add_edge("belongs_to", "beat::shared_setup", "path::trust__b")
+        graph.add_edge("belongs_to", "beat::commit_a", "path::trust__a")
+        _add_grants(graph, "beat::commit_a", "state_flag::trust__a_committed")
+        graph.add_edge("belongs_to", "beat::commit_b", "path::trust__b")
+        _add_grants(graph, "beat::commit_b", "state_flag::trust__b_committed")
+        graph.add_edge("predecessor", "beat::commit_a", "beat::shared_setup")
+        graph.add_edge("predecessor", "beat::commit_b", "beat::shared_setup")
+
+        flags = compute_active_flags_at_beat(graph, "beat::commit_b")
+        assert flags == {frozenset({"state_flag::trust__b_committed"})}

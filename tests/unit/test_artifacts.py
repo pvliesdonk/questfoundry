@@ -24,13 +24,13 @@ def test_dream_artifact_valid_minimal() -> None:
         tone=["dark"],
         audience="adult",
         themes=["betrayal"],
-        scope=Scope(story_size="standard"),
+        scope=Scope(story_size="medium"),
     )
     assert artifact.type == "dream"
     assert artifact.version == 1
     assert artifact.genre == "mystery"
     assert artifact.subgenre is None
-    assert artifact.scope.story_size == "standard"
+    assert artifact.scope.story_size == "medium"
 
 
 def test_dream_artifact_valid_full() -> None:
@@ -57,7 +57,7 @@ def test_dream_artifact_invalid_empty_genre() -> None:
             tone=["dark"],
             audience="adult",
             themes=["betrayal"],
-            scope=Scope(story_size="standard"),
+            scope=Scope(story_size="medium"),
         )
     assert "genre" in str(exc_info.value)
 
@@ -70,7 +70,7 @@ def test_dream_artifact_invalid_empty_tone() -> None:
             tone=[],
             audience="adult",
             themes=["betrayal"],
-            scope=Scope(story_size="standard"),
+            scope=Scope(story_size="medium"),
         )
     assert "tone" in str(exc_info.value)
 
@@ -83,7 +83,7 @@ def test_dream_artifact_invalid_audience() -> None:
             tone=["dark"],
             audience="",  # Empty string not allowed
             themes=["betrayal"],
-            scope=Scope(story_size="standard"),
+            scope=Scope(story_size="medium"),
         )
     assert "audience" in str(exc_info.value)
 
@@ -96,7 +96,7 @@ def test_dream_artifact_invalid_empty_themes() -> None:
             tone=["dark"],
             audience="adult",
             themes=[],
-            scope=Scope(story_size="standard"),
+            scope=Scope(story_size="medium"),
         )
     assert "themes" in str(exc_info.value)
 
@@ -115,7 +115,7 @@ def test_dream_artifact_accepts_flexible_audience() -> None:
         tone=["dark"],
         audience="adults",  # Not strictly "adult" but valid
         themes=["betrayal"],
-        scope=Scope(story_size="standard"),
+        scope=Scope(story_size="medium"),
     )
     assert artifact.audience == "adults"
 
@@ -144,7 +144,7 @@ def test_reader_reads_artifact(tmp_path: Path) -> None:
             "tone": ["dark"],
             "audience": "adult",
             "themes": ["betrayal"],
-            "scope": {"story_size": "standard"},
+            "scope": {"story_size": "medium"},
         },
     )
 
@@ -166,7 +166,7 @@ def test_reader_read_validated(tmp_path: Path) -> None:
             "tone": ["dark", "atmospheric"],
             "audience": "adult",
             "themes": ["betrayal"],
-            "scope": {"story_size": "standard"},
+            "scope": {"story_size": "medium"},
         },
     )
 
@@ -198,7 +198,7 @@ def test_reader_exists(tmp_path: Path) -> None:
             "tone": ["dark"],
             "audience": "adult",
             "themes": ["betrayal"],
-            "scope": {"story_size": "standard"},
+            "scope": {"story_size": "medium"},
         },
     )
 
@@ -221,7 +221,7 @@ def test_validator_valid_data() -> None:
         "tone": ["dark"],
         "audience": "adult",
         "themes": ["betrayal"],
-        "scope": {"story_size": "standard"},
+        "scope": {"story_size": "medium"},
     }
 
     errors = validator.validate(data, "dream")
@@ -239,7 +239,7 @@ def test_validator_is_valid() -> None:
         "tone": ["dark"],
         "audience": "adult",
         "themes": ["betrayal"],
-        "scope": {"story_size": "standard"},
+        "scope": {"story_size": "medium"},
     }
     invalid_data = {
         "type": "dream",
@@ -248,7 +248,7 @@ def test_validator_is_valid() -> None:
         "tone": [],  # Invalid: empty
         "audience": "adult",
         "themes": ["betrayal"],
-        "scope": {"story_size": "standard"},
+        "scope": {"story_size": "medium"},
     }
 
     assert validator.is_valid(valid_data, "dream")
@@ -265,7 +265,7 @@ def test_validator_invalid_data_pydantic() -> None:
         "tone": [],  # Invalid: must have at least 1
         "audience": "adult",
         "themes": ["betrayal"],
-        "scope": {"story_size": "standard"},
+        "scope": {"story_size": "medium"},
     }
 
     errors = validator.validate(data, "dream")
@@ -284,7 +284,7 @@ def test_validator_invalid_data_schema() -> None:
         "tone": ["dark"],
         "audience": "",  # Empty string not allowed (minLength=1)
         "themes": ["betrayal"],
-        "scope": {"story_size": "standard"},
+        "scope": {"story_size": "medium"},
     }
 
     errors = validator.validate(data, "dream")
@@ -302,7 +302,7 @@ def test_validator_raise_on_error() -> None:
         "tone": [],
         "audience": "adult",
         "themes": ["betrayal"],
-        "scope": {"story_size": "standard"},
+        "scope": {"story_size": "medium"},
     }
 
     with pytest.raises(ArtifactValidationError) as exc_info:
@@ -359,11 +359,11 @@ def test_scope_requires_story_size() -> None:
     with pytest.raises(ValidationError):
         Scope()  # type: ignore[call-arg]
 
-    scope = Scope(story_size="vignette")
-    assert scope.story_size == "vignette"
+    scope = Scope(story_size="micro")
+    assert scope.story_size == "micro"
 
-    scope = Scope(story_size="standard")
-    assert scope.story_size == "standard"
+    scope = Scope(story_size="medium")
+    assert scope.story_size == "medium"
 
 
 def test_scope_required_on_dream_artifact() -> None:
@@ -382,6 +382,6 @@ def test_scope_required_on_dream_artifact() -> None:
         tone=["dark"],
         audience="adult",
         themes=["betrayal"],
-        scope=Scope(story_size="vignette"),
+        scope=Scope(story_size="micro"),
     )
-    assert artifact.scope.story_size == "vignette"
+    assert artifact.scope.story_size == "micro"

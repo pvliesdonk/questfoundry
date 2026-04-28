@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import atexit
+import os
 import sys
-from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any
 
@@ -669,6 +669,11 @@ def _run_stage_command(
 
     if _log_enabled:
         console.print(f"  Logs: [dim]{project_path / 'logs'}[/dim]")
+
+    if result.summary_lines:
+        console.print("  Summary:")
+        for line in result.summary_lines:
+            console.print(f"    - {line}")
 
     console.print()
     if next_step_hint:
@@ -1825,6 +1830,18 @@ def run(
         str | None,
         typer.Option("--language", "-l", help="Output language (ISO 639-1 code, e.g., nl, ja, de)"),
     ] = None,
+    max_vram: Annotated[
+        float | None,
+        typer.Option(
+            "--max-vram",
+            help=(
+                "VRAM budget in GB for Ollama models. Computes the largest num_ctx "
+                "that fits weights + KV cache in this budget, preventing silent "
+                "spillover to CPU. Ignored for cloud providers. Equivalent to "
+                "setting QF_MAX_VRAM=<value> in the environment."
+            ),
+        ),
+    ] = None,
 ) -> None:
     """Run multiple pipeline stages sequentially.
 
@@ -1832,14 +1849,25 @@ def run(
     target stage. By default, skips already-completed stages and uses
     non-interactive mode for batch execution.
 
+    For individual stage commands (qf dream, qf brainstorm, ...), set
+    ``QF_MAX_VRAM=<gb>`` in the environment to apply VRAM-aware
+    num_ctx sizing across the whole session.
+
     Examples:
         qf run --to seed --prompt "A mystery story"
         qf run --to brainstorm --from dream --force
         qf run --to seed --prompt "A mystery" --init --project my-story
+        qf run --to fill --max-vram 12     # sized for a 12 GB consumer GPU
     """
     project_path = _resolve_project_path(project)
     project_path = _ensure_project(project_path, auto_init=init, provider=provider)
     _configure_project_logging(project_path)
+
+    if max_vram is not None:
+        if max_vram <= 0:
+            console.print("[red]Error:[/red] --max-vram must be positive.")
+            raise typer.Exit(1)
+        os.environ["QF_MAX_VRAM"] = str(max_vram)
 
     log = get_logger(__name__)
 
@@ -2513,14 +2541,6 @@ def _check_project(project_path: Path) -> bool:
     return all_ok
 
 
-class _GraphFormat(StrEnum):
-    """Output format for the graph command."""
-
-    dot = "dot"
-    mermaid = "mermaid"
-    json = "json"
-
-
 @app.command(name="graph")
 def graph_cmd(
     project: Annotated[
@@ -2531,46 +2551,26 @@ def graph_cmd(
             help="Project directory. Can be a path or name (looks in --projects-dir).",
         ),
     ] = None,
-    fmt: Annotated[
-        _GraphFormat,
-        typer.Option(
-            "--format",
-            "-f",
-            help="Output format.",
-        ),
-    ] = _GraphFormat.dot,
     output: Annotated[
         Path | None,
         typer.Option("--output", "-o", help="Output file (stdout if not specified)."),
     ] = None,
-    spine_only: Annotated[
-        bool,
-        typer.Option("--spine-only", help="Only show passages on the spine arc."),
-    ] = False,
     no_labels: Annotated[
         bool,
-        typer.Option("--no-labels", help="Omit choice labels on edges."),
+        typer.Option("--no-labels", help="Omit effect tags from beat boxes."),
     ] = False,
 ) -> None:
-    """Visualize story graph as DOT, Mermaid, or JSON."""
+    """Visualize beat DAG as PlantUML component diagram."""
     project_path = _resolve_project_path(project)
     _require_project(project_path)
 
     from questfoundry.graph.graph import Graph
-    from questfoundry.visualization import build_story_graph, render_dot, render_mermaid
+    from questfoundry.visualization import build_beat_dag, render_plantuml
 
     graph = Graph.load(project_path)
-    sg = build_story_graph(graph, spine_only=spine_only)
+    dag = build_beat_dag(graph)
 
-    if fmt == _GraphFormat.dot:
-        result = render_dot(sg, no_labels=no_labels)
-    elif fmt == _GraphFormat.mermaid:
-        result = render_mermaid(sg, no_labels=no_labels)
-    else:
-        import dataclasses
-        import json
-
-        result = json.dumps(dataclasses.asdict(sg), indent=2)
+    result = render_plantuml(dag, no_labels=no_labels)
 
     if output:
         output.write_text(result)

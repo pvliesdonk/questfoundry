@@ -95,59 +95,11 @@ class PolishPlan:
 
 
 # ---------------------------------------------------------------------------
-# Phase 3b: Collapse Linear Beats (registered as @polish_phase)
-# ---------------------------------------------------------------------------
-
-
-@polish_phase(
-    name="collapse_linear_beats",
-    depends_on=["character_arcs"],
-    is_deterministic=True,
-    priority=3,
-)
-async def phase_collapse_linear_beats(
-    graph: Graph,
-    model: BaseChatModel,  # noqa: ARG001
-) -> PhaseResult:
-    """Phase 3b: Collapse mandatory linear beat runs before passage grouping.
-
-    Preconditions:
-    - Beat reordering, pacing, and character arcs complete (Phases 1-3).
-    - Beat nodes have predecessor edges defining ordering.
-
-    Postconditions:
-    - Linear runs of 2+ consecutive single-path beats are merged.
-    - Surviving beat absorbs summaries and entities from removed beats.
-    - predecessor edges updated to preserve ordering.
-    - Beat count reduced; passage planning operates on collapsed DAG.
-
-    Invariants:
-    - Deterministic: min_run_length=2 always applied.
-    - Only mandatory (single-path) beats collapsed; shared beats preserved.
-    """
-    from questfoundry.graph.grow_algorithms import collapse_linear_beats
-
-    result = collapse_linear_beats(graph, min_run_length=2)
-    if result.beats_removed == 0:
-        return PhaseResult(
-            phase="collapse_linear_beats",
-            status="completed",
-            detail="No linear beat runs to collapse",
-        )
-
-    return PhaseResult(
-        phase="collapse_linear_beats",
-        status="completed",
-        detail=f"Collapsed {result.beats_removed} beats across {result.runs_collapsed} run(s)",
-    )
-
-
-# ---------------------------------------------------------------------------
 # Phase 4: Plan Computation (registered as @polish_phase)
 # ---------------------------------------------------------------------------
 
 
-@polish_phase(name="plan_computation", depends_on=["collapse_linear_beats"], priority=4)
+@polish_phase(name="plan_computation", depends_on=["character_arcs"], priority=4)
 async def phase_plan_computation(
     graph: Graph,
     model: BaseChatModel,  # noqa: ARG001
@@ -174,7 +126,7 @@ async def phase_plan_computation(
     # 4b: Prose feasibility audit
     feasibility = compute_prose_feasibility(graph, plan.passage_specs)
 
-    # 4b (overlay audit): Overlay composition check (Doc 3 §6)
+    # 4b (overlay audit): Overlay composition check (Story Graph Ontology §6)
     _audit_overlay_composition(graph, plan.passage_specs, feasibility)
 
     plan.feasibility_annotations = feasibility["annotations"]
@@ -192,7 +144,33 @@ async def phase_plan_computation(
 
     # 4c: Choice edge derivation
     plan.choice_specs = compute_choice_edges(graph, plan.passage_specs)
-    log.debug("phase4c_complete", choices=len(plan.choice_specs))
+    # R-4c.2 only fires when there are no Y-fork choices. Continue choices
+    # (R-4c.7) cover linear cross-passage transitions and do NOT satisfy the
+    # "story has Y-forks" invariant — a story with only Continue edges is
+    # still a SEED/GROW failure, just one that R-4c.7 partly masks. Filter
+    # Continue edges out before counting.
+    fork_choices = [c for c in plan.choice_specs if c.label != "Continue"]
+    if not fork_choices:
+        from questfoundry.graph.polish_validation import PolishContractError
+
+        log.error(
+            "polish_zero_choice_halt",
+            upstream="SEED/GROW",
+            passage_count=len(plan.passage_specs),
+            total_choices=len(plan.choice_specs),
+            continue_choices=len(plan.choice_specs),
+            detail="Phase 4c produced no Y-fork choice edges — upstream DAG has no Y-forks",
+        )
+        raise PolishContractError(
+            "R-4c.2: Phase 4c produced no Y-fork choice edges (only "
+            f"{len(plan.choice_specs)} Continue edge(s)) — SEED/GROW DAG has "
+            "no Y-forks. Upstream bug — halting POLISH."
+        )
+    log.debug(
+        "phase4c_complete",
+        choices=len(plan.choice_specs),
+        fork_choices=len(fork_choices),
+    )
 
     # 4d: False branch candidate identification
     plan.false_branch_candidates = find_false_branch_candidates(graph, plan.passage_specs)
@@ -224,122 +202,103 @@ async def phase_plan_computation(
 
 
 def compute_beat_grouping(graph: Graph) -> list[PassageSpec]:
-    """Group beats into passages via intersection, collapse, and singleton.
+    """Phase 4a: group beats into passages using the maximal-linear-collapse rule.
 
-    Args:
-        graph: Graph with frozen beat DAG.
+    Walk the finalized beat DAG; partition beats into maximal linear runs
+    (no internal divergence or convergence).  Applies uniformly to
+    narrative and structural beats.  Passage boundaries sit at DAG
+    divergences or convergences; every passage ends at a choice point
+    (divergence → choice edges in Phase 4c) or a convergence/terminal.
 
-    Returns:
-        List of PassageSpec objects, one per passage.
+    POLISH does NOT consume intersection groups — those are GROW-internal.
+    See docs/design/procedures/polish.md §R-4a.3, R-4a.4.
     """
     beat_nodes = graph.get_nodes_by_type("beat")
-    predecessor_edges = graph.get_edges(edge_type="predecessor")
+    if not beat_nodes:
+        return []
 
-    # Build adjacency
-    children: dict[str, list[str]] = {bid: [] for bid in beat_nodes}
-    parents: dict[str, list[str]] = {bid: [] for bid in beat_nodes}
-    for edge in predecessor_edges:
-        from_id = edge["from"]
-        to_id = edge["to"]
-        if from_id in beat_nodes and to_id in beat_nodes:
-            parents[from_id].append(to_id)
-            children[to_id].append(from_id)
+    pred_edges = graph.get_edges(edge_type="predecessor")
+    successors: dict[str, set[str]] = {bid: set() for bid in beat_nodes}
+    predecessors: dict[str, set[str]] = {bid: set() for bid in beat_nodes}
+    for edge in pred_edges:
+        # predecessor edges point successor → predecessor
+        succ, pred = edge["from"], edge["to"]
+        if succ in beat_nodes and pred in beat_nodes:
+            successors[pred].add(succ)
+            predecessors[succ].add(pred)
 
-    # Build beat → path mapping
-    belongs_to_edges = graph.get_edges(edge_type="belongs_to")
-    beat_to_path: dict[str, str] = {}
-    for edge in belongs_to_edges:
-        if edge["from"] in beat_nodes:
-            beat_to_path[edge["from"]] = edge["to"]
+    def _is_run_start(bid: str) -> bool:
+        preds = predecessors[bid]
+        if len(preds) != 1:
+            return True  # root or convergence
+        only_pred = next(iter(preds))
+        return len(successors[only_pred]) != 1  # predecessor forks
 
-    # Track which beats are already grouped
-    grouped_beats: set[str] = set()
     specs: list[PassageSpec] = []
-    passage_counter = 0
+    assigned: set[str] = set()
 
-    # 1. Intersection grouping: beats from intersection groups
-    intersection_groups = graph.get_nodes_by_type("intersection_group")
-    for _group_id, group_data in sorted(intersection_groups.items()):
-        raw_beat_ids = group_data.get("beat_ids", [])
-        beat_ids = [bid for bid in raw_beat_ids if bid in beat_nodes and bid not in grouped_beats]
-        if not beat_ids:
+    # Order start beats deterministically so fixture tests are stable.
+    start_beats = sorted(bid for bid in beat_nodes if _is_run_start(bid))
+
+    for start in start_beats:
+        if start in assigned:
             continue
-
-        summary = _merge_summaries(beat_nodes, beat_ids)
-        entities = _merge_entities(beat_nodes, beat_ids)
-
-        specs.append(
-            PassageSpec(
-                passage_id=f"passage::intersection_{passage_counter}",
-                beat_ids=beat_ids,
-                summary=summary,
-                entities=entities,
-                grouping_type="intersection",
-            )
-        )
-        grouped_beats.update(beat_ids)
-        passage_counter += 1
-
-    # 2. Collapse grouping: sequential same-path beats with no choices
-    # Find linear chains of ungrouped beats on the same path
-    for bid in _topological_order(beat_nodes, parents, children):
-        if bid in grouped_beats:
-            continue
-
-        path_id = beat_to_path.get(bid)
-        if path_id is None:
-            continue
-
-        # Walk forward collecting same-path, single-child, single-parent beats
-        chain = [bid]
-        current = bid
+        run = [start]
+        assigned.add(start)
+        current = start
         while True:
-            c = [cid for cid in children[current] if cid not in grouped_beats]
-            if len(c) != 1:
-                break
-            next_beat = c[0]
-            if len(parents[next_beat]) != 1:
-                break
-            if beat_to_path.get(next_beat) != path_id:
-                break
-            # Entity compatibility check: too many new entities = hard break
-            if not _entities_compatible(beat_nodes, chain[-1], next_beat):
-                break
-            chain.append(next_beat)
-            current = next_beat
+            succs = successors[current]
+            if len(succs) != 1:
+                break  # divergence or terminal
+            nxt = next(iter(succs))
+            if len(predecessors[nxt]) != 1 or nxt in assigned:
+                break  # convergence or already taken
+            run.append(nxt)
+            assigned.add(nxt)
+            current = nxt
 
-        if len(chain) >= 2:
-            summary = _merge_summaries(beat_nodes, chain)
-            entities = _merge_entities(beat_nodes, chain)
+        # Merge entities across all beats in the run (order-preserving, unique).
+        # Phase 4b's prose feasibility audit reads ``spec.entities`` to compute
+        # entity overlap between the passage and structural flags; if this is
+        # left empty, every structural flag is classified as irrelevant and
+        # no variant/residue specs are generated.
+        merged_entities: list[str] = []
+        seen_entities: set[str] = set()
+        for bid in run:
+            for eid in beat_nodes[bid].get("entities", []) or []:
+                if eid not in seen_entities:
+                    merged_entities.append(eid)
+                    seen_entities.add(eid)
 
-            specs.append(
-                PassageSpec(
-                    passage_id=f"passage::collapse_{passage_counter}",
-                    beat_ids=chain,
-                    summary=summary,
-                    entities=entities,
-                    grouping_type="collapse",
-                )
-            )
-            grouped_beats.update(chain)
-            passage_counter += 1
+        # `grouping_type` is a legacy annotation used by Phase 5f
+        # (transition-guidance generation) and by `format_transition_guidance_context`
+        # to identify multi-beat passages that need scene-to-scene transitions.
+        # Both gate on `grouping_type == "collapse"`.  The new rule has no
+        # "collapse" vs "singleton" distinction — it's one uniform algorithm —
+        # but we still populate the field so Phase 5f keeps firing on
+        # multi-beat runs.  Single-beat runs remain `singleton`.
+        grouping_type = "collapse" if len(run) > 1 else "singleton"
 
-    # 3. Singleton: remaining ungrouped beats
-    for bid in sorted(beat_nodes.keys()):
-        if bid in grouped_beats:
-            continue
-
-        data = beat_nodes[bid]
         specs.append(
             PassageSpec(
-                passage_id=f"passage::single_{passage_counter}",
-                beat_ids=[bid],
-                summary=data.get("summary", ""),
-                entities=data.get("entities", []),
-                grouping_type="singleton",
+                passage_id=f"passage::{run[0].split('::', 1)[-1]}",
+                beat_ids=list(run),
+                summary=beat_nodes[run[0]].get("summary", ""),
+                entities=merged_entities,
+                grouping_type=grouping_type,
             )
         )
-        passage_counter += 1
+
+    # Safety: every beat must be assigned to exactly one PassageSpec.  Any
+    # leftover indicates a graph-topology anomaly; surface loudly rather
+    # than silently skip — matches Silent Degradation policy.
+    leftover = sorted(set(beat_nodes) - assigned)
+    if leftover:
+        raise ValueError(
+            f"compute_beat_grouping: {len(leftover)} beats not assigned to "
+            f"any passage — graph may have disconnected components or "
+            f"malformed predecessor edges: {leftover[:5]}"
+        )
 
     return specs
 
@@ -364,6 +323,17 @@ def compute_prose_feasibility(
     ambiguous_specs: list[AmbiguousFeasibilityCase] = []
     warnings: list[str] = []
 
+    # Build state_flag → path_id lookup via derived_from → consequence → path_id.
+    flag_to_path: dict[str, str] = {}
+    consequence_nodes = graph.get_nodes_by_type("consequence")
+    for edge in graph.get_edges(edge_type="derived_from"):
+        sf_id = edge["from"]
+        cons_id = edge["to"]
+        cons_data = consequence_nodes.get(cons_id, {})
+        pid = cons_data.get("path_id", "")
+        if pid:
+            flag_to_path[sf_id] = pid
+
     # Build overlay data: flag → affected entities
     # Overlays are embedded on entity nodes as {when: [state_flag_ids], details: {k: v}}
     flag_entities: dict[str, set[str]] = {}
@@ -377,6 +347,16 @@ def compute_prose_feasibility(
     dilemma_residue: dict[str, str] = {}
     for did, ddata in dilemma_nodes.items():
         dilemma_residue[did] = ddata.get("residue_weight", "light")
+
+    # Build state_flag → dilemma mapping so that state_flag node IDs (the new
+    # format returned by compute_active_flags_at_beat) can be resolved to their
+    # dilemma for residue-weight lookup.
+    state_flag_nodes = graph.get_nodes_by_type("state_flag")
+    flag_to_dilemma: dict[str, str] = {}
+    for sf_id, sf_data in state_flag_nodes.items():
+        did = sf_data.get("dilemma_id", "")
+        if did:
+            flag_to_dilemma[sf_id] = did
 
     variant_counter = 0
 
@@ -420,12 +400,25 @@ def compute_prose_feasibility(
         if irrelevant_flags:
             annotations[spec.passage_id] = irrelevant_flags
 
-        # Categorize based on relevant flags
-        if len(relevant_flags) >= 4:
-            # Structural split: too many conflicting flags
+        # Categorize based on *conflicting* flags — flags from the same dilemma
+        # that represent mutually exclusive paths.  Multiple flags from different
+        # dilemmas are NOT conflicting: the player is on exactly one path per
+        # dilemma, so only one flag per dilemma is active at a time.  Conflicting
+        # means the passage must serve BOTH paths of a dilemma simultaneously
+        # (only possible after soft-dilemma convergence).
+        flags_by_dilemma: dict[str, list[str]] = {}
+        for flag in relevant_flags:
+            did = flag_to_dilemma.get(flag) or _parse_flag_dilemma_id(flag)
+            flags_by_dilemma.setdefault(did, []).append(flag)
+
+        conflicting_dilemmas = {
+            did: flags for did, flags in flags_by_dilemma.items() if len(flags) >= 2
+        }
+        if len(conflicting_dilemmas) >= 4:
+            # Structural split: too many conflicting dilemmas
             warnings.append(
-                f"Passage {spec.passage_id} has {len(relevant_flags)} "
-                f"narratively relevant flags — structural split recommended"
+                f"Passage {spec.passage_id} has {len(conflicting_dilemmas)} "
+                f"conflicting dilemmas — structural split recommended"
             )
             continue
 
@@ -433,11 +426,10 @@ def compute_prose_feasibility(
         heavy_flags: list[str] = []
         light_flags: list[str] = []
         for flag in relevant_flags:
-            # Flag format: "{dilemma_id}:{path_id}" e.g. "dilemma::d1:path::brave"
-            # Extract dilemma_id: find the colon that separates dilemma from path.
-            # Both parts use "::" internally, so the separator is the ":" right
-            # before "path::" (or the first ":" if the old short format is used).
-            dilemma_id = _parse_flag_dilemma_id(flag)
+            # Resolve dilemma ID from either a state_flag node ID (new format,
+            # returned by compute_active_flags_at_beat) or the legacy synthetic
+            # "{dilemma_id}:path::{path_raw}" string (old format).
+            dilemma_id = flag_to_dilemma.get(flag) or _parse_flag_dilemma_id(flag)
             weight = dilemma_residue.get(dilemma_id, "light")
             if weight in ("heavy", "hard"):
                 heavy_flags.append(flag)
@@ -469,7 +461,29 @@ def compute_prose_feasibility(
         else:
             # All relevant flags are light → deterministically residue
             for flag in relevant_flags:
-                path_id = flag.split(":")[-1] if ":" in flag else ""
+                path_id = flag_to_path.get(flag)
+                if not path_id:
+                    # Flag has no derived_from→consequence→path_id mapping.
+                    # Skip rather than emit a malformed ResidueSpec with empty
+                    # path_id (which would silently mis-attribute the residue
+                    # beat downstream — see #1530).
+                    log.warning(
+                        "residue_spec_skipped_unmapped_flag",
+                        flag=flag,
+                        passage=spec.passage_id,
+                        available_paths=sorted(set(flag_to_path.values())),
+                        detail=(
+                            "state_flag has no derived_from consequence with a "
+                            "path_id; cannot attribute residue to a path. The "
+                            "residue beat for this flag will be missing — fix "
+                            "the upstream consequence wiring."
+                        ),
+                    )
+                    warnings.append(
+                        f"Residue beat skipped for unmapped flag {flag} on "
+                        f"passage {spec.passage_id} (R-5.5 path attribution)."
+                    )
+                    continue
                 residue_specs.append(
                     ResidueSpec(
                         target_passage_id=spec.passage_id,
@@ -498,7 +512,7 @@ def _audit_overlay_composition(
     specs: list[PassageSpec],
     feasibility: dict[str, Any],
 ) -> None:
-    """Audit overlay composition for prose feasibility (Doc 3 §6).
+    """Audit overlay composition for prose feasibility (Story Graph Ontology §6).
 
     For each passage, checks whether any entity present in its beats could
     have 4 or more overlays simultaneously active under any single flag
@@ -640,12 +654,20 @@ def compute_choice_edges(
         if from_id in beat_nodes and to_id in beat_nodes:
             children[to_id].append(from_id)
 
-    # Build beat → path mapping
+    # Build beat → grants targets index (state_flag node IDs)
+    beat_grants: dict[str, list[str]] = {}
+    for edge in graph.get_edges(edge_type="grants"):
+        beat_grants.setdefault(edge["from"], []).append(edge["to"])
+
+    # Build beat → path-set mapping (Y-shape: pre-commit beats have dual membership)
     belongs_to_edges = graph.get_edges(edge_type="belongs_to")
-    beat_to_path: dict[str, str] = {}
+    _ce_accum: dict[str, set[str]] = {}
     for edge in belongs_to_edges:
         if edge["from"] in beat_nodes:
-            beat_to_path[edge["from"]] = edge["to"]
+            _ce_accum.setdefault(edge["from"], set()).add(edge["to"])
+    beat_to_paths_ce: dict[str, frozenset[str]] = {
+        bid: frozenset(ps) for bid, ps in _ce_accum.items()
+    }
 
     # Build beat → passage mapping
     beat_to_passage: dict[str, str] = {}
@@ -666,40 +688,93 @@ def compute_choice_edges(
             if prefixed in dilemma_nodes:
                 path_to_dilemma[pid] = prefixed
 
+    # Build state_flag → dilemma_role lookup for R-4c.3/R-4c.4.
+    # state_flag nodes carry a ``dilemma_id`` field; dilemma nodes carry
+    # ``dilemma_role`` ("soft" | "hard").  We pre-compute the combined
+    # flag→role mapping so the inner loop doesn't re-query the graph.
+    state_flag_nodes = graph.get_nodes_by_type("state_flag")
+    flag_to_dilemma_role: dict[str, str] = {}
+    for sf_id, sf_data in state_flag_nodes.items():
+        did = sf_data.get("dilemma_id", "")
+        if did:
+            ddata = (
+                dilemma_nodes.get(did)
+                or dilemma_nodes.get(normalize_scoped_id(did, "dilemma"))
+                or {}
+            )
+            role = ddata.get("dilemma_role", "soft")
+            flag_to_dilemma_role[sf_id] = role
+
     # Keyed by (from_passage, to_passage) to deduplicate multiple beats in the
     # same passage that independently diverge to the same target (#1185).
     choices_map: dict[tuple[str, str], ChoiceSpec] = {}
 
-    # Build passage_id_to_spec once outside the loop (not per-divergence-point)
-    passage_id_to_spec: dict[str, PassageSpec] = {s.passage_id: s for s in specs}
-
-    # Find divergence points: commit beats with children on different paths
-    # of the SAME dilemma (#1197). Only commits create player choices — see
-    # docs/design/procedures/polish.md Phase 4c step 1.
+    # Find divergence points — two cases:
+    #
+    # Case A (classic): A commit beat that itself has 2+ successors on different
+    #   same-dilemma paths.  This arises in old-style (non-Y-shape) DAGs where
+    #   the branching beat carries effect=commits.
+    #
+    # Case B (Y-shape, #1220): A pre-commit beat with dual belongs_to (shared
+    #   across both paths of a dilemma) whose successors are single-membership
+    #   commit beats on different paths.  The player's choice happens at the end
+    #   of the shared passage, so the shared beat is the divergence point.
+    #
+    # In both cases the from_passage is the passage of the diverging beat and
+    # the to_passages are the passages of the first exclusive beats per path.
     for bid in sorted(beat_nodes.keys()):
         data = beat_nodes.get(bid, {})
 
-        # Extract dilemma IDs this beat commits — only commit beats diverge
+        child_ids = children[bid]
+        if len(child_ids) < 2:
+            continue
+
+        # Group children by all their path memberships to detect any divergence.
+        # Pre-commit beats share multiple paths; commit beats have a single path.
+        # Using all memberships avoids missing divergence when a shared path sorts
+        # first alphabetically under the old primary-path heuristic.
+        child_paths: dict[str, list[str]] = {}
+        for cid in child_ids:
+            for path_id in beat_to_paths_ce.get(cid, frozenset()):
+                child_paths.setdefault(path_id, []).append(cid)
+
+        if len(child_paths) < 2:
+            continue
+
+        # --- Determine committing dilemmas for this divergence point ---
+        #
+        # Case A: beat itself carries effect=commits → use those dilemma IDs.
         committing_dilemmas: set[str] = set()
         for impact in data.get("dilemma_impacts", []):
             if impact.get("effect") == "commits":
                 did = impact.get("dilemma_id", "")
                 if did:
                     committing_dilemmas.add(normalize_scoped_id(did, "dilemma"))
+
+        # Case B (Y-shape, #1254): A shared pre-commit beat whose immediate
+        # children include single-path beats from the same dilemma on different
+        # paths.  The commit beat may be deeper in the chain (e.g., beat_01 is
+        # advances, beat_02 is commits), so we detect divergence from *path
+        # membership* rather than effect=commits.
         if not committing_dilemmas:
-            continue
+            own_paths = beat_to_paths_ce.get(bid, frozenset())
+            if len(own_paths) >= 2:
+                # Identify this beat's dilemma
+                own_dilemmas = {path_to_dilemma[p] for p in own_paths if p in path_to_dilemma}
+                if len(own_dilemmas) == 1:
+                    own_dilemma = next(iter(own_dilemmas))
+                    # Find immediate children that are single-path and same-dilemma
+                    same_dilemma_child_paths: dict[str, list[str]] = {}
+                    for cid in child_ids:
+                        cpaths = beat_to_paths_ce.get(cid, frozenset())
+                        if len(cpaths) == 1:
+                            cpath = next(iter(cpaths))
+                            if path_to_dilemma.get(cpath) == own_dilemma:
+                                same_dilemma_child_paths.setdefault(cpath, []).append(cid)
+                    if len(same_dilemma_child_paths) >= 2:
+                        committing_dilemmas = {own_dilemma}
 
-        child_ids = children[bid]
-        if len(child_ids) < 2:
-            continue
-
-        # Group children by path
-        child_paths: dict[str, list[str]] = {}
-        for cid in child_ids:
-            path_id = beat_to_path.get(cid, "")
-            child_paths.setdefault(path_id, []).append(cid)
-
-        if len(child_paths) < 2:
+        if not committing_dilemmas:
             continue
 
         from_passage = beat_to_passage.get(bid, "")
@@ -725,40 +800,83 @@ def compute_choice_edges(
                 if not to_passage or to_passage == from_passage:
                     continue
 
-                # Compute grants: state flags activated by taking this path
+                # Compute grants: state flag node IDs activated by taking this path.
+                # Walk forward from each path child to find the first commits
+                # beat, then resolve its ``grants`` edges to state_flag nodes.
                 grants: list[str] = []
-                for cid in path_children:
+                visited_for_grants: set[str] = set()
+                search_queue = list(path_children)
+                while search_queue:
+                    cid = search_queue.pop(0)
+                    if cid in visited_for_grants:
+                        continue
+                    visited_for_grants.add(cid)
                     cdata = beat_nodes.get(cid, {})
-                    for impact in cdata.get("dilemma_impacts", []):
-                        if impact.get("effect") == "commits":
-                            grant_did = impact.get("dilemma_id", "")
-                            if grant_did and path_id:
-                                grants.append(f"{grant_did}:{path_id}")
+                    found_commit = any(
+                        imp.get("effect") == "commits" for imp in cdata.get("dilemma_impacts", [])
+                    )
+                    if found_commit:
+                        # Resolve via grants edge index to state_flag node IDs
+                        for sf_id in beat_grants.get(cid, []):
+                            grants.append(sf_id)
+                    else:
+                        # Continue to children on the same single path
+                        for next_cid in children.get(cid, []):
+                            if beat_to_paths_ce.get(next_cid, frozenset()) == frozenset({path_id}):
+                                search_queue.append(next_cid)
 
-                # Compute requires: for choices from intersection passages,
-                # populate the required state flags for the target passage.
+                # Compute requires (R-4c.3 / R-4c.4): for post-convergence
+                # soft-dilemma choices, set requires to the state flags that
+                # are active at the target beat and belong to soft dilemmas.
+                # Hard-dilemma flags are excluded per R-4c.4 (the passage
+                # graph is already structurally separate for hard dilemmas).
                 requires: list[str] = []
-                from_spec = passage_id_to_spec.get(from_passage)
-                if from_spec and from_spec.grouping_type == "intersection":
-                    try:
-                        flag_combos = compute_active_flags_at_beat(graph, target_beat)
+                try:
+                    flag_combos = compute_active_flags_at_beat(graph, target_beat)
+                    if flag_combos:
+                        # Pick a deterministic combo when multiple exist.
+                        # Prefer a single combo; warn on ambiguity (R-4c.5
+                        # says single-outgoing-successor choices keep empty
+                        # requires, but here we have 2+ successors by design).
                         if len(flag_combos) == 1:
                             combo = next(iter(flag_combos))
-                            if combo:
-                                requires = sorted(combo)
-                        elif len(flag_combos) > 1:
+                        else:
+                            # Multiple flag combos (rare): pick lexicographically
+                            # smallest to keep output deterministic.
+                            combo = min(flag_combos, key=lambda s: tuple(sorted(s)))
                             log.warning(
                                 "choice_requires_multi_combo",
                                 from_passage=from_passage,
                                 to_passage=to_passage,
                                 combo_count=len(flag_combos),
                             )
-                    except ValueError as e:
-                        log.warning(
-                            "choice_requires_compute_failed",
-                            from_passage=from_passage,
-                            error=str(e),
-                        )
+                        # Filter to soft-dilemma flags only (R-4c.3/R-4c.4).
+                        # Flags without a resolvable dilemma default to "soft"
+                        # (included in requires); surface the fallback so a
+                        # broken derived_from chain is visible, not silent.
+                        soft_flags: list[str] = []
+                        for f in combo:
+                            role = flag_to_dilemma_role.get(f)
+                            if role is None:
+                                log.warning(
+                                    "choice_requires_flag_role_unresolved",
+                                    flag=f,
+                                    from_passage=from_passage,
+                                    to_passage=to_passage,
+                                    hint="state_flag has no derived_from chain to a dilemma; "
+                                    "treating as soft for R-4c.3 purposes",
+                                )
+                                soft_flags.append(f)
+                            elif role == "soft":
+                                soft_flags.append(f)
+                        if soft_flags:
+                            requires = sorted(soft_flags)
+                except ValueError as e:
+                    log.warning(
+                        "choice_requires_compute_failed",
+                        from_passage=from_passage,
+                        error=str(e),
+                    )
 
                 key = (from_passage, to_passage)
                 if key in choices_map:
@@ -780,6 +898,35 @@ def compute_choice_edges(
                         requires=requires,
                         label="",  # Populated by Phase 5
                     )
+
+    # R-4c.7: emit Continue choice edges for linear cross-passage transitions.
+    # Every cross-passage beat predecessor edge that does not originate at a
+    # divergence point produces a single "Continue" choice. Without this the
+    # passage layer is unreachable past Y-fork commit beats — SHIP's
+    # reachability validator (R-4.2) fires on any post-commit linear chain.
+    for edge in predecessor_edges:
+        from_beat = edge["to"]  # predecessor relation: B requires A → A precedes B
+        to_beat = edge["from"]
+        if from_beat not in beat_nodes or to_beat not in beat_nodes:
+            continue
+        from_p = beat_to_passage.get(from_beat)
+        to_p = beat_to_passage.get(to_beat)
+        if not from_p or not to_p or from_p == to_p:
+            continue
+        if (from_p, to_p) in choices_map:
+            continue  # already covered by Y-fork handler
+        # Skip when source beat is a divergence point: the Y-fork handler
+        # already emitted same-dilemma choices, and other-dilemma children
+        # are temporal interleaving (not player choices).
+        if len(children.get(from_beat, [])) > 1:
+            continue
+        choices_map[(from_p, to_p)] = ChoiceSpec(
+            from_passage=from_p,
+            to_passage=to_p,
+            grants=[],
+            requires=[],
+            label="Continue",
+        )
 
     return list(choices_map.values())
 
@@ -1004,7 +1151,7 @@ async def phase_plan_application(
             "residue_passages": 0,
             "choices": 0,
             "false_branches": 0,
-            "sidetrack_beats": 0,
+            "false_branch_beats": 0,
         }
 
         # 1. Create passage nodes with grouped_in edges
@@ -1043,7 +1190,7 @@ async def phase_plan_application(
 
             new_beats, new_choices = _apply_false_branch(graph, fb_spec)
             counts["false_branches"] += 1
-            counts["sidetrack_beats"] += new_beats
+            counts["false_branch_beats"] += new_beats
             counts["choices"] += new_choices
 
         log.debug("phase6_false_branches_applied", count=counts["false_branches"])
@@ -1106,7 +1253,8 @@ def _create_passage_node(graph: Graph, spec: PassageSpec) -> None:
 
 
 def _create_variant_passage(graph: Graph, vspec: VariantSpec) -> None:
-    """Create a variant passage node with variant_of edge to base."""
+    """Create a variant passage node with variant_of edge to base, inheriting entities (R-6.5)."""
+    inherited_entities = _inherited_passage_entities(graph, vspec.base_passage_id)
     graph.create_node(
         vspec.variant_id,
         {
@@ -1115,23 +1263,81 @@ def _create_variant_passage(graph: Graph, vspec: VariantSpec) -> None:
             "summary": vspec.summary,
             "requires": vspec.requires,
             "is_variant": True,
+            "entities": inherited_entities,
         },
     )
 
     graph.add_edge("variant_of", vspec.variant_id, vspec.base_passage_id)
 
 
+def _inherited_passage_entities(graph: Graph, source_passage_id: str) -> list[str]:
+    """Return the entity IDs a synthesized passage should inherit from its source.
+
+    Residue passages / beats and variant passages all play out narratively at
+    the same dramatic moment as a base passage — same cast on stage. FILL
+    builds its `### Valid Entity IDs` context from the passage's ``entities``
+    field, so a missing or empty list on the synthesized node forces the
+    prose-call to invent IDs from the passage_id text and produces phantom-ID
+    escalations downstream (#1457 for residues, #1459 for variants).
+
+    A source passage that doesn't exist is a structural failure: Phase 6's
+    application order (R-6.2) creates base passages before variants and
+    residues, so this can only happen if Phase 4-5 produced a plan that
+    violates that order or someone called this helper out-of-band. Raise
+    rather than fall back to ``[]`` — silently inheriting an empty entity
+    list is the exact failure mode that produced #1457 in the first place.
+    (Per ``.gemini/styleguide.md`` anti-pattern: silent fallbacks that hide
+    bugs prefer explicit errors.)
+
+    The inner ``or []`` on ``source.get("entities")`` handles a *present*
+    source whose entities field is missing or explicitly ``None`` — that's
+    a legitimate empty case (e.g. setup beats before any cast is on stage).
+    """
+    source = graph.get_node(source_passage_id)
+    if source is None:
+        raise ValueError(
+            f"R-6.5: source passage {source_passage_id!r} not found in graph. "
+            "Phase 6 application order (R-6.2) requires source passages "
+            "(residue targets and variant bases) to be created before "
+            "their dependent residue / variant nodes."
+        )
+    return list(source.get("entities") or [])
+
+
 def _create_residue_beat_and_passage(graph: Graph, rspec: ResidueSpec) -> None:
+    """Phase 6: materialize a residue spec into the passage layer.
+
+    Branches on ``rspec.mapping_strategy`` per R-5.7/R-5.8:
+      - ``residue_passage_with_variants`` — one residue passage with
+        variant children carrying flag-gated prose (the existing shape).
+      - ``parallel_passages`` — sibling passages that branch from the
+        target's predecessor and rejoin at the target (new shape).
+    """
+    if rspec.mapping_strategy == "residue_passage_with_variants":
+        _apply_residue_with_variants(graph, rspec)
+    elif rspec.mapping_strategy == "parallel_passages":
+        _apply_residue_parallel_passages(graph, rspec)
+    else:  # defensive — validator catches this too
+        raise ValueError(
+            f"R-5.8: unknown mapping_strategy {rspec.mapping_strategy!r} for "
+            f"residue {rspec.residue_id!r}"
+        )
+
+
+def _apply_residue_with_variants(graph: Graph, rspec: ResidueSpec) -> None:
     """Create a residue beat node and a residue passage containing it.
 
     The residue passage is gated by the residue's state flag and
-    precedes the target shared passage.
+    precedes the target shared passage.  This is the default
+    ``residue_passage_with_variants`` shape.
     """
     # Derive IDs from residue_id — use residue_ prefix to avoid collision
     # with regular beat/passage IDs
     residue_suffix = rspec.residue_id.split("::")[-1]
     beat_id = f"beat::residue_{residue_suffix}"
     residue_passage_id = f"passage::residue_{residue_suffix}"
+
+    inherited_entities = _inherited_passage_entities(graph, rspec.target_passage_id)
 
     # Create residue beat node
     graph.create_node(
@@ -1143,13 +1349,12 @@ def _create_residue_beat_and_passage(graph: Graph, rspec: ResidueSpec) -> None:
             "role": "residue_beat",
             "scene_type": "sequel",
             "dilemma_impacts": [],
-            "entities": [],
+            "entities": inherited_entities,
+            "created_by": "POLISH",
         },
     )
 
-    # Add belongs_to edge to path if specified
-    if rspec.path_id:
-        graph.add_edge("belongs_to", beat_id, rspec.path_id)
+    graph.add_edge("belongs_to", beat_id, rspec.path_id)
 
     # Create residue passage containing this beat
     graph.create_node(
@@ -1160,11 +1365,121 @@ def _create_residue_beat_and_passage(graph: Graph, rspec: ResidueSpec) -> None:
             "summary": rspec.content_hint or f"Residue for {rspec.flag}",
             "requires": [rspec.flag],
             "is_residue": True,
+            "residue_for": rspec.target_passage_id,
+            "mapping_strategy": rspec.mapping_strategy,
+            "entities": inherited_entities,
         },
     )
 
     graph.add_edge("grouped_in", beat_id, residue_passage_id)
     graph.add_edge("precedes", residue_passage_id, rspec.target_passage_id)
+
+    # Insert into beat DAG.  Splice the residue beat before the target
+    # passage's first beat.  Skip transition beats (zero-membership,
+    # may be pruned from arcs) — connect to the first regular beat.
+    target_beats = [
+        e["from"]
+        for e in graph.get_edges(edge_type="grouped_in")
+        if e["to"] == rspec.target_passage_id
+    ]
+    if target_beats:
+        beat_data = graph.get_nodes_by_type("beat")
+        # Prefer non-transition beats; fall back to any
+        regular_targets = [
+            tb for tb in target_beats if beat_data.get(tb, {}).get("role") != "transition_beat"
+        ]
+        target_beat = sorted(regular_targets or target_beats)[0]
+        # Residue inherits the target beat's predecessors
+        for pred_edge in graph.get_edges(edge_type="predecessor"):
+            if pred_edge["from"] == target_beat:
+                graph.add_edge("predecessor", beat_id, pred_edge["to"])
+        graph.add_edge("predecessor", target_beat, beat_id)
+
+
+def _apply_residue_parallel_passages(graph: Graph, rspec: ResidueSpec) -> None:
+    """Alternative residue mapping per R-5.7/R-5.8: a parallel passage gated
+    by ``rspec.flag`` that branches from the target's predecessor and
+    rejoins at the target.
+
+    Creates:
+      - One residue beat (``beat::residue_<id>``) with ``role: residue_beat``,
+        ``created_by: POLISH``.
+      - One parallel passage (``passage::residue_<id>``) containing the beat,
+        with ``residue_for: <target>``, ``is_residue: True``, and
+        ``mapping_strategy: "parallel_passages"``.
+      - A ``precedes`` edge from the parallel passage to the target (the
+        branch rejoins here).  The predecessor passage's existing
+        ``precedes`` edge to the target remains (the non-residue path).
+      - Beat-layer insertion: predecessor beat(s) of the target gain a
+        ``predecessor`` edge from the residue beat; the residue beat
+        precedes the target's first regular (non-transition) beat.
+
+    The flag gating (``requires: [rspec.flag]`` on the residue passage)
+    ensures the parallel path is only taken when the flag is present.
+    """
+    residue_suffix = rspec.residue_id.split("::")[-1]
+    beat_id = f"beat::residue_{residue_suffix}"
+    residue_passage_id = f"passage::residue_{residue_suffix}"
+
+    inherited_entities = _inherited_passage_entities(graph, rspec.target_passage_id)
+
+    # Create residue beat — same shape as the variants strategy.
+    graph.create_node(
+        beat_id,
+        {
+            "type": "beat",
+            "raw_id": f"residue_{residue_suffix}",
+            "summary": rspec.content_hint or f"Residue moment for {rspec.flag}",
+            "role": "residue_beat",
+            "scene_type": "sequel",
+            "dilemma_impacts": [],
+            "entities": inherited_entities,
+            "created_by": "POLISH",
+        },
+    )
+
+    graph.add_edge("belongs_to", beat_id, rspec.path_id)
+
+    # Create parallel residue passage — residue_for + mapping_strategy set
+    # so Phase 7's _check_residue_mapping_strategy validates successfully.
+    graph.create_node(
+        residue_passage_id,
+        {
+            "type": "passage",
+            "raw_id": f"residue_{residue_suffix}",
+            "summary": rspec.content_hint or f"Residue (parallel) for {rspec.flag}",
+            "requires": [rspec.flag],
+            "is_residue": True,
+            "residue_for": rspec.target_passage_id,
+            "mapping_strategy": rspec.mapping_strategy,
+            "entities": inherited_entities,
+        },
+    )
+
+    graph.add_edge("grouped_in", beat_id, residue_passage_id)
+    # Parallel branch: residue passage also precedes the target.  The
+    # predecessor passage's existing precedes edge to the target remains
+    # untouched — players without the flag take the direct path.
+    graph.add_edge("precedes", residue_passage_id, rspec.target_passage_id)
+
+    # Beat DAG insertion — mirror the variants strategy's splice logic.
+    # The residue beat sits parallel to the target's first regular beat:
+    # it inherits the target's predecessors and precedes the target.
+    target_beats = [
+        e["from"]
+        for e in graph.get_edges(edge_type="grouped_in")
+        if e["to"] == rspec.target_passage_id
+    ]
+    if target_beats:
+        beat_data = graph.get_nodes_by_type("beat")
+        regular_targets = [
+            tb for tb in target_beats if beat_data.get(tb, {}).get("role") != "transition_beat"
+        ]
+        target_beat = sorted(regular_targets or target_beats)[0]
+        for pred_edge in graph.get_edges(edge_type="predecessor"):
+            if pred_edge["from"] == target_beat:
+                graph.add_edge("predecessor", beat_id, pred_edge["to"])
+        graph.add_edge("predecessor", target_beat, beat_id)
 
 
 def _create_choice_edge(graph: Graph, cspec: ChoiceSpec) -> None:
@@ -1187,7 +1502,7 @@ def _apply_false_branch(
     """Apply a false branch decision (diamond or sidetrack).
 
     Returns:
-        Tuple of (sidetrack_beats_created, choice_edges_created).
+        Tuple of (false_branch_beats_created, choice_edges_created).
     """
     if fb_spec.branch_type == "diamond":
         return _apply_diamond(graph, fb_spec)
@@ -1273,10 +1588,11 @@ def _apply_sidetrack(graph: Graph, fb_spec: FalseBranchSpec) -> tuple[int, int]:
             "type": "beat",
             "raw_id": f"sidetrack_{from_passage.split('::')[-1]}",
             "summary": fb_spec.sidetrack_summary or "A brief detour",
-            "role": "sidetrack_beat",
+            "role": "false_branch_beat",
             "scene_type": "scene",
             "dilemma_impacts": [],
             "entities": fb_spec.sidetrack_entities,
+            "created_by": "POLISH",
         },
     )
 
@@ -1316,22 +1632,27 @@ async def phase_validation(
     """Phase 7: Validate the complete passage graph.
 
     Runs structural, variant, choice, and feasibility checks on the
-    passage layer created by Phase 6. Failures indicate bugs in
-    Phases 4-6 or insufficient GROW output.
+    passage layer created by Phase 6.  On any error, raises
+    ``PolishContractError`` after logging a structured ERROR event —
+    failures at this seam indicate bugs in Phases 4-6 or insufficient
+    GROW output and should halt the pipeline loudly.
     """
-    from questfoundry.graph.polish_validation import validate_polish_output
+    from questfoundry.graph.polish_validation import (
+        PolishContractError,
+        validate_polish_output,
+    )
 
     errors = validate_polish_output(graph)
 
     if errors:
-        detail = f"{len(errors)} validation error(s): {'; '.join(errors[:3])}"
-        if len(errors) > 3:
-            detail += f" (and {len(errors) - 3} more)"
-        log.warning("phase7_validation_failed", errors=len(errors))
-        return PhaseResult(
-            phase="validation",
-            status="failed",
-            detail=detail,
+        log.error(
+            "polish_contract_failed",
+            total_errors=len(errors),  # full count, even when the list below is capped
+            errors=errors[:10],  # cap for log readability; full list is in the raised exception
+        )
+        raise PolishContractError(
+            f"POLISH stage output contract violated ({len(errors)} "
+            f"error(s)):\n" + "\n".join(f"  - {e}" for e in errors)
         )
 
     # Collect summary stats for PolishResult
@@ -1342,7 +1663,7 @@ async def phase_validation(
     residue_count = sum(1 for p in passage_nodes.values() if p.get("is_residue"))
 
     beat_nodes = graph.get_nodes_by_type("beat")
-    sidetrack_count = sum(1 for b in beat_nodes.values() if b.get("role") == "sidetrack_beat")
+    sidetrack_count = sum(1 for b in beat_nodes.values() if b.get("role") == "false_branch_beat")
 
     # Count false branches from diamond_alt and sidetrack passages
     false_branch_count = sum(1 for p in passage_nodes.values() if p.get("is_diamond_alt")) + sum(
@@ -1369,82 +1690,6 @@ async def phase_validation(
         status="completed",
         detail=detail,
     )
-
-
-# ---------------------------------------------------------------------------
-# Internal helpers
-# ---------------------------------------------------------------------------
-
-
-def _topological_order(
-    beat_nodes: dict[str, dict[str, Any]],
-    parents: dict[str, list[str]],
-    children: dict[str, list[str]],
-) -> list[str]:
-    """Return beat IDs in topological order (parents before children)."""
-    from collections import deque
-
-    in_degree: dict[str, int] = {bid: len(parents.get(bid, [])) for bid in beat_nodes}
-    queue = deque(sorted(bid for bid, deg in in_degree.items() if deg == 0))
-    result: list[str] = []
-
-    while queue:
-        node = queue.popleft()
-        result.append(node)
-        for neighbor in sorted(children.get(node, [])):
-            in_degree[neighbor] -= 1
-            if in_degree[neighbor] == 0:
-                queue.append(neighbor)
-
-    return result
-
-
-def _merge_summaries(
-    beat_nodes: dict[str, dict[str, Any]],
-    beat_ids: list[str],
-) -> str:
-    """Merge summaries from multiple beats into one passage summary."""
-    parts = []
-    for bid in beat_ids:
-        data = beat_nodes.get(bid, {})
-        summary = data.get("summary", "")
-        if summary:
-            parts.append(summary)
-    return "; ".join(parts)
-
-
-def _merge_entities(
-    beat_nodes: dict[str, dict[str, Any]],
-    beat_ids: list[str],
-) -> list[str]:
-    """Merge entity lists from multiple beats (union, deduplicated)."""
-    entities: set[str] = set()
-    for bid in beat_ids:
-        data = beat_nodes.get(bid, {})
-        for eid in data.get("entities", []):
-            entities.add(eid)
-    return sorted(entities)
-
-
-def _entities_compatible(
-    beat_nodes: dict[str, dict[str, Any]],
-    beat_a: str,
-    beat_b: str,
-    max_new_entities: int = 3,
-) -> bool:
-    """Check if two beats have compatible entity sets for collapsing.
-
-    Returns False if beat_b introduces too many new entities not in beat_a,
-    suggesting a natural scene break.
-    """
-    entities_a = set(beat_nodes.get(beat_a, {}).get("entities", []))
-    entities_b = set(beat_nodes.get(beat_b, {}).get("entities", []))
-
-    if not entities_a or not entities_b:
-        return True  # No entity constraint when either has no entities
-
-    new_entities = entities_b - entities_a
-    return len(new_entities) <= max_new_entities
 
 
 # ---------------------------------------------------------------------------

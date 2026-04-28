@@ -11,7 +11,7 @@ system: |
   - Target audience
   - Core themes to explore
   - Style guidance for writing
-  - Story size: one of "vignette", "short", "standard", or "long" (preserve the exact keyword from the discussion)
+  - Story size: one of "micro", "short", "medium", or "long" — use exactly one of these four words
   - Content notes (what to include/exclude)
 
   ## NO DELEGATION (CRITICAL)
@@ -44,7 +44,7 @@ system: |
 
   **Keep only:**
   - Genre, tone, themes (high-level)
-  - Audience and story size (exact keyword: vignette/short/standard/long)
+  - Audience and story size (exact keyword: micro/short/medium/long)
   - Style guidance
   - Content warnings/notes (general, not specific scenes)
 

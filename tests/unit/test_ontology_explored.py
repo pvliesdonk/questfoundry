@@ -387,6 +387,7 @@ class TestPruningImmutability:
                         beat_id=f"beat_{path_id}",
                         summary="Summary",
                         paths=[path_id],
+                        entities=["character::placeholder"],
                         dilemma_impacts=[
                             {"dilemma_id": tid, "effect": "commits", "note": "Commits the dilemma"}
                         ],
@@ -496,6 +497,7 @@ class TestScopedIdStandardization:
                     beat_id="artifact_beat_01",
                     summary="Discovery of the artifact",
                     path_id="path::artifact_natural",  # Scoped! belongs to natural path
+                    entities=["entity::artifact"],
                     dilemma_impacts=[
                         {
                             "dilemma_id": "dilemma::artifact_origin",
@@ -508,6 +510,7 @@ class TestScopedIdStandardization:
                     beat_id="artifact_beat_02",
                     summary="Beat only for crafted path",
                     path_id="path::artifact_crafted",  # Scoped! belongs to crafted path
+                    entities=["entity::artifact"],
                     dilemma_impacts=[
                         {
                             "dilemma_id": "dilemma::artifact_origin",
@@ -576,11 +579,13 @@ class TestScopedIdStandardization:
                     consequence_id="cons_a",
                     path_id="path::th_a",  # Scoped
                     description="Consequence for path A",
+                    narrative_effects=["path A ripple"],
                 ),
                 Consequence(
                     consequence_id="cons_b",
                     path_id="path::th_b",  # Scoped
                     description="Consequence for path B",
+                    narrative_effects=["path B ripple"],
                 ),
             ],
             initial_beats=[
@@ -588,6 +593,7 @@ class TestScopedIdStandardization:
                     beat_id="beat_1",
                     summary="Test beat",
                     paths=["path::th_a"],
+                    entities=["character::placeholder"],
                     dilemma_impacts=[{"dilemma_id": "t1", "effect": "commits", "note": "n"}],
                 ),
             ],
@@ -638,6 +644,7 @@ class TestScopedIdStandardization:
                     beat_id="keeper_beat_1",
                     summary="Meeting the keeper",
                     path_id="path::keeper_protector",  # Scoped!
+                    entities=["character::keeper"],
                     dilemma_impacts=[
                         {
                             "dilemma_id": "dilemma::keeper_trust",
@@ -767,6 +774,7 @@ class TestCanonicalAnswerFromGraph:
                     beat_id="beat_1",
                     summary="Test",
                     path_id="path_b",  # Belongs to the graph-default path
+                    entities=["character::protagonist"],
                     dilemma_impacts=[{"dilemma_id": "t1", "effect": "commits", "note": "n"}],
                 ),
             ],
@@ -817,6 +825,7 @@ class TestCanonicalAnswerFromGraph:
                     beat_id="beat_1",
                     summary="Test",
                     path_id="path_a",  # Belongs to explored[0] (canonical without graph)
+                    entities=["character::protagonist"],
                     dilemma_impacts=[{"dilemma_id": "t1", "effect": "commits", "note": "n"}],
                 ),
             ],

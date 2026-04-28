@@ -92,26 +92,35 @@ async def phase_intra_path_predecessors(
     **before** cross-path interleaving runs, so every beat has its in-path
     successor as a structural predecessor child.
 
-    Only beats that are **exclusive to one path** participate in the chain.
-    Shared beats (belonging to multiple paths) already have or will receive
-    ordering from cross-path interleaving; adding alphabetical edges for them
-    risks creating cycles with those existing edges.
+    **All** beats on each path participate in the chain, including Y-shape
+    shared pre-commit beats (dual ``belongs_to``).  Shared beats appear in
+    both sibling paths' beat lists; when the second path is processed, the
+    shared-beat edges already exist and are idempotently skipped.  This
+    produces the correct Y-shape DAG::
+
+        shared_01 → shared_02 → commit_P1 → post_P1_01 → ...
+                               → commit_P2 → post_P2_01 → ...
+
+    Cross-dilemma cycle risk does not apply because guard rail 1 (Story
+    Graph Ontology Part 8) guarantees that dual ``belongs_to`` is always
+    intra-dilemma — shared beats cannot conflict with cross-dilemma
+    interleaving edges created by ``interleave_cross_path_beats``.
 
     Preconditions:
     - Beat DAG validated (Phase 1 passed).
     - Path nodes exist with beats linked via ``belongs_to`` edges.
 
     Postconditions:
-    - For each path, single-path-exclusive beats are sorted alphabetically
-      (canonical SEED naming: ``_beat_01``, ``_beat_02``, …) and chained:
-      ``predecessor(beat_n+1, beat_n)`` for every consecutive pair.
+    - For each path, beats are sorted alphabetically (canonical SEED naming:
+      ``shared_setup_…_01``, ``shared_setup_…_02``, ``…_beat_01``, …) and
+      chained: ``predecessor(beat_n+1, beat_n)`` for every consecutive pair.
     - Edges are only added, never removed; existing edges are not duplicated.
     - No edge is added whose reverse already exists (prevents cycles).
 
     Invariants:
     - Deterministic: same graph always produces same edges.
     - Idempotent: running twice produces the same edge set.
-    - Skips paths with fewer than 2 exclusive beats (no chain to form).
+    - Skips paths with fewer than 2 beats (no chain to form).
     """
     log.info("intra_path_predecessors_start")
     path_nodes = graph.get_nodes_by_type("path")
@@ -122,13 +131,9 @@ async def phase_intra_path_predecessors(
             detail="No path nodes found; nothing to do",
         )
 
-    # Build path → beats mapping and beat → paths mapping from belongs_to edges.
-    # We only chain beats that are exclusive to a single path.  Shared beats
-    # (belonging to multiple paths) already have cross-path predecessor edges
-    # created by SEED or earlier phases; adding alphabetical intra-path edges
-    # for them risks creating cycles with those existing edges.
+    # Build path → beats mapping, beat → paths, and path → dilemma index.
     path_beats: dict[str, list[str]] = {path_id: [] for path_id in path_nodes}
-    beat_path_count: dict[str, int] = {}
+    beat_paths: dict[str, set[str]] = {}
     belongs_to_edges = graph.get_edges(edge_type="belongs_to")
     beat_nodes = graph.get_nodes_by_type("beat")
     for edge in belongs_to_edges:
@@ -136,13 +141,65 @@ async def phase_intra_path_predecessors(
         path_id = edge["to"]
         if path_id in path_nodes and beat_id in beat_nodes:
             path_beats[path_id].append(beat_id)
-            beat_path_count[beat_id] = beat_path_count.get(beat_id, 0) + 1
+            beat_paths.setdefault(beat_id, set()).add(path_id)
 
-    # Restrict each path's beat list to single-path-exclusive beats.
-    exclusive_path_beats: dict[str, list[str]] = {}
-    for path_id in path_nodes:
-        exclusive = [b for b in path_beats.get(path_id, []) if beat_path_count.get(b, 0) == 1]
-        exclusive_path_beats[path_id] = sorted(exclusive)
+    # Resolve path → dilemma_id so we can distinguish Y-shape intra-dilemma
+    # shared beats from cross-dilemma shared beats (e.g., opening/finale
+    # that belong to paths from multiple dilemmas).
+    path_dilemma: dict[str, str] = {}
+    for path_id, pdata in path_nodes.items():
+        did = pdata.get("dilemma_id", "")
+        if did:
+            path_dilemma[path_id] = normalize_scoped_id(did, "dilemma")
+
+    def _is_intra_dilemma_shared(beat_id: str) -> bool:
+        """True if beat belongs to >1 path but all paths share the same dilemma.
+
+        Y-shape shared pre-commit beats satisfy this — they belong to both
+        paths of one dilemma.  Cross-dilemma shared beats (e.g., a fixture's
+        opening/finale beat that belongs to paths from 2+ dilemmas) do NOT.
+
+        Raises ValueError if a path is missing its dilemma mapping — this
+        indicates a broken graph (SEED always sets dilemma_id on paths).
+        """
+        paths = beat_paths.get(beat_id, set())
+        if len(paths) <= 1:
+            return False
+        dilemmas: set[str] = set()
+        for p in paths:
+            if p not in path_dilemma:
+                raise ValueError(
+                    f"Path {p!r} has no dilemma_id — cannot determine "
+                    f"whether beat {beat_id!r} is intra-dilemma shared."
+                )
+            dilemmas.add(path_dilemma[p])
+        return len(dilemmas) == 1
+
+    # Determine which beats to include per path.
+    # - Exclusive beats (single path): always included.
+    # - Y-shape intra-dilemma shared beats: included — they form the shared
+    #   pre-commit chain that must connect to each path's commit beat.
+    # - Cross-dilemma shared beats: excluded — their ordering comes from
+    #   cross-path interleaving; alphabetical chaining here would conflict
+    #   with pre-existing predecessor edges.
+    def _chainable(beat_id: str) -> bool:
+        paths = beat_paths.get(beat_id, set())
+        if len(paths) <= 1:
+            return True  # exclusive
+        return _is_intra_dilemma_shared(beat_id)  # Y-shape: yes; cross-dilemma: no
+
+    # Sort chainable beats: Y-shape shared beats first (they're the setup
+    # that precedes the per-path fork), then exclusive beats, alphabetical
+    # within each group.
+    def _beat_sort_key(beat_id: str) -> tuple[int, str]:
+        # 0 = intra-dilemma shared (pre-commit setup), 1 = exclusive
+        return (0 if _is_intra_dilemma_shared(beat_id) else 1, beat_id)
+
+    for path_id in path_beats:
+        path_beats[path_id] = sorted(
+            [b for b in path_beats[path_id] if _chainable(b)],
+            key=_beat_sort_key,
+        )
 
     # Build existing predecessor edge set for idempotency check.
     # We track both directions to avoid creating edges that conflict with
@@ -155,7 +212,7 @@ async def phase_intra_path_predecessors(
     paths_processed = 0
 
     for path_id in sorted(path_nodes):
-        beats = exclusive_path_beats.get(path_id, [])
+        beats = path_beats.get(path_id, [])
         if len(beats) < 2:
             continue
 
@@ -180,6 +237,67 @@ async def phase_intra_path_predecessors(
         edges_created=edges_created,
         paths_processed=paths_processed,
     )
+
+    # --- Y-fork postcondition (R-1.4) ---
+    # Every last shared pre-commit beat must have one commit-beat successor per
+    # explored path of its dilemma.  If ANY path is missing its commit successor,
+    # the wired DAG cannot form a Y-fork and the phase fails loudly — silent
+    # Y-fork loss is forbidden by the silent-degradation anti-pattern.
+    #
+    # Algorithm mirrors _check_beat_dag in grow_validation.py but runs at
+    # write time for an earlier, more specific error.
+    all_predecessor_edges = graph.get_edges(edge_type="predecessor")
+    # Rebuild beat_paths from the *full* belongs_to edge set (includes edges not
+    # restricted to chainable beats, because non-chainable commit beats still have
+    # belongs_to edges we need here).
+    full_beat_to_paths: dict[str, list[str]] = {}
+    for edge in graph.get_edges(edge_type="belongs_to"):
+        full_beat_to_paths.setdefault(edge["from"], []).append(edge["to"])
+
+    # successors_by_beat[X] = list of beat IDs Y where predecessor(Y, X) exists,
+    # i.e. Y comes AFTER X in topological order.
+    successors_by_beat: dict[str, list[str]] = {}
+    for edge in all_predecessor_edges:
+        successors_by_beat.setdefault(edge["to"], []).append(edge["from"])
+
+    current_beat_nodes = graph.get_nodes_by_type("beat")
+    for beat_id, beat_data in sorted(current_beat_nodes.items()):
+        paths = full_beat_to_paths.get(beat_id, [])
+        impacts = beat_data.get("dilemma_impacts", [])
+        has_commits = any(i.get("effect") == "commits" for i in impacts)
+        if len(paths) < 2 or has_commits:
+            continue  # not a pre-commit beat
+
+        successors = successors_by_beat.get(beat_id, [])
+        commit_successor_paths: set[str] = set()
+        for s in successors:
+            s_beat = current_beat_nodes.get(s, {})
+            s_paths = full_beat_to_paths.get(s, [])
+            s_impacts = s_beat.get("dilemma_impacts", [])
+            s_has_commits = any(i.get("effect") == "commits" for i in s_impacts)
+            if s_has_commits and len(s_paths) == 1:
+                commit_successor_paths.update(s_paths)
+
+        if commit_successor_paths:
+            # This beat is a Y-fork tip — verify all paths are covered.
+            missing = set(paths) - commit_successor_paths
+            if missing:
+                detail = (
+                    f"R-1.4 Y-fork postcondition: pre-commit beat {beat_id!r} has "
+                    f"commit successors for {sorted(commit_successor_paths)} but "
+                    f"is missing commit beats for path(s) {sorted(missing)}"
+                )
+                log.error(
+                    "yfork_postcondition_failed",
+                    beat_id=beat_id,
+                    missing_paths=sorted(missing),
+                )
+                return GrowPhaseResult(
+                    phase="intra_path_predecessors",
+                    status="failed",
+                    detail=detail,
+                )
+
     return GrowPhaseResult(
         phase="intra_path_predecessors",
         status="completed",
@@ -254,7 +372,9 @@ async def phase_interleave_beats(
 
 @grow_phase(
     name="enumerate_arcs",
-    depends_on=["entity_arcs", "interleave_beats"],
+    # entity_arcs moved to POLISH Phase 3 (PR C of #1368); enumerate_arcs
+    # only needs interleave_beats now.
+    depends_on=["interleave_beats"],
     is_deterministic=True,
     priority=9,
 )
@@ -276,7 +396,7 @@ async def phase_enumerate_arcs(
     - Exactly one spine arc exists (containing all canonical paths).
     - Arc count bounded by 4x size_profile.max_arcs (if provided).
     - No arc nodes or arc_contains edges are stored — arcs are computed
-      traversals per Document 3 ontology.
+      traversals per the Story Graph Ontology.
 
     Invariants:
     - Deterministic: same graph always produces same arcs.
@@ -326,21 +446,21 @@ async def phase_enumerate_arcs(
     )
 
 
-# --- Phase 6: Divergence ---
+# --- Phase 7: Divergence (Arc Validation helper) ---
 
 
 @grow_phase(name="divergence", depends_on=["enumerate_arcs"], is_deterministic=True, priority=10)
 async def phase_divergence(graph: Graph, model: BaseChatModel) -> GrowPhaseResult:  # noqa: ARG001
-    """Phase 6: Compute divergence points between arcs (validation only).
+    """Phase 7: Compute divergence points between arcs (Arc Validation helper).
 
     Preconditions:
-    - Arc enumeration complete (Phase 5).
+    - Arc enumeration complete (prior step in Phase 7).
     - At least one spine arc exists for reference.
 
     Postconditions:
     - Divergence points computed and validated.
     - No graph writes — divergence metadata is computed on-the-fly
-      by downstream consumers per Document 3 ontology.
+      by downstream consumers per the Story Graph Ontology.
 
     Invariants:
     - Deterministic: divergence points derived from sequence comparison.
@@ -373,57 +493,136 @@ async def phase_divergence(graph: Graph, model: BaseChatModel) -> GrowPhaseResul
     )
 
 
-# --- Phase 7: Convergence ---
+# --- Phase 6: Convergence ---
 
 
 @grow_phase(name="convergence", depends_on=["divergence"], is_deterministic=True, priority=11)
 async def phase_convergence(graph: Graph, model: BaseChatModel) -> GrowPhaseResult:  # noqa: ARG001
-    """Phase 7: Find convergence points for diverged arcs (validation only).
+    """Phase 6: Identify and persist convergence points for soft dilemmas.
+
+    For each soft dilemma with 2+ explored paths, walks the interleaved beat
+    DAG to find the first beat reachable from all terminal exclusive beats.
+    Persists ``converges_at`` (beat ID) and ``convergence_payoff`` (exclusive
+    beat count) on each soft dilemma node.
+
+    Also runs the existing arc-level ``find_convergence_points()`` for
+    diagnostic logging.
 
     Preconditions:
-    - Divergence points computed (Phase 6 complete).
+    - Interleaving complete (predecessor edges exist).
     - Dilemma nodes have dilemma_role from SEED analysis.
 
     Postconditions:
-    - Convergence points computed and validated.
-    - No graph writes — convergence metadata is computed on-the-fly
-      by downstream consumers per Document 3 ontology.
+    - Two-path soft dilemma nodes have ``converges_at`` and
+      ``convergence_payoff`` set.
+    - Single-path soft dilemma nodes have both fields null per
+      GROW R-6.4 single-path scope (locked-dilemma shadow pattern).
+    - Hard dilemma nodes are unchanged.
 
     Invariants:
-    - Deterministic: convergence derived from dilemma policies and beat sequences.
+    - Deterministic: convergence derived from DAG topology and dilemma roles.
+    - Idempotent: calling twice produces the same node data.
     """
     from questfoundry.graph.grow_algorithms import (
         compute_divergence_points,
         enumerate_arcs,
         find_convergence_points,
+        find_dag_convergence_beat,
     )
 
+    # --- DAG-based convergence: persist on dilemma nodes ---
+    dilemma_nodes = graph.get_nodes_by_type("dilemma")
+    persisted = 0
+
+    # Pre-build dilemma → paths map to avoid repeated full-graph scans.
+    path_nodes = graph.get_nodes_by_type("path")
+    dilemma_paths_map: dict[str, set[str]] = {}
+    for path_id, pdata in path_nodes.items():
+        raw_did = pdata.get("dilemma_id", "")
+        if raw_did:
+            scoped = normalize_scoped_id(raw_did, "dilemma")
+            dilemma_paths_map.setdefault(scoped, set()).add(path_id)
+
+    for dilemma_id, ddata in dilemma_nodes.items():
+        role = ddata.get("dilemma_role")
+        if role is None:
+            log.error("convergence_dilemma_role_missing", dilemma_id=dilemma_id)
+            continue
+        if role == "hard":
+            continue
+
+        # R-6.4 (single-path scope): single-path soft is the legitimate
+        # locked-dilemma shadow pattern — Phase 6's Operations header scopes
+        # the operation to "two explored paths" and R-6.4's halt only fires
+        # within that scope.  Skip without halting; converges_at and
+        # convergence_payoff stay null per Output Contract item 3.
+        paths_for_dilemma = dilemma_paths_map.get(dilemma_id, set())
+        if len(paths_for_dilemma) < 2:
+            log.debug(
+                "convergence_skipped_single_path_soft",
+                dilemma_id=dilemma_id,
+                explored_paths=len(paths_for_dilemma),
+                reason="locked-dilemma shadow pattern (R-6.4 single-path scope)",
+            )
+            continue
+
+        result = find_dag_convergence_beat(
+            graph,
+            dilemma_id,
+            dilemma_paths=paths_for_dilemma,
+        )
+        if result is None:
+            # R-6.4: a soft dilemma with two explored paths and no structural
+            # convergence beat is a classification error — the dilemma should
+            # be hard, or the paths need rework so they rejoin.  Silent null
+            # is forbidden.  Return a failed GrowPhaseResult so the stage
+            # loop can run its savepoint cleanup (release/save) before
+            # raising GrowMutationError.  Reserve GrowContractError for stage
+            # exit, not intra-phase failures.
+            log.error(
+                "soft_dilemma_no_convergence",
+                dilemma_id=dilemma_id,
+                reason="classification error — soft dilemma paths never rejoin",
+            )
+            return GrowPhaseResult(
+                phase="convergence",
+                status="failed",
+                detail=(
+                    f"R-6.4: soft dilemma {dilemma_id!r} (two explored paths) has no "
+                    "structural convergence beat — misclassified as soft (paths "
+                    "never rejoin; should be hard, or paths need rework)."
+                ),
+            )
+        converges_at, payoff = result
+        graph.update_node(
+            dilemma_id,
+            converges_at=converges_at,
+            convergence_payoff=payoff,
+        )
+        persisted += 1
+        log.debug(
+            "convergence_persisted",
+            dilemma_id=dilemma_id,
+            converges_at=converges_at,
+            convergence_payoff=payoff,
+        )
+
+    # --- Arc-level convergence: diagnostic logging (existing behavior) ---
     arcs = enumerate_arcs(graph)
-    if not arcs:
-        return GrowPhaseResult(
-            phase="convergence",
-            status="completed",
-            detail="No arcs to process",
-        )
+    arc_convergence_count = 0
+    if arcs:
+        spine_arc_id = next((a.arc_id for a in arcs if a.arc_type == "spine"), None)
+        divergence_map = compute_divergence_points(arcs, spine_arc_id)
+        convergence_map = find_convergence_points(graph, arcs, divergence_map, spine_arc_id)
+        arc_convergence_count = sum(1 for info in convergence_map.values() if info.converges_at)
 
-    spine_arc_id = next((a.arc_id for a in arcs if a.arc_type == "spine"), None)
-
-    # Compute divergence first (needed for convergence)
-    divergence_map = compute_divergence_points(arcs, spine_arc_id)
-    convergence_map = find_convergence_points(graph, arcs, divergence_map, spine_arc_id)
-
-    if not convergence_map:
-        return GrowPhaseResult(
-            phase="convergence",
-            status="completed",
-            detail="No convergence points found",
-        )
-
-    convergence_count = sum(1 for info in convergence_map.values() if info.converges_at)
     return GrowPhaseResult(
         phase="convergence",
         status="completed",
-        detail=f"Found {convergence_count} convergence points",
+        detail=(
+            f"Persisted convergence for {persisted} dilemma(s); "
+            f"arc-level: {arc_convergence_count} convergence points"
+        ),
     )
 
 
@@ -435,7 +634,7 @@ async def phase_state_flags(graph: Graph, model: BaseChatModel) -> GrowPhaseResu
     """Phase 8b: Create state flag nodes from consequences.
 
     Preconditions:
-    - Beat collapse complete (Phase 7b).
+    - Beat collapse / interleaving complete.
     - Consequence nodes exist with path_id associations.
     - has_consequence edges link paths to consequences.
 

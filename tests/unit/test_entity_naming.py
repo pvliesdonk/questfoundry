@@ -32,13 +32,14 @@ class TestEntityNameField:
         assert entity.name == "Lady Beatrice Ashford"
 
     def test_entity_without_name(self) -> None:
-        """Entity can omit name (SEED will generate one)."""
-        entity = Entity(
-            entity_id="butler",
-            entity_category="character",
-            concept="The manor's long-serving butler",
-        )
-        assert entity.name is None
+        """Entity without name is rejected — R-2.1 now requires a non-empty name."""
+        with pytest.raises(ValidationError) as exc:
+            Entity(  # type: ignore[call-arg]
+                entity_id="butler",
+                entity_category="character",
+                concept="The manor's long-serving butler",
+            )
+        assert "name" in str(exc.value)
 
     def test_entity_name_min_length(self) -> None:
         """Empty string name is rejected (must be None or non-empty)."""
@@ -162,8 +163,28 @@ class TestEntityDecisionNameField:
 # ---------------------------------------------------------------------------
 
 
+def _create_compliant_vision(graph: Graph) -> None:
+    """Create a vision node that satisfies DREAM contract."""
+    graph.create_node(
+        "vision",
+        {
+            "type": "vision",
+            "genre": "mystery",
+            "tone": ["atmospheric"],
+            "themes": ["hidden truths"],
+            "audience": "adult",
+            "scope": {"story_size": "short"},
+            "human_approved": True,
+        },
+    )
+
+
 def _create_test_graph_with_entities() -> Graph:
-    """Create a test graph with entity nodes for mutation tests."""
+    """Create a test graph with entity nodes for _format_seed_valid_ids tests.
+
+    Tests that use this (TestFormatSeedValidIdsNeedsName) expect entities
+    with and without names, so we keep it simple — no dilemma, minimal structure.
+    """
     graph = Graph.empty()
 
     # Entity with name from BRAINSTORM
@@ -204,18 +225,276 @@ def _create_test_graph_with_entities() -> Graph:
     return graph
 
 
+def _create_compliant_graph_with_entities() -> Graph:
+    """Create a BRAINSTORM-contract-compliant graph for mutation tests.
+
+    This graph satisfies the BRAINSTORM contract:
+    - DREAM vision node
+    - 2 character entities with category, name, concept
+    - 2 location entities with category, name, concept (R-2.4)
+    - 1 dilemma with question, why_it_matters, 2 answers
+    - dilemma anchored_to an entity (R-3.6)
+
+    Used by TestApplySeedMutationsWithNames.
+    """
+    graph = Graph.empty()
+    _create_compliant_vision(graph)
+
+    # Character entity WITH name from BRAINSTORM
+    graph.create_node(
+        "character::lady_beatrice",
+        {
+            "type": "entity",
+            "raw_id": "lady_beatrice",
+            "category": "character",
+            "name": "Lady Beatrice Ashford",
+            "concept": "A sharp-tongued dowager",
+        },
+    )
+
+    # Character entity WITHOUT name from BRAINSTORM (will get one from SEED)
+    graph.create_node(
+        "character::butler",
+        {
+            "type": "entity",
+            "raw_id": "butler",
+            "category": "character",
+            "concept": "The manor's long-serving butler",
+            # No name - needs one from SEED
+        },
+    )
+
+    # First location entity with name
+    graph.create_node(
+        "location::manor",
+        {
+            "type": "entity",
+            "raw_id": "manor",
+            "category": "location",
+            "name": "The Manor",
+            "concept": "A crumbling gothic estate",
+        },
+    )
+
+    # Second location entity with name (R-2.4: BRAINSTORM must produce ≥2 locations)
+    graph.create_node(
+        "location::town",
+        {
+            "type": "entity",
+            "raw_id": "town",
+            "category": "location",
+            "name": "Whitmore",
+            "concept": "A provincial town with dark secrets",
+        },
+    )
+
+    # Dilemma to satisfy R-1.1: BRAINSTORM must produce ≥1 dilemma
+    graph.create_node(
+        "dilemma::truth_or_secret",
+        {
+            "type": "dilemma",
+            "raw_id": "truth_or_secret",
+            "question": "Should the protagonist reveal the truth or keep the secret?",
+            "why_it_matters": "This choice defines the protagonist's integrity.",
+        },
+    )
+
+    # R-3.6: dilemma must have anchored_to edge to an entity
+    graph.add_edge(
+        "anchored_to",
+        "dilemma::truth_or_secret",
+        "character::butler",
+    )
+
+    # Answers for the truth_or_secret dilemma
+    graph.create_node(
+        "dilemma::truth_or_secret::alt::reveal",
+        {
+            "type": "answer",
+            "raw_id": "reveal",
+            "description": "The protagonist chooses to tell the truth.",
+            "is_canonical": True,
+        },
+    )
+    graph.create_node(
+        "dilemma::truth_or_secret::alt::conceal",
+        {
+            "type": "answer",
+            "raw_id": "conceal",
+            "description": "The protagonist keeps the secret hidden.",
+            "is_canonical": False,
+        },
+    )
+
+    # Link answers to dilemma
+    graph.add_edge(
+        "has_answer",
+        "dilemma::truth_or_secret",
+        "dilemma::truth_or_secret::alt::reveal",
+    )
+    graph.add_edge(
+        "has_answer",
+        "dilemma::truth_or_secret",
+        "dilemma::truth_or_secret::alt::conceal",
+    )
+
+    return graph
+
+
 def _make_complete_seed_output(entities: list[dict[str, Any]]) -> dict[str, Any]:
     """Create a complete seed_output with required structure.
 
-    apply_seed_mutations validates that ALL entities have decisions,
-    so tests must provide decisions for all entities in the graph.
+    apply_seed_mutations validates the full SEED contract, which requires:
+    - All entities have decisions
+    - All dilemmas have been explored/analyzed
+    - Paths and consequences for explored dilemmas
+    - initial_beats with proper Y-shape structure
+    - dilemma_analyses with dilemma_role, residue_weight, ending_salience
+    - human_approved_paths must be True (R-6.4)
     """
     return {
         "entities": entities,
-        "dilemmas": [],
-        "paths": [],
-        "consequences": [],
-        "initial_beats": [],
+        "dilemmas": [
+            {
+                "dilemma_id": "truth_or_secret",
+                "explored": ["reveal", "conceal"],
+                "unexplored": [],
+            }
+        ],
+        "paths": [
+            {
+                "path_id": "truth_or_secret__reveal",
+                "dilemma_id": "truth_or_secret",
+                "answer_id": "reveal",
+                "name": "Reveal",
+                "description": "The protagonist chooses to tell the truth.",
+            },
+            {
+                "path_id": "truth_or_secret__conceal",
+                "dilemma_id": "truth_or_secret",
+                "answer_id": "conceal",
+                "name": "Conceal",
+                "description": "The protagonist keeps the secret hidden.",
+            },
+        ],
+        "consequences": [
+            {
+                "consequence_id": "truth_revealed",
+                "path_id": "truth_or_secret__reveal",
+                "description": "The secret is revealed, trust is broken.",
+                "narrative_effects": ["relationships damaged"],
+            },
+            {
+                "consequence_id": "secret_kept",
+                "path_id": "truth_or_secret__conceal",
+                "description": "The secret is maintained, tension builds.",
+                "narrative_effects": ["protagonist carries burden"],
+            },
+        ],
+        "dilemma_analyses": [
+            {
+                "dilemma_id": "truth_or_secret",
+                "dilemma_role": "hard",
+                "payoff_budget": 2,
+                "ending_salience": "none",
+                "residue_weight": "cosmetic",
+            }
+        ],
+        "initial_beats": [
+            {
+                "beat_id": "discovery",
+                "summary": "Protagonist learns the secret.",
+                "path_id": "truth_or_secret__reveal",
+                "also_belongs_to": "truth_or_secret__conceal",
+                "entities": ["character::butler"],
+                "dilemma_impacts": [
+                    {
+                        "dilemma_id": "truth_or_secret",
+                        "effect": "advances",
+                        "note": "revelation",
+                    }
+                ],
+            },
+            {
+                "beat_id": "reveal_choice",
+                "summary": "Protagonist tells the truth.",
+                "path_id": "truth_or_secret__reveal",
+                "entities": ["character::lady_beatrice"],
+                "dilemma_impacts": [
+                    {
+                        "dilemma_id": "truth_or_secret",
+                        "effect": "commits",
+                        "note": "locked in truth",
+                    }
+                ],
+            },
+            {
+                "beat_id": "reveal_aftermath_1",
+                "summary": "Aftermath of revelation.",
+                "path_id": "truth_or_secret__reveal",
+                "entities": ["character::lady_beatrice"],
+                "dilemma_impacts": [
+                    {
+                        "dilemma_id": "truth_or_secret",
+                        "effect": "advances",
+                        "note": "fallout",
+                    }
+                ],
+            },
+            {
+                "beat_id": "reveal_aftermath_2",
+                "summary": "Resolution of revelation.",
+                "path_id": "truth_or_secret__reveal",
+                "entities": ["character::butler"],
+                "dilemma_impacts": [
+                    {
+                        "dilemma_id": "truth_or_secret",
+                        "effect": "advances",
+                        "note": "new equilibrium",
+                    }
+                ],
+            },
+            {
+                "beat_id": "conceal_choice",
+                "summary": "Protagonist keeps the secret.",
+                "path_id": "truth_or_secret__conceal",
+                "entities": ["character::butler"],
+                "dilemma_impacts": [
+                    {
+                        "dilemma_id": "truth_or_secret",
+                        "effect": "commits",
+                        "note": "locked in silence",
+                    }
+                ],
+            },
+            {
+                "beat_id": "conceal_aftermath_1",
+                "summary": "Tension from keeping secret.",
+                "path_id": "truth_or_secret__conceal",
+                "entities": ["character::lady_beatrice"],
+                "dilemma_impacts": [
+                    {
+                        "dilemma_id": "truth_or_secret",
+                        "effect": "advances",
+                        "note": "burden",
+                    }
+                ],
+            },
+            {
+                "beat_id": "conceal_aftermath_2",
+                "summary": "Secret remains hidden.",
+                "path_id": "truth_or_secret__conceal",
+                "entities": ["character::butler"],
+                "dilemma_impacts": [
+                    {
+                        "dilemma_id": "truth_or_secret",
+                        "effect": "advances",
+                        "note": "status quo maintained",
+                    }
+                ],
+            },
+        ],
+        "human_approved_paths": True,
     }
 
 
@@ -224,25 +503,28 @@ class TestApplySeedMutationsWithNames:
 
     def test_seed_applies_name_to_entity_without_name(self) -> None:
         """SEED name is applied when entity has no BRAINSTORM name."""
-        graph = _create_test_graph_with_entities()
+        graph = _create_compliant_graph_with_entities()
 
         # Must provide decisions for ALL entities in the graph
         # Use raw IDs (not category-prefixed) as expected by validation
         seed_output = _make_complete_seed_output(
             [
                 {
+                    "entity_id": "lady_beatrice",
+                    "disposition": "retained",
+                },
+                {
                     "entity_id": "butler",
                     "disposition": "retained",
                     "name": "Edmund Graves",
                 },
                 {
-                    "entity_id": "lady_beatrice",
+                    "entity_id": "manor",
                     "disposition": "retained",
                 },
                 {
-                    "entity_id": "manor",
+                    "entity_id": "town",
                     "disposition": "retained",
-                    "name": "Thornwood Manor",
                 },
             ]
         )
@@ -256,7 +538,7 @@ class TestApplySeedMutationsWithNames:
 
     def test_seed_preserves_brainstorm_name(self) -> None:
         """BRAINSTORM name is preserved even if SEED provides a different name."""
-        graph = _create_test_graph_with_entities()
+        graph = _create_compliant_graph_with_entities()
 
         # Must provide decisions for ALL entities in the graph
         seed_output = _make_complete_seed_output(
@@ -274,7 +556,10 @@ class TestApplySeedMutationsWithNames:
                 {
                     "entity_id": "manor",
                     "disposition": "retained",
-                    "name": "Thornwood Manor",
+                },
+                {
+                    "entity_id": "town",
+                    "disposition": "retained",
                 },
             ]
         )
@@ -289,7 +574,7 @@ class TestApplySeedMutationsWithNames:
 
     def test_seed_without_name_preserves_existing(self) -> None:
         """Entity name is preserved when SEED provides no name."""
-        graph = _create_test_graph_with_entities()
+        graph = _create_compliant_graph_with_entities()
 
         # Must provide decisions for ALL entities in the graph
         seed_output = _make_complete_seed_output(
@@ -307,7 +592,10 @@ class TestApplySeedMutationsWithNames:
                 {
                     "entity_id": "manor",
                     "disposition": "retained",
-                    "name": "Thornwood Manor",
+                },
+                {
+                    "entity_id": "town",
+                    "disposition": "retained",
                 },
             ]
         )

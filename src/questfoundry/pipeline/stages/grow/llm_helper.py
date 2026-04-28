@@ -1,13 +1,20 @@
 """LLM call helper and validation utilities for the GROW stage.
 
-Provides _LLMHelperMixin with _grow_llm_call(), error feedback formatting,
-and gap-beat insertion validation.  GrowStage inherits this mixin so all
-LLM phase methods can call ``self._grow_llm_call(...)`` directly.
+Provides _LLMHelperMixin with _grow_llm_call() and error feedback
+formatting. GrowStage inherits this mixin so LLM phase methods can call
+``self._grow_llm_call(...)`` directly.
+
+Gap-insertion logic lives in ``questfoundry.graph.gap_insertion``. GROW
+no longer calls gap-insertion directly (narrative_gaps and pacing_gaps
+both moved to POLISH per issue #1368), but the
+``_validate_and_insert_gaps`` delegation is retained here so existing
+test call sites keep working without churn. ``GapInsertionReport`` is
+also re-exported here for back-compat with code that imports it via
+``grow.llm_helper``.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -15,7 +22,7 @@ from pydantic import BaseModel, ValidationError
 
 from questfoundry.agents.serialize import extract_tokens
 from questfoundry.artifacts.validator import get_all_field_paths
-from questfoundry.graph.graph import Graph  # noqa: TC001 - used at runtime
+from questfoundry.graph.gap_insertion import GapInsertionReport, validate_and_insert_gaps
 from questfoundry.graph.mutations import GrowValidationError  # noqa: TC001 - used at runtime
 from questfoundry.observability.tracing import traceable
 from questfoundry.pipeline.stages.grow._helpers import (
@@ -35,31 +42,11 @@ if TYPE_CHECKING:
 
     from langchain_core.language_models import BaseChatModel
 
+    from questfoundry.graph.graph import Graph
     from questfoundry.models.grow import GapProposal
 
-
-@dataclass
-class GapInsertionReport:
-    """Summary of gap insertion validation and results."""
-
-    inserted: int = 0
-    invalid_path_id: int = 0
-    invalid_after_beat: int = 0
-    invalid_before_beat: int = 0
-    invalid_beat_order: int = 0
-    beat_not_in_sequence: int = 0
-    anchor_wrong_path: int = 0
-
-    @property
-    def total_invalid(self) -> int:
-        return (
-            self.invalid_path_id
-            + self.invalid_after_beat
-            + self.invalid_before_beat
-            + self.invalid_beat_order
-            + self.beat_not_in_sequence
-            + self.anchor_wrong_path
-        )
+# Re-exported for back-compat with existing imports.
+__all__ = ["GapInsertionReport", "_LLMHelperMixin"]
 
 
 class _LLMHelperMixin:
@@ -174,7 +161,7 @@ class _LLMHelperMixin:
                     if sem_errors:
                         entry_count = count_entries(validated)
                         error_ratio = len(sem_errors) / max(entry_count, 1)
-                        log.warning(
+                        log.info(
                             "grow_semantic_validation_fail",
                             template=template_name,
                             errors=len(sem_errors),
@@ -193,7 +180,7 @@ class _LLMHelperMixin:
                 return validated, llm_calls, total_tokens
 
             except (ValidationError, TypeError) as e:
-                log.warning(
+                log.info(
                     "grow_llm_validation_fail",
                     template=template_name,
                     attempt=attempt + 1,
@@ -247,175 +234,10 @@ class _LLMHelperMixin:
         valid_beat_ids: set[str] | dict[str, Any],
         phase_name: str,
     ) -> GapInsertionReport:
-        """Validate gap proposals and insert valid ones into the graph.
+        """Thin delegation to ``graph.gap_insertion.validate_and_insert_gaps``.
 
-        Checks path_id prefixing, beat ID existence, ordering, and cycle
-        safety before inserting each gap beat.  A cycle check is performed
-        before every insertion: if inserting the gap beat would close a cycle
-        in the predecessor DAG, the gap is skipped with a warning.
-
-        Args:
-            graph: Graph to insert beats into.
-            gaps: List of GapProposal instances from LLM output.
-            valid_path_ids: Set or dict of valid path IDs.
-            valid_beat_ids: Set or dict of valid beat IDs.
-            phase_name: Phase name for log event prefixing.
-
-        Returns:
-            Report with counts of inserted and invalid gaps.
+        Retained for back-compat with existing test call sites; GROW phase
+        code itself no longer calls this since gap-insertion phases moved
+        to POLISH (issue #1368).
         """
-        from collections import defaultdict
-
-        from questfoundry.graph.grow_algorithms import (
-            _would_create_cycle,
-            get_path_beat_sequence,
-            insert_gap_beat,
-        )
-
-        report = GapInsertionReport()
-        valid_path_set = (
-            set(valid_path_ids.keys()) if isinstance(valid_path_ids, dict) else set(valid_path_ids)
-        )
-        valid_beat_set = (
-            set(valid_beat_ids.keys()) if isinstance(valid_beat_ids, dict) else set(valid_beat_ids)
-        )
-
-        # Build the successors dict (prerequisite → dependents) for cycle detection.
-        # predecessor(A, B) means B comes before A; successors[B] contains A.
-        # We keep this in sync after each successful insertion.
-        beat_set: set[str] = set(graph.get_nodes_by_type("beat").keys())
-        successors: dict[str, set[str]] = defaultdict(set)
-        for edge in graph.get_edges(from_id=None, to_id=None, edge_type="predecessor"):
-            # edge["from"] requires edge["to"] → edge["to"] is a prereq of edge["from"]
-            successors[edge["to"]].add(edge["from"])
-
-        def _normalize_beat_id(beat_id: str | None) -> str | None:
-            if not beat_id:
-                return None
-            if beat_id in valid_beat_set:
-                return beat_id
-            if not beat_id.startswith("beat::"):
-                prefixed = f"beat::{beat_id}"
-                if prefixed in valid_beat_set:
-                    log.warning(
-                        f"{phase_name}_unprefixed_beat_id",
-                        beat_id=beat_id,
-                        prefixed=prefixed,
-                    )
-                    return prefixed
-            return beat_id
-
-        for gap in gaps:
-            prefixed_pid = (
-                gap.path_id if gap.path_id.startswith("path::") else f"path::{gap.path_id}"
-            )
-            if prefixed_pid != gap.path_id:
-                log.warning(
-                    f"{phase_name}_unprefixed_path_id",
-                    path_id=gap.path_id,
-                    prefixed=prefixed_pid,
-                )
-            if prefixed_pid not in valid_path_set:
-                log.warning(f"{phase_name}_invalid_path_id", path_id=gap.path_id)
-                report.invalid_path_id += 1
-                continue
-            after_beat = _normalize_beat_id(gap.after_beat)
-            before_beat = _normalize_beat_id(gap.before_beat)
-            if after_beat and after_beat not in valid_beat_set:
-                log.warning(f"{phase_name}_invalid_after_beat", beat_id=after_beat)
-                report.invalid_after_beat += 1
-                continue
-            if before_beat and before_beat not in valid_beat_set:
-                log.warning(f"{phase_name}_invalid_before_beat", beat_id=before_beat)
-                report.invalid_before_beat += 1
-                continue
-            # Validate path membership: anchors must belong to the gap's path.
-            # A beat belongs to a path if it has a belongs_to edge pointing to it.
-            if after_beat:
-                after_paths = {
-                    e["to"] for e in graph.get_edges(edge_type="belongs_to", from_id=after_beat)
-                }
-                if prefixed_pid not in after_paths:
-                    log.warning(
-                        f"{phase_name}_anchor_wrong_path",
-                        after_beat=after_beat,
-                        path_id=prefixed_pid,
-                    )
-                    report.anchor_wrong_path += 1
-                    continue
-            if before_beat:
-                before_paths = {
-                    e["to"] for e in graph.get_edges(edge_type="belongs_to", from_id=before_beat)
-                }
-                if prefixed_pid not in before_paths:
-                    log.warning(
-                        f"{phase_name}_anchor_wrong_path",
-                        before_beat=before_beat,
-                        path_id=prefixed_pid,
-                    )
-                    report.anchor_wrong_path += 1
-                    continue
-            # Validate ordering: after_beat must come before before_beat
-            if after_beat and before_beat:
-                sequence = get_path_beat_sequence(graph, prefixed_pid)
-                try:
-                    after_idx = sequence.index(after_beat)
-                    before_idx = sequence.index(before_beat)
-                    if after_idx >= before_idx:
-                        log.warning(
-                            f"{phase_name}_invalid_beat_order",
-                            after_beat=after_beat,
-                            before_beat=before_beat,
-                        )
-                        report.invalid_beat_order += 1
-                        continue
-                except ValueError:
-                    log.warning(f"{phase_name}_beat_not_in_sequence", path_id=gap.path_id)
-                    report.beat_not_in_sequence += 1
-                    continue
-
-            # Cycle prevention: if after_beat and before_beat are both given,
-            # check whether inserting the gap would create a cycle.
-            # The gap insertion adds predecessor(gap, after_beat) and
-            # predecessor(before_beat, gap).  A cycle forms if after_beat is
-            # already a transitive successor of before_beat — i.e. inserting
-            # gap closes a circle: before_beat → gap → after_beat → ... → before_beat.
-            # This is equivalent to asking: is after_beat reachable from
-            # before_beat via the current successors graph?
-            # _would_create_cycle(before_beat, after_beat, ...) returns True iff
-            # after_beat is reachable from before_beat, which is exactly that case.
-            if (
-                after_beat
-                and before_beat
-                and _would_create_cycle(before_beat, after_beat, successors, beat_set)
-            ):
-                log.warning(
-                    "gap_skipped_would_create_cycle",
-                    phase=phase_name,
-                    after_beat=after_beat,
-                    before_beat=before_beat,
-                    path_id=prefixed_pid,
-                )
-                continue
-
-            new_beat_id = insert_gap_beat(
-                graph,
-                path_id=prefixed_pid,
-                after_beat=after_beat,
-                before_beat=before_beat,
-                summary=gap.summary,
-                scene_type=gap.scene_type,
-                dilemma_impacts=[i.model_dump() for i in gap.dilemma_impacts],
-            )
-            report.inserted += 1
-
-            # Update successors and beat_set to reflect the newly inserted beat.
-            # predecessor(new_beat, after_beat) → after_beat is prereq of new_beat
-            # predecessor(before_beat, new_beat) → new_beat is prereq of before_beat
-            beat_set.add(new_beat_id)
-            if after_beat:
-                successors[after_beat].add(new_beat_id)
-            if before_beat:
-                successors[new_beat_id].add(before_beat)
-
-        return report
+        return validate_and_insert_gaps(graph, gaps, valid_path_ids, valid_beat_ids, phase_name)

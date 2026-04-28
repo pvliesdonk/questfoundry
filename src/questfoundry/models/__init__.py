@@ -16,6 +16,8 @@ Terminology (v5):
 
 from questfoundry.models.brainstorm import (
     Answer,
+    BrainstormDilemmasOutput,
+    BrainstormEntitiesOutput,
     BrainstormOutput,
     Dilemma,
     Entity,
@@ -43,6 +45,8 @@ from questfoundry.models.dress import (
     Illustration,
     IllustrationBrief,
     IllustrationCategory,
+    SpoilerCheckResult,
+    SpoilerLeak,
 )
 from questfoundry.models.fill import (
     BatchedExpandOutput,
@@ -95,6 +99,7 @@ from questfoundry.models.polish import (
     FalseBranchSpec,
     MicroBeatProposal,
     PassageSpec,
+    PerPathArc,
     PolishResult,
     ReorderedSection,
     ResidueContentItem,
@@ -142,6 +147,7 @@ from questfoundry.models.seed import (
     PathTier,
     ResidueWeight,
     SeedOutput,
+    SharedBeatsSection,
     TemporalHint,
     TemporalPosition,
 )
@@ -157,6 +163,8 @@ __all__ = [
     "BatchedCodexItem",
     "BatchedCodexOutput",
     "BatchedExpandOutput",
+    "BrainstormDilemmasOutput",
+    "BrainstormEntitiesOutput",
     "BrainstormOutput",
     "CharacterArcMetadata",
     "Choice",
@@ -218,6 +226,7 @@ __all__ = [
     "Path",
     "PathMiniArc",
     "PathTier",
+    "PerPathArc",
     "Phase3Output",
     "Phase4aOutput",
     "Phase4bOutput",
@@ -242,6 +251,9 @@ __all__ = [
     "SceneTypeTag",
     "Scope",
     "SeedOutput",
+    "SharedBeatsSection",
+    "SpoilerCheckResult",
+    "SpoilerLeak",
     "SpokeLabelUpdate",
     "StateFlag",
     "TemporalHint",

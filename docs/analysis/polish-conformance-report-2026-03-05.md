@@ -4,7 +4,7 @@
 **Reviewer**: architect-reviewer subagent (adversarial review)
 **Design documents reviewed**:
 - `docs/design/how-branching-stories-work.md`
-- `docs/design/document-3-ontology.md`
+- `docs/design/story-graph-ontology.md`
 - `docs/design/procedures/polish.md`
 
 **Implementation reviewed**:
@@ -30,7 +30,7 @@
 | 5 | Phase 2: pacing flags (3+ scene/sequel runs, post-commit sequel) | polish.md, Phase 2 | CONFORMANT | `llm_phases.py:645-794` |
 | 6 | Phase 2: micro-beats with `role: "micro_beat"` in linear sections | polish.md, Phase 2 | CONFORMANT | `llm_phases.py:797-850` |
 | 7 | Phase 3: character arc synthesis (entities in 2+ beats) | polish.md, Phase 3 | CONFORMANT | `llm_phases.py:212-288` |
-| 8 | Phase 3: arc metadata annotated on entity nodes (via graph edge) | Doc 3, Part 1 | PARTIAL | Stored as orphan `character_arc_metadata::` nodes; no `has_arc_metadata` edge to entity; consumers match by string → **#1154** |
+| 8 | Phase 3: arc metadata annotated on entity nodes (via graph edge) | Story Graph Ontology, Part 1 | PARTIAL | Stored as orphan `character_arc_metadata::` nodes; no `has_arc_metadata` edge to entity; consumers match by string → **#1154** |
 | 9 | Human gate after Phase 3 | polish.md, "Human Gates" | PARTIAL | Gate fires after every phase generically; no special post-Phase-3 behavior. AutoApprovePhaseGate auto-approves. |
 | 10 | Phase 4a: beat grouping (intersection, collapse, singleton) | polish.md, Phase 4a | CONFORMANT | `deterministic.py:181-299` |
 | 11 | Phase 4b: prose feasibility audit (two passes, 5 categories) | polish.md, Phase 4b | CONFORMANT | `deterministic.py:307-426` |
@@ -52,14 +52,14 @@
 | 27 | Phase 7: no passage has outgoing choices with overlapping `requires` | polish.md, Phase 7 | MISSING | Not checked → **#1156** |
 | 28 | Phase 7: arc completeness (every arc = complete passage sequence) | polish.md, Phase 7 | DEAD | Structurally impossible while `arc_traversals == {}` (see #15) → **#1153, #1156** |
 | 29 | Phase 7: no structural split left unresolved | polish.md, Phase 7 | MISSING | Structural split warnings from 4b are not validated against phase 7 state → **#1156** |
-| 30 | Residue beats: one variant per path, gated by state flag | Doc 1, Part 4; Doc 3, Part 5 | CONFORMANT | `deterministic.py:759-802` |
-| 31 | Transition guidance for collapsed passages | Doc 1, Part 4, "Passage Collapse" | MISSING | `_merge_summaries` joins with "; " — no bridging instructions generated → **#1158** |
-| 32 | Phase 2 injects micro-beats for pacing | Doc 1, Part 4, "Pacing" | CONFORMANT | Phase 2 |
-| 33 | `grouped_in` edge (beat → passage) | Doc 3, Part 9 | CONFORMANT | `deterministic.py:740` |
-| 34 | `choice` edge with label, requires, grants | Doc 3, Part 9 | CONFORMANT | `deterministic.py:805-815` |
-| 35 | `variant_of` edge (variant → base passage) | Doc 3, Part 9 | CONFORMANT | `deterministic.py:756` |
-| 36 | POLISH audits overlay composition for prose feasibility | Doc 3, Part 6 | MISSING | Phase 4b checks state flags vs entity overlap but not multi-overlay infeasibility → **#1162** |
-| 37 | POLISH may create cosmetic codewords | Doc 3, Part 1 | DEFERRED | Doc 3 line 719 explicitly defers this pattern. Filed as design discussion → **#1163** |
+| 30 | Residue beats: one variant per path, gated by state flag | "How Branching Stories Work", Part 4; Story Graph Ontology, Part 5 | CONFORMANT | `deterministic.py:759-802` |
+| 31 | Transition guidance for collapsed passages | "How Branching Stories Work", Part 4, "Passage Collapse" | MISSING | `_merge_summaries` joins with "; " — no bridging instructions generated → **#1158** |
+| 32 | Phase 2 injects micro-beats for pacing | "How Branching Stories Work", Part 4, "Pacing" | CONFORMANT | Phase 2 |
+| 33 | `grouped_in` edge (beat → passage) | Story Graph Ontology, Part 9 | CONFORMANT | `deterministic.py:740` |
+| 34 | `choice` edge with label, requires, grants | Story Graph Ontology, Part 9 | CONFORMANT | `deterministic.py:805-815` |
+| 35 | `variant_of` edge (variant → base passage) | Story Graph Ontology, Part 9 | CONFORMANT | `deterministic.py:756` |
+| 36 | POLISH audits overlay composition for prose feasibility | Story Graph Ontology, Part 6 | MISSING | Phase 4b checks state flags vs entity overlap but not multi-overlay infeasibility → **#1162** |
+| 37 | POLISH may create cosmetic codewords | Story Graph Ontology, Part 1 | DEFERRED | Story Graph Ontology line 719 explicitly defers this pattern. Filed as design discussion → **#1163** |
 | 38 | Phase ordering: collapse_linear_beats between character_arcs and plan_computation | Registry | CONFORMANT | `deterministic.py:66-69` |
 
 ---
@@ -89,7 +89,7 @@
 ### MISSING (most impactful)
 
 **#13: `ChoiceSpec.requires` never populated** (`#1152`)
-`compute_choice_edges` only computes `grants`. Post-convergence gated choices — a core design concept in Doc 1 ("Gates appear after soft dilemma convergence") — are never generated. All choices are always visible to all players regardless of prior decisions. Soft dilemma convergence routing is non-functional.
+`compute_choice_edges` only computes `grants`. Post-convergence gated choices — a core design concept in "How Branching Stories Work" ("Gates appear after soft dilemma convergence") — are never generated. All choices are always visible to all players regardless of prior decisions. Soft dilemma convergence routing is non-functional.
 
 **#23–#29: Phase 7 validation is a skeleton** (`#1156`)
 Of 10+ required checks, only ~5 are implemented. `check_all_endings_reachable` and `check_gate_satisfiability` exist but are never called. Critical structural invariants (divergences have choices, arc completeness, no unresolved splits) are unchecked.

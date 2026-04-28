@@ -7,8 +7,6 @@
 
 ## Instruction Hierarchy (Read This First)
 
-**This section defines what you MUST do. Violations waste user time and money.**
-
 ### After Context Compaction
 
 When a conversation is compacted (you see a summary of previous work):
@@ -21,281 +19,116 @@ Context compaction loses nuance. Re-reading these rules prevents repeating mista
 
 ### Rules vs Guidelines
 
-| Type | How to Treat | Examples |
-|------|--------------|----------|
-| **MUST/NEVER/ALWAYS** | Hard rules - no exceptions | "NEVER run full test suite without asking" |
-| **Should/Prefer** | Strong defaults - deviate only with reason | "Should use targeted tests" |
-| **May/Can** | Options - use judgment | "May split into multiple PRs" |
+| Type | How to Treat |
+|------|--------------|
+| **MUST/NEVER/ALWAYS** | Hard rules — no exceptions |
+| **Should/Prefer** | Strong defaults — deviate only with reason |
+| **May/Can** | Options — use judgment |
 
-Design docs in `docs/design/` are guidelines. This CLAUDE.md file is rules.
+### Design Doc Authority (Specs Supersede Code)
+
+The following design documents are **authoritative specifications**, not guidelines. They define what the pipeline must do; code and tests must conform to them.
+
+- `docs/design/how-branching-stories-work.md` — narrative model
+- `docs/design/story-graph-ontology.md` — graph / data model (Part 8 has Y-shape guard rails)
+- `docs/design/procedures/*.md` — per-stage algorithm specifications
+
+**What "authoritative" means:**
+
+1. **Specs supersede code and tests.** If code or tests conflict with these docs, the code or tests are wrong. Do not "interpret" the doc to match the code.
+2. **Docs-first fix order.** If something doesn't work correctly: (a) read the spec; (b) if the spec is silent or wrong, **update the spec first** as an explicit alignment step (separate commit / PR section); (c) then update code and tests. Never invert this order.
+3. **Surface drift explicitly.** If code contradicts a spec, fix one of them — never "both working as intended."
+4. **ADRs and implementation notes do not override specs.** If an ADR conflicts with an authoritative spec, the spec wins and the ADR must be updated.
+
+**Other docs — not authoritative:** CLAUDE.md (rules for *how* to work), `docs/design/01-prompt-compiler.md`, `docs/design/07-getting-started.md`, `docs/design/00-spec.md` (DEPRECATED), other files in `docs/design/` (clarifying guidelines unless listed above).
 
 ---
 
 ## Project Overview
 
-QuestFoundry v5 is a **pipeline-driven interactive fiction generation system** that uses LLMs as collaborators under constraint, not autonomous agents. It generates complete, branching interactive stories through a six-stage pipeline with human review gates.
+QuestFoundry v5 is a pipeline-driven interactive fiction generation system.
 
-**Core Philosophy**: "The LLM as a collaborator under constraint, not an autonomous agent."
+**Core philosophy:** "The LLM as a collaborator under constraint, not an autonomous agent."
 
-## Architecture
+**Six-stage pipeline:**
 
-### Six-Stage Pipeline
 ```
 DREAM → BRAINSTORM → SEED → GROW → FILL → SHIP
 ```
 
-- **DREAM**: Establish creative vision (genre, tone, themes)
-- **BRAINSTORM**: Generate raw material (characters, settings, hooks)
-- **SEED**: Crystallize core elements (protagonist, setting, dilemma)
-- **GROW**: Build complete branching structure (spine, anchors, branches)
-- **FILL**: Generate prose for scenes
-- **SHIP**: Export to playable formats (Twee, HTML, JSON)
+DRESS / POLISH stages exist alongside this spine — see their procedure docs.
 
-DRESS stage (art direction, illustrations, codex) is specified in Slice 5. See `docs/design/procedures/dress.md` and ADR-012.
+**Key principles:** No persistent agent state · One LLM call per stage · Human gates between stages · Prompts as visible artifacts in `/prompts/` · No backflow.
 
-### Key Design Principles
+**Stack:** Python 3.11+ with `uv`, `typer + rich` CLI, `ruamel.yaml`, `pydantic`, LangChain, `pytest` (70% coverage target), async throughout. Primary LLM: Ollama `qwen3:4b-instruct-32k`; secondary: OpenAI.
 
-1. **No Persistent Agent State** - Each stage starts fresh; context from artifacts
-2. **One LLM Call Per Stage** - Predictable, bounded calls
-3. **Human Gates Between Stages** - Review and approval checkpoints
-4. **Prompts as Visible Artifacts** - All prompts in `/prompts/`, not in code
-5. **No Backflow** - Later stages cannot modify earlier artifacts
+---
 
-## Technical Stack
+## Tooling-First Workflow
 
-- **Python 3.11+** with `uv` package manager
-- **typer + rich** for CLI
-- **ruamel.yaml** for YAML with comment preservation
-- **pydantic** for data validation
-- **LangChain** for LLM providers and agent patterns (stages use `langchain.agents`, `ChatPromptTemplate`)
-- **pytest** with 70% coverage target
-- **Async throughout** for LLM calls
+- **Use tools as the source of truth** — avoid repo-wide reasoning or "global refactors".
+- **Locate via `rg`, resolve via LSP** — `rg` to find candidates, `pylsp` definition/references to confirm symbol meaning.
+- **Renames must be semantic** — use `pylsp`/Rope rename; fall back to `rg` + manual edits only when LSP cannot handle the case, and explain why.
+- **Single formatting authority** — do not use pylsp formatters. Use `ruff check --fix` and `ruff format` on changed files.
+- **Validate with targeted checks** — `uv run ruff`, `uv run mypy`, targeted `uv run pytest`. Use `pre-commit run --files ...` for touched files.
 
-### LLM Providers
-- Primary: **Ollama** (qwen3:4b-instruct-32k) at `http://athena.int.liesdonk.nl:11434`
-- Secondary: **OpenAI** (API key in .env)
-- Provider interface via `LangChainProvider` adapter (supports any LangChain chat model)
+---
 
-## Development Guidelines
-
-### Tooling-First Workflow
-
-- **Use tools as the source of truth** — avoid repo-wide reasoning or "global refactors"
-- **Locate via rg, resolve via LSP** — use `rg` to find candidates, then `pylsp` definition/references to confirm symbol meaning
-- **Renames must be semantic** — use `pylsp`/Rope rename for symbol renames; fall back to `rg` + manual edits only when LSP cannot handle the case, and explain why
-- **Single formatting authority** — do not use pylsp formatters (autopep8/YAPF); use `ruff check --fix` and `ruff format` on changed files
-- **Validate with targeted checks** — prefer `uv run ruff`, `uv run mypy`, and targeted `uv run pytest`; use `pre-commit run --files ...` for touched files
-
-### Debugging Policy
+## Debugging Policy
 
 When a bug is not resolved by static tools (ruff/mypy/tests):
 
-1) Reproduce the failure with a minimal command.
-2) Do not edit code until reproduction is confirmed.
-3) Use `pdb` for interactive inspection if needed.
-4) Prefer temporary logging before stepping.
-5) Form a concrete hypothesis before modifying code.
-6) Remove all debug hooks before final commit.
-7) Re-run pre-commit and tests after fixes.
+0. **Read the authoritative spec first.** A failing test or buggy output is usually evidence that code diverged from the spec. Less often it's evidence of a test against undefined behavior or a spec gap — in which case the fix still starts with the spec (update it, then code follows).
+1. Reproduce the failure with a minimal command.
+2. Do not edit code until reproduction is confirmed.
+3. Use `pdb` for interactive inspection if needed.
+4. Prefer temporary logging before stepping.
+5. Form a concrete hypothesis before modifying code, naming which spec rule the current behavior violates.
+6. Remove all debug hooks before final commit.
+7. Re-run pre-commit and tests after fixes.
 
-Use debugging as a precision tool, not a trial-and-error loop.
+If the spec is silent or ambiguous, **update the spec first**, then fix code. Never invert.
 
-### Logging
+For LLM-output specific debugging (validation fails, parse errors, unexpected fields, project-run post-mortem), use the **`questfoundry-llm-debugging`** skill.
 
-Use **structlog** via `get_logger()` for all application logging:
+---
+
+## Logging
+
+Use **structlog** via `get_logger()` for all application logging.
 
 ```python
 from questfoundry.observability.logging import get_logger
-
 log = get_logger(__name__)
-
-# Structured event logging (preferred)
 log.info("stage_complete", stage="dream", tokens=1234, duration="5.2s")
-log.debug("tool_call_start", tool="search_corpus", query="mystery")
-log.warning("validation_failed", field="genre", error="empty string")
-log.error("provider_error", provider="ollama", message=str(e))
 ```
 
-**Log Levels:**
-- `INFO`: High-level flow events visible at default verbosity (stage start/complete, conversation phases)
-- `DEBUG`: Detailed events for troubleshooting (tool calls, validation details, LLM responses)
-- `WARNING`: Recoverable issues (missing optional config, fallbacks activated)
-- `ERROR`: Failures that stop execution (provider errors, validation exhausted)
+| Level | When |
+|-------|------|
+| `DEBUG` | Internal machinery, filtering details, cache hits |
+| `INFO` | Significant operations completing normally, phase transitions |
+| `WARNING` | Degraded state that may need attention — system continues but something unexpected happened |
+| `ERROR` | Failures that stop execution or produce incorrect results |
 
-**Event Naming:**
-- Use `snake_case` event names as the first argument
-- Add structured key=value context, not string interpolation
-- Good: `log.info("stage_complete", stage="dream", tokens=1234)`
-- Bad: `log.info(f"Stage dream completed with {tokens} tokens")`
+**The litmus test:** if the system detected a problem AND handled it correctly (rejected bad input, used a fallback, skipped an invalid proposal), that's `INFO` or `DEBUG` — not `WARNING`. `WARNING` means "this worked but someone should look at it." `ERROR` means "this didn't work."
 
-**What to Log:**
-- Phase/stage transitions (INFO)
-- Tool calls and results (DEBUG)
-- Validation attempts and failures (DEBUG/WARNING)
-- LLM call counts and token usage (INFO at completion)
-- Errors with context for debugging (ERROR/WARNING)
+Use `snake_case` event names; pass structured key=value context, not f-string interpolation.
 
-### Model Workflow (Ontology → Pydantic → Graph)
+---
 
-**The design specification (`docs/design/00-spec.md`) defines the ontology.** Pydantic models in `src/questfoundry/models/` are hand-written implementations of that ontology. The graph (`graph.db`) is the runtime source of truth for story state.
+## Project Git Rules
 
-```
-docs/design/00-spec.md        ← Ontology definition (node types, relationships)
-        ↓
-src/questfoundry/models/*.py  ← Hand-written Pydantic models (validate LLM output)
-        ↓
-graph/mutations.py            ← Semantic validation against graph state
-        ↓
-graph.db                      ← Runtime source of truth (SQLite, nodes + edges)
-```
+Beyond the global GitHub workflow rules:
 
-**When adding new stage models:**
-1. Check the ontology in `docs/design/00-spec.md` for the node types and fields
-2. Create/update Pydantic models in `src/questfoundry/models/`
-3. Add semantic validation in `graph/mutations.py` if needed
-4. Export from `models/__init__.py`
+- Use `Closes #123` (or `Fixes #123`) in PR descriptions — bare `#123` does not auto-close.
+- **Deferred work MUST have a tracking issue.** No silent deferrals — applies to "Not Included / Future PRs" sections, follow-ups from review, known gaps, surviving TODOs, scope cuts.
+- **Always fetch main before branching:** `git fetch origin main` then `git checkout -b feat/...`.
+- **Removal issues MUST have a Verification section** with grep/shell commands confirming old code is gone, AND test updates asserting the new state. Run verification before closing.
+- **Separate add from remove** — don't bundle them unless removal is < 10 lines.
+- **Epics ≤ 10 issues.** Split larger efforts into milestones.
+- **Every push triggers AI-bot PR review** (Gemini, Codex, claude-review), each costing real tokens (~$3 per claude-review run). **Do not push incremental WIP commits.** Batch fixes locally, run tests and self-review, push only when ready for another round.
 
-**Optional vs Nullable (semantic distinction):**
-- **Optional** (not in `required`): field may be absent → Pydantic defaults to `None`
-- **Nullable**: field explicitly accepts `null` as a value
-- LLMs often send `null` for optional fields; use `strip_null_values()` before validation to treat `null` as absent
-
-### Pre-Implementation Analysis
-
-**Before writing non-trivial code, think about what can go wrong.**
-
-Rushing to "done" instead of "correct" causes multiple review cycles. A 30-minute upfront analysis prevents hours of back-and-forth with reviewers.
-
-#### 1. List Edge Cases First
-
-Before implementing, enumerate:
-- **Empty inputs** - empty strings, empty lists, empty dicts, None
-- **Missing fields** - what if optional fields are absent? what if required fields are missing?
-- **Invalid types** - wrong type passed, type not in supported set
-- **Special characters** - quotes, newlines, tabs, unicode in string inputs
-- **Name collisions** - what if two inputs produce the same output name?
-- **Error paths** - what happens when external calls fail?
-
-#### 2. Write Edge Case Tests First
-
-If you'd written `test_empty_properties` before implementing, you'd catch the bug before review. For each edge case identified, write a test that exercises it.
-
-#### 3. Trace Every Code Path
-
-Especially defaults and fallbacks. Ask:
-- "What happens if X is missing?"
-- "What does this return when Y is None?"
-- "Is this silent fallback hiding a bug?"
-
-**Silent fallbacks are bugs, not features.** Code like `items.get("type", "Any")` silently produces invalid output. Prefer explicit errors: raise `ValueError` with a helpful message.
-
-#### 4. Apply DRY During Writing
-
-Notice patterns as you write, not when a reviewer points them out. If you copy-paste code and change one thing, extract a helper function immediately.
-
-#### 5. Inspect Actual Output
-
-Don't just run tests—actually read the generated/output files. Tests verify behavior you thought of; inspection catches behavior you didn't.
-
-#### 6. Think Like a Reviewer
-
-Before pushing, ask: "What would a careful reviewer find wrong with this?" If you can anticipate the feedback, fix it before pushing.
-
-### Project Git Rules
-
-Beyond the global GitHub workflow rules, these are project-specific:
-
-- Use `Closes #123` (or `Fixes #123`) in PR descriptions — bare `#123` references do NOT auto-close issues on merge.
-- Every "Not Included / Future PRs" item in a PR description MUST link to a GitHub issue. No silent deferrals.
-- **Always fetch main before creating a branch**: `git fetch origin main` before `git checkout -b feat/...`
-- **Removal issues MUST have a Verification section** with grep/shell commands confirming the old code is gone, AND test updates asserting the new expected state. Run verification before closing.
-- **Separate add from remove** — never bundle "add feature X" and "remove old feature Y" in one issue unless the removal is < 10 lines.
-- **Epics ≤ 10 issues.** Split larger efforts into milestones. Audit completion between milestones.
-
-### File Organization
-
-```
-questfoundry/
-├── src/questfoundry/
-│   ├── __init__.py
-│   ├── cli.py                 # typer CLI entry point
-│   ├── pipeline/
-│   │   ├── orchestrator.py    # Stage execution
-│   │   └── stages/            # Stage implementations
-│   ├── prompts/
-│   │   ├── compiler.py        # Prompt assembly
-│   │   └── loader.py          # Template loading
-│   ├── artifacts/
-│   │   ├── reader.py
-│   │   ├── writer.py
-│   │   └── validator.py
-│   ├── providers/             # LLM provider clients
-│   └── export/                # Output format exporters
-├── prompts/                   # Prompt templates (outside src/)
-│   ├── templates/
-│   └── components/
-├── tests/
-│   ├── unit/
-│   ├── integration/
-│   └── e2e/
-└── docs/
-    ├── design/                # Design specifications
-    └── architecture/          # Implementation architecture
-```
-
-## Implementation Roadmap
-
-### Slice 1: DREAM Only
-- Pipeline orchestrator skeleton
-- DREAM stage implementation
-- Basic prompt compiler
-- Artifact schemas and validation
-- CLI with `qf dream` command
-
-### Slice 2: DREAM → SEED
-- Multi-stage execution
-- Context injection between stages
-- Human gate hooks (UI separate concern)
-- BRAINSTORM and SEED stages
-
-### Slice 3: Full GROW
-- 11-phase GROW algorithm
-- Path-agnostic assessment, intersection detection
-- Arc enumeration and validation
-- State derivation (codewords, overlays)
-
-### Slice 4: FILL and SHIP
-- Prose generation
-- Export formats (Twee, HTML, JSON)
-- Full validation and quality bars
-
-## Commands
-
-```bash
-# Quick validation (use these, not full test suite)
-uv run mypy src/                                    # Type check - fast, no LLM
-uv run ruff check src/                              # Lint - fast, no LLM
-uv run pytest tests/unit/test_<module>.py -x -q    # Targeted unit test
-
-# Full test suite (CI only - NEVER run locally without permission)
-uv run pytest tests/unit/ -x -q                    # All unit tests (safe, no LLM)
-uv run pytest tests/integration/ -x -q             # Integration tests (USES LLM - expensive!)
-uv run pytest --cov                                # With coverage (USES LLM - expensive!)
-
-# CLI (once implemented)
-qf dream                       # Run DREAM stage
-qf run --to seed              # Run up to SEED
-qf status                     # Show pipeline state
-qf inspect -p <project>       # Inspect project quality (no LLM calls)
-qf inspect -p <project> --json # Machine-readable JSON output
-```
-
-## Key Files to Reference
-
-- `docs/design/00-spec.md` - Unified v5 specification (vision, pipeline, schemas)
-- `docs/design/procedures/` - Stage algorithm specifications
-- `docs/design/01-prompt-compiler.md` - Prompt assembly system
-- `docs/design/07-getting-started.md` - Implementation slices
+---
 
 ## Anti-Patterns to Avoid
 
@@ -308,539 +141,97 @@ qf inspect -p <project> --json # Machine-readable JSON output
 - Backward-compatibility shims during internal refactoring (replace directly, don't wrap)
 - Closing removal issues by adding code alongside the thing to be removed
 - Using "tests pass" as sole evidence that a removal/refactoring issue is complete
-- Epics larger than 10 issues (split into sequential milestones)
+- Epics larger than 10 issues
 - Claiming "SEED/GROW/POLISH ran successfully" based on exit code without verifying output against design docs
-- **Silent degradation of story structure constraints** — if the pipeline cannot satisfy a structural requirement (cross-dilemma ordering, intersection formation, DAG consistency), it MUST fail loudly. Silently skipping constraints and producing a weaker story is not acceptable. `interleave_cycle_skipped` warnings, all-intersections-rejected, and similar "we tried but gave up" outcomes are pipeline failures, not warnings.
-
-## Design Conformance Review (CRITICAL)
-
-**Every PR that touches pipeline stages (SEED, GROW, POLISH, FILL) MUST include an architect-reviewer conformance report.** This is non-negotiable. "Tests pass" is not evidence of design conformance.
-
-### Why This Exists
-
-The codebase has a history of implementations that run without errors but are missing entire features specified in the design documents. Test fixtures mask these gaps by hand-constructing graph state that the real pipeline never produces. The only reliable check is comparing the implementation against the authoritative design documents.
-
-### The Process
-
-Before creating a PR or closing an issue that touches pipeline stages:
-
-1. **Launch the `architect-reviewer` subagent** with:
-   - The relevant design document sections (Doc 1, Doc 3, procedure docs)
-   - The implementation files being changed
-   - The issue acceptance criteria (if applicable)
-
-2. **The subagent produces a conformance report** with:
-   - Numbered requirements extracted from the design docs
-   - Status per requirement: CONFORMANT / PARTIAL / MISSING / DEAD
-   - Data flow verification (producer → consumer chains)
-   - Fixture divergence check (does the test fixture create state the pipeline doesn't?)
-
-3. **Include the report summary in the PR description** under a `## Design Conformance` section. At minimum:
-   - Number of requirements checked
-   - Any MISSING or DEAD findings (must be addressed or explicitly deferred with linked issues)
-   - Fixture divergence findings
-
-4. **DEAD = MISSING.** A model that exists but the LLM never populates, or a consumer that exists but never receives input, is not an implementation. It is dead code.
-
-### What the Reviewer Checks
-
-The `architect-reviewer` agent (defined in `.claude/agents/architect-reviewer.md`) is specifically designed to:
-- Start from the design document, never from the code
-- Ignore test results entirely
-- Trace data flow end-to-end (schema exists AND producer populates AND consumer reads)
-- Compare test fixtures against real pipeline output
-- Flag requirements with no corresponding implementation
-
-### When to Skip
-
-- Pure refactoring with no behavioral change (rename, move, extract)
-- Documentation-only changes
-- Test-only changes that don't touch pipeline code
-- CLI/UI changes that don't affect the pipeline
-
-### Issue Acceptance Criteria
-
-Every issue that implements pipeline functionality MUST include this acceptance criterion:
-
-> **Design conformance**: `architect-reviewer` sign-off with 0 MISSING/DEAD findings against [relevant design doc sections].
-
-Issues without this criterion for pipeline work are incomplete.
-
-## Testing Strategy
-
-- **Unit tests** for individual functions/classes
-- **Integration tests** for stage execution with mocked LLM
-- **E2E tests** for full pipeline runs (may use real LLM)
-- Target **70% coverage** initially, increase later
-- Use pytest fixtures for common test data
-
-### Test Execution Policy (CRITICAL)
-
-**NEVER run the full test suite (`uv run pytest tests/`) without explicit user permission.**
-
-The test suite includes integration tests that make real LLM API calls. These are:
-- **Slow**: Minutes to hours depending on provider
-- **Expensive**: Each run costs real money (API tokens)
-- **Resource-intensive**: Can saturate GPU/API rate limits
-
-#### When to Run Which Tests
-
-| Situation | Command | Why |
-|-----------|---------|-----|
-| Changed a specific file | `uv run pytest tests/unit/test_<module>.py` | Test only what changed |
-| Changed models/*.py | `uv run pytest tests/unit/test_mutations.py tests/unit/test_*models*.py` | Model validation tests |
-| Changed graph/*.py | `uv run pytest tests/unit/test_graph*.py tests/unit/test_mutations.py` | Graph logic tests |
-| Changed prompts | `uv run mypy src/ && uv run ruff check` | Prompts don't have unit tests |
-| Before pushing PR | `uv run pytest tests/unit/ -x -q` | Unit tests only, stop on first failure |
-| CI is failing | Run the specific failing test locally | Don't shotgun the whole suite |
-
-#### What NEVER to Do
-
-- **NEVER** run `uv run pytest tests/` or `uv run pytest` without `-x` (stop on first failure)
-- **NEVER** run integration tests (`tests/integration/`) without user permission
-- **NEVER** run multiple test commands in parallel (saturates resources)
-- **NEVER** run full suite "just to make sure" - that's what CI is for
-
-#### Quick Validation (Default)
-
-```bash
-uv run mypy src/questfoundry/  # Type check (fast, no LLM)
-uv run ruff check src/         # Lint (fast, no LLM)
-# Only if needed:
-uv run pytest tests/unit/test_<specific>.py -x -q
-```
-
-## Configuration
-
-### General Provider Precedence
-
-Configuration follows a strict precedence order (highest to lowest):
-
-1. **CLI flags** - `--provider ollama/qwen3:4b-instruct-32k`
-2. **Environment variables** - `QF_PROVIDER=openai/gpt-4o` (can be set in your shell or a `.env` file)
-3. **Project config** - `project.yaml` providers.default
-4. **Defaults** - `ollama/qwen3:4b-instruct-32k`
-
-### Hybrid Provider Configuration (Role-Based)
-
-Different providers can be used for each LLM role (creative, balanced, structured). This allows using creative models for prose generation and reasoning models for structured output. Legacy phase names (discuss, summarize, serialize) are accepted as aliases.
-
-**Roles**: `creative` (discuss), `balanced` (summarize), `structured` (serialize)
-
-**8-level precedence chain** (per role):
-1. Role-specific CLI flag (`--provider-creative`, `--provider-balanced`, `--provider-structured`)
-2. General CLI flag (`--provider`)
-3. Role-specific env var (`QF_PROVIDER_CREATIVE`, `QF_PROVIDER_BALANCED`, `QF_PROVIDER_STRUCTURED`)
-4. General env var (`QF_PROVIDER`)
-5. Role-specific project config (`providers.creative`, `providers.balanced`, `providers.structured`)
-6. Role-specific user config (`~/.config/questfoundry/config.yaml`)
-7. Default project config (`providers.default`)
-8. Default user config
-
-Legacy CLI flags (`--provider-discuss`, etc.) and env vars (`QF_PROVIDER_DISCUSS`, etc.) are accepted as aliases.
-
-**Example project.yaml with hybrid providers:**
-```yaml
-name: my-adventure
-providers:
-  default: ollama/qwen3:4b-instruct-32k        # Fallback for all phases
-  discuss: ollama/qwen3:4b-instruct-32k        # Tool-enabled model for exploration
-  summarize: openai/gpt-4o        # Creative model for narrative
-  serialize: openai/o1-mini       # Reasoning model for JSON output
-```
-
-**Example CLI usage:**
-```bash
-# Override serialize phase to use o1-mini
-qf seed --provider-serialize openai/o1-mini
-
-# Full hybrid setup from CLI
-qf seed --provider-discuss ollama/qwen3:4b-instruct-32k \
-        --provider-summarize openai/gpt-4o \
-        --provider-serialize openai/o1-mini
-```
-
-**Note**: o1/o1-mini models don't support tools. While you can configure them for any phase, they will fail at runtime if tools are invoked. They are best suited for the serialize phase only.
-
-### Environment Variables
-
-```bash
-# Provider configuration
-QF_PROVIDER=ollama/qwen3:4b-instruct-32k                       # Override default provider
-QF_PROVIDER_DISCUSS=ollama/qwen3:4b-instruct-32k               # Override discuss phase
-QF_PROVIDER_SUMMARIZE=openai/gpt-4o               # Override summarize phase
-QF_PROVIDER_SERIALIZE=openai/o1-mini              # Override serialize phase
-
-# Required for providers
-OLLAMA_HOST=http://athena.int.liesdonk.nl:11434   # Required for Ollama
-OPENAI_API_KEY=sk-...                             # Required for OpenAI
-
-# Optional observability
-LANGSMITH_TRACING=true
-```
-
-**Note**: `OLLAMA_HOST` and `OPENAI_API_KEY` are required for their respective providers. There are no defaults - you must explicitly configure them.
-
-## Debugging LLM Output Issues
-
-When stage validation fails or LLM output doesn't match expectations:
-
-### 0. Where to Look First (Project Results)
-
-If asked to inspect or debug a specific project run, start with these files in `projects/<dir>/`:
-
-- `logs/debug.jsonl` — complete debug logs (primary signal for failures)
-- `logs/llm_calls.jsonl` — full prompt + LLM traces (use to understand model output)
-- `graph.db` — primary output artifact (SQLite database, current story state)
-- `snapshots/` — pre-stage graph checkpoints for rollback/diagnosis
-- `exports/` — derived outputs from `graph.db` (use for context only)
-
-### 1. Enable LLM Logging
-
-```bash
-uv run qf --log -vvv dream --project myproject "prompt"
-```
-
-This creates:
-- `{project}/logs/llm_calls.jsonl` - Full request/response for each LLM call
-- `{project}/logs/debug.jsonl` - Structured application logs
-
-### 2. Analyze the Response
-
-```bash
-# Pretty-print the last LLM response (JSONL = one JSON object per line)
-python3 -c "
-import json
-with open('myproject/logs/llm_calls.jsonl') as f:
-    lines = f.readlines()
-    d = json.loads(lines[-1])  # Get last call
-    print(d['content'])
-"
-
-# Debug YAML parsing
-python3 -c "
-import json, yaml
-with open('myproject/logs/llm_calls.jsonl') as f:
-    d = json.loads(f.readlines()[-1])
-parsed = yaml.safe_load(d['content'])
-print(json.dumps(parsed, indent=2))
-"
-```
-
-### 3. Common Issues
-
-| Symptom | Likely Cause | Fix |
-|---------|--------------|-----|
-| Empty field in parsed YAML | YAML block extraction stops early | Check `_extract_yaml_block` handles multi-line content |
-| YAML parse error | Model includes prose around YAML | Improve fence detection or extraction |
-| Missing fields | Model omits optional fields | Make schema fields optional with defaults |
-
-### 4. Prompt Engineering Reference
-
-Key patterns for working with LLMs:
-- **Sandwich pattern**: Repeat critical instructions at start AND end of prompt
-- **Validate → Feedback → Repair loop**: For structured output, validate and ask model to fix errors
-- **Discuss → Freeze → Serialize**: Separate conversation from structured output generation
-- **Model size considerations**: Small models (≤8B) need simpler prompts, fewer tools
-
-### 5. Schema Design for LLM Output
-
-Since artifacts will be interpreted by other LLMs (not programmatic code), prefer:
-- **Strings with examples** over strict enums (e.g., `audience: str` not `Literal["adult",...]`)
-- **Inline examples in prompts** to guide format: `audience: <e.g., adult, young adult, mature>`
-- **min_length=1 constraints** to catch empty values while accepting variations
-
-This allows LLM-generated variations like "adults" or "extensive" to pass validation
-while still providing guidance through examples in the prompt template.
-
-### 6. Valid ID Injection Principle
-
-When serializing structured output that references IDs from earlier stages:
-
-> **Always provide an explicit `### Valid IDs` section listing every ID the model
-> is allowed to use. Never assume the model will correctly infer IDs from prose.**
-
-This is critical for preventing "phantom ID" errors where the model invents or
-misreferences IDs. Current implementation:
-
-- `graph/context.py`: `format_valid_ids_context()` builds entity and dilemma ID lists
-- `graph/context.py`: `format_path_ids_context()` builds path ID list after paths are serialized
-- `agents/serialize.py`: Injects valid IDs before each serialization call
-
-When adding new ID types that downstream sections reference:
-1. Collect IDs after their section is serialized
-2. Inject into context before downstream sections that reference them
-3. List with clear labels showing their purpose and valid values
-
-### 7. Defensive Prompt Patterns
-
-Use explicit good/bad examples to prevent common errors:
-
-```yaml
-## Dilemma ID Naming (CRITICAL)
-GOOD: `host_benevolent_or_self_serving` (binary pattern)
-BAD: `host_motivation` (ambiguous, could be confused with path name)
-
-## What NOT to Do
-- Do NOT write prose paragraphs with backstories
-- Do NOT end with "Good luck!" or similar pleasantries
-- Do NOT reuse dilemma IDs as path IDs
-```
-
-These patterns help chat-optimized models (like GPT-4o) avoid over-helpful behaviors
-that hurt structured output quality.
-
-### 8. Context Enrichment Principle (Ontology-Driven)
-
-> **Every LLM call MUST receive all ontologically relevant graph data available at
-> call time. The ontology (`docs/design/00-spec.md`) is the authoritative source for
-> what fields exist on each node type — consult it, don't guess.**
-
-Small models (4B parameters) cannot infer narrative meaning from identifiers alone.
-When a `format_*_context()` function builds context for an LLM call, it MUST include
-all fields from the graph that would inform the model's decision. Bare ID listings
-(e.g., `dilemma::X: explored=[a, b]`) are insufficient when the graph also has
-`question`, `why_it_matters`, `consequence.description`, `narrative_effects`,
-`path_theme`, and `central_entity_ids`.
-
-**The ontology defines what the LLM should know.** Each node type in the spec has
-defined fields and relationships. A context builder that only passes an ID and a
-label is ignoring the ontological richness that the spec provides. For example, a
-`dilemma` node has `question`, `why_it_matters`, `answers[]` with `label`,
-`consequence`, `narrative_effects`, and `(default)` markers — all of which inform
-the LLM's decision about how to handle that dilemma.
-
-**Recurring pattern to avoid** (see #772, #783, #784, #1088):
-- A context builder strips a rich graph node down to just its ID and one field
-- The LLM lacks information to make a meaningful classification
-- Output quality is poor; the model defaults to the safest/vaguest option
-- Someone eventually notices and enriches the context
-
-**When writing or modifying any `format_*_context()` function:**
-1. **Read the ontology** (`docs/design/00-spec.md`) for the relevant node type(s)
-2. List every field defined in the spec for those node types
-3. Include all fields that would help the LLM make an informed decision
-4. Keep it compact (5-8 lines per item) but never strip to bare IDs
-5. Use the `prompt-engineer` subagent for advice on context design and prompt structure
-
-**When writing or modifying any LLM prompt template:**
-1. Use the `prompt-engineer` subagent to review prompt design before implementation
-2. Cross-reference the ontology to verify the context includes all relevant fields
-3. Verify the injected context actually contains the data the prompt references
-4. Test with `logs/llm_calls.jsonl` — inspect the `messages` array to confirm
-   the model receives rich context, not bare listings
-
-### 9. Prompt Context Formatting (CRITICAL)
-
-> **NEVER interpolate Python objects into LLM-facing text.** Every variable injected
-> into a prompt, context block, or error feedback MUST be explicitly formatted as
-> human-readable text. See #784, #1088.
-
-**The anti-pattern (recurring — see #784, #1088):**
-```python
-# BAD: Python repr leaks into prompt
-explored = ["protector", "manipulator"]
-f"Explored answers: {explored}"
-# LLM sees: "Explored answers: ['protector', 'manipulator']"
-
-# BAD: Enum repr leaks into prompt
-f"Category: {error.category}"
-# LLM sees: "Category: <SeedErrorCategory.CROSS_REFERENCE: 5>"
-```
-
-**The fix:**
-```python
-# GOOD: Explicit formatting with semantic labels
-f"Explored answers (generate a path for EACH): `protector`, `manipulator`"
-
-# GOOD: Join lists, backtick-wrap IDs
-f"Explored answers: {', '.join(f'`{a}`' for a in explored)}"
-
-# GOOD: Use .value or .name, not raw enum
-f"Category: {error.category.name.lower()}"
-```
-
-**Rules for ALL code that builds LLM-facing text:**
-
-1. **NEVER use f-string interpolation of `list`, `dict`, `set`, `Enum`, or dataclass objects.** Always use explicit `', '.join()` or bullet-point formatting.
-2. **Every context block MUST have a header explaining WHAT the data is and WHY it's provided.** Raw ID dumps with no explanation are insufficient.
-3. **Constraints MUST be stated explicitly with good/bad examples.** Don't assume the model will infer rules from data patterns (e.g., `(default)` markers).
-4. **Error feedback sent to LLMs MUST describe the specific problem and the fix.** Generic messages like "Missing items" don't help the model self-correct.
-5. **Use the `prompt-engineer` subagent to review** any new or modified prompt text, context builder, or error feedback function before merging.
-6. **Verify with `logs/llm_calls.jsonl`** — read the actual `messages` array sent to the model. If you see square brackets, angle brackets, or Python class names, the formatting is broken.
-
-**When reviewing existing code:** If you encounter a `format_*()` function or f-string that interpolates a variable into LLM-facing text, check whether it could be a list, enum, or complex object. If so, fix it.
-
-### 10. Small Model Prompt Bias (CRITICAL)
-
-**You have a systematic bias toward writing prompts optimized for large LLMs (70B+).
-Do NOT blame small models when output quality is poor — fix the prompt first.**
-
-Common failure pattern:
-1. You write a prompt with implicit instructions, complex nesting, or assumed knowledge
-2. A small model (e.g., qwen3:4b) produces poor output
-3. You conclude "the model is too small" and suggest switching to a larger model
-4. The actual problem is the prompt — a well-structured prompt works fine on 4B models
-
-**Rules:**
-- NEVER suggest "use a larger model" as a first response to output quality issues
-- ALWAYS use the `prompt-engineer` subagent to review and fix prompts before
-  concluding a model is incapable
-- Small models need: explicit instructions, concrete examples, shorter context,
-  simpler schemas, and clear delimiters — not different models
-- If the `prompt-engineer` subagent cannot make it work, THEN discuss model limitations
-
-## DREAM Stage Implementation
-
-The DREAM stage is the reference implementation for new stages (see [ADR-009](docs/architecture/decisions.md#adr-009-langchain-native-dream-pipeline)). Key patterns:
-
-### Three-Phase Pattern
-
-All stages use the same **Discuss → Summarize → Serialize** pattern:
-
-1. **Discuss**: Explore/refine via dialogue and research tools (using `langchain.agents`)
-2. **Summarize**: Distill into concise narrative (direct model call)
-3. **Serialize**: Convert to validated YAML (structured output via `with_structured_output()`)
-
-The `ConversationRunner` orchestrates all three phases and handles:
-- Tool execution and result collection
-- Validation and repair loops (max 3 retries)
-- Message history management
-- Token counting and logging
-
-### Provider Strategies for Structured Output
-
-When serializing structured output (phase 3), all providers use the same strategy:
-
-```python
-# All providers use JSON_MODE (json_schema method)
-structured_model = model.with_structured_output(
-    schema=BrainstormOutput,
-    method="json_schema",  # Native JSON mode
-)
-```
-
-**Why JSON_MODE for all providers?**
-- Works reliably with complex nested schemas (BrainstormOutput, SeedOutput)
-- The TOOL strategy (function_calling) was tried but returns None for complex schemas on Ollama
-- Native JSON mode is efficient and consistent across providers
-
-**The two available strategies (for reference):**
-- `method="json_schema"` (JSON_MODE): Uses provider's native JSON mode to constrain output
-- `method="function_calling"` (TOOL): Creates a fake tool with the schema, forces model to call it
-
-The strategy selection is handled by `with_structured_output()` in `providers/structured_output.py`.
-
-### Prompt Management
-
-Using `ChatPromptTemplate`:
-- LangChain's `ChatPromptTemplate` for variable injection
-- Template stored externally (prompts/templates/dream.md)
-- Separated from serialization logic
-
-When building prompts for stages:
-1. Create `prompts/templates/stagename.md` with template text
-2. Use `ChatPromptTemplate.from_template()` to load and parameterize
-3. Pass variables dict to template compilation
-4. Never hardcode prompts in Python—always externalize
-
-### Tool Response Format
-
-All tool results must return structured JSON (per ADR-008):
-
-```python
-# Success
-{
-    "result": "success",
-    "data": { ... },
-    "action": "Use this information to inform decisions."
-}
-
-# No results
-{
-    "result": "no_results",
-    "query": "...",
-    "action": "No matching guidance found. Proceed with your instincts."
-}
-
-# Error
-{
-    "result": "error",
-    "error": "Connection timeout",
-    "action": "Tool unavailable. Continue without this information."
-}
-```
-
-This prevents infinite loops where LLM follows "try again" instructions repeatedly.
-
-### Validation & Repair Loop
-
-When structured output validation fails:
-
-```python
-def _validate_dream(self, data: dict[str, Any]) -> ValidationResult:
-    """Validate using Pydantic model.
-
-    Returns structured errors that guide LLM correction.
-    """
-    try:
-        DreamArtifact.model_validate(data)
-        return ValidationResult(valid=True, data=...)
-    except ValidationError as e:
-        # Convert to structured errors (field, issue, requirement)
-        return ValidationResult(
-            valid=False,
-            errors=pydantic_errors_to_details(e.errors()),
-            expected_fields=get_all_field_paths(DreamArtifact),
-        )
-```
-
-The error format tells LLM exactly what's wrong and what to fix, enabling recovery in 1-2 retries.
+- **Silent degradation of story structure constraints** — if the pipeline cannot satisfy a structural requirement (cross-dilemma ordering, intersection formation, DAG consistency), it MUST fail loudly. Silently skipping constraints and producing a weaker story is not acceptable. `interleave_cycle_skipped` warnings, all-intersections-rejected, and similar "we tried but gave up" outcomes are pipeline failures.
+- **Retroactively updating an authoritative spec to match broken code.** Spec comes first. If code diverges, the code is wrong — fix the code. If the spec is incomplete/incorrect, update the spec *first*, then fix the code.
+- **Treating code or tests as the source of truth** for pipeline behavior. The authoritative specs are. Reading existing code to "figure out" how a stage is supposed to work is a trap — read the spec first.
 
 ---
 
-## Python Patterns for This Project
+## Test Execution Policy (CRITICAL)
 
-These patterns are established in the codebase. Follow them — don't introduce new ones without flagging it.
+**NEVER run the full test suite (`uv run pytest tests/`) without explicit user permission.**
 
-- `TypedDict` for message structures (e.g., `Message`, `LLMResponse`)
+Integration tests make real LLM API calls — slow, expensive (real money), GPU/rate-limit intensive.
+
+| Situation | Command |
+|-----------|---------|
+| Changed a specific file | `uv run pytest tests/unit/test_<module>.py` |
+| Changed `models/*.py` | `uv run pytest tests/unit/test_mutations.py tests/unit/test_*models*.py` |
+| Changed `graph/*.py` | `uv run pytest tests/unit/test_graph*.py tests/unit/test_mutations.py` |
+| Changed prompts | `uv run mypy src/ && uv run ruff check` (no unit tests for prompts) |
+| Before pushing PR | `uv run pytest tests/unit/ -x -q` |
+| CI is failing | Run the specific failing test locally — don't shotgun |
+
+**Never:** run `uv run pytest tests/` or `uv run pytest` without `-x`, run integration tests without permission, run multiple test commands in parallel, run full suite "just to make sure".
+
+Default validation: `uv run mypy src/questfoundry/`, `uv run ruff check src/`, then targeted unit tests if needed.
+
+---
+
+## Prompt & Context Authoring (Use the Subagent)
+
+When writing or modifying any LLM-facing text — prompt templates in `prompts/templates/`, `format_*_context()` functions, error feedback sent to models, `with_structured_output()` schemas — **dispatch the `@prompt-engineer` subagent**.
+
+It owns the project's prompt-engineering canon: Valid ID injection (phantom-ID prevention), defensive GOOD/BAD example patterns, ontology-driven context enrichment, prompt-context formatting (never interpolate Python objects — no `[…]`, no `<EnumClass.X: 1>`), and small-model bias (the prompt is the suspect, not the model). The subagent's audit dimensions and severity rubric are the source of truth — do not paraphrase those rules from memory.
+
+For *adding a new stage* or substantively reshaping an existing one (orchestrator, structured-output strategy, repair loop, tool response format), use the **`questfoundry-stage-implementation`** skill.
+
+For *debugging output that came back wrong*, use the **`questfoundry-llm-debugging`** skill.
+
+---
+
+## Configuration (Pointer)
+
+Provider config follows precedence: CLI flag > env var > `project.yaml` > defaults. Hybrid roles supported per phase: `creative` / `balanced` / `structured` (legacy aliases: `discuss` / `summarize` / `serialize`). Full chain: role-specific CLI > general CLI > role env > general env > role project config > role user config > default project > default user.
+
+Required env vars: `OLLAMA_HOST` for Ollama, `OPENAI_API_KEY` for OpenAI. No defaults. Run `uv run qf <stage> --help` for the full flag surface.
+
+---
+
+## Python Patterns
+
+Established conventions (don't introduce new ones without flagging):
+
+- `TypedDict` for message structures (`Message`, `LLMResponse`)
 - `Protocol` for duck typing (`LLMProvider`, `Stage`, `Tool`)
-- `dataclass` for simple internal data; Pydantic for validated artifacts
-- `from __future__ import annotations` for forward refs in model files
-- Mock LLM providers in unit tests — **never** call real providers in unit tests
+- `dataclass` for simple internal data; **Pydantic** for validated artifacts
+- `from __future__ import annotations` in model files for forward refs
+- **Mock LLM providers in unit tests — never call real providers**
 
-### Code Organization
+Coverage target: 70% overall, 85% for new code. Run `uv run pytest --cov=questfoundry --cov-report=term-missing`.
+
+---
+
+## Key Code Layout
 
 ```
 src/questfoundry/
 ├── cli.py                 # typer CLI
-├── pipeline/
-│   ├── orchestrator.py    # Stage execution
-│   └── stages/            # Stage implementations
-├── prompts/               # Prompt compiler + loader
+├── pipeline/orchestrator.py + stages/
+├── prompts/               # compiler + loader
 ├── models/                # Pydantic artifact models
 ├── providers/             # LLM provider clients
-├── conversation/          # Multi-turn conversation runner
-├── graph/                 # Graph mutations + context builders
-└── tools/                 # Tool definitions for stages
+├── conversation/          # multi-turn conversation runner
+├── graph/                 # mutations + context builders
+└── tools/                 # tool definitions for stages
 ```
 
-### Test Coverage
+Templates live in `prompts/templates/<stage>.md` (outside `src/`).
 
-- Coverage target: **70%** overall, **85%** for new code
-- `uv run pytest tests/unit/ -x -q` — unit tests (safe, no LLM calls)
-- `uv run pytest --cov=questfoundry --cov-report=term-missing` — with coverage
+---
 
-### Global Agents Available
+## Global Agents Available
 
-Use these global agents rather than project-local ones:
-- `@python-dev` — general Python implementation (features, bugfixes, refactoring)
+Use these rather than project-local ones:
+
+- `@python-dev` — general Python implementation
 - `@llm-engineer` — LLM pipeline, LangChain, providers, structured output
-- `@test-engineer` — test strategy, coverage analysis, pytest patterns
+- `@test-engineer` — test strategy, coverage, pytest patterns
 - `@frontend-dev` — CLI (typer/rich) development
-- `@prompt-engineer` — prompt design and optimization (read-only/advisory)
-- `@architect-reviewer` — design conformance review (always run before PR)
-- `@investigator` — deep failure root cause analysis
+- `@prompt-engineer` — prompt design and review (read-only/advisory; project-local, owns prompt rules)
+- `@investigator` — deep failure root-cause analysis
 
 ---
 

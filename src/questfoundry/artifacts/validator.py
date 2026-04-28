@@ -485,15 +485,25 @@ def get_all_field_paths(model_cls: type[BaseModel], prefix: str = "") -> set[str
                 try:
                     if isinstance(arg, type) and issubclass(arg, BaseModel):
                         paths.update(get_all_field_paths(arg, field_path))
-                except TypeError:
+                except TypeError as e:  # pragma: no cover - defensive type-introspection fallback
                     # Not a valid class type (e.g., special form), skip
-                    pass
+                    log.debug(
+                        "artifact_validator_union_arg_not_class",
+                        error=str(e),
+                        arg_type=str(type(arg)),
+                        field_path=field_path,
+                    )
         elif isinstance(annotation, type):
             # Direct Pydantic model (not wrapped in Optional/Union)
             try:
                 if issubclass(annotation, BaseModel):
                     paths.update(get_all_field_paths(annotation, field_path))
-            except TypeError:
-                pass
+            except TypeError as e:  # pragma: no cover - defensive type-introspection fallback
+                log.debug(
+                    "artifact_validator_direct_annotation_not_model",
+                    error=str(e),
+                    annotation_type=str(annotation),
+                    field_path=field_path,
+                )
 
     return paths

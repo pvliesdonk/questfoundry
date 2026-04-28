@@ -14,8 +14,9 @@ Validation categories retained here:
 from __future__ import annotations
 
 from collections import deque
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
+from questfoundry.graph.algorithms import compute_arc_traversals
 from questfoundry.graph.context import get_primary_beat, normalize_scoped_id
 from questfoundry.graph.fill_context import is_merged_passage
 from questfoundry.graph.validation_types import ValidationCheck, ValidationReport
@@ -25,6 +26,7 @@ if TYPE_CHECKING:
 
 # Re-export types for backward compatibility — many modules import from here.
 __all__ = [
+    "GrowContractError",
     "ValidationCheck",
     "ValidationReport",
     "build_exempt_passages",
@@ -32,6 +34,9 @@ __all__ = [
     "build_passage_adjacency",
     "check_dilemma_role_compliance",
     "check_dilemmas_resolved",
+    "check_no_cross_dilemma_belongs_to",
+    "check_no_dual_on_commit_beat",
+    "check_no_pre_commit_intersections",
     "check_passage_dag_cycles",
     "check_single_root_beat",
     "check_single_start",
@@ -42,8 +47,577 @@ __all__ = [
     "passages_with_forward_incoming",
     "run_all_checks",
     "run_grow_checks",
+    "validate_grow_output",
     "walk_linear_stretches",
 ]
+
+
+class GrowContractError(ValueError):
+    """Raised when GROW's Stage Output Contract is violated."""
+
+
+_FORBIDDEN_NODE_TYPES_GROW_EXIT = frozenset({"passage", "choice"})
+_ACTION_PHRASE_PATTERNS = (
+    "player_",
+    "user_chose",
+    "_chose_",
+    "_chooses_",
+    "chose_to_",
+)
+
+
+# ---------------------------------------------------------------------------
+# GROW Stage Output Contract validator
+# ---------------------------------------------------------------------------
+
+
+def _check_convergence_and_ordering_exit(graph: Graph, errors: list[str]) -> None:
+    """Soft vs hard dilemma convergence metadata (GROW R-6.3, GROW R-6.4).
+
+    Single-path soft Dilemmas (the locked-dilemma shadow pattern; SEED Phase 2
+    R-2.2) are exempt from the converges_at requirement per GROW R-6.4's
+    two-path scope: with only one path, there is no second path to converge
+    with, so converges_at and convergence_payoff stay null.
+    """
+    dilemma_nodes = graph.get_nodes_by_type("dilemma")
+
+    # Pre-build dilemma → paths map for the path-count check (R-6.4 single-path scope).
+    path_nodes = graph.get_nodes_by_type("path")
+    dilemma_paths_count: dict[str, int] = {}
+    for _path_id, pdata in path_nodes.items():
+        raw_did = pdata.get("dilemma_id", "")
+        if raw_did:
+            scoped = normalize_scoped_id(raw_did, "dilemma")
+            dilemma_paths_count[scoped] = dilemma_paths_count.get(scoped, 0) + 1
+
+    for dilemma_id, dilemma in sorted(dilemma_nodes.items()):
+        role = dilemma.get("dilemma_role")
+        converges_at = dilemma.get("converges_at")
+        payoff = dilemma.get("convergence_payoff")
+
+        if role == "hard":
+            if converges_at is not None:
+                errors.append(
+                    f"GROW R-6.3: hard dilemma {dilemma_id!r} must have "
+                    f"converges_at null, got {converges_at!r}"
+                )
+            if payoff is not None:
+                errors.append(
+                    f"GROW R-6.3: hard dilemma {dilemma_id!r} must have "
+                    f"convergence_payoff null, got {payoff!r}"
+                )
+        elif role == "soft":
+            # GROW R-6.4 single-path scope: skip the converges_at requirement
+            # for single-path soft (locked-dilemma shadow pattern). Both fields
+            # stay null per Phase 6 §Output Contract item 3.
+            if dilemma_paths_count.get(dilemma_id, 0) < 2:
+                continue
+            if converges_at is None:
+                errors.append(
+                    f"GROW R-6.4: soft dilemma {dilemma_id!r} (two explored paths) "
+                    "missing converges_at (paths must structurally rejoin)"
+                )
+            if payoff is None:
+                errors.append(
+                    f"GROW R-6.4: soft dilemma {dilemma_id!r} (two explored paths) "
+                    "missing convergence_payoff"
+                )
+
+
+def _check_arc_enumeration(graph: Graph, errors: list[str]) -> None:
+    """Arc materialization + forbidden node types (R-8.2, Output-12)."""
+    # R-8.2: arcs stored as nodes must use materialized_ prefix.
+    arc_nodes = graph.get_nodes_by_type("arc")
+    for arc_id in sorted(arc_nodes.keys()):
+        stripped = arc_id.split("::", 1)[-1] if "::" in arc_id else arc_id
+        if not stripped.startswith("materialized_"):
+            errors.append(
+                f"R-8.2: arc node {arc_id!r} must use 'materialized_' prefix "
+                "if stored (arcs are computed, not persisted)"
+            )
+
+    # Output-12: no passage / choice nodes at GROW exit.
+    for node_type in sorted(_FORBIDDEN_NODE_TYPES_GROW_EXIT):
+        forbidden = graph.get_nodes_by_type(node_type)
+        if forbidden:
+            errors.append(
+                f"Output-12: GROW must not create {node_type!r} nodes; "
+                f"found {len(forbidden)}: {sorted(forbidden.keys())[:3]}"
+            )
+
+
+def _check_transition_beats(graph: Graph, errors: list[str]) -> None:
+    """Transition beat structure (R-5.1 zero belongs_to + zero dilemma_impacts)."""
+    beat_nodes = graph.get_nodes_by_type("beat")
+    belongs_to_edges = graph.get_edges(edge_type="belongs_to")
+    beat_to_paths: dict[str, list[str]] = {}
+    for edge in belongs_to_edges:
+        beat_to_paths.setdefault(edge["from"], []).append(edge["to"])
+
+    for beat_id, beat in sorted(beat_nodes.items()):
+        if beat.get("role") != "transition_beat":
+            continue
+        if beat_to_paths.get(beat_id):
+            errors.append(
+                f"R-5.1: transition beat {beat_id!r} must have zero "
+                f"belongs_to edges, found "
+                f"{len(beat_to_paths.get(beat_id, []))}"
+            )
+        if beat.get("dilemma_impacts"):
+            errors.append(f"R-5.1: transition beat {beat_id!r} must have zero dilemma_impacts")
+
+
+def _check_entity_overlays(graph: Graph, errors: list[str]) -> None:
+    """Entity overlay composition (R-5.5, R-5.6)."""
+    entity_nodes = graph.get_nodes_by_type("entity")
+
+    for entity_id, entity in sorted(entity_nodes.items()):
+        overlays = entity.get("overlays", [])
+        if not overlays:
+            continue
+
+        for idx, overlay in enumerate(overlays):
+            if not isinstance(overlay, dict):
+                errors.append(f"R-5.5: entity {entity_id!r} overlay[{idx}] is not a dict")
+                continue
+            when = overlay.get("when", [])
+            details = overlay.get("details")
+            if not when:
+                errors.append(
+                    f"R-5.5: entity {entity_id!r} overlay[{idx}] has empty "
+                    "'when' (activation condition missing)"
+                )
+            if not details:
+                errors.append(f"R-5.5: entity {entity_id!r} overlay[{idx}] has empty 'details'")
+
+    # R-5.6: detect per-state entity duplicates (entity_id__state pattern).
+    for entity_id in sorted(entity_nodes):
+        if "__" in entity_id:
+            base = entity_id.rsplit("__", 1)[0]
+            if base in entity_nodes:
+                errors.append(
+                    f"R-5.6: entity {entity_id!r} appears to be a state-variant "
+                    f"of {base!r}; overlays must be embedded, not separate nodes"
+                )
+
+
+def _check_state_flags(graph: Graph, errors: list[str]) -> None:
+    """State flag derivation + naming (GROW R-5.1, R-5.2, R-5.4)."""
+    state_flag_nodes = graph.get_nodes_by_type("state_flag")
+    consequence_nodes = graph.get_nodes_by_type("consequence")
+    derived_from_edges = graph.get_edges(edge_type="derived_from")
+
+    # R-5.1: every state_flag has ≥1 derived_from edge.
+    flag_to_conseqs: dict[str, list[str]] = {}
+    for edge in derived_from_edges:
+        flag_to_conseqs.setdefault(edge["from"], []).append(edge["to"])
+
+    for flag_id in sorted(state_flag_nodes.keys()):
+        if not flag_to_conseqs.get(flag_id):
+            errors.append(
+                f"R-5.1: state_flag {flag_id!r} has no derived_from edge "
+                "(ad-hoc creation forbidden)"
+            )
+
+    # R-5.2: state flag names express world state, not player actions.
+    # phase_state_flags populates `raw_id` (the stable name), not `name`.
+    # Check both so the rule enforces against real GROW output, not just
+    # fixtures that happen to set `name`.
+    for flag_id, flag in sorted(state_flag_nodes.items()):
+        name_candidates = [flag.get("name", ""), flag.get("raw_id", "")]
+        matched: tuple[str, str] | None = None
+        for candidate in name_candidates:
+            lowered = candidate.lower()
+            for pattern in _ACTION_PHRASE_PATTERNS:
+                if pattern in lowered:
+                    matched = (candidate, pattern)
+                    break
+            if matched is not None:
+                break
+        if matched is not None:
+            offender, pattern = matched
+            errors.append(
+                f"R-5.2: state_flag {flag_id!r} name {offender!r} is "
+                f"action-phrased (contains {pattern!r}); must express "
+                "world state"
+            )
+
+    # R-5.4: every Consequence produces at least one State Flag.
+    derived_conseqs: set[str] = set()
+    for edge in derived_from_edges:
+        derived_conseqs.add(edge["to"])
+    for conseq_id in sorted(consequence_nodes.keys()):
+        if conseq_id not in derived_conseqs:
+            errors.append(f"R-5.4: consequence {conseq_id!r} has no derived state_flag")
+
+
+def _check_intersections(graph: Graph, errors: list[str]) -> None:
+    """Intersection Group invariants (R-2.3 ≥2 different dilemmas, R-2.4 no same-dilemma pre-commit).
+
+    Extends existing _check_intersection_group_paths.
+    Accepts both intersection-edge membership and legacy beat_ids field.
+    """
+    group_nodes = graph.get_nodes_by_type("intersection_group")
+    intersection_edges = graph.get_edges(edge_type="intersection")
+    beat_nodes = graph.get_nodes_by_type("beat")
+    path_nodes = graph.get_nodes_by_type("path")
+    belongs_to_edges = graph.get_edges(edge_type="belongs_to")
+
+    beat_to_paths: dict[str, list[str]] = {}
+    for edge in belongs_to_edges:
+        beat_to_paths.setdefault(edge["from"], []).append(edge["to"])
+    path_dilemma = {pid: path.get("dilemma_id", "") for pid, path in path_nodes.items()}
+
+    members_by_group: dict[str, list[str]] = {}
+    for edge in intersection_edges:
+        members_by_group.setdefault(edge["to"], []).append(edge["from"])
+    for group_id, group in group_nodes.items():
+        legacy_members = group.get("beat_ids", [])
+        if legacy_members:
+            members_by_group.setdefault(group_id, []).extend(legacy_members)
+
+    for group_id in sorted(group_nodes.keys()):
+        members = sorted(set(members_by_group.get(group_id, [])))
+        if len(members) < 2:
+            errors.append(
+                f"R-2.3: intersection_group {group_id!r} has {len(members)} member(s); must be ≥2"
+            )
+            continue
+
+        # R-2.3: ≥2 different dilemmas across members.
+        beat_dilemmas: dict[str, set[str]] = {}
+        for m in members:
+            dilemmas: set[str] = set()
+            for p in beat_to_paths.get(m, []):
+                d = path_dilemma.get(p, "")
+                if d:
+                    dilemmas.add(d)
+            beat_dilemmas[m] = dilemmas
+
+        all_dilemmas: set[str] = set()
+        for d_set in beat_dilemmas.values():
+            all_dilemmas |= d_set
+        if len(all_dilemmas) < 2:
+            errors.append(
+                f"R-2.3: intersection_group {group_id!r} contains beats from "
+                f"only {len(all_dilemmas)} dilemma(s); need ≥2 "
+                f"(members: {members})"
+            )
+
+        # R-2.4: no two pre-commit beats of the same dilemma.
+        pre_commit_by_dilemma: dict[str, list[str]] = {}
+        for m in members:
+            beat = beat_nodes.get(m, {})
+            paths = beat_to_paths.get(m, [])
+            impacts = beat.get("dilemma_impacts", [])
+            has_commits = any(i.get("effect") == "commits" for i in impacts)
+            if len(paths) >= 2 and not has_commits:
+                for d in beat_dilemmas.get(m, set()):
+                    pre_commit_by_dilemma.setdefault(d, []).append(m)
+        for d, beats in sorted(pre_commit_by_dilemma.items()):
+            if len(beats) >= 2:
+                errors.append(
+                    f"R-2.4: intersection_group {group_id!r} contains "
+                    f"{len(beats)} pre-commit beats of dilemma {d!r}: "
+                    f"{sorted(beats)}"
+                )
+
+
+def _check_beat_dag(graph: Graph, errors: list[str]) -> None:
+    """Y-fork postcondition (R-1.4).
+
+    The last shared pre-commit beat of each dilemma must have one
+    commit-beat successor per explored path of that dilemma.
+    """
+    beat_nodes = graph.get_nodes_by_type("beat")
+    belongs_to_edges = graph.get_edges(edge_type="belongs_to")
+    predecessor_edges = graph.get_edges(edge_type="predecessor")
+
+    # Build beat → belongs_to paths lookup.
+    beat_to_paths: dict[str, list[str]] = {}
+    for edge in belongs_to_edges:
+        beat_to_paths.setdefault(edge["from"], []).append(edge["to"])
+
+    # Build beat → successors lookup.
+    # predecessor edge: from=B to=A means A is predecessor of B;
+    # so successors-of-A are B (=edge["from"]).
+    successors_by_beat: dict[str, list[str]] = {}
+    for edge in predecessor_edges:
+        successors_by_beat.setdefault(edge["to"], []).append(edge["from"])
+
+    # Identify pre-commit beats: multi-belongs_to + no commits impact.
+    pre_commit_beats: dict[str, list[str]] = {}
+    for beat_id, beat in beat_nodes.items():
+        paths = beat_to_paths.get(beat_id, [])
+        impacts = beat.get("dilemma_impacts", [])
+        has_commits = any(i.get("effect") == "commits" for i in impacts)
+        if len(paths) >= 2 and not has_commits:
+            pre_commit_beats[beat_id] = sorted(paths)
+
+    # For each pre-commit beat that is a Y-fork tip (has at least one
+    # commit-beat successor), verify its commit successors cover all paths.
+    for beat_id, paths in sorted(pre_commit_beats.items()):
+        successors = successors_by_beat.get(beat_id, [])
+        commit_successor_paths: set[str] = set()
+        for s in successors:
+            s_beat = beat_nodes.get(s, {})
+            s_paths = beat_to_paths.get(s, [])
+            s_impacts = s_beat.get("dilemma_impacts", [])
+            s_has_commits = any(i.get("effect") == "commits" for i in s_impacts)
+            if s_has_commits and len(s_paths) == 1:
+                commit_successor_paths.update(s_paths)
+
+        # Only check if this beat is a Y-fork tip.
+        if commit_successor_paths:
+            missing = set(paths) - commit_successor_paths
+            if missing:
+                errors.append(
+                    f"R-1.4: Y-fork postcondition — pre-commit beat "
+                    f"{beat_id!r} has commit successors for paths "
+                    f"{sorted(commit_successor_paths)} but is missing "
+                    f"commit beats for path(s) {sorted(missing)}"
+                )
+
+
+def _check_upstream_contract(graph: Graph, errors: list[str]) -> None:
+    """Delegate to SEED validator with skip_forbidden_types=True."""
+    from questfoundry.graph.seed_validation import validate_seed_output
+
+    upstream = validate_seed_output(graph, skip_forbidden_types=True)
+    for e in upstream:
+        errors.append(f"Output-0: SEED contract violated post-GROW — {e}")
+
+
+def validate_grow_output(graph: Graph) -> list[str]:
+    """Verify GROW's output meets POLISH's input contract.
+
+    Args:
+        graph: Graph containing GROW stage output.
+
+    Returns:
+        List of error strings. Empty means valid.
+    """
+    errors: list[str] = []
+    _check_upstream_contract(graph, errors)
+    _check_beat_dag(graph, errors)
+    _check_intersections(graph, errors)
+    _check_state_flags(graph, errors)
+    _check_entity_overlays(graph, errors)
+    _check_transition_beats(graph, errors)
+    _check_arc_enumeration(graph, errors)
+    _check_convergence_and_ordering_exit(graph, errors)
+
+    # 1. Beat nodes exist with summaries and dilemma_impacts
+    beat_nodes = graph.get_nodes_by_type("beat")
+    if not beat_nodes:
+        errors.append("No beat nodes found in graph")
+    else:
+        for beat_id, beat_data in beat_nodes.items():
+            if not beat_data.get("summary"):
+                errors.append(f"Beat {beat_id} missing summary")
+            # Accept both plural "dilemma_impacts" and legacy singular "dilemma_impact"
+            # from older GROW outputs that used the singular key.
+            if "dilemma_impacts" not in beat_data and "dilemma_impact" not in beat_data:
+                errors.append(f"Beat {beat_id} missing dilemma_impacts")
+
+    # 2. No cycles in predecessor DAG
+    if beat_nodes:
+        _check_predecessor_cycles(graph, beat_nodes, errors)
+
+    # 3. Every beat has at least one belongs_to edge.
+    # Pre-commit beats may have multiple belongs_to edges (Y-shape: one edge per path
+    # of their dilemma). Guard rails for dual-belongs_to correctness are enforced by
+    # check_no_cross_dilemma_belongs_to and check_no_dual_on_commit_beat in
+    # grow_validation.py.
+    belongs_to_edges = graph.get_edges(edge_type="belongs_to")
+    beats_with_path: dict[str, list[str]] = {}
+    for edge in belongs_to_edges:
+        from_id = edge["from"]
+        to_id = edge["to"]
+        if from_id in beat_nodes:
+            beats_with_path.setdefault(from_id, []).append(to_id)
+
+    for beat_id in beat_nodes:
+        paths = beats_with_path.get(beat_id, [])
+        if len(paths) == 0:
+            # Zero-belongs_to beats are DAG infrastructure — they don't belong
+            # to any dilemma's Y-shape.  See Story Graph Ontology Part 8
+            # "Zero-belongs_to beats": setup / epilogue / transition / gap beats.
+            beat_data = beat_nodes[beat_id]
+            if beat_data.get("role") in (
+                "setup",
+                "epilogue",
+                "transition_beat",
+                "gap_beat",
+            ):
+                continue
+            errors.append(f"Beat {beat_id} has no belongs_to edge (no path assignment)")
+
+    # 4. State flag nodes exist for explored dilemmas
+    dilemma_nodes = graph.get_nodes_by_type("dilemma")
+    explored_dilemmas = {
+        did
+        for did, ddata in dilemma_nodes.items()
+        # GROW may omit status for dilemmas it fully explored; treat None as "explored".
+        if ddata.get("status") in ("explored", None)
+    }
+    # Build consequence → state_flag map via derived_from edges (Story Graph Ontology, Part 9).
+    # state_flag nodes have no dilemma_id field; the association is:
+    #   state_flag --derived_from--> consequence <--has_consequence-- path.dilemma_id
+    _flagged_consequences: set[str] = {
+        edge["to"] for edge in graph.get_edges(edge_type="derived_from")
+    }
+    # Build consequence → dilemma lookup via has_consequence edges + path.dilemma_id
+    _path_nodes = graph.get_nodes_by_type("path")
+    _cons_to_dilemma: dict[str, str] = {}
+    for edge in graph.get_edges(edge_type="has_consequence"):
+        path_data = _path_nodes.get(edge["from"], {})
+        raw_did = path_data.get("dilemma_id", "")
+        if raw_did:
+            linked_did = normalize_scoped_id(raw_did, "dilemma")
+            _cons_to_dilemma[edge["to"]] = linked_did
+
+    dilemmas_with_flags: set[str] = set()
+    for cons_id in _flagged_consequences:
+        linked_dilemma = _cons_to_dilemma.get(cons_id)
+        if linked_dilemma:
+            dilemmas_with_flags.add(linked_dilemma)
+
+    for dilemma_id in explored_dilemmas:
+        if dilemma_id not in dilemmas_with_flags:
+            errors.append(f"Explored dilemma {dilemma_id} has no state flag nodes")
+
+    # 5. Dilemma nodes have dilemma_role set
+    for dilemma_id, dilemma_data in dilemma_nodes.items():
+        if not dilemma_data.get("dilemma_role"):
+            errors.append(f"Dilemma {dilemma_id} missing dilemma_role (hard/soft)")
+
+    # 6. Every computed arc traversal is complete (no dead ends)
+    _check_arc_traversal_completeness(graph, beat_nodes, errors)
+
+    # 7. Intersection groups reference beats from different paths only
+    intersection_groups = graph.get_nodes_by_type("intersection_group")
+    for group_id, group_data in intersection_groups.items():
+        _check_intersection_group_paths(
+            graph, group_id, group_data, beat_nodes, beats_with_path, errors
+        )
+
+    return errors
+
+
+def _check_arc_traversal_completeness(
+    graph: Graph,
+    beat_nodes: dict[str, dict[str, Any]],
+    errors: list[str],
+) -> None:
+    """Verify every arc traversal terminates at a beat with no arc-internal successors.
+
+    A "dead end" is a beat in the middle of an arc that has successors in the
+    full beat DAG but none within the arc's own beat set. This indicates GROW
+    produced an incomplete arc where beats belonging to the arc's paths were
+    not connected forward.
+
+    Args:
+        graph: Graph containing the beat DAG.
+        beat_nodes: Dict of beat node ID → data (pre-fetched).
+        errors: Mutable list to append error strings to.
+    """
+    arc_traversals = compute_arc_traversals(graph)
+    if not arc_traversals:
+        return  # No dilemmas/paths — skip
+
+    # Build full children adjacency from predecessor edges
+    # predecessor edge: from=child, to=parent  →  children[parent].append(child)
+    predecessor_edges = graph.get_edges(edge_type="predecessor")
+    children_all: dict[str, list[str]] = {bid: [] for bid in beat_nodes}
+    for edge in predecessor_edges:
+        from_id = edge["from"]
+        to_id = edge["to"]
+        if from_id in beat_nodes and to_id in beat_nodes:
+            children_all[to_id].append(from_id)
+
+    for arc_key, beat_sequence in arc_traversals.items():
+        arc_beat_set = set(beat_sequence)
+
+        for beat_id in beat_sequence:
+            beat_children = children_all.get(beat_id, [])
+            children_in_arc = [c for c in beat_children if c in arc_beat_set]
+
+            # A dead end: beat has successors globally but none within this arc
+            if not children_in_arc and beat_children:
+                errors.append(
+                    f"Arc '{arc_key}' has dead-end beat {beat_id!r}: "
+                    f"beat has successors {beat_children} outside the arc "
+                    f"but no successors within the arc's beat set"
+                )
+
+
+def _check_predecessor_cycles(
+    graph: Graph,
+    beat_nodes: dict[str, dict[str, Any]],
+    errors: list[str],
+) -> None:
+    """Check for cycles in predecessor edges using Kahn's algorithm."""
+    predecessor_edges = graph.get_edges(edge_type="predecessor")
+
+    # Build adjacency: predecessor edges mean "from depends on to"
+    # i.e., edge from A to B means "A's predecessor is B" (B comes before A)
+    in_degree: dict[str, int] = dict.fromkeys(beat_nodes, 0)
+    adj: dict[str, list[str]] = {bid: [] for bid in beat_nodes}
+
+    for edge in predecessor_edges:
+        from_id = edge["from"]
+        to_id = edge["to"]
+        if from_id in beat_nodes and to_id in beat_nodes:
+            in_degree[from_id] += 1
+            adj[to_id].append(from_id)
+
+    queue = [bid for bid, deg in in_degree.items() if deg == 0]
+    visited = 0
+
+    while queue:
+        node = queue.pop()
+        visited += 1
+        for neighbor in adj[node]:
+            in_degree[neighbor] -= 1
+            if in_degree[neighbor] == 0:
+                queue.append(neighbor)
+
+    if visited != len(beat_nodes):
+        cycle_members = [bid for bid, deg in in_degree.items() if deg > 0]
+        errors.append(
+            f"Cycle detected in predecessor DAG among {len(cycle_members)} beats: "
+            f"{', '.join(sorted(cycle_members)[:5])}" + ("..." if len(cycle_members) > 5 else "")
+        )
+
+
+def _check_intersection_group_paths(
+    graph: Graph,  # noqa: ARG001
+    group_id: str,
+    group_data: dict[str, Any],
+    beat_nodes: dict[str, dict[str, Any]],
+    beats_with_path: dict[str, list[str]],
+    errors: list[str],
+) -> None:
+    """Check that an intersection group's beats come from different paths."""
+    # Intersection group nodes store beat IDs in beat_ids field
+    beat_ids = group_data.get("beat_ids", [])
+    if not beat_ids:
+        errors.append(f"Intersection group {group_id} has empty beat_ids")
+        return
+
+    paths_seen: set[str] = set()
+    for beat_id in beat_ids:
+        if beat_id not in beat_nodes:
+            continue
+        beat_paths = beats_with_path.get(beat_id, [])
+        for path_id in beat_paths:
+            if path_id in paths_seen:
+                errors.append(
+                    f"Intersection group {group_id} has multiple beats from the same path {path_id}"
+                )
+                return
+            paths_seen.add(path_id)
 
 
 # ---------------------------------------------------------------------------
@@ -288,7 +862,7 @@ def check_single_root_beat(graph: Graph) -> ValidationCheck:
     ``from_id`` in any predecessor edge. The beat DAG must have exactly one
     root for POLISH to produce a single start passage.
 
-    Synthetic beat roles (micro_beat, residue_beat, sidetrack_beat) are
+    Synthetic beat roles (micro_beat, residue_beat, false_branch_beat) are
     excluded since they are created by POLISH, not GROW.
 
     Args:
@@ -318,7 +892,7 @@ def check_single_root_beat(graph: Graph) -> ValidationCheck:
     # Exclude synthetic beat roles that are created by POLISH, not GROW.
     # At GROW Phase 10 none exist, but run_all_checks() (used by qf inspect)
     # may run after POLISH when synthetic beats are present.
-    synthetic_roles = {"micro_beat", "residue_beat", "sidetrack_beat"}
+    synthetic_roles = {"micro_beat", "residue_beat", "false_branch_beat"}
     root_beats = sorted(
         bid
         for bid in beat_nodes
@@ -677,6 +1251,147 @@ def check_dilemma_role_compliance(graph: Graph) -> list[ValidationCheck]:
 
 
 # ---------------------------------------------------------------------------
+# Y-shape guard rail checks (Story Graph Ontology §8)
+# ---------------------------------------------------------------------------
+
+
+def check_no_cross_dilemma_belongs_to(graph: Graph) -> ValidationCheck:
+    """Guard rail 1: dual belongs_to must reference paths of the same dilemma.
+
+    Cross-dilemma dual belongs_to is forbidden (Story Graph Ontology §8
+    "Path Membership ≠ Scene Participation").  Transition beats and other
+    zero-belongs_to DAG infrastructure have no belongs_to edges at all
+    and are therefore not checked here.
+    """
+    path_nodes = graph.get_nodes_by_type("path")
+    beat_nodes = graph.get_nodes_by_type("beat")
+
+    # path → dilemma map (normalized)
+    path_to_dilemma: dict[str, str] = {}
+    for pid, pdata in path_nodes.items():
+        did = pdata.get("dilemma_id")
+        if did:
+            path_to_dilemma[pid] = normalize_scoped_id(did, "dilemma")
+
+    # beat → set of paths
+    beat_paths: dict[str, set[str]] = {}
+    for e in graph.get_edges(edge_type="belongs_to"):
+        if e["from"] in beat_nodes:
+            beat_paths.setdefault(e["from"], set()).add(e["to"])
+
+    violations: list[str] = []
+    for beat_id, paths in beat_paths.items():
+        if len(paths) < 2:
+            continue
+        dilemmas = {path_to_dilemma.get(p) for p in paths}
+        dilemmas.discard(None)  # paths without dilemma_id are caught by earlier checks
+        if len(dilemmas) > 1:
+            violations.append(
+                f"{beat_id} -> {sorted(paths)} across dilemmas {sorted(d for d in dilemmas if d)}"
+            )
+
+    dual_count = sum(1 for p in beat_paths.values() if len(p) >= 2)
+    if not violations:
+        return ValidationCheck(
+            name="no_cross_dilemma_belongs_to",
+            severity="pass",
+            message=f"All {dual_count} dual-belongs_to beats are same-dilemma",
+        )
+    return ValidationCheck(
+        name="no_cross_dilemma_belongs_to",
+        severity="fail",
+        message=f"cross-dilemma dual belongs_to (guard rail 1): {'; '.join(violations[:3])}",
+    )
+
+
+def check_no_dual_on_commit_beat(graph: Graph) -> ValidationCheck:
+    """Guard rail 2: commit beats must have a single belongs_to.
+
+    A commit beat is the first beat exclusive to its path; dual membership
+    on a commit beat is structurally impossible (Story Graph Ontology §8).
+    """
+    beat_nodes = graph.get_nodes_by_type("beat")
+    beat_paths: dict[str, set[str]] = {}
+    for e in graph.get_edges(edge_type="belongs_to"):
+        if e["from"] in beat_nodes:
+            beat_paths.setdefault(e["from"], set()).add(e["to"])
+
+    violations: list[str] = []
+    for bid, pset in beat_paths.items():
+        if len(pset) < 2:
+            continue
+        impacts = beat_nodes[bid].get("dilemma_impacts", [])
+        if any(imp.get("effect") == "commits" for imp in impacts):
+            violations.append(f"{bid} commits AND has {len(pset)} belongs_to edges: {sorted(pset)}")
+
+    if not violations:
+        return ValidationCheck(
+            name="no_dual_on_commit_beat",
+            severity="pass",
+            message="No commit beats with dual belongs_to",
+        )
+    return ValidationCheck(
+        name="no_dual_on_commit_beat",
+        severity="fail",
+        message=f"commit beat with dual belongs_to (guard rail 2): {'; '.join(violations[:3])}",
+    )
+
+
+def check_no_pre_commit_intersections(graph: Graph) -> ValidationCheck:
+    """Guard rail 3: intersection groups must not contain two pre-commit
+    beats with identical dual ``belongs_to`` path sets (same dilemma).
+
+    Implementation note: under the binary Y-shape assumption (guard rail 1),
+    two pre-commit beats belong to the same dilemma if and only if they have
+    identical `belongs_to` path frozensets. This check enforces that
+    constraint by checking for beat pairs that share the same path set
+    within an intersection group.
+
+    Rationale: two pre-commit beats of the same dilemma have identical dual
+    ``belongs_to`` path sets and are sequentially ordered in the dilemma's
+    pre-commit chain. An intersection group implies simultaneity, contradicting
+    that chain ordering. Cross-dilemma pre-commit co-occurrence is not affected.
+    See ``docs/design/story-graph-ontology.md`` Part 8 guard rail 3 for the ruling.
+    """
+    beat_nodes = graph.get_nodes_by_type("beat")
+    group_nodes = graph.get_nodes_by_type("intersection_group")
+
+    raw_beat_paths: dict[str, set[str]] = {}
+    for e in graph.get_edges(edge_type="belongs_to"):
+        if e["from"] in beat_nodes:
+            raw_beat_paths.setdefault(e["from"], set()).add(e["to"])
+    beat_paths: dict[str, frozenset[str]] = {b: frozenset(p) for b, p in raw_beat_paths.items()}
+
+    violations: list[str] = []
+    for gid, gdata in group_nodes.items():
+        beat_ids = gdata.get("beat_ids", [])
+        dual_by_pathset: dict[frozenset[str], list[str]] = {}
+        for bid in beat_ids:
+            pset = beat_paths.get(bid, frozenset())
+            if len(pset) < 2:
+                continue
+            dual_by_pathset.setdefault(pset, []).append(bid)
+        for pset, bids in dual_by_pathset.items():
+            if len(bids) >= 2:
+                violations.append(
+                    f"{gid} contains {len(bids)} pre-commit beats sharing paths "
+                    f"{sorted(pset)}: {', '.join(bids)}"
+                )
+
+    if not violations:
+        return ValidationCheck(
+            name="no_pre_commit_intersections",
+            severity="pass",
+            message="No intersection groups with pre-commit collisions",
+        )
+    return ValidationCheck(
+        name="no_pre_commit_intersections",
+        severity="fail",
+        message=f"pre-commit beats grouped in intersection (guard rail 3): {'; '.join(violations[:3])}",
+    )
+
+
+# ---------------------------------------------------------------------------
 # Entry points
 # ---------------------------------------------------------------------------
 
@@ -712,6 +1427,9 @@ def run_grow_checks(graph: Graph) -> ValidationReport:
         check_passage_dag_cycles(graph),
         check_spine_arc_exists(graph),
         check_dilemmas_resolved(graph),
+        check_no_cross_dilemma_belongs_to(graph),
+        check_no_dual_on_commit_beat(graph),
+        check_no_pre_commit_intersections(graph),
     ]
     checks.extend(check_dilemma_role_compliance(graph))
     return ValidationReport(checks=checks)

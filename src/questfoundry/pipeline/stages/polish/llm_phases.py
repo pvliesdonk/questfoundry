@@ -44,6 +44,8 @@ from questfoundry.pipeline.stages.polish.deterministic import _load_plan_data
 from questfoundry.pipeline.stages.polish.registry import polish_phase
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from langchain_core.language_models import BaseChatModel
 
     from questfoundry.graph.graph import Graph
@@ -124,7 +126,7 @@ class _PolishLLMPhaseMixin:
                     f"beat set mismatch (expected {len(beat_ids)}, got {len(matched.beat_ids)})"
                 )
                 warnings.append(msg)
-                log.warning(
+                log.info(
                     "phase1_set_mismatch",
                     section=section_id,
                     expected=len(beat_ids),
@@ -139,7 +141,7 @@ class _PolishLLMPhaseMixin:
                     f"hard constraint violation (commit before advance/reveal)"
                 )
                 warnings.append(msg)
-                log.warning("phase1_constraint_violation", section=section_id)
+                log.info("phase1_constraint_violation", section=section_id)
                 continue
 
             # Apply: update predecessor edges within the section
@@ -170,7 +172,132 @@ class _PolishLLMPhaseMixin:
             tokens_used=total_tokens,
         )
 
-    @polish_phase(name="pacing", depends_on=["beat_reordering"], priority=1)
+    @polish_phase(name="narrative_gaps", depends_on=["beat_reordering"], priority=1)
+    async def _phase_1a_narrative_gaps(self, graph: Graph, model: BaseChatModel) -> PhaseResult:
+        """Phase 1a: Narrative Gap Insertion.
+
+        For each path with 2+ beats, the LLM identifies missing
+        intermediate beats (e.g., a path goes setup → climax with no
+        development beat) and proposes new beats to insert at specified
+        positions. Insertion validates IDs, ordering, and cycle safety.
+
+        Per the structural-vs-narrative migration (PR #1366), this is
+        narrative-prep work — POLISH territory, not GROW. See
+        ``docs/design/procedures/polish.md`` §Phase 1a for the spec.
+
+        Postconditions:
+        - Gap beats inserted into the graph with predecessor edges,
+          ``belongs_to`` to their path, ``is_gap_beat=True``,
+          ``role: gap_beat``, ``created_by: "POLISH"``.
+        - Per-path cap: maximum 2 gap beats per path.
+        """
+        from questfoundry.graph.gap_insertion import validate_and_insert_gaps
+        from questfoundry.graph.grow_algorithms import get_path_beat_sequence
+        from questfoundry.models.grow import Phase4bOutput
+
+        path_nodes = graph.get_nodes_by_type("path")
+        if not path_nodes:
+            log.info("phase1a_no_paths", detail="No paths to check for gaps")
+            return PhaseResult(
+                phase="narrative_gaps",
+                status="skipped",
+                detail="No paths to check for gaps",
+            )
+
+        # Build path sequences with truncated summaries (matches GROW Phase 4b's
+        # original context shape so the prompt can be migrated verbatim).
+        path_sequences: list[str] = []
+        valid_beat_ids: set[str] = set()
+        # Per-path beat lists for the grouped Valid IDs block — replaces
+        # the two flat ``valid_path_ids`` + ``valid_beat_ids`` lists that
+        # small models had to cross-correlate by hand.
+        path_beats: dict[str, list[str]] = {}
+        for pid in sorted(path_nodes.keys()):
+            sequence = get_path_beat_sequence(graph, pid)
+            if len(sequence) < 2:
+                continue
+            beat_list: list[str] = []
+            for bid in sequence:
+                node = graph.get_node(bid)
+                summary = (node.get("summary", "") or "")[:80] if node else ""
+                scene_type = node.get("scene_type", "untagged") if node else "untagged"
+                beat_list.append(f"    {bid} [{scene_type}]: {summary}")
+                valid_beat_ids.add(bid)
+            raw_pid = path_nodes[pid].get("raw_id", pid)
+            path_sequences.append(f"  Path: {raw_pid} ({pid})\n" + "\n".join(beat_list))
+            path_beats[pid] = sequence
+
+        if not path_sequences:
+            log.info("phase1a_no_multibeat_paths", detail="No paths with 2+ beats")
+            return PhaseResult(
+                phase="narrative_gaps",
+                status="skipped",
+                detail="No paths with 2+ beats to check",
+            )
+
+        # Path → dilemma map for the prompt's Valid IDs section.
+        # Helper lives in graph/context.py (moved out of grow/llm_phases.py
+        # in PR C of issue #1368 since GROW no longer needs it after
+        # pacing_gaps moved to POLISH).
+        from questfoundry.graph.context import build_path_dilemma_context
+
+        # Phase 1a no longer accepts dilemma_impacts in its output (R-1a.2 — gap
+        # beats are structural). The path → dilemma map is still shown for context
+        # so the LLM can recognise which dilemmas a path explores while reading the
+        # sequence, but valid_dilemma_ids is no longer injected (gap beats can't
+        # reference dilemmas).
+        path_dilemma_map_text, _ = build_path_dilemma_context(graph, path_nodes)
+
+        # Combined Valid IDs block grouped by path so the LLM sees the
+        # path→beats relationship at point of use.
+        valid_path_beats_lines: list[str] = []
+        for pid in sorted(path_beats):
+            beats = ", ".join(f"`{b}`" for b in path_beats[pid])
+            valid_path_beats_lines.append(f"  - `{pid}` → {beats}")
+        valid_path_beats_block = "\n".join(valid_path_beats_lines)
+
+        context = {
+            "path_sequences": "\n\n".join(path_sequences),
+            "valid_path_beats": valid_path_beats_block,
+            "path_dilemma_map": path_dilemma_map_text,
+        }
+
+        # The LLM call uses POLISH's helper. POLISH's _polish_llm_call has no
+        # semantic_validator parameter, so invalid IDs in the response are
+        # caught by validate_and_insert_gaps at insertion time instead of
+        # forcing a retry. If retry-on-invalid-IDs becomes important, add
+        # semantic_validator support to _polish_llm_call (mirroring GROW's).
+        result, llm_calls, tokens = await self._polish_llm_call(  # type: ignore[attr-defined]
+            model=model,
+            template_name="polish_phase1a_narrative_gaps",
+            context=context,
+            output_schema=Phase4bOutput,
+        )
+
+        # Validate proposals and insert gap beats.
+        report = validate_and_insert_gaps(
+            graph,
+            result.gaps,
+            valid_path_ids=set(path_nodes.keys()),
+            valid_beat_ids=valid_beat_ids,
+            phase_name="phase1a",
+        )
+
+        log.info(
+            "phase1a_complete",
+            inserted=report.inserted,
+            invalid=report.total_invalid,
+            proposals=len(result.gaps),
+        )
+        return PhaseResult(
+            phase="narrative_gaps",
+            status="completed",
+            detail=f"Inserted {report.inserted} gap beats from {len(result.gaps)} proposals",
+            llm_calls=llm_calls,
+            tokens_used=tokens,
+        )
+
+    @polish_phase(name="pacing", depends_on=["narrative_gaps"], priority=1)
     async def _phase_2_pacing(self, graph: Graph, model: BaseChatModel) -> PhaseResult:
         """Phase 2: Pacing & Micro-beat Injection.
 
@@ -203,18 +330,38 @@ class _PolishLLMPhaseMixin:
             output_schema=Phase2Output,
         )
 
+        # Build a lookup of which after_beat_id values come from a
+        # consecutive-run flag (R-2.6 pacing-run correction) vs. a
+        # pacing-flag micro-beat insertion (e.g. no_sequel_after_commit).
+        # Per spec R-2.7, only the former carry ``is_gap_beat: True`` —
+        # the flag distinguishes correction-beat origin from regular
+        # micro-beat origin so FILL can render them differently.
+        consecutive_run_beat_ids: set[str] = set()
+        for flag in pacing_flags:
+            issue_type = flag.get("issue_type", "")
+            if issue_type.startswith("consecutive_"):
+                consecutive_run_beat_ids.update(flag.get("beat_ids", []))
+
         # Apply micro-beats
         inserted = 0
         for mb in result.micro_beats:
             if mb.after_beat_id not in beat_nodes:
-                log.warning(
+                log.info(
                     "phase2_invalid_after_beat",
                     after_beat_id=mb.after_beat_id,
                 )
                 continue
 
             micro_beat_id = f"beat::micro_{inserted}_{mb.after_beat_id.split('::')[-1]}"
-            _insert_micro_beat(graph, micro_beat_id, mb.after_beat_id, mb.summary, mb.entity_ids)
+            is_correction = mb.after_beat_id in consecutive_run_beat_ids
+            _insert_micro_beat(
+                graph,
+                micro_beat_id,
+                mb.after_beat_id,
+                mb.summary,
+                mb.entity_ids,
+                is_correction_beat=is_correction,
+            )
             inserted += 1
 
         return PhaseResult(
@@ -230,10 +377,18 @@ class _PolishLLMPhaseMixin:
         """Phase 3: Character Arc Synthesis.
 
         For entities appearing in 2+ beats, synthesizes arc descriptions
-        (start, pivots, end per path) for FILL's prose consistency.
+        (start, pivots, end per path, AND arcs_per_path) for FILL's prose
+        consistency. Per spec R-3.6, ``arcs_per_path`` is produced in the
+        SAME LLM call as start/pivots/end_per_path so the per-path arc
+        line and pivot_beat are internally consistent with the
+        per-entity pivot map. Per R-3.7 ``arc_type`` is set by code from
+        the entity's category. Per R-3.8 ``pivots[path_id]`` MUST equal
+        ``arcs_per_path[*].pivot_beat`` for the same path; mismatches
+        log INFO and the entry is dropped from arcs_per_path.
 
         Postconditions:
-        - CharacterArcMetadata nodes created for arc-worthy entities.
+        - Entity nodes carry ``character_arc`` annotation with start,
+          pivots, end_per_path, and arcs_per_path fields.
         """
         beat_nodes = graph.get_nodes_by_type("beat")
         entity_nodes = graph.get_nodes_by_type("entity")
@@ -258,6 +413,16 @@ class _PolishLLMPhaseMixin:
         total_tokens = 0
         arcs_created = 0
 
+        # R-3.7: arc_type is determined by entity category, NOT by the LLM.
+        # The LLM emits a placeholder which we overwrite with the derived
+        # value (and log a mismatch if the LLM tried to set a real type).
+        arc_type_by_category = {
+            "character": "transformation",
+            "location": "atmosphere",
+            "object": "significance",
+            "faction": "relationship",
+        }
+
         # Process entities in batches via a single LLM call per entity
         for entity_id, beat_appearances in sorted(arc_worthy.items()):
             context = format_entity_arc_context(graph, entity_id, beat_appearances)
@@ -271,35 +436,361 @@ class _PolishLLMPhaseMixin:
             total_llm_calls += llm_calls
             total_tokens += tokens
 
-            # Store arc metadata
+            # Derive arc_type for this entity from its category (R-3.7).
+            # An unknown category is a graph-validation gap upstream — log
+            # a WARNING rather than silently emitting "transformation"
+            # (CLAUDE.md §Anti-Patterns: silent fallbacks are bugs).
+            entity_data = entity_nodes.get(entity_id, {})
+            category = entity_data.get("entity_category", "character")
+            if category not in arc_type_by_category:
+                log.warning(
+                    "phase3_unknown_entity_category",
+                    entity_id=entity_id,
+                    category=category,
+                    fallback="transformation",
+                )
+                derived_arc_type = "transformation"
+            else:
+                derived_arc_type = arc_type_by_category[category]
+
+            # Store arc metadata as an annotation on the Entity node (R-3.3).
             for arc in result.character_arcs:
                 if arc.entity_id != entity_id:
-                    log.warning(
+                    log.info(
                         "phase3_entity_mismatch",
                         expected=entity_id,
                         got=arc.entity_id,
                     )
                     continue
 
-                arc_node_id = f"character_arc_metadata::{entity_id.split('::')[-1]}"
-                graph.create_node(
-                    arc_node_id,
-                    {
-                        "type": "character_arc_metadata",
-                        "raw_id": entity_id.split("::")[-1],
-                        "entity_id": entity_id,
+                # pivots is a list of ArcPivot models with (path_id, beat_id)
+                # attributes; normalize to path_id → beat_id so the R-3.3
+                # validator's shape check passes.
+                pivots_by_path = {p.path_id: p.beat_id for p in arc.pivots}
+
+                # Build arcs_per_path with R-3.7 arc_type override + R-3.8
+                # pivot consistency check. Entries that disagree with the
+                # entity-scoped pivot map are logged and dropped.
+                # Note R-3.8's "for each path_id present in BOTH" framing —
+                # an arcs_per_path entry for a path the entity has no pivot
+                # on is allowed (some paths have a trajectory line without a
+                # distinct turning point), so we only enforce equality when
+                # both maps reference the path.
+                arcs_per_path: list[dict[str, str]] = []
+                for entry in arc.arcs_per_path:
+                    expected_pivot = pivots_by_path.get(entry.path_id)
+                    if expected_pivot and expected_pivot != entry.pivot_beat:
+                        log.info(
+                            "phase3_arcs_per_path_pivot_mismatch",
+                            entity_id=entity_id,
+                            path_id=entry.path_id,
+                            pivots_value=expected_pivot,
+                            arcs_per_path_value=entry.pivot_beat,
+                        )
+                        continue
+                    if entry.arc_type not in {"_set_by_code", derived_arc_type}:
+                        log.info(
+                            "phase3_arc_type_overridden",
+                            entity_id=entity_id,
+                            path_id=entry.path_id,
+                            llm_value=entry.arc_type,
+                            derived=derived_arc_type,
+                        )
+                    arcs_per_path.append(
+                        {
+                            "path_id": entry.path_id,
+                            "arc_type": derived_arc_type,
+                            "arc_line": entry.arc_line,
+                            "pivot_beat": entry.pivot_beat,
+                        }
+                    )
+
+                # R-3.6 partial coverage: every path on which the entity is
+                # arc-worthy (i.e., has a pivot) should also have an
+                # arcs_per_path entry. Missing entries log a WARNING per the
+                # polish.md violation table; partial coverage is accepted but
+                # surfaced.
+                paths_with_pivot = set(pivots_by_path.keys())
+                covered_paths = {e["path_id"] for e in arcs_per_path}
+                missing_paths = paths_with_pivot - covered_paths
+                if missing_paths:
+                    log.warning(
+                        "phase3_arcs_per_path_partial_coverage",
+                        entity_id=entity_id,
+                        missing_paths=sorted(missing_paths),
+                        covered=len(covered_paths),
+                        total=len(paths_with_pivot),
+                    )
+
+                graph.update_node(
+                    entity_id,
+                    character_arc={
                         "start": arc.start,
-                        "pivots": [p.model_dump() for p in arc.pivots],
-                        "end_per_path": arc.end_per_path,
+                        "pivots": pivots_by_path,
+                        "end_per_path": dict(arc.end_per_path),
+                        "arcs_per_path": arcs_per_path,
                     },
                 )
-                graph.add_edge("has_arc_metadata", entity_id, arc_node_id)
                 arcs_created += 1
 
         return PhaseResult(
             phase="character_arcs",
             status="completed",
             detail=f"Created {arcs_created} character arc(s) from {len(arc_worthy)} entities",
+            llm_calls=total_llm_calls,
+            tokens_used=total_tokens,
+        )
+
+    @polish_phase(name="atmospheric_annotation", depends_on=["character_arcs"], priority=3)
+    async def _phase_5e_atmospheric(self, graph: Graph, model: BaseChatModel) -> PhaseResult:
+        """Phase 5e: Atmospheric Annotation.
+
+        For every beat in the frozen DAG, generate an
+        ``atmospheric_detail`` string describing the sensory environment
+        (sight, sound, smell, texture). Single LLM call covers all beats.
+
+        Per spec ``polish.md`` §Phase 5e (R-5e.1 through R-5e.3) and the
+        structural-vs-narrative migration in PR #1366: sensory grounding
+        is prose-prep, POLISH territory. Migrated from GROW Phase 4d
+        per issue #1368 (PR B).
+
+        R-5e.3: runs after Beat DAG Freeze, so transition beats inserted
+        by GROW Phase 4c receive ``atmospheric_detail`` like any other
+        beat (auto-fixes the audit Q3 gap).
+        """
+        from questfoundry.graph.context_compact import (
+            ContextItem,
+            build_narrative_frame,
+            compact_items,
+            enrich_beat_line,
+        )
+        from questfoundry.models.grow import Phase4dOutput
+
+        beat_nodes = graph.get_nodes_by_type("beat")
+        if not beat_nodes:
+            log.info("atmospheric_no_beats", detail="No beats to annotate")
+            return PhaseResult(
+                phase="atmospheric_annotation",
+                status="skipped",
+                detail="No beats to annotate",
+            )
+
+        # Sort once; reused for the enriched beat summaries and the bullet-list
+        # `valid_beat_ids` block.
+        sorted_beat_ids = sorted(beat_nodes.keys())
+
+        # Build enriched beat summaries with entity names
+        beat_items: list[ContextItem] = []
+        for bid in sorted_beat_ids:
+            data = beat_nodes[bid]
+            line = enrich_beat_line(graph, bid, data, include_entities=True)
+            beat_items.append(ContextItem(id=bid, text=line))
+
+        # Build narrative frame from dilemmas and paths
+        dilemma_ids = sorted(graph.get_nodes_by_type("dilemma").keys())
+        path_ids = sorted(graph.get_nodes_by_type("path").keys())
+        narrative_frame = build_narrative_frame(graph, dilemma_ids=dilemma_ids, path_ids=path_ids)
+
+        # POLISH's _polish_llm_call doesn't accept a compact-config the way
+        # GROW does; pass the items directly with a generous default budget
+        # since the prompt is small and the LLM can handle many beats.
+        # Bullet list per ID; small models lose track of flat comma-separated
+        # lists for 60+ beats (#1505 — mirrors Phase 1 / 1a / 3 bulletization).
+        valid_beat_ids_block = "\n".join(f"- `{b}`" for b in sorted_beat_ids)
+
+        context = {
+            "narrative_frame": narrative_frame,
+            "beat_summaries": compact_items(beat_items, None),
+            "beat_count": str(len(beat_nodes)),
+            "valid_beat_ids": valid_beat_ids_block,
+        }
+
+        result, llm_calls, tokens = await self._polish_llm_call(  # type: ignore[attr-defined]
+            model=model,
+            template_name="polish_phase5e_atmospheric",
+            context=context,
+            output_schema=Phase4dOutput,
+        )
+
+        # Apply atmospheric details (R-5e.1: partial coverage emits WARNING)
+        applied = 0
+        for detail in result.details:
+            if detail.beat_id not in beat_nodes:
+                log.info("atmospheric_invalid_beat_id", beat_id=detail.beat_id)
+                continue
+            graph.update_node(
+                detail.beat_id,
+                atmospheric_detail=detail.atmospheric_detail,
+            )
+            applied += 1
+
+        if applied < len(beat_nodes):
+            log.warning(
+                "atmospheric_partial_coverage",
+                applied=applied,
+                total=len(beat_nodes),
+                missing=len(beat_nodes) - applied,
+            )
+
+        return PhaseResult(
+            phase="atmospheric_annotation",
+            status="completed",
+            detail=f"Applied atmospheric details to {applied}/{len(beat_nodes)} beats",
+            llm_calls=llm_calls,
+            tokens_used=tokens,
+        )
+
+    @polish_phase(
+        name="path_thematic_annotation",
+        depends_on=["atmospheric_annotation"],
+        priority=3,
+    )
+    async def _phase_5f_path_thematic(self, graph: Graph, model: BaseChatModel) -> PhaseResult:
+        """Phase 5f: Path Thematic Annotation.
+
+        For each multi-beat path, generate ``path_theme`` (controlling
+        idea) and ``path_mood`` (tonal palette). One LLM call per path.
+
+        Per spec ``polish.md`` §Phase 5f (R-5f.1 through R-5f.3) and the
+        structural-vs-narrative migration in PR #1366: per-path narrative
+        identity is prose-prep, POLISH territory. Migrated from GROW
+        Phase 4e per issue #1368 (PR B).
+        """
+        from questfoundry.graph.grow_algorithms import get_path_beat_sequence
+        from questfoundry.models.grow import PathMiniArc
+        from questfoundry.pipeline.batching import batch_llm_calls
+
+        path_nodes = graph.get_nodes_by_type("path")
+        if not path_nodes:
+            log.info("path_thematic_no_paths", detail="No paths to annotate")
+            return PhaseResult(
+                phase="path_thematic_annotation",
+                status="skipped",
+                detail="No paths to annotate",
+            )
+
+        applied = 0
+
+        # Pre-compute context for each path (graph reads are sync)
+        path_items: list[tuple[str, dict[str, str]]] = []
+        for pid in sorted(path_nodes.keys()):
+            pdata = path_nodes[pid]
+            dilemma_id = pdata.get("dilemma_id", "")
+            dilemma_node = graph.get_node(dilemma_id) if dilemma_id else None
+            dilemma_question = dilemma_node.get("question", "") if dilemma_node else ""
+            dilemma_stakes = dilemma_node.get("why_it_matters", "") if dilemma_node else ""
+            path_description = pdata.get("description", "")
+
+            try:
+                beat_ids = get_path_beat_sequence(graph, pid)
+            except ValueError:
+                log.info("path_thematic_cycle_in_path", path_id=pid)
+                continue
+
+            # R-5f.1: skip paths with <2 beats (no narrative arc to summarize)
+            if len(beat_ids) < 2:
+                log.info("path_thematic_skip_short", path_id=pid, beats=len(beat_ids))
+                continue
+
+            beat_entity_ids: set[str] = set()
+            beat_lines: list[str] = []
+            for i, bid in enumerate(beat_ids, 1):
+                bdata = graph.get_node(bid)
+                if not bdata:
+                    continue
+                summary = bdata.get("summary", "")
+                narrative_fn = bdata.get("narrative_function", "")
+                scene_type = bdata.get("scene_type", "")
+                # atmospheric_detail is populated by the preceding 5e phase
+                # (hard depends_on); include it so the thematic LLM call has
+                # the full sensory context per CLAUDE.md §Context Enrichment.
+                atmo = bdata.get("atmospheric_detail", "")
+                atmo_clause = f", atmospheric={atmo!r}" if atmo else ""
+                beat_lines.append(
+                    f"{i}. {bid}: {summary} "
+                    f"[function={narrative_fn}, scene_type={scene_type}{atmo_clause}]"
+                )
+                for eid in bdata.get("entities", []):
+                    beat_entity_ids.add(eid)
+
+            entity_lines: list[str] = []
+            for eid in sorted(beat_entity_ids):
+                enode = graph.get_node(eid)
+                if enode:
+                    name = enode.get("name") or enode.get("raw_id", eid)
+                    concept = enode.get("concept", "")
+                    entity_lines.append(
+                        f"- {name}: {concept}" if concept else f"- {name}: (no concept yet)"
+                    )
+                else:
+                    entity_lines.append(f"- {eid}: (not in graph)")
+
+            arc_lines: list[str] = []
+            for arc in pdata.get("entity_arcs", []):
+                arc_entity = arc.get("entity_id", "")
+                arc_line = arc.get("arc_line", "")
+                if arc_entity and arc_line:
+                    ename = arc_entity
+                    enode = graph.get_node(arc_entity)
+                    if enode:
+                        ename = enode.get("name") or enode.get("raw_id", arc_entity)
+                    arc_lines.append(f"- {ename}: {arc_line}")
+
+            context = {
+                "path_id": pid,
+                "dilemma_question": dilemma_question or "(none)",
+                "dilemma_stakes": dilemma_stakes or "(none)",
+                "path_description": path_description or "(none)",
+                "entity_context": "\n".join(entity_lines) if entity_lines else "(none)",
+                "entity_arcs": "\n".join(arc_lines) if arc_lines else "(none)",
+                "beat_sequence": "\n".join(beat_lines) if beat_lines else "(none)",
+            }
+            path_items.append((pid, context))
+
+        async def _arc_for_path(
+            item: tuple[str, dict[str, str]],
+        ) -> tuple[tuple[str, PathMiniArc], int, int]:
+            pid, ctx = item
+            result, llm_calls, tokens = await self._polish_llm_call(  # type: ignore[attr-defined]
+                model=model,
+                template_name="polish_phase5f_path_thematic",
+                context=ctx,
+                output_schema=PathMiniArc,
+            )
+            return (pid, result), llm_calls, tokens
+
+        # PolishStage doesn't carry _max_concurrency / _on_connectivity_error
+        # the way GrowStage does (those were added for GROW's batch phases).
+        # Default to concurrency=2 and no retry hook; if PolishStage grows
+        # those attrs later, getattr picks them up automatically.
+        results, total_llm_calls, total_tokens, errors = await batch_llm_calls(
+            path_items,
+            _arc_for_path,
+            getattr(self, "_max_concurrency", 2),
+            on_connectivity_error=getattr(self, "_on_connectivity_error", None),
+        )
+
+        for item in results:
+            if item is None:
+                continue
+            pid, result = item
+            graph.update_node(
+                pid,
+                path_theme=result.path_theme,
+                path_mood=result.path_mood,
+            )
+            applied += 1
+
+        # R-5f.3: per-path failures log at WARNING; field stays unpopulated
+        if errors:
+            for idx, e in errors:
+                pid = path_items[idx][0]
+                log.warning("path_thematic_llm_failed", path_id=pid, error=str(e))
+
+        return PhaseResult(
+            phase="path_thematic_annotation",
+            status="completed",
+            detail=f"Annotated {applied}/{len(path_items)} multi-beat paths",
             llm_calls=total_llm_calls,
             tokens_used=total_tokens,
         )
@@ -336,8 +827,12 @@ class _PolishLLMPhaseMixin:
         enrichment_parts: list[str] = []
 
         # 5a: Choice labels
-        if choice_specs:
-            context = format_choice_label_context(graph, choice_specs, passage_specs)
+        # R-4c.7: Continue choices ship with the literal label "Continue" already
+        # set by compute_choice_edges. They are navigational (linear cross-passage
+        # transitions) and should not be sent to the LLM for diegetic relabeling.
+        labelable_specs = [s for s in choice_specs if s.get("label", "") != "Continue"]
+        if labelable_specs:
+            context = format_choice_label_context(graph, labelable_specs, passage_specs)
             result, llm_calls, tokens = await self._polish_llm_call(  # type: ignore[attr-defined]
                 model=model,
                 template_name="polish_phase5a_choice_labels",
@@ -352,7 +847,7 @@ class _PolishLLMPhaseMixin:
             for item in result.choice_labels:
                 key = (item.from_passage, item.to_passage)
                 if key in label_lookup:
-                    log.warning(
+                    log.info(
                         "phase5a_duplicate_choice_label",
                         from_passage=item.from_passage,
                         to_passage=item.to_passage,
@@ -361,10 +856,24 @@ class _PolishLLMPhaseMixin:
                     )
                 else:
                     label_lookup[key] = item.label
-            for spec in choice_specs:
+            for spec in labelable_specs:
                 key = (spec["from_passage"], spec["to_passage"])
                 if key in label_lookup:
                     spec["label"] = label_lookup[key]
+
+            # R-5.2: labels are distinct within a source passage.  Case-insensitive
+            # uniqueness — detect collisions, log a WARNING so humans can review.
+            # Use labelable_specs (excludes Continue): two Continue edges from the
+            # same passage are navigational, not diegetic, so a "Continue/Continue"
+            # collision is meaningless and should not surface as an R-5.2 warning.
+            for collision in _detect_duplicate_labels_in_passage(labelable_specs):
+                log.warning(
+                    "phase5a_duplicate_labels_in_passage",
+                    from_passage=collision["from_passage"],
+                    duplicate_label=collision["label"],
+                    conflicting_targets=collision["targets"],
+                    hint="Human review recommended; R-5.2 requires distinct labels within a passage.",
+                )
 
             enrichment_parts.append(f"{len(result.choice_labels)} choice labels")
             log.debug("phase5a_complete", labels=len(result.choice_labels))
@@ -381,12 +890,14 @@ class _PolishLLMPhaseMixin:
             total_llm_calls += llm_calls
             total_tokens += tokens
 
-            # Apply content hints to residue specs
-            hint_lookup = {item.residue_id: item.content_hint for item in result_b.residue_content}
+            # Apply content hints and mapping_strategy to residue specs
+            item_lookup = {item.residue_id: item for item in result_b.residue_content}
             for spec in residue_specs:
                 rid = spec.get("residue_id", "")
-                if rid in hint_lookup:
-                    spec["content_hint"] = hint_lookup[rid]
+                if rid in item_lookup:
+                    item = item_lookup[rid]
+                    spec["content_hint"] = item.content_hint
+                    spec["mapping_strategy"] = item.mapping_strategy
 
             enrichment_parts.append(f"{len(result_b.residue_content)} residue hints")
             log.debug("phase5b_complete", hints=len(result_b.residue_content))
@@ -407,7 +918,7 @@ class _PolishLLMPhaseMixin:
             for decision in result_c.decisions:
                 idx = decision.candidate_index
                 if idx < 0 or idx >= len(false_branch_candidates):
-                    log.warning("phase5c_invalid_index", index=idx)
+                    log.info("phase5c_invalid_index", index=idx)
                     continue
 
                 candidate = false_branch_candidates[idx]
@@ -468,16 +979,26 @@ class _PolishLLMPhaseMixin:
                 c.passage_id: c for c in ambiguous_cases
             }
 
+            # Hoist flag → path_id resolution (mirrors deterministic.py:313-322
+            # so Phase 5e residue construction uses the same lookup as Phase 4b).
+            consequence_nodes = graph.get_nodes_by_type("consequence")
+            flag_to_path: dict[str, str] = {}
+            for edge in graph.get_edges(edge_type="derived_from"):
+                cdata = consequence_nodes.get(edge["to"], {})
+                candidate = cdata.get("path_id", "")
+                if candidate:
+                    flag_to_path[edge["from"]] = candidate
+
             resolved_count = 0
             for decision in result_e.feasibility_decisions:
                 passage_id = decision.passage_id
                 flag_index = decision.flag_index
                 case = case_lookup.get(passage_id)
                 if case is None:
-                    log.warning("phase5e_unknown_passage", passage_id=passage_id)
+                    log.info("phase5e_unknown_passage", passage_id=passage_id)
                     continue
                 if flag_index < 0 or flag_index >= len(case.flags):
-                    log.warning(
+                    log.info(
                         "phase5e_invalid_flag_index",
                         passage_id=passage_id,
                         flag_index=flag_index,
@@ -499,7 +1020,19 @@ class _PolishLLMPhaseMixin:
                         ).model_dump()
                     )
                 elif d == "residue":
-                    path_id = flag.split(":")[-1] if ":" in flag else ""
+                    path_id = flag_to_path.get(flag, "")
+                    if not path_id:
+                        log.warning(
+                            "phase5e_residue_skipped_unmapped_flag",
+                            flag=flag,
+                            passage=passage_id,
+                            available_paths=sorted(set(flag_to_path.values())),
+                            detail=(
+                                "state_flag has no derived_from consequence "
+                                "with a path_id; residue beat skipped."
+                            ),
+                        )
+                        continue
                     passage_raw = passage_id.split("::")[-1]
                     residue_specs.append(
                         ResidueSpec(
@@ -515,7 +1048,7 @@ class _PolishLLMPhaseMixin:
                     existing = plan_data.get("feasibility_annotations", {})
                     existing.setdefault(ann_key, []).append(flag)
                 else:
-                    log.warning("phase5e_unknown_decision", decision=d, passage_id=passage_id)
+                    log.info("phase5e_unknown_decision", decision=d, passage_id=passage_id)
                     continue
 
                 resolved_count += 1
@@ -548,14 +1081,14 @@ class _PolishLLMPhaseMixin:
             for item in result_f.transition_guidance:
                 spec = passage_lookup.get(item.passage_id)
                 if spec is None:
-                    log.warning(
+                    log.info(
                         "phase5f_unknown_passage",
                         passage_id=item.passage_id,
                     )
                     continue
                 expected = len(spec.get("beat_ids", [])) - 1
                 if len(item.transitions) != expected:
-                    log.warning(
+                    log.info(
                         "phase5f_transition_count_mismatch",
                         passage_id=item.passage_id,
                         expected=expected,
@@ -601,6 +1134,46 @@ class _PolishLLMPhaseMixin:
 # ---------------------------------------------------------------------------
 # Phase 5 helpers
 # ---------------------------------------------------------------------------
+
+
+def _detect_duplicate_labels_in_passage(
+    choice_specs: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """R-5.2: return collisions where two+ choices from the same passage share a label.
+
+    Pure function — no side effects.  Used by Phase 5a after the LLM
+    assigns labels to detect case-insensitive within-passage collisions.
+    The caller logs each collision; the LLM re-call decision is left to
+    the operator (empty return means no collisions).
+
+    Each collision is a dict with:
+      - ``from_passage``: the source passage.
+      - ``label``: the case-folded label string that collided.
+      - ``targets``: sorted list of target passages sharing the label.
+    """
+    from collections import defaultdict
+
+    labels_by_passage: dict[str, dict[str, list[str]]] = defaultdict(lambda: defaultdict(list))
+    for spec in choice_specs:
+        label = spec.get("label") or ""
+        if not label:
+            continue
+        labels_by_passage[spec["from_passage"]][label.lower()].append(spec["to_passage"])
+
+    collisions: list[dict[str, Any]] = []
+    for from_passage in sorted(labels_by_passage):
+        label_map = labels_by_passage[from_passage]
+        for lower_label in sorted(label_map):
+            targets = label_map[lower_label]
+            if len(targets) > 1:
+                collisions.append(
+                    {
+                        "from_passage": from_passage,
+                        "label": lower_label,
+                        "targets": sorted(targets),
+                    }
+                )
+    return collisions
 
 
 def _update_plan_data(
@@ -837,10 +1410,15 @@ def _detect_pacing_flags(
     """
     # Build adjacency for path-local walks
     belongs_to_edges = graph.get_edges(edge_type="belongs_to")
-    beat_to_path: dict[str, str] = {}
+    _dp_accum: dict[str, set[str]] = {}
     for edge in belongs_to_edges:
         if edge["from"] in beat_nodes:
-            beat_to_path[edge["from"]] = edge["to"]
+            _dp_accum.setdefault(edge["from"], set()).add(edge["to"])
+    beat_to_paths: dict[str, frozenset[str]] = {bid: frozenset(ps) for bid, ps in _dp_accum.items()}
+
+    def _primary_path(bid: str) -> str:
+        """First-by-sort-order path membership. Stable for reporting."""
+        return next(iter(sorted(beat_to_paths.get(bid, frozenset()))), "")
 
     children: dict[str, list[str]] = {bid: [] for bid in beat_nodes}
     parents: dict[str, list[str]] = {bid: [] for bid in beat_nodes}
@@ -865,10 +1443,10 @@ def _detect_pacing_flags(
             visited.add(b)
 
         # Check for consecutive scene/sequel runs
-        _check_consecutive_runs(chain, beat_nodes, beat_to_path, flags)
+        _check_consecutive_runs(chain, beat_nodes, _primary_path, flags)
 
         # Check for missing sequel after commits
-        _check_post_commit_sequel(chain, beat_nodes, beat_to_path, flags)
+        _check_post_commit_sequel(chain, beat_nodes, _primary_path, flags)
 
     return flags
 
@@ -896,7 +1474,7 @@ def _walk_linear_chain(
 def _check_consecutive_runs(
     chain: list[str],
     beat_nodes: dict[str, dict[str, Any]],
-    beat_to_path: dict[str, str],
+    get_primary_path: Callable[[str], str],
     flags: list[dict[str, Any]],
 ) -> None:
     """Check for 3+ consecutive same-type beats in a chain."""
@@ -917,7 +1495,7 @@ def _check_consecutive_runs(
                     {
                         "issue_type": f"consecutive_{run_type}",
                         "beat_ids": list(run_beats),
-                        "path_id": beat_to_path.get(run_beats[0], ""),
+                        "path_id": get_primary_path(run_beats[0]),
                     }
                 )
             run_type = scene_type
@@ -929,7 +1507,7 @@ def _check_consecutive_runs(
             {
                 "issue_type": f"consecutive_{run_type}",
                 "beat_ids": list(run_beats),
-                "path_id": beat_to_path.get(run_beats[0], ""),
+                "path_id": get_primary_path(run_beats[0]),
             }
         )
 
@@ -937,7 +1515,7 @@ def _check_consecutive_runs(
 def _check_post_commit_sequel(
     chain: list[str],
     beat_nodes: dict[str, dict[str, Any]],
-    beat_to_path: dict[str, str],
+    get_primary_path: Callable[[str], str],
     flags: list[dict[str, Any]],
 ) -> None:
     """Check for missing sequel beats after commit beats."""
@@ -956,7 +1534,7 @@ def _check_post_commit_sequel(
                 {
                     "issue_type": "no_sequel_after_commit",
                     "beat_ids": chain[max(0, i - 1) : i + 1],
-                    "path_id": beat_to_path.get(bid, ""),
+                    "path_id": get_primary_path(bid),
                 }
             )
         else:
@@ -967,7 +1545,7 @@ def _check_post_commit_sequel(
                     {
                         "issue_type": "no_sequel_after_commit",
                         "beat_ids": chain[max(0, i - 1) : i + 3],
-                        "path_id": beat_to_path.get(bid, ""),
+                        "path_id": get_primary_path(bid),
                     }
                 )
 
@@ -978,10 +1556,18 @@ def _insert_micro_beat(
     after_beat_id: str,
     summary: str,
     entity_ids: list[str],
+    *,
+    is_correction_beat: bool = False,
 ) -> None:
     """Insert a micro-beat node after the specified beat in the DAG.
 
     Updates predecessor edges to splice the micro-beat into the chain.
+
+    ``is_correction_beat`` (default False) controls whether the inserted
+    beat carries ``is_gap_beat: True`` — set True only for pacing-run
+    correction beats (R-2.7), False for regular pacing-flag micro-beats
+    (e.g. no_sequel_after_commit). The flag distinguishes origin so FILL
+    can render the two kinds differently.
     """
     beat_nodes = graph.get_nodes_by_type("beat")
 
@@ -993,19 +1579,24 @@ def _insert_micro_beat(
             path_id = edge["to"]
             break
 
-    # Create the micro-beat node
-    graph.create_node(
-        micro_beat_id,
-        {
-            "type": "beat",
-            "raw_id": micro_beat_id.split("::")[-1],
-            "summary": summary,
-            "role": "micro_beat",
-            "scene_type": "micro_beat",
-            "dilemma_impacts": [],
-            "entities": entity_ids,
-        },
-    )
+    # Create the micro-beat node.
+    # Per spec R-2.7 (PR #1366), only correction beats — those that break
+    # a 3+ consecutive same-scene_type run — carry ``is_gap_beat: True``.
+    # Regular pacing-flag micro-beats (e.g. no_sequel_after_commit) carry
+    # ``is_gap_beat=False`` so FILL renders their summary normally.
+    node_data: dict[str, Any] = {
+        "type": "beat",
+        "raw_id": micro_beat_id.split("::")[-1],
+        "summary": summary,
+        "role": "micro_beat",
+        "scene_type": "micro_beat",
+        "dilemma_impacts": [],
+        "entities": entity_ids,
+        "created_by": "POLISH",
+    }
+    if is_correction_beat:
+        node_data["is_gap_beat"] = True
+    graph.create_node(micro_beat_id, node_data)
 
     # Add belongs_to edge
     if path_id:

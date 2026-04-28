@@ -111,7 +111,16 @@ class IntersectionProposal(BaseModel):
     """Phase 3: Proposes beats that form structural intersections."""
 
     beat_ids: list[str] = Field(min_length=2)
-    resolved_location: str | None = None
+    resolved_location: str = Field(
+        min_length=1,
+        description=(
+            "Specific location where this intersection scene occurs. "
+            "Must be a non-empty string. When multiple locations are mentioned "
+            "in the candidate group, pick the one that fits most beats. "
+            "When genuinely uncertain, use the most specific location from "
+            "any of the beat descriptions rather than a placeholder."
+        ),
+    )
     shared_entities: list[str] = Field(default_factory=list)
     rationale: str = Field(min_length=1)
 
@@ -177,7 +186,14 @@ class SceneTypeTag(BaseModel):
 class Phase4aOutput(BaseModel):
     """Wrapper for Phase 4a structured output (scene-type tags)."""
 
-    tags: list[SceneTypeTag] = Field(default_factory=list)
+    tags: list[SceneTypeTag] = Field(
+        min_length=1,
+        description=(
+            "Scene-type annotations for beats. Zero tags is treated as LLM "
+            "failure (R-4b.4) and triggers retry; partial coverage is allowed "
+            "with a downstream WARNING (R-4b.1)."
+        ),
+    )
 
 
 class AtmosphericDetail(BaseModel):
@@ -194,14 +210,19 @@ class AtmosphericDetail(BaseModel):
 class Phase4dOutput(BaseModel):
     """Wrapper for Phase 4d structured output (atmospheric details)."""
 
-    details: list[AtmosphericDetail] = Field(default_factory=list)
+    details: list[AtmosphericDetail] = Field(
+        min_length=1,
+        description=(
+            "Atmospheric details per beat. Zero details is treated as LLM "
+            "failure and triggers retry; partial coverage emits WARNING."
+        ),
+    )
 
     @model_validator(mode="after")
     def _validate_unique_beat_ids(self) -> Phase4dOutput:
-        if self.details:
-            detail_ids = [d.beat_id for d in self.details]
-            if len(detail_ids) != len(set(detail_ids)):
-                raise ValueError("beat_id in details list must be unique")
+        detail_ids = [d.beat_id for d in self.details]
+        if len(detail_ids) != len(set(detail_ids)):
+            raise ValueError("beat_id in details list must be unique")
         return self
 
 
@@ -224,14 +245,13 @@ class PathMiniArc(BaseModel):
 class Phase4eOutput(BaseModel):
     """Wrapper for Phase 4e structured output (per-path mini-arcs)."""
 
-    arcs: list[PathMiniArc] = Field(default_factory=list)
+    arcs: list[PathMiniArc] = Field(min_length=1)
 
     @model_validator(mode="after")
     def _validate_unique_path_ids(self) -> Phase4eOutput:
-        if self.arcs:
-            path_ids = [arc.path_id for arc in self.arcs]
-            if len(path_ids) != len(set(path_ids)):
-                raise ValueError("path_id in arcs list must be unique")
+        path_ids = [arc.path_id for arc in self.arcs]
+        if len(path_ids) != len(set(path_ids)):
+            raise ValueError("path_id in arcs list must be unique")
         return self
 
 
@@ -256,19 +276,25 @@ class EntityArcDescriptor(BaseModel):
 class Phase4fOutput(BaseModel):
     """Wrapper for Phase 4f structured output (entity arcs per path)."""
 
-    arcs: list[EntityArcDescriptor] = Field(default_factory=list)
+    arcs: list[EntityArcDescriptor] = Field(min_length=1)
 
     @model_validator(mode="after")
     def _validate_unique_entity_ids(self) -> Phase4fOutput:
-        if self.arcs:
-            eids = [a.entity_id for a in self.arcs]
-            if len(eids) != len(set(eids)):
-                raise ValueError("entity_id in arcs list must be unique")
+        eids = [a.entity_id for a in self.arcs]
+        if len(eids) != len(set(eids)):
+            raise ValueError("entity_id in arcs list must be unique")
         return self
 
 
 class GapProposal(BaseModel):
-    """Phase 4b/4c: Proposes new beats to fill structural gaps."""
+    """POLISH Phase 1a (Narrative Gap Insertion): proposes new beats to fill
+    structural transitions between adjacent beats. Per polish.md R-1a.2, gap
+    beats are STRUCTURAL ONLY — they MUST NOT carry `dilemma_impacts`. The
+    field below is retained as an empty default for back-compat with the
+    prior GROW Phase 4b/4c shape; a model_validator rejects any non-empty
+    value so an LLM that ignores the prompt fails validation immediately
+    rather than producing a beat that violates R-1a.2 downstream.
+    """
 
     path_id: str = Field(min_length=1)
     after_beat: str | None = Field(
@@ -281,7 +307,38 @@ class GapProposal(BaseModel):
     )
     summary: str = Field(min_length=1)
     scene_type: Literal["scene", "sequel", "micro_beat"] = "sequel"
-    dilemma_impacts: list[DilemmaImpact] = Field(default_factory=list)
+    dilemma_impacts: list[DilemmaImpact] = Field(
+        default_factory=list,
+        description=(
+            "MUST be empty per polish.md R-1a.2 — gap beats are structural "
+            "transition beats and cannot advance, reveal, commit, or "
+            "complicate any dilemma."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _no_dilemma_impacts(self) -> GapProposal:
+        if self.dilemma_impacts:
+            raise ValueError(
+                "Gap beats MUST NOT carry dilemma_impacts (polish.md R-1a.2). "
+                "Gap beats are structural transition beats only — they cannot "
+                "advance, reveal, commit, or complicate any dilemma. Remove the "
+                "dilemma_impacts entries from this gap proposal."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _require_placement(self) -> GapProposal:
+        """POLISH R-1a.3: at least one of after_beat/before_beat must be set."""
+        if self.after_beat is None and self.before_beat is None:
+            raise ValueError(
+                "GapProposal must have at least one of `after_beat` or "
+                "`before_beat` set to be placeable in the beat sequence "
+                "(POLISH R-1a.3). A gap beat with neither anchor cannot be "
+                "inserted — provide the earlier beat (`after_beat`) or the "
+                "later beat (`before_beat`) or both."
+            )
+        return self
 
 
 class Phase4bOutput(BaseModel):
@@ -332,6 +389,21 @@ class Phase8cOutput(BaseModel):
     overlays: list[OverlayProposal] = Field(default_factory=list)
 
 
+class TransitionBridge(BaseModel):
+    """A single transition bridge between two beats."""
+
+    transition_id: str = Field(min_length=1)
+    summary: str = Field(min_length=1)
+    entities: list[str] = Field(default_factory=list)
+    location: str = ""
+
+
+class TransitionGapsOutput(BaseModel):
+    """Output of the transition gap detection LLM call."""
+
+    bridges: list[TransitionBridge] = Field(default_factory=list)
+
+
 # ---------------------------------------------------------------------------
 # Stage result
 # ---------------------------------------------------------------------------
@@ -350,9 +422,7 @@ class GrowResult(BaseModel):
     """Overall GROW stage result."""
 
     arc_count: int = 0
-    passage_count: int = 0
     state_flag_count: int = 0
-    choice_count: int = 0
     overlay_count: int = 0
     phases_completed: list[GrowPhaseResult] = Field(default_factory=list)
     spine_arc_id: str | None = None

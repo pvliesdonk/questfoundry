@@ -22,6 +22,7 @@ Phases:
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypeVar
 
@@ -41,6 +42,7 @@ from questfoundry.graph.dress_context import (
     format_all_entity_visuals,
     format_art_direction_context,
     format_entities_batch_for_codex,
+    format_entity_for_codex,
     format_passages_batch_for_briefs,
     format_vision_and_entities,
 )
@@ -50,6 +52,7 @@ from questfoundry.graph.dress_mutations import (
     apply_dress_codex,
     apply_dress_illustration,
     validate_dress_codex_entries,
+    validate_entity_visual_coverage,
 )
 from questfoundry.graph.fill_context import format_dream_vision
 from questfoundry.graph.graph import Graph
@@ -58,8 +61,11 @@ from questfoundry.graph.snapshots import save_snapshot
 from questfoundry.models.dress import (
     BatchedBriefOutput,
     BatchedCodexOutput,
+    DressEscalation,
     DressPhase0Output,
+    DressPhase2Output,
     DressPhaseResult,
+    SpoilerCheckResult,
 )
 from questfoundry.observability.logging import get_logger
 from questfoundry.observability.tracing import traceable
@@ -99,6 +105,19 @@ log = get_logger(__name__)
 # Aspect ratios supported by all image providers.
 _VALID_ASPECT_RATIOS = {"1:1", "16:9", "9:16", "3:2", "2:3"}
 
+# Sentinel priority stored on briefs whose computed score would otherwise be 0
+# (skipped). Sits above any practical Gate 2 cutoff (1=must, 2=important,
+# 3=nice-to-have) so they never auto-render but remain visible for human
+# reprioritization. Spec calls this `priority: skip` (string); see
+# tracking note in map_score_to_priority for the drift.
+_BRIEF_SKIP_PRIORITY = 99
+
+# Per-entity codex regeneration cap per spec R-3.6: at most 2 retries after
+# the original batch attempt for any one entity whose entries leak content
+# gated behind a higher tier. After exhaustion, fall back to a minimal
+# rank-1-only entry with WARNING (no silent gap).
+_CODEX_SPOILER_RETRIES = 2
+
 
 def _parse_aspect_ratio(raw: str) -> str:
     """Extract a valid aspect ratio from an LLM-generated string.
@@ -113,7 +132,7 @@ def _parse_aspect_ratio(raw: str) -> str:
     for match in re.finditer(r"\b(\d+:\d+)\b", raw):
         if match.group(1) in _VALID_ASPECT_RATIOS:
             return match.group(1)
-    log.warning("invalid_aspect_ratio", raw=raw, fallback="16:9")
+    log.info("invalid_aspect_ratio", raw=raw, fallback="16:9")
     return "16:9"
 
 
@@ -123,6 +142,23 @@ def _get_prompts_path() -> Path:
     if pkg_path.exists():
         return pkg_path
     return Path.cwd() / "prompts"
+
+
+def _build_dress_error_feedback(
+    error: Exception,
+    output_schema: type[BaseModel],
+    extra_repair_hints: list[str] | None = None,
+) -> str:
+    """Build the per-attempt repair feedback for `_dress_llm_call`."""
+    expected = get_all_field_paths(output_schema)
+    parts = [
+        f"Your response failed validation:\n{error}",
+        f"\nExpected fields: {', '.join(expected)}",
+        "Please fix the errors and try again.",
+    ]
+    if extra_repair_hints:
+        parts.append("\n" + "\n\n".join(extra_repair_hints))
+    return "\n".join(parts)
 
 
 class DressStageError(ValueError):
@@ -167,6 +203,10 @@ class DressStage:
         self._lang_instruction: str = ""
         self._on_connectivity_error: ConnectivityRetryFn | None = None
         self._skip_codex: bool = False
+        # Per-item escalations from `batch_llm_calls` retry exhaustion (#1480).
+        # Folded into DressStageError at exit so failures point at the
+        # batch responses, not just at the missing-artifact symptom.
+        self._escalations: list[DressEscalation] = []
 
     PhaseFunc = Callable[["Graph", "BaseChatModel"], Awaitable[DressPhaseResult]]
 
@@ -262,6 +302,8 @@ class DressStage:
         self._lang_instruction = get_output_language_instruction(kwargs.get("language", "en"))
 
         log.info("stage_start", stage="dress")
+        # Reset escalations for this run; previous runs' escalations don't carry over.
+        self._escalations = []
 
         phases = self._phase_order()
         phase_map = {name: i for i, (_, name) in enumerate(phases)}
@@ -296,6 +338,18 @@ class DressStage:
             if n > 0:
                 log.info("rewinding_graph", stage="dress", mutations=n)
             save_snapshot(graph, resolved_path, "dress")
+
+        # FILL Stage Output Contract — validate post-rewind so the
+        # check sees the base FILL state, not stale DRESS mutations
+        # from an earlier run (#1347).
+        from questfoundry.graph.fill_output_validation import validate_fill_output
+
+        entry_errors = validate_fill_output(graph)
+        if entry_errors:
+            raise DressStageError(
+                f"FILL output validation failed ({len(entry_errors)} "
+                f"error(s)):\n" + "\n".join(f"  - {e}" for e in entry_errors)
+            )
 
         phase_results: list[DressPhaseResult] = []
         total_llm_calls = 0
@@ -340,6 +394,15 @@ class DressStage:
             graph.save(resolved_path / "graph.db")
 
         if completed_normally:
+            # DRESS Stage Output Contract — validate before stamping
+            # last_stage so a malformed artifact is owned by DRESS,
+            # not discovered downstream at SHIP (#1348).
+            from questfoundry.graph.dress_output_validation import validate_dress_output
+
+            exit_errors = validate_dress_output(graph)
+            if exit_errors:
+                raise DressStageError(self._format_exit_error(exit_errors))
+
             graph.set_last_stage("dress")
             graph.save(resolved_path / "graph.db")
 
@@ -368,6 +431,25 @@ class DressStage:
             "codex_entries": dict(codex_entries),
             "illustrations": dict(illustrations),
         }
+
+    def _format_exit_error(self, exit_errors: list[str]) -> str:
+        """Build the message body for the stage-exit ``DressStageError``.
+
+        Folds per-item escalations into the contract-failure message so the
+        failure surface points at the batch responses that misbehaved
+        (#1480). Escalations only ENRICH an existing contract failure; the
+        caller decides whether to raise based on ``exit_errors`` alone.
+        """
+        lines = [
+            f"DRESS output contract violated ({len(exit_errors)} error(s)):",
+            *[f"  - {e}" for e in exit_errors],
+        ]
+        if self._escalations:
+            lines.append(
+                f"Plus {len(self._escalations)} batch_llm_calls retry-exhaustion escalation(s):"
+            )
+            lines += [f"  - [{esc.kind}] {esc.item_id}: {esc.detail}" for esc in self._escalations]
+        return "\n".join(lines)
 
     # -------------------------------------------------------------------------
     # Phase 0: Art Direction (discuss/summarize/serialize)
@@ -407,7 +489,7 @@ class DressStage:
         if self._interactive:
             mode_section = ""
         else:
-            non_interactive = getattr(discuss_template, "non_interactive_section", None)
+            non_interactive = discuss_template.extra.get("non_interactive_section")
             if non_interactive:
                 mode_section = non_interactive
             else:
@@ -473,9 +555,9 @@ class DressStage:
         if self._unload_after_summarize is not None:
             await self._unload_after_summarize()
 
-        # Phase 3: Serialize
+        # Phase 3: Serialize. Backtick-wrap IDs per @prompt-engineer Rule 4.
         entity_ids = "\n".join(
-            f"- {edata.get('raw_id', strip_scope_prefix(eid))}" for eid, edata in entities.items()
+            f"- `{edata.get('raw_id', strip_scope_prefix(eid))}`" for eid, edata in entities.items()
         )
         serialize_template = loader.load("dress_serialize")
         serialize_prompt = serialize_template.system.format(
@@ -483,6 +565,11 @@ class DressStage:
             entity_ids=entity_ids,
         )
 
+        # Re-echo valid entity IDs on retry — system prompt is far back by then.
+        serialize_repair_hints = [
+            "REMINDER — Valid entity IDs for `entity_visuals[].entity_id` "
+            f"(use ONLY these — raw IDs, no `entity::` prefix):\n{entity_ids}",
+        ]
         output, serialize_tokens = await serialize_to_artifact(
             model=self._serialize_model or model,
             brief=brief,
@@ -491,6 +578,7 @@ class DressStage:
             system_prompt=serialize_prompt,
             callbacks=self._callbacks,
             stage="dress",
+            extra_repair_hints=serialize_repair_hints,
         )
         total_llm_calls += 1
         total_tokens += serialize_tokens
@@ -499,6 +587,23 @@ class DressStage:
         art_dir_dict = output.art_direction.model_dump()
         visuals_list = [ev.model_dump() for ev in output.entity_visuals]
         apply_dress_art_direction(graph, art_dir_dict, visuals_list)
+
+        # R-1.3 / R-1.4: every entity with appears edges must have an
+        # EntityVisual with a non-empty reference_prompt_fragment.  Without
+        # this, image generation has no per-entity prompt fragment to inject
+        # and illustrations drift across passages.  Halt loudly so the gap
+        # is fixed in the prompt or upstream rather than silently shipped.
+        coverage_errors = validate_entity_visual_coverage(graph)
+        if coverage_errors:
+            log.error(
+                "entity_visual_coverage_failed",
+                error_count=len(coverage_errors),
+                errors=coverage_errors[:10],
+            )
+            raise DressStageError(
+                f"DRESS Phase 0 produced {len(coverage_errors)} EntityVisual coverage "
+                f"violation(s):\n" + "\n".join(f"  - {e}" for e in coverage_errors)
+            )
 
         log.info(
             "art_direction_created",
@@ -529,6 +634,7 @@ class DressStage:
         *,
         creative: bool = False,
         strategy: StructuredOutputStrategy | None = None,
+        extra_repair_hints: list[str] | None = None,
     ) -> tuple[T, int, int]:
         """Call LLM with structured output and retry on validation failure.
 
@@ -543,6 +649,8 @@ class DressStage:
                 mood/caption diversity matters.
             strategy: Override the default structured output strategy for this
                 call. If None, uses the provider-level default.
+            extra_repair_hints: Hint blocks appended verbatim to retry feedback
+                so caller-known IDs/constraints survive context drift.
 
         Returns:
             Tuple of (validated_result, llm_calls, tokens_used).
@@ -619,12 +727,7 @@ class DressStage:
                 )
 
                 if attempt < max_retries - 1:
-                    expected = get_all_field_paths(output_schema)
-                    error_msg = (
-                        f"Your response failed validation:\n{e}\n\n"
-                        f"Expected fields: {', '.join(expected)}\n"
-                        f"Please fix the errors and try again."
-                    )
+                    error_msg = _build_dress_error_feedback(e, output_schema, extra_repair_hints)
                     # Append error feedback to conversation history so the
                     # LLM can see what went wrong and fix it
                     messages.append(HumanMessage(content=error_msg))
@@ -659,35 +762,24 @@ class DressStage:
         briefs_created = 0
         briefs_skipped = 0
 
-        # Collect passage IDs with prose and pre-compute structural scores.
-        # Pre-filter by min_priority: skip passages whose *best possible*
-        # priority (structural score + max LLM adjustment of +2) would still
-        # exceed the threshold. This avoids wasting LLM tokens on passages
-        # that can't possibly make the cut.
+        # R-2.1: every passage with prose gets a brief. The previous
+        # implementation pre-filtered by min_priority before generation
+        # to save LLM tokens, but the spec requires that low-priority
+        # passages also produce briefs (with the priority itself surfaced
+        # at Gate 2 / Phase 4 for human reprioritization).  Image-budget
+        # filtering applies later, at render time.
         eligible_ids: list[str] = []
         base_scores: dict[str, int] = {}
-        priority_filtered = 0
         for passage_id, passage_data in passages.items():
             if not passage_data.get("prose"):
                 briefs_skipped += 1
                 continue
-            score = compute_structural_score(graph, passage_id)
-            best_possible = map_score_to_priority(score + 2)
-            if best_possible > self._min_priority or best_possible == 0:
-                priority_filtered += 1
-                continue
             eligible_ids.append(passage_id)
-            base_scores[passage_id] = score
+            base_scores[passage_id] = compute_structural_score(graph, passage_id)
 
-        if priority_filtered:
-            log.info(
-                "briefs_priority_filtered",
-                min_priority=self._min_priority,
-                filtered=priority_filtered,
-            )
-
-        # Store the min_priority used for brief generation so generate-images
-        # can detect when it requests briefs that were never generated.
+        # Record min_priority for downstream image-budget enforcement; the
+        # value is no longer used to suppress brief creation but is still
+        # consulted by generate-images to choose what to render.
         graph.upsert_node(
             "dress_meta::brief_config",
             {
@@ -734,6 +826,16 @@ class DressStage:
                 "output_language_instruction": self._lang_instruction,
             }
 
+            # Re-echo IllustrationBrief constraints on retry — system prompt is far back by then.
+            brief_schema_hints = [
+                "REMINDER for each brief in this batch:\n"
+                "  - `priority` MUST be 1, 2, or 3 (1=must-have, 2=important, 3=nice-to-have)\n"
+                "  - `category` MUST be one of: `scene`, `portrait`, `vista`, "
+                "`item_detail`, `cover` (`cover` only for the story's title image)\n"
+                "  - `caption` MUST be 10-60 characters in the format "
+                "`[Subject] [action/state]` (diegetic; no meta-language)",
+            ]
+
             output, llm_calls, tokens = await self._dress_llm_call(
                 model,
                 "dress_brief_batch",
@@ -741,6 +843,7 @@ class DressStage:
                 BatchedBriefOutput,
                 creative=True,
                 strategy=StructuredOutputStrategy.JSON_MODE,
+                extra_repair_hints=brief_schema_hints,
             )
 
             # Extract per-item results
@@ -756,16 +859,45 @@ class DressStage:
 
             return items, llm_calls, tokens
 
-        results, total_llm_calls, total_tokens, _errors = await batch_llm_calls(
+        results, total_llm_calls, total_tokens, errors = await batch_llm_calls(
             chunks,
             _brief_batch,
             self._max_concurrency,
             on_connectivity_error=self._on_connectivity_error,
         )
 
+        # Per-item escalation when a brief batch's retries exhausted (#1480).
+        # eligible_ids comes from graph.get_nodes_by_type("passage").keys() —
+        # always fully-prefixed `passage::*`, no normalization needed.
+        for idx, exc in errors:
+            for affected_pid in chunks[idx]:
+                log.warning(
+                    "briefs_batch_failed_escalated",
+                    passage_id=affected_pid,
+                    exc_type=type(exc).__name__,
+                    exc_msg=str(exc),
+                )
+                self._escalations.append(
+                    DressEscalation(
+                        kind="briefs_batch_failed",
+                        item_id=affected_pid,
+                        detail=(
+                            f"dress_brief_batch failed after retries "
+                            f"({type(exc).__name__}: {exc}). Passage has no "
+                            "illustration brief; the output contract will "
+                            "fail at stage exit if briefs are required."
+                        ),
+                        upstream_stage="DRESS",
+                    )
+                )
+
         # Post-process results: apply priority mapping, store on graph
         # Composition log is best-effort: concurrent batches read a snapshot
         # from before their wave started; updates accumulate sequentially here.
+        # R-2.1: every passage with prose gets a brief — including ones whose
+        # computed priority is 0 (would-be-skipped).  Those briefs land with
+        # priority=_BRIEF_SKIP_PRIORITY so Gate 2 can surface them for human
+        # reprioritization but they won't be rendered automatically.
         for batch_result in results:
             if batch_result is None:
                 log.warning("brief_batch_failed", detail="batch returned no results")
@@ -774,14 +906,14 @@ class DressStage:
                 score = base_scores.get(passage_id, 0)
                 final_priority = map_score_to_priority(score + llm_adjustment)
                 if final_priority < 1:
-                    briefs_skipped += 1
                     log.debug(
-                        "brief_skipped",
+                        "brief_skip_priority",
                         passage_id=passage_id,
                         base_score=score,
                         llm_adj=llm_adjustment,
+                        stored_as=_BRIEF_SKIP_PRIORITY,
                     )
-                    continue
+                    final_priority = _BRIEF_SKIP_PRIORITY
 
                 brief_dict["priority"] = final_priority
                 apply_dress_brief(graph, passage_id, brief_dict, final_priority)
@@ -841,8 +973,10 @@ class DressStage:
 
         vision_ctx = format_dream_vision(graph)
         state_flags = graph.get_nodes_by_type("state_flag")
+        # Prefixed `state_flag::` so the LLM mirrors the same form in `visible_when` (#1473).
         state_flag_list = "\n".join(
-            f"- `{sf_data.get('raw_id', sf_id)}`: {sf_data.get('trigger', '')}"
+            f"- `state_flag::{sf_data.get('raw_id', strip_scope_prefix(sf_id))}`:"
+            f" {sf_data.get('trigger', '')}"
             for sf_id, sf_data in state_flags.items()
         )
 
@@ -864,11 +998,22 @@ class DressStage:
                 "vision_context": vision_ctx or "No creative vision available.",
                 "entities_batch": entities_batch,
                 "entity_count": str(len(chunk)),
-                "codewords": state_flag_list or "No codewords defined.",
+                "state_flags": state_flag_list or "No state flags defined.",
                 "output_language_instruction": self._lang_instruction,
             }
+            # Re-echo state flags and rank-1 invariant on retry (dress.md R-3.7).
+            codex_repair_hints = [
+                f"REMINDER — Available State Flags (use ONLY these in `visible_when`):\n"
+                f"{state_flag_list or 'No state flags defined.'}",
+                "REMINDER: Rank 1 entries MUST have empty `visible_when` "
+                "(always visible to player). Higher ranks gate on state flag IDs.",
+            ]
             output, llm_calls, tokens = await self._dress_llm_call(
-                model, "dress_codex_batch", context, BatchedCodexOutput
+                model,
+                "dress_codex_batch",
+                context,
+                BatchedCodexOutput,
+                extra_repair_hints=codex_repair_hints,
             )
 
             # Validate returned entity_ids match input chunk
@@ -887,19 +1032,70 @@ class DressStage:
 
             return items, llm_calls, tokens
 
-        results, total_llm_calls, total_tokens, _errors = await batch_llm_calls(
+        results, total_llm_calls, total_tokens, errors = await batch_llm_calls(
             chunks,
             _codex_batch,
             self._max_concurrency,
             on_connectivity_error=self._on_connectivity_error,
         )
 
+        # Per-item escalation when a codex batch's retries exhausted (#1480).
+        for idx, exc in errors:
+            for affected_eid in chunks[idx]:
+                log.warning(
+                    "codex_batch_failed_escalated",
+                    entity_id=affected_eid,
+                    exc_type=type(exc).__name__,
+                    exc_msg=str(exc),
+                )
+                self._escalations.append(
+                    DressEscalation(
+                        kind="codex_batch_failed",
+                        item_id=affected_eid,
+                        detail=(
+                            f"dress_codex_batch failed after retries "
+                            f"({type(exc).__name__}: {exc}). Entity has no "
+                            "codex entries; the Output-5 contract will fail "
+                            "at stage exit."
+                        ),
+                        upstream_stage="DRESS",
+                    )
+                )
+
+        spoiler_retries = 0
+        spoiler_fallbacks = 0
+
         for batch_result in results:
             if batch_result is None:
                 log.warning("codex_batch_failed", detail="batch returned no results")
                 continue
             for entity_id, entry_dicts in batch_result:
-                errs = validate_dress_codex_entries(graph, entity_id, entry_dicts)
+                # R-3.6: per-entity spoiler-direction check. If a lower tier
+                # leaks higher-tier content, regenerate this entity's entries
+                # alone (max _CODEX_SPOILER_RETRIES). On exhaustion, fall back
+                # to a minimal rank-1-only codex with a WARNING — never ship
+                # silently leaking spoilers.
+                (
+                    final_entries,
+                    retries,
+                    fallback,
+                    retry_calls,
+                    retry_tokens,
+                ) = await self._enforce_codex_spoiler_safety(
+                    graph,
+                    model,
+                    entity_id,
+                    entry_dicts,
+                    vision_ctx=vision_ctx,
+                    state_flag_list=state_flag_list,
+                )
+                spoiler_retries += retries
+                if fallback:
+                    spoiler_fallbacks += 1
+                total_llm_calls += retry_calls
+                total_tokens += retry_tokens
+
+                errs = validate_dress_codex_entries(graph, entity_id, final_entries)
                 if errs:
                     validation_warnings += 1
                     log.warning(
@@ -907,14 +1103,16 @@ class DressStage:
                         entity_id=entity_id,
                         errors=errs,
                     )
-                apply_dress_codex(graph, entity_id, entry_dicts)
-                codex_created += len(entry_dicts)
+                apply_dress_codex(graph, entity_id, final_entries)
+                codex_created += len(final_entries)
 
         log.info(
             "codex_phase_complete",
             entries_created=codex_created,
             entities=len(entities),
             warnings=validation_warnings,
+            spoiler_retries=spoiler_retries,
+            spoiler_fallbacks=spoiler_fallbacks,
         )
 
         return DressPhaseResult(
@@ -926,6 +1124,144 @@ class DressStage:
         )
 
     # -------------------------------------------------------------------------
+    # Phase 2 helpers: spoiler-direction enforcement (R-3.6)
+    # -------------------------------------------------------------------------
+
+    async def _enforce_codex_spoiler_safety(
+        self,
+        graph: Graph,
+        model: BaseChatModel,
+        entity_id: str,
+        entries: list[dict[str, Any]],
+        *,
+        vision_ctx: str,
+        state_flag_list: str,
+    ) -> tuple[list[dict[str, Any]], int, bool, int, int]:
+        """Enforce R-3.6 spoiler-direction safety on one entity's entries.
+
+        Runs an LLM spoiler check; on detected leak, regenerates the
+        entity's entries alone (max ``_CODEX_SPOILER_RETRIES``).  If
+        every retry still leaks, returns a minimal rank-1-only fallback
+        with WARNING logged.
+
+        Returns:
+            ``(final_entries, retries_used, used_fallback, llm_calls, tokens)``.
+        """
+        current = entries
+        retries_used = 0
+        total_calls = 0
+        total_tokens = 0
+
+        for attempt in range(_CODEX_SPOILER_RETRIES + 1):
+            check, calls, tokens = await self._spoiler_check(model, entity_id, current)
+            total_calls += calls
+            total_tokens += tokens
+            if not check.has_leak:
+                return current, retries_used, False, total_calls, total_tokens
+
+            log.warning(
+                "codex_spoiler_leak_detected",
+                entity_id=entity_id,
+                attempt=attempt + 1,
+                leaks=[leak.model_dump() for leak in check.leaks],
+                reason=check.reason,
+            )
+
+            if attempt == _CODEX_SPOILER_RETRIES:
+                break
+
+            retries_used += 1
+            regen_entries, regen_calls, regen_tokens = await self._regenerate_codex_for_entity(
+                graph,
+                model,
+                entity_id,
+                vision_ctx=vision_ctx,
+                state_flag_list=state_flag_list,
+                prior_leak=check,
+            )
+            total_calls += regen_calls
+            total_tokens += regen_tokens
+            current = regen_entries
+
+        # Retries exhausted; spec mandates a rank-1-only fallback with WARNING
+        # rather than a silent gap.
+        fallback = _minimal_rank_one_codex(graph, entity_id)
+        log.warning(
+            "codex_spoiler_retry_exhausted",
+            entity_id=entity_id,
+            retries=_CODEX_SPOILER_RETRIES,
+            fallback_entries=len(fallback),
+        )
+        return fallback, retries_used, True, total_calls, total_tokens
+
+    async def _spoiler_check(
+        self,
+        model: BaseChatModel,
+        entity_id: str,
+        entries: list[dict[str, Any]],
+    ) -> tuple[SpoilerCheckResult, int, int]:
+        """Ask the LLM whether any lower-ranked entry leaks higher-rank content."""
+        entries_block = _format_entries_for_spoiler_check(entries)
+        context = {
+            "entity_id": entity_id,
+            "entries_block": entries_block,
+        }
+        return await self._dress_llm_call(
+            model,
+            "dress_codex_spoiler_check",
+            context,
+            SpoilerCheckResult,
+        )
+
+    async def _regenerate_codex_for_entity(
+        self,
+        graph: Graph,
+        model: BaseChatModel,
+        entity_id: str,
+        *,
+        vision_ctx: str,
+        state_flag_list: str,
+        prior_leak: SpoilerCheckResult,
+    ) -> tuple[list[dict[str, Any]], int, int]:
+        """Regenerate one entity's codex after a detected spoiler leak."""
+        entity_details = format_entity_for_codex(graph, entity_id)
+        leak_summary = (
+            "\n".join(
+                f"- rank {leak.lower_rank} leaked content gated behind rank "
+                f"{leak.higher_rank}: {leak.leaked_content}"
+                for leak in prior_leak.leaks
+            )
+            or "Prior attempt leaked higher-tier content."
+        )
+        # Append the prior-leak description to entity details so the model
+        # has the concrete failure mode to avoid this round.
+        entity_details_with_warning = (
+            f"{entity_details}\n\n## Prior attempt leaked spoilers — DO NOT REPEAT\n{leak_summary}"
+        )
+        context = {
+            "vision_context": vision_ctx or "No creative vision available.",
+            "entity_details": entity_details_with_warning,
+            "state_flags": state_flag_list or "No state flags defined.",
+            "output_language_instruction": self._lang_instruction,
+        }
+        # Re-echo state flags and prior-leak summary on retry to prevent re-drift.
+        regen_repair_hints = [
+            f"REMINDER — Available State Flags (use ONLY these in `visible_when`):\n"
+            f"{state_flag_list or 'No state flags defined.'}",
+            f"REMINDER — Prior attempt leaked higher-tier content. Lower-rank "
+            f"entries MUST NOT disclose what higher-rank entries reveal:\n"
+            f"{leak_summary}",
+        ]
+        output, calls, tokens = await self._dress_llm_call(
+            model,
+            "dress_codex",
+            context,
+            DressPhase2Output,
+            extra_repair_hints=regen_repair_hints,
+        )
+        return [e.model_dump() for e in output.entries], calls, tokens
+
+    # -------------------------------------------------------------------------
     # Phase 3: Human Review Gate
     # -------------------------------------------------------------------------
 
@@ -934,11 +1270,19 @@ class DressStage:
         graph: Graph,
         model: BaseChatModel,  # noqa: ARG002
     ) -> DressPhaseResult:
-        """Phase 3: Review briefs and select which to render.
+        """Phase 3 (spec Phase 4): Gate 2 — Review briefs and select.
 
-        In auto-approve mode all briefs are selected. In interactive
-        mode (future), a gate would present briefs for budget selection.
-        Stores the selection as metadata on the graph.
+        Per spec R-4.1, the human sets the rendering budget; per R-4.4,
+        the approval (mode + timestamp + budget) is recorded so
+        downstream stages have an audit trail.
+
+        Selection today is purely automatic in both ``--no-interactive``
+        and interactive modes: every brief at or above
+        ``self._min_priority`` is approved.  No human prompt is wired up
+        yet (tracked separately as the in-loop selection UX), so
+        ``approval_mode="auto"`` is recorded for both modes — claiming
+        ``"interactive"`` when the human never actually chose would
+        misrepresent the audit trail.
         """
         briefs = graph.get_nodes_by_type("illustration_brief")
         if not briefs:
@@ -948,20 +1292,44 @@ class DressStage:
                 detail="no briefs to review",
             )
 
-        # Sort by priority (1=must-have first)
+        # Sort by priority (1=must-have first; missing/skip → end)
         sorted_briefs = sorted(
             briefs.items(),
-            key=lambda item: item[1].get("priority", 99),
+            key=lambda item: item[1].get("priority", _BRIEF_SKIP_PRIORITY),
         )
-        selected_ids = [bid for bid, _ in sorted_briefs]
 
-        # Store selection in graph metadata for Phase 4
+        # R-4.1: pick a budget. Selection rule today: include every brief
+        # at or above the configured min_priority cutoff.  No interactive
+        # budget refinement (e.g. an in-loop prompt to pick a different
+        # cutoff) is wired up yet — that is the spec's eventual goal but
+        # is left to a future change.
+        selected_ids = [
+            bid
+            for bid, bdata in sorted_briefs
+            if bdata.get("priority", _BRIEF_SKIP_PRIORITY) <= self._min_priority
+        ]
+
+        # No human prompt runs in either mode today, so record "auto"
+        # for both rather than claiming "interactive" when nothing was
+        # interactively chosen.  When an in-loop selection UX lands,
+        # this should switch back to "interactive" for that branch.
+        approval_mode = "auto"
+
+        # R-4.4: stamp approval metadata on the dress_meta::selection node
+        # so SHIP and the CLI report can confirm Gate 2 actually happened
+        # and surface what budget was applied.
         graph.upsert_node(
             "dress_meta::selection",
             {
                 "type": "dress_meta",
                 "selected_briefs": selected_ids,
                 "total_briefs": len(briefs),
+                "approved_at": datetime.now(UTC).isoformat(),
+                "approval_mode": approval_mode,
+                "budget": {
+                    "rule": "priority_cutoff",
+                    "priority_cutoff": self._min_priority,
+                },
             },
         )
 
@@ -969,12 +1337,17 @@ class DressStage:
             "review_complete",
             selected=len(selected_ids),
             total=len(briefs),
+            approval_mode=approval_mode,
+            priority_cutoff=self._min_priority,
         )
 
         return DressPhaseResult(
             phase="review",
             status="completed",
-            detail=f"{len(selected_ids)} of {len(briefs)} briefs selected",
+            detail=(
+                f"{len(selected_ids)} of {len(briefs)} briefs selected "
+                f"(cutoff=priority≤{self._min_priority}, mode={approval_mode})"
+            ),
         )
 
     # -------------------------------------------------------------------------
@@ -1191,7 +1564,7 @@ class DressStage:
                 # formatting. Token count not available from distiller API.
                 return (bid, pos, neg, bdata), 1, 0
 
-            results, _, _, _errs = await batch_llm_calls(
+            results, _, _, distill_errors = await batch_llm_calls(
                 distill_items,
                 _distill_one,
                 self._max_concurrency,
@@ -1200,7 +1573,28 @@ class DressStage:
             for item in results:
                 if item is not None:
                     prepared.append(item)
-            failed += len(_errs)
+            # Per-item escalation when a distill call's retries exhausted (#1480).
+            for idx, exc in distill_errors:
+                affected_brief_id = distill_items[idx][0]
+                log.warning(
+                    "distill_batch_failed_escalated",
+                    brief_id=affected_brief_id,
+                    exc_type=type(exc).__name__,
+                    exc_msg=str(exc),
+                )
+                self._escalations.append(
+                    DressEscalation(
+                        kind="distill_batch_failed",
+                        item_id=affected_brief_id,
+                        detail=(
+                            f"dress_distill failed after retries "
+                            f"({type(exc).__name__}: {exc}). Brief was not "
+                            "rendered; illustration will be missing."
+                        ),
+                        upstream_stage="DRESS",
+                    )
+                )
+            failed += len(distill_errors)
         else:
             # Non-LLM distillation — no concurrency needed
             for brief_id in selected_ids:
@@ -1353,6 +1747,68 @@ class DressStage:
             status="completed",
             detail=f"{generated} images generated, {failed} failed",
         )
+
+
+# -------------------------------------------------------------------------
+# Codex spoiler-check helpers
+# -------------------------------------------------------------------------
+
+
+def _format_entries_for_spoiler_check(entries: list[dict[str, Any]]) -> str:
+    """Render codex entries as a numbered, rank-ordered block for the LLM.
+
+    The spoiler-check prompt needs human-readable entries (per CLAUDE.md
+    §Prompt Context Formatting). Sort by rank ascending so the model
+    audits low → high in the same direction the player would unlock them.
+    """
+    sorted_entries = sorted(entries, key=lambda e: e.get("rank", 0))
+    lines: list[str] = []
+    for entry in sorted_entries:
+        rank = entry.get("rank", "?")
+        title = entry.get("title", "(no title)")
+        gates = entry.get("visible_when") or []
+        # Preserve the `state_flag::` prefix (R-3.7) so few-shot examples
+        # in dress_codex_spoiler_check.yaml match runtime input verbatim.
+        gate_text = (
+            "always visible" if not gates else "gated by " + ", ".join(f"`{g}`" for g in gates)
+        )
+        content = (entry.get("content") or "").strip() or "(no content)"
+        lines.append(f"### Rank {rank} — {title} ({gate_text})\n{content}")
+    return "\n\n".join(lines)
+
+
+_FALLBACK_DESCRIPTORS: dict[str, str] = {
+    "character": "a figure encountered in the story",
+    "location": "a place encountered in the story",
+    "object": "an object encountered in the story",
+    "item": "an object encountered in the story",
+    "faction": "a group encountered in the story",
+}
+_FALLBACK_DESCRIPTOR_DEFAULT = "an element of the story"
+
+
+def _minimal_rank_one_codex(graph: Graph, entity_id: str) -> list[dict[str, Any]]:
+    """Build a deliberately vague rank-1-only fallback codex entry.
+
+    Used when spoiler retries are exhausted. Per spec, retry exhaustion
+    must produce a minimal codex with WARNING — never a silent gap.
+    The fallback uses the entity's display name and an entity-type
+    appropriate descriptor so the entry stays diegetic (R-3.4) for
+    locations, items, and factions as well as characters.
+    """
+    raw_id = strip_scope_prefix(entity_id)
+    entity_node = graph.get_node(entity_id) or {}
+    title = entity_node.get("name") or entity_node.get("title") or raw_id
+    entity_type = entity_node.get("entity_type", "character")
+    descriptor = _FALLBACK_DESCRIPTORS.get(entity_type, _FALLBACK_DESCRIPTOR_DEFAULT)
+    return [
+        {
+            "title": title,
+            "rank": 1,
+            "visible_when": [],
+            "content": f"{title} — {descriptor}. Further details are not yet known.",
+        }
+    ]
 
 
 # -------------------------------------------------------------------------
@@ -1605,6 +2061,14 @@ def map_score_to_priority(score: int) -> int:
     Returns:
         Priority: 1 (must-have), 2 (important), 3 (nice-to-have),
         or 0 for skip.
+
+    Note:
+        The DRESS spec models "skip" as the string ``priority: skip``,
+        but the graph stores priority as an integer everywhere else, so
+        the code uses ``0`` from this function and ``_BRIEF_SKIP_PRIORITY``
+        (a high integer sentinel) when actually persisting the brief.
+        Callers that need the persisted skip value should use the
+        sentinel rather than ``0`` so sorts and cutoffs behave correctly.
     """
     if score >= 5:
         return 1

@@ -7,7 +7,7 @@ system: |
   HOW the story will be told: POV, tense, register, and voice characteristics.
 
   ## Task Contract
-  Stage: FILL (5 of 6: DREAM → BRAINSTORM → SEED → GROW → FILL → SHIP)
+  Stage: FILL (6 of 8: DREAM → BRAINSTORM → SEED → GROW → POLISH → FILL → DRESS → SHIP)
   Deliverables: POV choice, tense choice, voice register decisions
   Completion: when voice decisions are established
 
@@ -38,18 +38,18 @@ system: |
   ## Guidelines
 
   ### POV Character Selection (CRITICAL)
-  - For first-person or third-limited POV, the POV character MUST be one of the valid characters listed above
+  - For first_person or third_person_limited POV, the POV character MUST be one of the valid characters listed above
   - Do NOT invent characters like "Mila", "the reader", or other names not in the valid characters list
   - If the creative vision specifies a protagonist, confirm it matches an actual character entity
   - If no protagonist is defined, discuss options with the user (interactive) or choose the most prominent character (autonomous)
 
   ### POV Character Naming (CRITICAL)
-  GOOD: Use an exact character name from the valid characters list: "Kay", "Marcus"
-  BAD: Invent a new character: "Mila", "the reader as Alex", "your character named Sam"
+  GOOD: Use an exact raw_id from the valid characters list: `kay`, `marcus` (lowercase, no `character::` prefix)
+  BAD: Capitalized display name (`"Kay"`), scoped form (`"character::kay"`), or an invented name (`"Mila"`, `"the reader as Alex"`)
 
   ### Voice Decisions to Make
-  1. **POV**: first, second, third_limited, or third_omniscient?
-     - If first/third_limited: which character from the valid list?
+  1. **POV**: first_person, second_person, third_person_limited, or third_person_omniscient?
+     - If first_person or third_person_limited: which character from the valid list?
   2. **Tense**: past or present?
   3. **Register**: formal, conversational, literary, or sparse?
   4. **Tone**: What 3-5 adjectives capture the voice? (derived from the creative vision's themes)

@@ -1,744 +1,478 @@
-# QuestFoundry v5 — FILL Algorithm Specification
-
-**Status:** Specification Complete
-**Parent:** questfoundry-v5-spec.md
-**Purpose:** Detailed specification of the FILL stage mechanics
-
-> For the narrative description of the FILL stage, see [Document 1, Part 5](../how-branching-stories-work.md). This document provides the detailed algorithm specification.
->
-> **Key changes from Documents 1/3 (2026-02-24):**
-> - The Poly-State Prose section below is **superseded** by ADR-015 (residue beats) and Document 1. See the note on that section.
-> - FILL receives character arc metadata produced by POLISH. See [Document 1, Part 4](../how-branching-stories-work.md) and [Document 3, Part 1](../document-3-ontology.md).
-> - FILL's input comes from POLISH (not directly from GROW). The passage layer, choices, and state flags are created by POLISH.
-
----
+# FILL — Write the prose
 
 ## Overview
 
-FILL transforms passage summaries into prose. It takes a validated story graph from POLISH and produces playable content.
+FILL is primarily a consumer. It reads the complete passage graph, entities with overlays, state flags, character arc metadata, and Vision; establishes a Voice Document; and writes prose into every Passage. FILL's only structural contribution is enriching Entity base-state with universal micro-details discovered during prose writing.
 
-**Input:**
-- Validated topology (passages with summaries, choice edges)
-- DREAM vision (genre, tone, themes)
-- GROW artifacts (arcs, beats with scene_type, entity states)
-- Entities and relationships
+FILL does NOT create, reorder, split, or merge beats or passages; does NOT add path-dependent state (overlays are earlier stages' work); does NOT rescue structural problems with prose — if a passage cannot be written well, the fix belongs upstream in POLISH, GROW, or SEED.
 
-**Output:**
-- All passages with `prose` populated
-- Entity updates (micro-details discovered during prose generation)
-- Relationship updates
+## Stage Input Contract
+
+*Must match POLISH §Stage Output Contract exactly.*
+
+1. Every beat is contained in exactly one Passage (via `grouped_in` edges).
+2. Every Passage has a non-empty summary derived from its beats.
+3. Exactly one start passage exists; all passages reachable from start.
+4. Choice edges exist at every Y-fork in the beat DAG.
+5. Every Choice edge has a non-empty, diegetic, distinct-within-source label.
+6. Post-convergence soft-dilemma choices have `requires` set to the appropriate state flag.
+7. Hard-dilemma choices have empty `requires`.
+8. Variant passages exist for every passage with incompatible heavy-residue state combinations, with `variant_of` edges and satisfiable `requires`.
+9. Residue beat passages exist wherever light-residue mood-bridging is needed; passage-layer mapping (residue-passage-with-variants or parallel-passages) is recorded.
+10. False-branch passages exist where Phase 5 approved diamond or sidetrack patterns; false-branch beats have `role: "false_branch_beat"`, zero `belongs_to`, zero `dilemma_impacts`.
+11. Character arc metadata is annotated on every entity with 2+ beat appearances: `start`, `pivots` per path, `end_per_path`, and `arcs_per_path` (see POLISH §Phase 3 §Output Contract for the full schema).
+12. Every passage has a prose feasibility annotation (clean / annotated / residue / variant). No `structural split` passages unresolved.
+13. No prose exists — `passage.prose` is empty until FILL.
+14. No cycles in the passage graph.
+15. Every beat has `atmospheric_detail` populated (or a WARNING was logged for partial coverage from POLISH Phase 5e).
+16. Every multi-beat path has `path_theme` and `path_mood` populated (or a WARNING was logged for per-path Phase 5f failure).
+17. Every collapsed passage (>1 beat) has N-1 transition instructions populated (or a WARNING was logged for per-passage Phase 5f failure) — FILL bridges without explicit guidance if absent (per POLISH R-5f.5).
+18. Gap beats inserted by POLISH Phase 1a carry `is_gap_beat: True`, `role: gap_beat`, `created_by: "POLISH"`, zero `dilemma_impacts`, single `belongs_to` to their path, and traceability fields (`bridges_from`, `bridges_to`, `transition_style`).
+19. Every beat has `scene_type`, `narrative_function`, and `exit_mood` populated (or a WARNING was logged for partial coverage from GROW Phase 4b; FILL falls back per R-4b.1).
 
 ---
 
-## Core Concepts
+## Phase 1: Voice Document Creation
 
-### Voice Document
+**Purpose:** Establish the stylistic identity of the story — POV, tense, register, sentence rhythm, tone words, avoid patterns. The Voice Document is a singleton configuration node, operational descendant of the Vision. Every subsequent prose generation receives it as context.
 
-The voice document captures the stylistic identity of the story. It's created at the start of FILL, not during DREAM, because:
+### Input Contract
 
-1. **DREAM is high-level vision.** "Dark fantasy, morally ambiguous" doesn't specify POV or tense.
-2. **GROW reveals structure.** Arc shapes, scene types, and beat content inform voice choices.
-3. **Voice needs concrete decisions.** First person or third? Past tense or present? These must be locked before prose generation.
+1. Stage Input Contract satisfied.
 
-The voice document is a **contract** for all FILL calls. Every prose generation receives it, ensuring consistency across 50+ passages.
+### Operations
 
-**What it contains:**
+#### Voice Document Proposal and Approval
 
-| Field | Purpose |
-|-------|---------|
-| `pov` | Point of view (first, second, third_limited, third_omniscient) |
-| `pov_character` | Whose perspective (for limited POVs) |
-| `tense` | Past or present |
-| `register` | Formality and style (formal, conversational, literary, sparse) |
-| `sentence_rhythm` | Pacing pattern (varied, punchy, flowing) |
-| `tone_words` | Adjectives describing the voice (terse, wry, melancholic) |
-| `avoid_words` | Words/phrases to never use |
-| `avoid_patterns` | Patterns to avoid (adverb-heavy, said-bookisms) |
-| `exemplar_passages` | Optional examples of the target voice |
-
-### Sequential Generation
-
-FILL generates passages one at a time, in order. Not parallel.
-
-**Why sequential?**
-
-1. **Voice consistency.** Each passage builds on the voice established by previous passages. The sliding window of recent prose reinforces consistent style.
-
-2. **Continuity.** Details established in passage 5 (a character's gesture, a room's description) should carry forward to passage 6.
-
-3. **Convergence handling.** Branch passages need to know what they're converging toward. Sequential generation ensures convergence passages exist before branches approach them.
-
-**Why spine first?**
-
-The spine arc is the canonical route—all canonical path answers. It establishes:
-- The baseline voice
-- The canonical version of convergence passages
-- The reference point for branch variations
-
-Branches then write toward established spine content, not into a void.
-
-### Sliding Window
-
-Each prose generation call includes recent passages for context. This serves two purposes:
-
-1. **Voice reinforcement.** The LLM sees how recent passages sound, maintaining consistency.
-2. **Detail continuity.** Minor details (character descriptions, environmental elements) carry forward naturally.
-
-**What's in the window:**
-
-- Generated prose (not just summaries)
-- The most recent N passages in arc order
-- Recommended: 3-5 passages (implementation-dependent based on context budget)
-
-**Why prose, not summaries?**
-
-Summaries capture *what happens*. Prose captures *how it sounds*. For voice consistency, the LLM needs to see actual prose.
-
-### Lookahead Strategy
-
-At structural junctures (divergence and convergence points), the LLM needs awareness of what comes before or after to write smooth transitions.
-
-**Convergence (spine pass):**
-
-When writing a convergence passage during spine generation, branches haven't been written yet. But their beat summaries exist. Include:
-- Beat summaries of all connecting branches
-- Path context (which answers arrive here)
-
-This lets the convergence passage be written with awareness of all arrivals, even without their prose.
-
-**Convergence (branch pass):**
-
-When writing branch passages approaching convergence, the convergence prose exists (written during spine). Include:
-- The convergence passage prose as lookahead
-- The branch writes *toward* this established target
-
-**Divergence (branch pass):**
-
-When writing the first branch-specific passage after divergence, include:
-- The divergence passage prose (for continuity)
-- The branch picks up smoothly from the shared content
-
-### Scene Type → Prose Guidance
-
-Each beat has a `scene_type` assigned during GROW. This guides prose structure.
-
-| Scene Type | Prose Guidance |
-|------------|----------------|
-| `scene` | Full dramatic structure. Goal, obstacle, outcome. Typically 3+ paragraphs. |
-| `sequel` | Reactive processing. Reaction, dilemma, decision. Breathing room. 2-3 paragraphs. |
-| `micro_beat` | Brief transition. Time passage, minor moment. 1 paragraph. |
-
-**Craft notes (informative, not exhaustive):**
-
-These are guidelines, not rigid rules. A skilled author might write a one-paragraph scene or a four-paragraph sequel. The guidance helps the LLM make reasonable default choices.
-
-**Scene structure (when scene_type = scene):**
-
-A full scene often follows a three-part cadence:
-
-1. **Lead** — Sensory grounding. The character in motion, concrete imagery. Establishes where we are and what's happening.
-
-2. **Middle** — Goal and obstacle. What the character wants, what's in the way. Rising dilemma.
-
-3. **Close** — Decision setup. The scene ends with stakes clarified and choices meaningful. For choice points, this paragraph sets up the options.
-
-**Sequel structure (when scene_type = sequel):**
-
-Sequels provide breathing room after intense scenes:
-
-1. **Reaction** — Emotional response to what just happened.
-2. **Dilemma** — Processing options, weighing consequences.
-3. **Decision** — Choosing a direction (may lead directly to choice options).
-
-**Micro-beat structure:**
-
-One paragraph. Functional prose that moves the story forward without dwelling. Time transitions, brief observations, minor interactions.
-
-### Entity Updates
-
-During prose generation, the LLM may invent micro-details about entities:
-- Physical appearance ("a wiry man with a scar across his left eye")
-- Mannerisms ("she had a habit of tapping her ring against the table")
-- Voice characteristics ("his voice was softer than expected")
-
-These details should be captured for consistency in later passages.
+**What:** The LLM proposes a Voice Document informed by DREAM Vision (genre, tone, themes), POLISH's passage graph structure, sample beat summaries, and character arc metadata. Human approves or modifies. Optionally, 1–2 exemplar passages are generated in the proposed voice to verify fit.
 
 **Rules:**
 
-1. **Updates only.** FILL cannot create new entities. Only existing entities can be updated.
-2. **Additive details.** Updates add information, not contradict existing state.
-3. **Automatic capture.** The FILL output schema includes `entity_updates` for this purpose.
+R-1.1. Exactly one Voice Document node is created. Retries replace the previous node, not duplicate it.
 
-If prose reveals that a new recurring entity is needed, FILL should flag and pause for human review. Creating the entity requires returning to SEED.
+R-1.2. Voice Document fields include `pov`, `tense`, `voice_register`, `sentence_rhythm`, `tone_words`, `avoid_words`, `avoid_patterns`, and optionally `pov_character` and `exemplar_passages`.
 
-### Poly-State Prose (Shared Beats)
+R-1.3. `pov` ∈ {`first_person`, `second_person`, `third_person_limited`, `third_person_omniscient`}. `pov_character` names the POV entity by its raw character ID (e.g. `kay`, not the scoped form `character::kay` and not the display name `Kay`) and is required when `pov` is `first_person` or `third_person_limited` (both attach narration to a single character's perspective). For `second_person` and `third_person_omniscient` the field is omitted or empty.
 
-> **Superseded by ADR-015 and Document 1.** Poly-state prose has been replaced by residue beats (see [ADR-015](../../architecture/decisions.md#adr-015-residue-beats-replace-poly-state-prose)). Shared passages are kept neutral; residue beats set path-specific emotional context before convergence points. The `flag: incompatible_states` escape hatch described below no longer exists. This section is retained for historical context.
+R-1.4. `tense` ∈ {`past`, `present`}.
 
-Shared beats (path-agnostic) appear in multiple arcs. When writing shared beats, FILL must produce **poly-state prose**: prose that is diegetically accurate for the active state but compatible with all shadow states.
+R-1.5. The Voice Document has no graph edges. It is retrieved by node-type lookup, not by traversal.
 
-**The challenge:**
+R-1.6. Vision's `pov_style` is advisory — the Voice Document may diverge from it if the story's structure suggests otherwise.
 
-A shared beat might be reached from paths where the character has different knowledge or emotional states. The prose must work for all arrivals without contradicting any.
+R-1.7. Human approval of the Voice Document is required before prose generation begins.
 
-**Context provided to LLM:**
+**Violations:**
 
-When writing a shared beat, the LLM receives:
-- The active state (the arc currently being generated)
-- Shadow states (other valid paths that share this beat)
-- Instruction: "Write prose that is true for the active state but does not contradict shadow states"
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| Two Voice Documents exist after Phase 1 | Retry duplicated | R-1.1 |
+| Voice Document has `pov: "omniscient"` | Value outside permitted set | R-1.3 |
+| Voice Document has `pov: "first_person"` or `"third_person_limited"` but no `pov_character` | Attached-POV needs a named character | R-1.3 |
+| Voice Document has outgoing edges to passages | Singleton contract violated | R-1.5 |
+| Phase 2 starts without recorded approval | Human gate skipped | R-1.7 |
 
-**Success example:**
+### Output Contract
 
-Beat: "Kay confronts the Mentor about the warning"
-- Active state: Kay suspects betrayal
-- Shadow state: Kay trusts the Mentor
-
-Poly-state prose: "Kay studied the Mentor's face, searching for the person she thought she knew. 'Why didn't you tell me sooner?'"
-
-This works for both states—suspicious Kay searching for deception, trusting Kay searching for reassurance.
-
-**Failure example:**
-
-Prose: "Kay gripped the knife hidden in her sleeve, knowing the Mentor was a traitor."
-
-This only works for the suspicious state. It contradicts the trusting path.
-
-**The escape hatch:**
-
-If the LLM cannot write poly-state prose due to extreme emotional divergence between paths, it must **flag the beat for splitting**:
-
-```yaml
-fill_output:
-  passage_id: mentor_confrontation
-  prose: null
-  flag: incompatible_states
-  flag_reason: "Character's emotional state too divergent—suspicious path requires hostile body language incompatible with trusting path"
-```
-
-Flagged beats return to GROW for splitting into separate path-specific passages.
-
-**When to flag (guidance for LLM):**
-- Internal monologue requires contradictory knowledge
-- Body language or actions only make sense for one state
-- Dialogue would reveal information only known on one path
-- Emotional register is fundamentally different (rage vs warmth)
-
-**When NOT to flag:**
-- Ambiguous phrasing can accommodate both states
-- Universal emotions apply (uncertainty, curiosity, hope)
-- Actions are neutral (observation, movement, waiting)
+1. Exactly one Voice Document node exists with all required fields populated.
+2. No graph edges on the Voice Document.
+3. Human approval recorded.
 
 ---
 
-## Algorithm Phases
+## Phase 2: Sequential Prose Generation
 
-### Phase 0: Voice Determination
+**Purpose:** Generate prose for every Passage in arc traversal order. Canonical arc first (establishing the baseline voice and canonical shared-passage prose), then other arcs written toward the already-established shared passages.
 
-**Purpose:** Establish the voice document that governs all prose generation.
+### Input Contract
 
-**Input:**
-- DREAM vision (genre, tone, themes)
-- GROW artifacts (arc structures, beat summaries, scene types)
-- Sample beat summaries (to understand content being voiced)
+1. Phase 1 Output Contract satisfied.
 
-**Operations:**
+### Operations
 
-1. LLM analyzes inputs and proposes voice document:
-   - POV and tense based on genre conventions and story needs
-   - Register and rhythm based on tone
-   - Tone words distilled from DREAM themes
-   - Avoid patterns based on genre anti-patterns
+#### Canonical Arc Generation
 
-2. Human reviews proposal:
-   - Approve: proceed with proposed voice
-   - Modify: adjust specific fields
-   - Override: provide complete voice document manually
+**What:** Walk the canonical arc (all canonical answers) from start to terminal, generating prose for each Passage in order. Each call receives the Voice Document, current Passage summary, scene-type guidance, full entity details with active overlays, preceding-passage sliding window (3–5 recent passages' prose), character arc metadata, shadows (non-chosen answers), and lookahead at convergence points.
 
-3. Optionally, generate 1-2 exemplar passages:
-   - Pick representative beat summaries
-   - Generate sample prose in proposed voice
-   - Include as exemplars if quality is good
+**Rules:**
 
-**Output:** Approved voice document
+R-2.1. The canonical arc is written first. The canonical arc is the combination of every Dilemma's canonical Answer's path.
 
-**Human Gate:** Required. Voice document must be approved before prose generation begins.
+R-2.2. Prose is generated one Passage at a time, in arc order. Not parallel.
 
-**LLM Involvement:** Proposal generation, exemplar generation (optional)
+R-2.3. Each LLM call receives the Voice Document as mandatory context.
 
----
+R-2.4. Each LLM call receives full entity details — not just names but appearance, personality, active overlay state from the arc's state flags.
 
-### Phase 1: Sequential Prose Generation
+R-2.5. Each LLM call receives a sliding window of 3–5 preceding passages' prose (not summaries) for voice continuity.
 
-**Purpose:** Generate prose for all passages in order.
+R-2.6. At convergence points, the canonical-arc pass receives beat summaries of all arriving branches as lookahead so the convergence prose works for all arrivals.
 
-**Input:**
-- Voice document (from Phase 0)
-- Passages with summaries and scene_type
-- Arc structure (traversal order)
-- Entity states (computed from codewords)
-- Path definitions (for shadows)
+R-2.7. FILL generates prose per scene-type guidance: `scene` (3+ paragraphs, full dramatic structure), `sequel` (2–3 paragraphs, reactive processing), `micro_beat` (1 paragraph, brief transition).
 
-**Traversal Order:**
+#### Non-Canonical Arc Generation
 
-1. Spine arc, start to finish
-2. For each branch arc (in any consistent order):
-   - Start from divergence point
-   - Generate branch-specific passages
-   - End at convergence or arc end
+**What:** For each remaining arc, start from the first divergence point and generate branch-specific passages. When the branch reaches an already-written convergence passage, its prose is the lookahead target — the branch writes *toward* it.
 
-**Per-Passage Context:**
+**Rules:**
 
-| Component | Content |
-|-----------|---------|
-| Voice document | Full document |
-| Beat summary | Current passage's summary |
-| Scene type | `scene`, `sequel`, or `micro_beat` |
-| Entity states | Relevant entities at this point (base + applicable overlays) |
-| Shadows | Unexplored answers for active dilemmas |
-| Sliding window | Last N passages of generated prose (recommended 3-5) |
-| Lookahead | See lookahead strategy in Core Concepts |
-| Path context | For intersections: which paths this beat serves |
+R-2.8. Branch passes start from the divergence point for that arc and continue until reaching a converged passage or terminal.
 
-**Per-Passage Operations:**
+R-2.9. When writing branch passages approaching a convergence, the already-written convergence prose is included as lookahead so the branch lands smoothly.
 
-1. Assemble context (all components above)
-2. LLM generates prose following:
-   - Voice document constraints
-   - Scene type guidance
-   - Beat summary content
-3. LLM outputs:
-   - `prose`: The generated passage text
-   - `entity_updates`: Any micro-details to capture (optional)
-   - `relationship_updates`: Any relationship details (optional)
-4. Store prose in passage
-5. Apply entity/relationship updates
-6. Advance to next passage
+R-2.10. Branch passes respect already-written shared-passage prose — a branch cannot rewrite a shared passage, only contribute its own variants (where applicable) and non-shared passages.
 
-**Convergence Passage Handling:**
+R-2.11. Variant passages receive the full set of active state flags as context so prose reflects the correct world state.
 
-When generating a convergence passage (spine pass):
-- Include beat summaries of all connecting branches as lookahead
-- Write prose that works for all arrivals
-- This passage will be referenced by branches later
+#### Entity Micro-detail Capture
 
-**Output:** All passages with prose populated
+**What:** During prose generation, the LLM may invent micro-details about entities (a character's gesture, a location's scent). These are captured back onto the Entity's base state — they are universal (true on every arc), not path-dependent.
 
-**Human Gate:** After all passages generated, human approves to proceed to review. May also spot-check during generation for long stories.
+**Rules:**
 
-**LLM Involvement:** All prose generation
+R-2.12. FILL can update Entity base state with universal micro-details only. Updates are additive.
+
+R-2.13. FILL cannot modify overlays. Overlays are path-dependent and are POLISH's/GROW's concern. If prose implies a path-dependent detail, that is an overlay concern, not a base-state update.
+
+R-2.14. FILL cannot create new Entity nodes. If prose reveals a new recurring entity is needed, halt with a request for SEED-level intervention.
+
+R-2.15. Micro-detail updates must not contradict existing Entity state. Contradictions halt with error.
+
+**Violations:**
+
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| Non-canonical arc written before canonical | Writing-order rule broken | R-2.1 |
+| LLM call for Passage receives only the summary (no entity details) | Context missing | R-2.4 |
+| LLM call missing sliding window | Voice drift guaranteed | R-2.5 |
+| Entity update: "mentor is hostile on distrust path" | Path-dependent, should be an overlay | R-2.13 |
+| FILL creates a new `character::archivist_assistant` node | Entity creation is SEED's job | R-2.14 |
+| Micro-detail "mentor has blue eyes" contradicts existing `mentor.eyes: "gray"` | Contradictory update | R-2.15 |
+| Branch arc rewrites shared passage prose | Canonical prose is authoritative | R-2.10 |
+
+### Output Contract
+
+1. Every Passage has non-empty `prose`.
+2. Entity base-state updated with universal micro-details where applicable.
+3. No Entity nodes created, deleted, or had overlays modified.
+4. No Passage, Choice, or beat structural mutations.
 
 ---
 
-### Phase 2: Review
+## Phase 3: Review
 
-**Purpose:** Identify passages that need revision.
+**Purpose:** Identify passages that need revision — voice drift, continuity breaks, flat prose, summary deviation, convergence awkwardness.
 
-**Input:** All passages with prose
+### Input Contract
 
-**Review Mechanisms:**
+1. Phase 2 Output Contract satisfied.
 
-Implementation may use any combination:
+### Operations
 
-1. **Human review:** Read passages, flag weak ones
-2. **LLM review:** Pass passages through review prompt, get flags
-3. **Hybrid:** LLM flags candidates, human makes final call
+#### Review Pass
 
-**LLM Review Approach:**
+**What:** Pass each Passage (or a sliding window of passages) through a review process — either human, LLM-assisted, or hybrid. Each pass produces a list of flagged passages with issue descriptions.
 
-If using LLM review, context limits require sliding window:
-- Review N passages at a time (recommended 5-10)
-- Overlap windows for continuity assessment
-- Flag passages with issues
+**Rules:**
 
-**Review Criteria:**
+R-3.1. Review runs once per cycle (windowed if LLM-assisted).
 
-| Issue | Detection |
-|-------|-----------|
-| Voice drift | Passage sounds different from surrounding prose |
-| Scene type mismatch | Full scene in one paragraph, micro-beat sprawling |
-| Summary deviation | Prose doesn't match beat summary content |
-| Continuity break | Details contradict earlier passages |
-| Convergence awkwardness | Passage doesn't work for one of the arriving branches |
-| Flat prose | Lacks dilemma, sensory detail, or emotional engagement |
+R-3.2. Flags name specific issues: voice drift, scene-type mismatch, summary deviation, continuity break, convergence awkwardness, flat prose.
 
-**Output:** List of flagged passages with issue descriptions
+R-3.3. Review does not modify prose. It only produces a list of candidates for Phase 4.
 
-**Human Gate:** Human reviews flagged list, may add/remove items, approves revision targets.
+**Violations:**
 
-**LLM Involvement:** Optional (for LLM review mechanism)
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| Review phase modifies passage prose | Should only flag | R-3.3 |
+| Flag description: "this passage is bad" | Not actionable | R-3.2 |
+
+### Output Contract
+
+1. A list of flagged Passage IDs with specific issue descriptions.
+2. Passage prose unchanged.
 
 ---
 
-### Phase 3: Revision
+## Phase 4: Revision
 
-**Purpose:** Regenerate flagged passages.
+**Purpose:** Regenerate flagged Passages with the issue description explicitly included in context.
 
-**Input:**
-- Flagged passages with issue descriptions
-- All prose (including unflagged passages for context)
+### Input Contract
 
-**Operations:**
+1. Phase 3 Output Contract satisfied.
 
-For each flagged passage:
+### Operations
 
-1. Assemble context:
-   - Voice document
-   - Issue description (explicit in context)
-   - Extended sliding window (more passages for revision)
-   - For convergence passages: all approach passages now exist
-2. LLM regenerates prose addressing the flagged issue
-3. Store revised prose
-4. Apply any entity/relationship updates
+#### Flagged Passage Regeneration
 
-**Revision Context Extensions:**
+**What:** For each flagged Passage, assemble extended context (Voice Document, issue description, extended sliding window, and relevant lookahead/continuity passages) and regenerate prose. Revision context may include more than the Phase 2 window.
 
-| Situation | Additional Context |
-|-----------|-------------------|
-| Voice drift | Include more exemplar passages showing correct voice |
-| Convergence issues | Include all approach passage prose |
-| Continuity break | Include the contradicted passage explicitly |
+**Rules:**
 
-**Output:** Revised passages
+R-4.1. Revision uses the same rules as Phase 2 generation plus the issue description.
 
-**Human Gate:** After revisions complete, human reviews revised passages.
+R-4.2. A Passage may be revised at most once per cycle.
 
-**LLM Involvement:** All regeneration
+R-4.3. Revision replaces the Passage's prose; previous prose is not preserved in the graph (version history is out of scope).
+
+**Violations:**
+
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| Passage revised twice in one cycle | Cycle bound violated | R-4.2 |
+
+### Output Contract
+
+1. Flagged Passages have updated prose.
+2. Other Passages unchanged.
 
 ---
 
-### Phase 4: Optional Second Cycle
+## Phase 4a: Arc-Level Structural Validation
 
-**Purpose:** Final quality pass if needed.
+**Purpose:** After per-passage revision, validate the structural integrity of each arc as a whole.  Some structural promises made by GROW/SEED (the arc's effect progression, Dilemma commit closure, and per-Dilemma prose coverage at commit beats) cannot be re-checked by reading a single passage — they are properties of the arc's beat sequence and passage prose as a whole.  Phase 4a is FILL's structural QA of its own output against those upstream promises.
 
-**Operations:**
+### Input Contract
 
-If human is unsatisfied after Phase 3:
-1. Return to Phase 2 (review)
-2. Flag remaining issues
-3. Revise (Phase 3)
+1. Phase 4 Output Contract satisfied.
 
-**Hard Cap:** Maximum 2 review-revise cycles.
+### Operations
 
-After cap reached, ship as-is. Persistent quality issues indicate upstream problems:
-- Voice document doesn't match the story
-- Beat summaries are too vague
-- Structure needs rework (return to SEED/GROW)
+#### Per-Arc Structural Checks
 
-The cap is configurable and human-overridable, but defaults to 2.
+**What:** For each arc (canonical arc first, then each non-canonical arc), run the following deterministic checks:
 
-**Human Gate:** Final approval after last cycle.
+- **Effect-sequence progression:** Inspect the arc's beats in DAG order and verify the sequence of `dilemma_impacts.effect` values shows structural progression toward a commit — arcs whose beats consist entirely of one effect type (e.g., only `reveals`) or whose sequence never reaches `commits` before the arc's terminal fail this check.  Concretely: locate the first beat on the arc whose `effect` is `commits` and verify at least one earlier beat on the arc has `effect` `advances` or `complicates`.  If no `commits` beat exists on the arc before its terminal, the arc fails.  This is a graph-structural check over ontology-defined fields only.
+- **Dilemma commit closure:** Verify every Dilemma explored on this arc (every Dilemma whose path has `belongs_to` edges from beats on the arc) has at least one beat on the arc whose `dilemma_impacts.effect` is `commits` before the arc's terminal.  An arc that explores a Dilemma but terminates without committing it fails this check.
+- **Dilemma-prose coverage:** Verify every Dilemma committed on the arc has non-empty prose at the commit-beat's passage AND the prose text mentions at least one of the Dilemma's central entities (resolved via `anchored_to` edges, matched by case-insensitive substring against each entity's `name` or `raw_id`).  This is a deterministic prose-text check — no LLM semantic judgment; either the name appears in the passage prose or it does not.  It is the narrative counterpart to Dilemma commit closure: the structural commit must be reflected in prose at the corresponding passage.
+
+**Rules:**
+
+R-4a.1. Phase 4a is deterministic — no LLM calls.  Checks use prose already in the graph plus graph-structural data (arc order, dilemma membership, beat roles).
+
+R-4a.2. Phase 4a produces a structural validation report but does NOT regenerate prose.  Issues found become arc-level flags.  If Phase 5 is run, these flags are included in the second-cycle review input.
+
+**Violations:**
+
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| Prose regenerated during Phase 4a | Gate mutated content | R-4a.2 |
+| Structural report not produced when issues are found | Flags silently dropped | R-4a.2 |
+| Phase 4a result varies for identical graph state | Non-deterministic check | R-4a.1 |
+
+### Output Contract
+
+1. A structural validation report (empty if no issues found) listing any arc-level flags with the specific check that triggered each flag.
+2. All passage prose unchanged.
+3. No LLM calls made.
+
+---
+
+## Phase 5: Optional Second Cycle
+
+**Purpose:** If quality is still unsatisfactory after Phase 4, run one more review + revision cycle. Hard cap: two total cycles.
+
+### Input Contract
+
+1. Phase 4a Output Contract satisfied, and human requests another cycle.  The Phase 4a structural report is part of the second-cycle review input.
+
+### Operations
+
+#### Second-Cycle Review and Revision
+
+**Rules:**
+
+R-5.1. Maximum 2 review-and-revision cycles per FILL run.
+
+R-5.2. After the cap, FILL ships as-is. Persistent quality issues indicate upstream problems (voice mismatch, vague summaries, structural issues) — those are escalated to earlier stages.
+
+R-5.3. The cap is configurable but defaults to 2.
+
+**Violations:**
+
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| 3+ review cycles run | Cap not enforced | R-5.1 |
+| Persistent low-quality prose shipped without escalation flag | Upstream problem masked | R-5.2 |
+
+### Output Contract
+
+1. At most 2 review+revision cycles completed.
+2. Unresolvable quality issues are flagged for upstream escalation.
 
 ---
 
-## Human Gates Summary
+## Stage Output Contract
 
-| After Phase | Human Decision |
-|-------------|----------------|
-| 0. Voice | Approve/modify voice document |
-| 1. Generation | Approve to review (may spot-check during) |
-| 2. Review | Approve revision targets |
-| 3. Revision | Approve revisions (or trigger Phase 4) |
-| 4. Second cycle | Final approval |
+1. Voice Document singleton exists with all required fields populated.
+2. Every Passage has non-empty `prose`.
+3. Entity base-state enriched with zero or more universal micro-details (additive only).
+4. No Passage, Choice, beat, Entity, Dilemma, Path, Consequence, or State Flag nodes created or deleted by FILL.
+5. No overlay modifications.
+6. Character arc metadata unchanged (consumed as context, not mutated).
+7. At most 2 review+revision cycles were run.
+
+## Implementation Constraints
+
+- **Context Enrichment:** Every prose-generation LLM call must receive the Voice Document, full entity details (name, appearance, personality, active overlays from state flags), character arc metadata for every entity in the passage, sliding window of preceding prose, lookahead at convergence points, shadows for active dilemmas. Bare Passage summaries are insufficient. → CLAUDE.md §Context Enrichment Principle (CRITICAL)
+- **Prompt Context Formatting:** Entity details, state flag lists, sliding windows, character arc metadata must be formatted as human-readable text with explanatory headers. Never interpolate Python objects. → CLAUDE.md §Prompt Context Formatting (CRITICAL)
+- **Valid ID Injection:** LLM calls do not generate IDs (prose is unconstrained); however, entity micro-detail updates must reference existing Entity IDs. Provide the valid Entity ID list when asking for updates. → CLAUDE.md §Valid ID Injection Principle
+- **Silent Degradation:** Persistent quality failures after 2 cycles must escalate upstream — do not ship silently-low-quality prose. The `fill_hard_transition_detected` warning — a runtime log signature emitted when FILL encounters a cross-dilemma seam that GROW's Phase 4c did not cover with a transition beat (→ grow.md §Phase 4c — Transition Beat Insertion) — must surface in logs and flag for human review, not be suppressed. → CLAUDE.md §Silent Degradation
+- **Small Model Prompt Bias:** If voice drifts or scene structure breaks on small models, fix the prompt (stronger voice reinforcement, explicit scene-type guidance, concrete exemplars) before blaming the model. → CLAUDE.md §Small Model Prompt Bias (CRITICAL)
+
+## Cross-References
+
+- FILL narrative concept → how-branching-stories-work.md §Part 5: Writing the Narrative
+- Voice Document schema → story-graph-ontology.md §Part 1: Vision (Voice Document paragraph); §Part 9: Node Types
+- Vision `pov_style` advisory role → story-graph-ontology.md §Part 1: Vision
+- Entity base-state vs overlays → story-graph-ontology.md §Part 6: What FILL Adds vs. What Overlays Track
+- Character arc metadata → story-graph-ontology.md §Part 1: Character Arc Metadata
+- Scene Blueprint (per-passage writing plan) → story-graph-ontology.md §Part 1: Scene Blueprint
+- Canonical arc writing-first-then-branches (operational privilege) → story-graph-ontology.md §Part 1: Answer
+- Previous stage → polish.md §Stage Output Contract
+- Next stage → dress.md §Stage Input Contract
+
+## Rule Index
+
+R-1.1: Exactly one Voice Document node; retries replace.
+R-1.2: Voice Document has required fields: pov, tense, voice_register, sentence_rhythm, tone_words, avoid_words, avoid_patterns.
+R-1.3: `pov` in permitted set; `pov_character` required for `first_person` and `third_person_limited`.
+R-1.4: `tense` ∈ {past, present}.
+R-1.5: Voice Document has no graph edges.
+R-1.6: Vision's `pov_style` is advisory.
+R-1.7: Human approval of Voice Document required before Phase 2.
+R-2.1: Canonical arc written first.
+R-2.2: Sequential generation; not parallel.
+R-2.3: Every prose call receives Voice Document.
+R-2.4: Every prose call receives full entity details with active overlays.
+R-2.5: Sliding window of 3–5 preceding passages' prose included.
+R-2.6: Convergence points receive lookahead from arriving branches.
+R-2.7: Scene-type guidance: scene / sequel / micro-beat.
+R-2.8: Branch passes start at divergence points.
+R-2.9: Branch passes receive convergence lookahead.
+R-2.10: Branches cannot rewrite shared-passage prose.
+R-2.11: Variant passages receive active state flags as context.
+R-2.12: Entity updates are universal micro-details (additive only).
+R-2.13: FILL cannot modify overlays.
+R-2.14: FILL cannot create new Entity nodes.
+R-2.15: Micro-detail updates must not contradict existing state.
+R-3.1: Review runs once per cycle.
+R-3.2: Flags name specific issues with actionable descriptions.
+R-3.3: Review does not modify prose.
+R-4.1: Revision uses Phase 2 rules plus the issue description.
+R-4.2: Each Passage revised at most once per cycle.
+R-4.3: Revision replaces prose (no version history).
+R-4a.1: Phase 4a is deterministic — no LLM calls.
+R-4a.2: Phase 4a produces a structural report but does not regenerate prose.
+R-5.1: Maximum 2 review+revision cycles per FILL run.
+R-5.2: Persistent quality issues escalate upstream, not ship silently.
+R-5.3: Cap is configurable; default 2.
 
 ---
 
-## Failure Modes and Recovery
+## Human Gates
 
-FILL failures are generally recoverable within the stage. Unlike GROW, prose problems rarely require returning to earlier stages.
-
-### Phase-Specific Failures
-
-| Phase | Failure | Detection | Recovery |
-|-------|---------|-----------|----------|
-| 0. Voice | Voice doesn't fit story | Human review | Iterate on voice document |
-| 0. Voice | Exemplars inconsistent | Human review | Regenerate exemplars or skip |
-| 1. Generation | Voice drift mid-story | Review (Phase 2) | Revise with stronger voice reinforcement |
-| 1. Generation | Passage too short/long | Review | Revise with explicit length guidance |
-| 1. Generation | Summary hallucination | Review | Revise with summary emphasized |
-| 1. Generation | Entity detail conflicts | Later generation fails | Update entity, revise both passages |
-| 1. Generation | Poly-state prose impossible | LLM flags `incompatible_states` | Return to GROW, split beat into path-specific passages |
-| 2. Review | Too many flags | Human overwhelm | Prioritize, accept some imperfection |
-| 3. Revision | Revision doesn't fix issue | Human review | Try different approach or accept |
-
-### Structural Failures (Abort to Earlier Stage)
-
-These are rare but indicate upstream problems:
-
-| Condition | Why Abort | Target |
-|-----------|-----------|--------|
-| Beat summaries too vague for prose | Structure issue | Return to GROW, improve summaries |
-| Convergence fundamentally broken | Arcs incompatible | Return to GROW, fix convergence |
-| Voice impossible for content | DREAM/structure mismatch | Return to DREAM or SEED |
-| New entity needed | Can't create in FILL | Return to SEED, add entity |
-
-### Quality Threshold
-
-FILL has inherent subjectivity. "Good prose" varies by reader. The procedure provides:
-- Structure (voice document, scene types)
-- Review mechanism
-- Iteration cap
-
-It does not guarantee prose quality. Quality ultimately depends on:
-- LLM capability
-- Prompt design (out of scope for this procedure)
-- Human curation effort
-
----
+| Phase | Gate | Decision |
+|-------|------|----------|
+| 1 | Voice Document Creation | Required — approve voice document |
+| 2 | Prose Generation | Approve to proceed to review (may spot-check during) |
+| 3 | Review | Required — approve revision targets |
+| 4 | Revision | Required — approve revisions, decide whether to run Phase 5 |
+| 4a | Arc-Level Structural Validation | None — automatic (deterministic report; flags feed Phase 5) |
+| 5 | Second Cycle (optional) | Required — final sign-off |
 
 ## Iteration Control
 
-**Principle:** Generate once, review once, revise targeted passages. Cap total cycles.
+**Forward flow:** 1 → 2 → 3 → 4 → 4a → (optional 5) → done.
 
-| Phase | Iteration | Fallback |
-|-------|-----------|----------|
-| Voice determination | Until human approves | 3 proposals max, then human writes |
-| Generation | One pass, strictly sequential | N/A |
-| Review | One pass (windowed if LLM) | N/A |
-| Revision | One pass per flagged passage | N/A |
-| Full cycle | 2 maximum | Ship as-is, note quality concerns |
+**Backward loops:**
 
-**Why strict limits?**
+| From | To | Trigger |
+|------|-----|---------|
+| 1 | DREAM | Voice impossible for content (genre/tone/structure mismatch) |
+| 2 | POLISH | Passage cannot be written — structural fix needed |
+| 2 | SEED | New Entity needed (cannot create in FILL) |
+| 4 | 3 | Additional cycle requested (up to cap) |
 
-Prose quality is unbounded. You can always revise more. Without caps:
-- Diminishing returns on iteration
-- Human fatigue
-- Lost time better spent on structure
+**Maximum iterations:**
 
-The cap forces "good enough" decisions. If prose consistently fails after 2 cycles, the problem is upstream (voice, structure, or model capability).
+- Voice Document: 3 proposal attempts before human writes manually.
+- Sequential generation: one pass.
+- Review: one pass per cycle.
+- Revision: one pass per flagged passage per cycle.
+- Full cycle: 2 maximum (configurable).
 
----
+## Failure Modes
+
+| Phase | Failure | Detection | Recovery |
+|-------|---------|-----------|----------|
+| 1 | Voice doesn't fit | Human review | Iterate on voice; up to 3 proposals then human writes |
+| 2 | Voice drift mid-story | Phase 3 flag | Revise with stronger voice reinforcement |
+| 2 | Passage requires path-dependent entity detail | R-2.13 violation attempt | Halt; return to POLISH or GROW for overlay |
+| 2 | New Entity needed for prose | R-2.14 violation attempt | Halt; return to SEED |
+| 2 | Micro-detail contradicts existing state | R-2.15 check | Halt; human decides which is correct |
+| 2 | Hard transition without GROW bridge | `fill_hard_transition_detected` warning | Flag for human review; may need GROW re-run |
+| 3 | Too many flags | Human overwhelm | Prioritize; accept some imperfection |
+| 4 | Revision doesn't fix issue | Human review | Try different approach or accept with flag |
+| 4a | Effect-sequence progression flag | `run_arc_validation` report | Phase 5 revision first; if unresolved, escalate to GROW (missing `commits` or non-progressing effect sequence is a beat-DAG shape issue) |
+| 4a | Dilemma commit closure flag | `run_arc_validation` report | Escalate to GROW — an unclosed Dilemma on a completed arc is a structural error not fixable by prose revision |
+| 4a | Dilemma-prose coverage flag | `run_arc_validation` report | Phase 5 revision first (add dilemma reference to commit-beat prose); if unresolved, escalate to POLISH (check dilemma is central to the commit passage) |
+| 5 | Quality still poor after 2 cycles | Cap reached | Ship with escalation flag to upstream stages |
+
+**Structural failures (abort to earlier stage):**
+
+| Condition | Target |
+|-----------|--------|
+| Beat summaries too vague for prose | POLISH (improve summaries) or SEED (fix scaffolds) |
+| Convergence fundamentally broken | GROW |
+| New entity needed | SEED |
+| Voice impossible for content | DREAM |
 
 ## Context Management
 
-### Standard (128k+ context)
+**Standard (≥128k context):** Full Voice Document + 5-passage sliding window + full entity details with overlays + character arc metadata + shadows + lookahead per call.
 
-Generous context allows:
-- Full voice document (~300-400 tokens)
-- Extended sliding window (5+ passages, ~2,000+ tokens)
-- Full entity states (~500 tokens)
-- Lookahead passages (~400 tokens)
-- Output buffer (~500 tokens)
-
-**Total per call:** ~4,000-5,000 tokens
-
-No windowing needed. Include everything.
-
-### Constrained (32k context)
-
-Tight context requires choices:
-- Reduce sliding window (2-3 passages)
-- Summarize distant entity states
-- Shorter voice document (drop exemplars)
-
-**Budget guidance:**
-
-| Component | Recommended | Minimum |
-|-----------|-------------|---------|
-| Voice document | 300 | 150 (no exemplars) |
-| Beat summary + scene_type | 100 | 80 |
-| Entity states | 400 | 200 (relevant only) |
-| Shadows | 150 | 100 |
-| Sliding window | 1,200 (3 passages) | 600 (2 passages) |
-| Lookahead | 400 | 200 |
-| Output buffer | 500 | 400 |
-| **Total** | ~3,050 | ~1,730 |
-
-For 32k context, this leaves ample room for system prompt and generation.
-
-### Implementation Decisions
-
-The procedure specifies *what* to include, not exact sizes. Implementation should:
-- Measure actual token usage for the specific model
-- Adjust window sizes based on available context
-- Prioritize voice document and current beat (never truncate these)
-- Truncate sliding window first if needed
-
----
+**Constrained (~32k context):** Reduce sliding window to 3; summarize character arc metadata; prioritize active-arc entities only; drop shadows for passages where they are not narratively relevant.
 
 ## Worked Example
 
-### Setup
+### Starting Point (POLISH output)
 
-**Story:** 2 dilemmas, 4 arcs total
-- Mentor trust: protector (canonical) vs manipulator
-- Artifact nature: saves (canonical) vs corrupts
+- 12 Passages with summaries
+- Choice edges at 1 Y-fork (mentor_trust commit)
+- 2 variant passages at the climax (for heavy-residue mentor state)
+- 2 residue passages with variants (mood bridges before shared vault passage)
+- Character arc metadata on 8 entities
+- No prose yet
 
-**Arcs:**
-- Spine: mentor_protector + artifact_saves
-- Branch A: mentor_protector + artifact_corrupts
-- Branch B: mentor_manipulator + artifact_saves
-- Branch C: mentor_manipulator + artifact_corrupts
+### Phase 1
 
-**Passages (simplified):**
+LLM proposes Voice Document based on Vision and POLISH structure. `pov: third_person_limited`, `pov_character: kay` (raw character ID — not the scoped form `character::kay` and not the display name `Kay`), `tense: past`, `voice_register: sparse`, `sentence_rhythm: punchy`, tone_words: `[muted, wary, hushed]`, avoid_patterns: `[adverb-heavy, said-bookisms]`. Human approves.
 
-| ID | Beat Summary | Scene Type | Arcs |
-|----|--------------|------------|------|
-| p1 | Kay enters the tower, meets the mentor | scene | all |
-| p2 | Mentor explains the artifact's power | scene | all |
-| p3_spine | Mentor reveals protective intent, gives artifact | scene | spine, A |
-| p3_branch | Mentor's manipulation exposed, takes artifact | scene | B, C |
-| p4_spine | Kay uses artifact, it heals the land | scene | spine |
-| p4_corrupt | Kay uses artifact, it corrupts her | scene | A, C |
-| p4_branch | Kay uses artifact against mentor, saves land | scene | B |
-| p5 | Aftermath: Kay reflects on choices | sequel | all (convergence) |
+### Phase 2
 
-### Phase 0: Voice Determination
+**Canonical arc (mentor_protector):** 12 passages written in order. First passage establishes voice; each subsequent call includes preceding prose as sliding window. At convergence, beat summaries of approaching non-canonical branch included as lookahead.
 
-**DREAM vision:** Dark fantasy, morally ambiguous, themes of trust and power.
+During Passage 4, LLM notes: "the mentor's habit of tapping his signet ring before speaking" — captured to Entity base-state as universal micro-detail.
 
-**LLM proposes:**
+**Non-canonical arc (mentor_manipulator):** 4 branch-specific passages written from divergence to convergence. Convergence passage prose is the lookahead target. At the climax, the variant passage (for this arc's state flag combination) is written.
 
-```yaml
-voice:
-  pov: third_limited
-  pov_character: kay
-  tense: past
-  register: literary
-  sentence_rhythm: varied
-  tone_words: [atmospheric, tense, intimate]
-  avoid_words: [suddenly, very, really]
-  avoid_patterns: [adverb-heavy dialogue tags, excessive internal monologue]
-  exemplar_passages: []
-```
+**Variant passages:** 2 variant passages written for the climax, each with the appropriate state flag context.
 
-**Human approves** with modification: adds "melancholic" to tone_words.
+### Phase 3
 
-### Phase 1: Sequential Prose Generation
+Human + LLM review pass. 2 passages flagged: one for voice drift (Passage 7 sounds too ornate), one for convergence awkwardness (Passage 10 doesn't land smoothly for the manipulator arc).
 
-**Spine generation (passages in order):**
+### Phase 4
 
-**p1** (Kay enters tower, meets mentor):
-- Context: voice doc, beat summary, scene_type=scene, no sliding window yet
-- Generated prose:
+Passage 7 regenerated with stronger voice reinforcement (more exemplar passages in context). Passage 10 regenerated with both approach-passage prose blocks as explicit context.
 
-> The tower stairs wound upward into darkness, each step groaning beneath Kay's weight. She had expected dust, decay—the usual markers of abandonment. Instead, candlelight flickered from above, warm and steady.
->
-> The chamber at the top held more books than walls. And in their midst, a figure turned to face her. The mentor. Older than the stories suggested, but his eyes held the same unsettling clarity.
->
-> "You found the way," he said. Not a question. "Sit. We have much to discuss, and the night is not as long as you might hope."
+### Phase 4a
 
-**p2** (Mentor explains artifact):
-- Context: voice doc, beat summary, scene_type=scene, sliding window [p1]
-- Generated prose:
+Arc-level structural validation runs on both arcs.  Effect-sequence progression: each arc contains `advances` / `complicates` beats followed by a `commits` beat before the arc's terminal, OK.  Dilemma commit closure: `mentor_trust` has a beat with `effect=commits` on both arcs, OK.  Dilemma-prose coverage: the commit-beat passage on each arc contains prose referencing the mentor entity (the Dilemma's `anchored_to` target), OK.  Structural report: empty.
 
-> The artifact lay on the table between them, no larger than Kay's fist. In the candlelight, it seemed to pulse—though perhaps that was her imagination, her exhaustion, the wine the mentor had poured without asking.
->
-> "It responds to intent," the mentor said, his fingers hovering but not touching. "The pure of heart find it heals. The corrupt find it... illuminating." A thin smile. "Most find it somewhere between."
->
-> Kay reached for it, then stopped. "And what did you find?"
->
-> The mentor's smile didn't waver. "I found that some questions are better lived than answered."
+Human approves. No Phase 5 needed.
 
-**p5** (Convergence - aftermath):
-- Context: voice doc, beat summary, scene_type=sequel, sliding window [p2], lookahead: beat summaries for all arriving branches
-- This is a convergence passage. Written during spine pass with awareness of all arrivals.
-- Generated prose:
-
-> The land stretched before her, changed. Whether healed or scarred depended on angles, on light, on what Kay allowed herself to remember.
->
-> She sat on the tower steps—the same steps she had climbed a lifetime ago, though the candles had long since guttered. The mentor was gone. The artifact was gone, or changed, or perhaps had never been what she thought.
->
-> What remained was the weight of choices made. Not regret, exactly. Something quieter. The knowledge that every path closed others, and that she would never know what those other paths held.
->
-> She rose. There was still work to do, in whatever world she had made.
-
-**Branch B generation** (mentor_manipulator + artifact_saves):
-
-Starts at divergence. p1 and p2 are shared (already generated).
-
-**p3_branch** (Mentor's manipulation exposed):
-- Context: voice doc, beat summary, scene_type=scene, sliding window [p1, p2], divergence passage p2 for continuity
-- Generated prose:
-
-> The question hung between them. Kay watched the mentor's face—watched the smile falter, just slightly, at the edges.
->
-> "What did I find?" he repeated. And something shifted in his eyes. The warmth Kay had thought she'd seen guttered like a candle in wind. "I found power, girl. The same thing everyone finds, if they're honest."
->
-> His hand closed over the artifact before she could react. "And I found that honesty is a luxury. One I can no longer afford."
->
-> Kay's hand went to her knife. Too slow. Always too slow.
-
-**p4_branch** (Kay uses artifact against mentor):
-- Context: voice doc, beat summary, scene_type=scene, sliding window [p2, p3_branch], lookahead: p5 (convergence prose)
-- Branch writes toward the established convergence.
-- Generated prose:
-
-> The struggle was brief and brutal. The mentor had age and knowledge; Kay had desperation and the knife she'd carried since childhood. In the end, neither mattered.
->
-> The artifact chose.
->
-> It burned in her grip—not with heat, but with something colder. Intent. And as the light poured through her, Kay understood what the mentor had never grasped: the artifact didn't respond to purity or corruption. It responded to truth.
->
-> The mentor crumpled. The land beyond the tower window shuddered, then stilled. Healed.
->
-> Kay dropped the artifact. It lay there, inert, its purpose spent or simply waiting. She didn't want to know which.
-
-### Phase 2: Review
-
-**LLM review flags:**
-- p4_corrupt (not shown): "Voice drift—more melodramatic than surrounding passages"
-- p3_spine (not shown): "Convergence approach—check works with branch arrivals"
-
-**Human reviews:**
-- Accepts p4_corrupt flag
-- Dismisses p3_spine concern (convergence is p5, not p3)
-
-### Phase 3: Revision
-
-**p4_corrupt revision:**
-- Context: voice doc, issue description ("reduce melodrama, match atmospheric tone"), extended sliding window
-- Regenerated with corrected tone
-
-### Phase 4: Not Needed
-
-Human approves after Phase 3. Done.
-
----
-
-## Design Principle: LLM Generates, Human Curates
-
-FILL is the most generative stage. Unlike GROW (where LLM proposes structural decisions), FILL asks the LLM to create content.
-
-**LLM responsibilities:**
-- Generate prose matching voice document
-- Follow scene type guidance
-- Maintain continuity via sliding window
-- Capture entity details
-
-**Human responsibilities:**
-- Approve voice document (sets the target)
-- Review prose quality (subjective judgment)
-- Decide revision targets (prioritize effort)
-- Accept "good enough" (avoid infinite polishing)
-
-**The human does not need to:**
-- Write prose from scratch
-- Manually track entity details
-- Remember voice constraints while reviewing
-
-**Quality depends on collaboration:**
-- LLM provides volume and consistency
-- Human provides taste and curation
-- Voice document bridges the gap
-
----
-
-## Summary
-
-FILL is 5 phases:
-
-| # | Phase | LLM | Human Gate |
-|---|-------|-----|------------|
-| 0 | Voice determination | Yes (proposal) | Yes |
-| 1 | Sequential generation | Yes (all prose) | Yes (approve to review) |
-| 2 | Review | Optional (LLM review) | Yes (approve targets) |
-| 3 | Revision | Yes (regeneration) | Yes (approve revisions) |
-| 4 | Optional second cycle | Yes | Yes (final approval) |
-
-**Phase distribution:**
-- LLM-heavy (0, 1, 3): Content generation
-- Human-heavy (2, 4): Quality judgment
-- All phases have human gates
-
-**Core principle:** LLM generates prose under voice document constraints. Human curates quality through review and revision targeting. Iteration is capped because prose quality is subjective—"good enough" beats "perfect forever."
+FILL complete.

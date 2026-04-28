@@ -10,7 +10,7 @@ import asyncio
 from unittest.mock import MagicMock
 
 from questfoundry.graph.graph import Graph
-from questfoundry.models.polish import CharacterArcMetadata, Phase3Output
+from questfoundry.models.polish import ArcPivot, CharacterArcMetadata, Phase3Output
 from questfoundry.pipeline.stages.polish.llm_phases import (
     _check_consecutive_runs,
     _check_post_commit_sequel,
@@ -256,7 +256,7 @@ class TestConsecutiveRuns:
             "c": {"scene_type": "scene"},
         }
         flags: list = []
-        _check_consecutive_runs(["a", "b", "c"], beat_nodes, {}, flags)
+        _check_consecutive_runs(["a", "b", "c"], beat_nodes, lambda _bid: "", flags)
         assert len(flags) == 1
         assert flags[0]["issue_type"] == "consecutive_scene"
 
@@ -267,13 +267,13 @@ class TestConsecutiveRuns:
             "c": {"scene_type": "sequel"},
         }
         flags: list = []
-        _check_consecutive_runs(["a", "b", "c"], beat_nodes, {}, flags)
+        _check_consecutive_runs(["a", "b", "c"], beat_nodes, lambda _bid: "", flags)
         assert len(flags) == 1
         assert flags[0]["issue_type"] == "consecutive_sequel"
 
     def test_short_chain_ignored(self) -> None:
         flags: list = []
-        _check_consecutive_runs(["a", "b"], {"a": {}, "b": {}}, {}, flags)
+        _check_consecutive_runs(["a", "b"], {"a": {}, "b": {}}, lambda _bid: "", flags)
         assert len(flags) == 0
 
 
@@ -289,7 +289,7 @@ class TestPostCommitSequel:
             "b": {"dilemma_impacts": [], "scene_type": "sequel"},
         }
         flags: list = []
-        _check_post_commit_sequel(["a", "b"], beat_nodes, {}, flags)
+        _check_post_commit_sequel(["a", "b"], beat_nodes, lambda _bid: "", flags)
         assert len(flags) == 0
 
     def test_commit_followed_by_scene_flagged(self) -> None:
@@ -301,7 +301,7 @@ class TestPostCommitSequel:
             "b": {"dilemma_impacts": [], "scene_type": "scene"},
         }
         flags: list = []
-        _check_post_commit_sequel(["a", "b"], beat_nodes, {}, flags)
+        _check_post_commit_sequel(["a", "b"], beat_nodes, lambda _bid: "", flags)
         assert len(flags) == 1
 
     def test_commit_at_end_of_chain_flagged(self) -> None:
@@ -314,7 +314,7 @@ class TestPostCommitSequel:
             },
         }
         flags: list = []
-        _check_post_commit_sequel(["a", "b"], beat_nodes, {}, flags)
+        _check_post_commit_sequel(["a", "b"], beat_nodes, lambda _bid: "", flags)
         assert len(flags) == 1
         assert flags[0]["issue_type"] == "no_sequel_after_commit"
 
@@ -395,11 +395,13 @@ class _FakePolishLLMHost(_PolishLLMPhaseMixin):
         return (self._llm_result, 1, 100)
 
 
-class TestPhase3ArcMetadataEdge:
-    """Phase 3 must add has_arc_metadata edge from entity to arc node."""
+class TestPhase3CharacterArcField:
+    """Phase 3 must annotate Entity nodes with character_arc field per R-3.3."""
 
-    def test_has_arc_metadata_edge_created(self) -> None:
-        """Phase 3 creates has_arc_metadata edge from entity to arc metadata node."""
+    def test_character_arc_field_on_entity(self) -> None:
+        """R-3.3: Phase 3 annotates Entity node's data dict with 'character_arc';
+        no separate 'character_arc_metadata' node and no 'has_arc_metadata' edge
+        are created."""
         graph = Graph.empty()
 
         # Create entity node
@@ -413,12 +415,25 @@ class TestPhase3ArcMetadataEdge:
         _make_beat(graph, "beat::b", "Second beat", entities=["entity::hero"])
         _add_predecessor(graph, "beat::b", "beat::a")
 
+        # Create a path (needed to make end_per_path work)
+        graph.create_node(
+            "path::brave",
+            {"type": "path", "raw_id": "brave"},
+        )
+
         # Phase 3 output
         arc_output = Phase3Output(
             character_arcs=[
                 CharacterArcMetadata(
                     entity_id="entity::hero",
                     start="Nervous newcomer",
+                    pivots=[
+                        ArcPivot(
+                            path_id="path::brave",
+                            beat_id="beat::b",
+                            description="Gains confidence",
+                        )
+                    ],
                     end_per_path={"path::brave": "Confident hero"},
                 )
             ]
@@ -429,11 +444,22 @@ class TestPhase3ArcMetadataEdge:
 
         assert result.status == "completed"
 
-        # Verify has_arc_metadata edge exists from entity to arc node
-        arc_node_id = "character_arc_metadata::hero"
-        edges = graph.get_edges(from_id="entity::hero", edge_type="has_arc_metadata")
-        assert len(edges) == 1
-        assert edges[0]["to"] == arc_node_id
+        # Verify character_arc field exists on entity node
+        entity_data = graph.get_node("entity::hero")
+        assert entity_data is not None
+        assert "character_arc" in entity_data
+        arc = entity_data["character_arc"]
+        assert "start" in arc
+        assert arc["start"] == "Nervous newcomer"
+        assert "pivots" in arc
+        assert "path::brave" in arc["pivots"]
+        assert arc["pivots"]["path::brave"] == "beat::b"
+        assert "end_per_path" in arc
+        assert arc["end_per_path"]["path::brave"] == "Confident hero"
+
+        # And the forbidden shapes are absent:
+        assert graph.get_nodes_by_type("character_arc_metadata") == {}
+        assert graph.get_edges(edge_type="has_arc_metadata") == []
 
 
 # ---------------------------------------------------------------------------
@@ -461,6 +487,19 @@ class TestPhase5eAmbiguousFeasibility:
             entities=["entity::hero"],
             flags=["dilemma::heavy:path::ph"],
         )
+
+        # Wire flag → consequence → path_id so the residue-decision lookup
+        # in Phase 5e (#1530) can resolve the flag to a real path.
+        graph.create_node("path::ph", {"type": "path", "raw_id": "ph"})
+        graph.create_node(
+            "consequence::heavy",
+            {"type": "consequence", "raw_id": "heavy", "path_id": "path::ph"},
+        )
+        graph.create_node(
+            "dilemma::heavy:path::ph",
+            {"type": "state_flag", "raw_id": "heavy", "derived_from": "consequence::heavy"},
+        )
+        graph.add_edge("derived_from", "dilemma::heavy:path::ph", "consequence::heavy")
 
         graph.create_node(
             "polish_plan::current",
@@ -577,6 +616,77 @@ class TestPhase5eAmbiguousFeasibility:
         # Nothing added to variant or residue specs
         assert len(plan_data.get("variant_specs", [])) == 0
 
+    def test_residue_decision_with_unmapped_flag_skips_spec(self) -> None:
+        """LLM 'residue' decision on a flag without a derived_from→consequence
+        path_id mapping skips the spec instead of constructing a malformed one.
+        """
+        from questfoundry.models.polish import (
+            AmbiguousFeasibilityCase,
+            FeasibilityDecisionItem,
+            PassageSpec,
+            Phase5eOutput,
+        )
+
+        graph = Graph.empty()
+
+        passage = PassageSpec(
+            passage_id="passage::ambig_x",
+            beat_ids=["beat::x"],
+            summary="Ambiguous passage with unmapped flag",
+            entities=["entity::hero"],
+            grouping_type="singleton",
+        )
+        ambiguous = AmbiguousFeasibilityCase(
+            passage_id="passage::ambig_x",
+            passage_summary="Ambiguous passage with unmapped flag",
+            entities=["entity::hero"],
+            flags=["dilemma::heavy:path::orphan"],
+        )
+
+        # Intentionally no derived_from edge / consequence wiring for this flag.
+        graph.create_node(
+            "polish_plan::current",
+            {
+                "type": "polish_plan",
+                "raw_id": "current",
+                "passage_count": 1,
+                "variant_count": 0,
+                "residue_count": 0,
+                "choice_count": 0,
+                "candidate_count": 0,
+                "warnings": [],
+                "passage_specs": [passage.model_dump()],
+                "variant_specs": [],
+                "residue_specs": [],
+                "choice_specs": [],
+                "false_branch_candidates": [],
+                "false_branch_specs": [],
+                "feasibility_annotations": {},
+                "ambiguous_specs": [ambiguous.model_dump()],
+                "arc_traversals": {},
+            },
+        )
+
+        llm_output = Phase5eOutput(
+            feasibility_decisions=[
+                FeasibilityDecisionItem(
+                    passage_id="passage::ambig_x",
+                    flag_index=0,
+                    decision="residue",
+                )
+            ]
+        )
+
+        host = _FakePolishLLMHost(llm_output)
+        result = asyncio.run(host._phase_5_llm_enrichment(graph, MagicMock()))  # type: ignore[arg-type]
+
+        assert result.status == "completed"
+
+        plan_nodes = graph.get_nodes_by_type("polish_plan")
+        plan_data = plan_nodes.get("polish_plan::current", {})
+        residue_specs = plan_data.get("residue_specs", [])
+        assert residue_specs == []
+
     def test_skipped_when_no_ambiguous_cases(self) -> None:
         """Phase 5e is skipped when ambiguous_specs is empty."""
         from questfoundry.models.polish import Phase5eOutput
@@ -610,6 +720,188 @@ class TestPhase5eAmbiguousFeasibility:
 
         assert result.status == "completed"
         assert "0 ambiguous cases resolved" in result.detail
+
+
+class _RecordingPolishLLMHost(_PolishLLMPhaseMixin):
+    """Like _FakePolishLLMHost, but records (template_name, context, schema) per call.
+
+    Used by Phase 5a tests to assert which specs were forwarded to the LLM.
+    """
+
+    def __init__(self, results_by_template: dict[str, object]) -> None:
+        self._results = results_by_template
+        self.calls: list[tuple[str, object, object]] = []
+
+    async def _polish_llm_call(
+        self,
+        model: object,  # noqa: ARG002
+        template_name: str,
+        context: object,
+        output_schema: object,
+    ) -> tuple[object, int, int]:
+        self.calls.append((template_name, context, output_schema))
+        result = self._results.get(template_name)
+        if result is None:
+            raise AssertionError(f"Unexpected template call: {template_name}")
+        return (result, 1, 100)
+
+
+class TestPhase5aContinueFiltering:
+    """Phase 5a must NOT forward Continue (R-4c.7) choices to the labeling LLM.
+
+    Continue edges already carry the literal label `"Continue"`, set by
+    `compute_choice_edges`. Sending them to the LLM wastes tokens and risks
+    relabeling them to diegetic phrases.
+    """
+
+    def _build_plan_with_mixed_choices(self, graph: Graph) -> None:
+        from questfoundry.models.polish import ChoiceSpec, PassageSpec
+
+        passages = [
+            PassageSpec(
+                passage_id=f"passage::p{i}",
+                beat_ids=[f"beat::b{i}"],
+                summary=f"summary {i}",
+                entities=[],
+                grouping_type="singleton",
+            )
+            for i in range(3)
+        ]
+
+        # Two choices: one fork (no label yet — to be filled by 5a) and one
+        # Continue (already labeled by R-4c.7).
+        choices = [
+            ChoiceSpec(
+                from_passage="passage::p0",
+                to_passage="passage::p1",
+                grants=[],
+                requires=[],
+                label="",
+            ).model_dump(),
+            ChoiceSpec(
+                from_passage="passage::p1",
+                to_passage="passage::p2",
+                grants=[],
+                requires=[],
+                label="Continue",
+            ).model_dump(),
+        ]
+
+        graph.create_node(
+            "polish_plan::current",
+            {
+                "type": "polish_plan",
+                "raw_id": "current",
+                "passage_count": 3,
+                "variant_count": 0,
+                "residue_count": 0,
+                "choice_count": 2,
+                "candidate_count": 0,
+                "warnings": [],
+                "passage_specs": [p.model_dump() for p in passages],
+                "variant_specs": [],
+                "residue_specs": [],
+                "choice_specs": choices,
+                "false_branch_candidates": [],
+                "false_branch_specs": [],
+                "feasibility_annotations": {},
+                "ambiguous_specs": [],
+                "arc_traversals": {},
+            },
+        )
+
+    def test_continue_specs_not_forwarded_to_llm(self) -> None:
+        from questfoundry.models.polish import (
+            ChoiceLabelItem,
+            Phase5aOutput,
+        )
+
+        graph = Graph.empty()
+        self._build_plan_with_mixed_choices(graph)
+
+        labeled = Phase5aOutput(
+            choice_labels=[
+                ChoiceLabelItem(
+                    from_passage="passage::p0",
+                    to_passage="passage::p1",
+                    label="Trust the mentor",
+                )
+            ]
+        )
+
+        host = _RecordingPolishLLMHost({"polish_phase5a_choice_labels": labeled})
+        result = asyncio.run(host._phase_5_llm_enrichment(graph, MagicMock()))  # type: ignore[arg-type]
+        assert result.status == "completed"
+
+        # Locate the Phase 5a call. The context dict carries "choice_count".
+        phase5a_calls = [c for c in host.calls if c[0] == "polish_phase5a_choice_labels"]
+        assert len(phase5a_calls) == 1
+        _, context, _ = phase5a_calls[0]
+        assert isinstance(context, dict)
+        assert context["choice_count"] == "1"  # Continue spec excluded
+
+        # The fork choice should now carry the LLM-supplied label.
+        plan_data = graph.get_nodes_by_type("polish_plan")["polish_plan::current"]
+        labels = {
+            (c["from_passage"], c["to_passage"]): c["label"] for c in plan_data["choice_specs"]
+        }
+        assert labels[("passage::p0", "passage::p1")] == "Trust the mentor"
+        # Continue label preserved exactly.
+        assert labels[("passage::p1", "passage::p2")] == "Continue"
+
+    def test_only_continue_choices_skips_phase5a_llm_call(self) -> None:
+        """When every choice is a Continue, Phase 5a must not invoke the LLM."""
+        from questfoundry.models.polish import ChoiceSpec, PassageSpec
+
+        graph = Graph.empty()
+        passages = [
+            PassageSpec(
+                passage_id=f"passage::p{i}",
+                beat_ids=[f"beat::b{i}"],
+                summary=f"summary {i}",
+                entities=[],
+                grouping_type="singleton",
+            )
+            for i in range(2)
+        ]
+        choices = [
+            ChoiceSpec(
+                from_passage="passage::p0",
+                to_passage="passage::p1",
+                grants=[],
+                requires=[],
+                label="Continue",
+            ).model_dump(),
+        ]
+        graph.create_node(
+            "polish_plan::current",
+            {
+                "type": "polish_plan",
+                "raw_id": "current",
+                "passage_count": 2,
+                "variant_count": 0,
+                "residue_count": 0,
+                "choice_count": 1,
+                "candidate_count": 0,
+                "warnings": [],
+                "passage_specs": [p.model_dump() for p in passages],
+                "variant_specs": [],
+                "residue_specs": [],
+                "choice_specs": choices,
+                "false_branch_candidates": [],
+                "false_branch_specs": [],
+                "feasibility_annotations": {},
+                "ambiguous_specs": [],
+                "arc_traversals": {},
+            },
+        )
+
+        host = _RecordingPolishLLMHost({})  # no Phase 5a result registered
+        result = asyncio.run(host._phase_5_llm_enrichment(graph, MagicMock()))  # type: ignore[arg-type]
+        assert result.status == "completed"
+
+        phase5a_calls = [c for c in host.calls if c[0] == "polish_phase5a_choice_labels"]
+        assert phase5a_calls == []
 
 
 # ---------------------------------------------------------------------------

@@ -156,6 +156,22 @@ def _preprocess_provider_kwargs(
     """
     kwargs = dict(kwargs)  # Don't mutate input
 
+    # max_vram is a QuestFoundry-only kwarg — never pass it through to the
+    # provider client. Resolve here and translate to num_ctx for ollama.
+    max_vram = kwargs.pop("max_vram", None)
+    if max_vram is None:
+        env_max_vram = os.getenv("QF_MAX_VRAM")
+        if env_max_vram is not None:
+            try:
+                max_vram = float(env_max_vram)
+            except ValueError:
+                log.warning(
+                    "qf_max_vram_invalid",
+                    value=env_max_vram,
+                    msg="QF_MAX_VRAM must be a positive number; ignoring",
+                )
+                max_vram = None
+
     if provider == "ollama":
         # Resolve host from kwargs or env var
         host = kwargs.pop("host", None) or os.getenv("OLLAMA_HOST")
@@ -165,14 +181,56 @@ def _preprocess_provider_kwargs(
                 "ollama",
                 "OLLAMA_HOST not configured. Set OLLAMA_HOST environment variable.",
             )
+        # Strip trailing slash once at the source — httpx silently normalises
+        # the resulting "//api/show" but we'd rather not rely on that.
+        host = host.rstrip("/")
         kwargs["base_url"] = host
 
-        # Query Ollama for num_ctx if not explicitly provided
+        # Resolve num_ctx. Precedence:
+        #   1. explicit num_ctx kwarg (caller's choice — never override)
+        #   2. max_vram-driven calculation (one /api/show round-trip)
+        #   3. /api/show num_ctx field (Modelfile or architectural max)
+        #   4. hard fallback 32_768
         if "num_ctx" not in kwargs:
-            num_ctx = _query_ollama_num_ctx(host, model)
-            kwargs["num_ctx"] = num_ctx if num_ctx else 32_768
+            show_data = _query_ollama_show(host, model)
+            num_ctx: int | None = None
 
-    elif provider == "openai":
+            if max_vram is not None and max_vram > 0 and show_data is not None:
+                from questfoundry.providers.vram import (
+                    VramTooSmallError,
+                    calculate_max_context,
+                )
+
+                try:
+                    architectural_max = _extract_architectural_max_from_show(show_data, model)
+                    num_ctx = calculate_max_context(
+                        max_vram, show_data, architectural_max=architectural_max
+                    )
+                except VramTooSmallError:
+                    raise
+                except ValueError as exc:
+                    log.warning(
+                        "vram_calc_skipped",
+                        model=model,
+                        reason=str(exc),
+                    )
+
+            if num_ctx is None and show_data is not None:
+                num_ctx = _extract_num_ctx_from_show(show_data, model)
+
+            kwargs["num_ctx"] = num_ctx if num_ctx else 32_768
+    elif max_vram is not None:
+        # max_vram only affects Ollama. Log and fall through to the
+        # cloud-provider config below — claude-review caught a bug where
+        # this branch was the second `elif` in the chain and short-circuited
+        # api_key injection for cloud providers when max_vram was passed.
+        log.debug(
+            "max_vram_ignored_non_ollama",
+            provider=provider,
+            msg="--max-vram only affects Ollama; cloud providers manage their own context",
+        )
+
+    if provider == "openai":
         # Resolve API key from kwargs or env var (handles api_key=None case)
         api_key = kwargs.get("api_key") or os.getenv("OPENAI_API_KEY")
         if not api_key:
@@ -209,7 +267,78 @@ def _preprocess_provider_kwargs(
             )
         kwargs["api_key"] = api_key
 
+        # Apply default safety_settings unless caller already supplied one (#1464).
+        # Gemini's defaults (BLOCK_MEDIUM_AND_ABOVE) reject genre-typical content
+        # for QuestFoundry's mystery / noir / horror / thriller use cases — see
+        # projects/murder3 PROHIBITED_CONTENT block on fill_phase1_expand for a
+        # blackmail-ledger / undercover-journalist passage batch. QuestFoundry
+        # users explicitly opt into a creative-writing pipeline; the safety
+        # filter is a chatbot-deployment concern, not an authoring concern.
+        # ``not kwargs.get(...)`` (rather than ``not in``) intentionally treats
+        # ``safety_settings=None`` and ``safety_settings={}`` as "use our
+        # defaults" too — silently letting None through would re-enable
+        # Gemini's consumer-level defaults, the exact failure this guards
+        # against.
+        if not kwargs.get("safety_settings"):
+            try:
+                kwargs["safety_settings"] = _default_google_safety_settings()
+            except ImportError:
+                # Defer to the centralised handler in ``create_chat_model``:
+                # a missing ``langchain-google-genai`` package surfaces as
+                # ``ProviderError`` with the ``uv add ...`` hint when
+                # ``_init_chat_model_safe`` runs. We only swallow this one
+                # exception class so unknown failures still propagate.
+                pass
+            else:
+                log.debug(
+                    "google_safety_settings_injected",
+                    categories=len(kwargs["safety_settings"]),
+                )
+
     return kwargs
+
+
+def _default_google_safety_settings() -> dict[Any, Any]:
+    """Return the default ``safety_settings`` dict for the Google provider.
+
+    Maps the four core user-facing harm categories to ``OFF``, plus
+    ``HARM_CATEGORY_CIVIC_INTEGRITY`` when the installed
+    ``langchain-google-genai`` exposes it (added in v1.0.4; pyproject pins
+    >=2.0 today, so the absence path is forward-defensive). When that
+    category is absent we log a warning to make the gap observable rather
+    than silently shipping a smaller default set.
+
+    ``OFF`` (not ``BLOCK_NONE``) is intentional: ``BLOCK_NONE`` only governs
+    the response-side filter — the input-side prefilter still rejects
+    prompts that mention things like \"blackmail ledger\" or \"undercover
+    journalist\" with ``block_reason=PROHIBITED_CONTENT`` (#1466 reproduced
+    against the murder3 cozy-mystery project after #1465 / #1464). ``OFF``
+    is the documented threshold that disables filtering at both layers,
+    appropriate for a creative-fiction authoring tool where genre-typical
+    content is expected.
+
+    Imported lazily so the factory doesn't require ``langchain-google-genai``
+    at module load time — only when a Google model is actually requested.
+    """
+    from langchain_google_genai import HarmBlockThreshold, HarmCategory
+
+    settings: dict[Any, Any] = {
+        HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.OFF,
+        HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.OFF,
+        HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.OFF,
+        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.OFF,
+    }
+    civic = getattr(HarmCategory, "HARM_CATEGORY_CIVIC_INTEGRITY", None)
+    if civic is not None:
+        settings[civic] = HarmBlockThreshold.OFF
+    else:
+        log.warning(
+            "google_safety_category_missing",
+            category="HARM_CATEGORY_CIVIC_INTEGRITY",
+            hint="langchain-google-genai < 1.0.4; civic-integrity content "
+            "uses Gemini's built-in defaults for this category only.",
+        )
+    return settings
 
 
 def _map_provider_for_init(provider: str) -> str:
@@ -335,19 +464,12 @@ def _normalize_provider(provider_name: str) -> str:
     return name
 
 
-def _query_ollama_num_ctx(host: str, model: str) -> int | None:
-    """Query Ollama /api/show to get the model's configured num_ctx.
+def _query_ollama_show(host: str, model: str) -> dict[str, Any] | None:
+    """Query Ollama /api/show and return the parsed response dict.
 
-    Parses the ``parameters`` field from the response which contains the
-    Modelfile-configured values (e.g., ``num_ctx  32768``).
-
-    Args:
-        host: Ollama server base URL.
-        model: Model name.
-
-    Returns:
-        The num_ctx value from the model's configuration, or None if the
-        query fails or the value is not found.
+    Centralised so callers needing different fields (num_ctx, architecture
+    metadata for VRAM calculation) share one HTTP round-trip per model.
+    Returns None on any error — callers fall back to their own defaults.
     """
     import httpx
 
@@ -355,12 +477,19 @@ def _query_ollama_num_ctx(host: str, model: str) -> int | None:
         with httpx.Client(timeout=10.0) as client:
             resp = client.post(f"{host}/api/show", json={"model": model})
             resp.raise_for_status()
-            data = resp.json()
+            return resp.json()  # type: ignore[no-any-return]
     except Exception as exc:
         log.warning("ollama_show_failed", model=model, error=str(exc))
         return None
 
-    # Parse the 'parameters' field: newline-separated "key  value" pairs
+
+def _extract_num_ctx_from_show(data: dict[str, Any], model: str) -> int | None:
+    """Pull num_ctx from a parsed /api/show response.
+
+    Prefers the Modelfile-configured value (``parameters: "num_ctx 32768"``);
+    falls back to the architectural ``*.context_length`` if no Modelfile
+    override is present.
+    """
     parameters = data.get("parameters", "")
     for line in parameters.splitlines():
         parts = line.split()
@@ -369,17 +498,41 @@ def _query_ollama_num_ctx(host: str, model: str) -> int | None:
                 num_ctx = int(parts[-1])
                 log.info("ollama_num_ctx_from_model", model=model, num_ctx=num_ctx)
                 return num_ctx
-            except ValueError:
-                pass
+            except ValueError as e:  # pragma: no cover - defensive against malformed Ollama API
+                log.debug(
+                    "ollama_num_ctx_parse_failed",
+                    error=str(e),
+                    model=model,
+                    value=parts[-1] if parts else None,
+                )
 
-    # Fallback: check model_info for architecture context_length
+    return _extract_architectural_max_from_show(data, model)
+
+
+def _extract_architectural_max_from_show(data: dict[str, Any], model: str) -> int | None:
+    """Return the architectural max context length, ignoring Modelfile overrides.
+
+    Used as the cap for VRAM-aware num_ctx — the Modelfile's `num_ctx`
+    is one default value, but max_vram should be able to compute *up to*
+    the architectural maximum if VRAM allows.
+    """
     model_info = data.get("model_info", {})
     for key, value in model_info.items():
         if key.endswith(".context_length") and isinstance(value, int):
             log.info("ollama_num_ctx_from_arch", model=model, num_ctx=value)
             return value
-
     return None
+
+
+def _query_ollama_num_ctx(host: str, model: str) -> int | None:
+    """Query Ollama /api/show to get the model's configured num_ctx.
+
+    Convenience wrapper preserved for callers that only need num_ctx.
+    """
+    data = _query_ollama_show(host, model)
+    if data is None:
+        return None
+    return _extract_num_ctx_from_show(data, model)
 
 
 async def unload_ollama_model(chat_model: BaseChatModel) -> None:

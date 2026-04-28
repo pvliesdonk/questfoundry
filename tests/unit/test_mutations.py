@@ -34,6 +34,146 @@ def _blocking_errors(errors: list[SeedValidationError]) -> list[SeedValidationEr
     return [e for e in errors if e.category != SeedErrorCategory.WARNING]
 
 
+def _create_compliant_vision(graph: Graph) -> None:
+    """Create a vision node that satisfies DREAM contract."""
+    graph.create_node(
+        "vision",
+        {
+            "type": "vision",
+            "genre": "dark fantasy",
+            "tone": ["atmospheric"],
+            "themes": ["forbidden knowledge"],
+            "audience": "adult",
+            "scope": {"story_size": "short"},
+            "human_approved": True,
+        },
+    )
+
+
+def _create_compliant_brainstorm_graph(
+    *,
+    extra_entities: list[tuple[str, dict]] | None = None,
+    extra_dilemmas: list[tuple[str, str, list[tuple[str, str, bool]], str]] | None = None,
+) -> Graph:
+    """Create a graph that fully satisfies the BRAINSTORM output contract.
+
+    This is required for tests that call ``apply_seed_mutations``, since SEED
+    exit runs ``validate_seed_output`` which includes ``_check_upstream_contract``
+    (BRAINSTORM + DREAM validators).
+
+    The base graph contains:
+    - DREAM vision node
+    - 1 character entity (``character::mentor``) with name/category/concept
+    - 2 location entities (``location::archive``, ``location::tower``) — R-2.4
+    - 1 dilemma (``dilemma::trust``) with question/why_it_matters/anchored_to/2 answers
+
+    Args:
+        extra_entities: Optional list of (node_id, data) pairs to add beyond the base set.
+        extra_dilemmas: Optional list of (raw_id, question, [(answer_raw_id, description,
+            is_canonical), ...], anchor_entity_id) tuples for additional dilemmas.
+
+    Returns:
+        A fully BRAINSTORM-contract-compliant ``Graph`` instance.
+    """
+    graph = Graph.empty()
+    _create_compliant_vision(graph)
+    # 1 character entity
+    graph.create_node(
+        "character::mentor",
+        {
+            "type": "entity",
+            "raw_id": "mentor",
+            "category": "character",
+            "name": "Mentor",
+            "concept": "Senior archivist with hidden motives",
+        },
+    )
+    # 2 location entities (R-2.4: BRAINSTORM must produce ≥2 locations)
+    graph.create_node(
+        "location::archive",
+        {
+            "type": "entity",
+            "raw_id": "archive",
+            "category": "location",
+            "name": "The Archive",
+            "concept": "Ancient repository of forbidden texts",
+        },
+    )
+    graph.create_node(
+        "location::tower",
+        {
+            "type": "entity",
+            "raw_id": "tower",
+            "category": "location",
+            "name": "The Tower",
+            "concept": "Tall observatory on the hill",
+        },
+    )
+    # 1 dilemma with 2 answers + anchored_to + why_it_matters
+    graph.create_node(
+        "dilemma::trust",
+        {
+            "type": "dilemma",
+            "raw_id": "trust",
+            "question": "Can the mentor be trusted?",
+            "why_it_matters": "Trust defines whether the protagonist gains an ally or faces a foe.",
+        },
+    )
+    graph.create_node(
+        "dilemma::trust::alt::protector",
+        {
+            "type": "answer",
+            "raw_id": "protector",
+            "description": "The mentor genuinely protects the protagonist.",
+            "is_canonical": True,
+        },
+    )
+    graph.create_node(
+        "dilemma::trust::alt::manipulator",
+        {
+            "type": "answer",
+            "raw_id": "manipulator",
+            "description": "The mentor is secretly manipulating for personal gain.",
+            "is_canonical": False,
+        },
+    )
+    graph.add_edge("has_answer", "dilemma::trust", "dilemma::trust::alt::protector")
+    graph.add_edge("has_answer", "dilemma::trust", "dilemma::trust::alt::manipulator")
+    graph.add_edge("anchored_to", "dilemma::trust", "character::mentor")
+
+    # Add any caller-requested extra entities
+    for node_id, data in extra_entities or []:
+        graph.create_node(node_id, data)
+
+    # Add any caller-requested extra dilemmas
+    for raw_id, question, answers, anchor_entity_id in extra_dilemmas or []:
+        d_id = f"dilemma::{raw_id}"
+        graph.create_node(
+            d_id,
+            {
+                "type": "dilemma",
+                "raw_id": raw_id,
+                "question": question,
+                "why_it_matters": f"This choice is central to the story of {raw_id}.",
+            },
+        )
+        for ans_raw, ans_desc, ans_canonical in answers:
+            ans_id = f"{d_id}::alt::{ans_raw}"
+            graph.create_node(
+                ans_id,
+                {
+                    "type": "answer",
+                    "raw_id": ans_raw,
+                    "description": ans_desc,
+                    "is_canonical": ans_canonical,
+                },
+            )
+            graph.add_edge("has_answer", d_id, ans_id)
+        graph.add_edge("anchored_to", d_id, anchor_entity_id)
+
+    return graph
+
+
 class TestHasMutationHandler:
     """Test the mutation handler check function."""
 
@@ -115,7 +255,14 @@ class TestApplyMutations:
     def test_routes_to_dream(self) -> None:
         """Routes dream stage to apply_dream_mutations."""
         graph = Graph.empty()
-        output = {"genre": "noir", "themes": ["trust"], "tone": ["dark"]}
+        output = {
+            "genre": "noir",
+            "themes": ["trust"],
+            "tone": ["dark"],
+            "audience": "adult",
+            "scope": {"story_size": "short"},
+            "human_approved": True,
+        }
 
         apply_mutations(graph, "dream", output)
 
@@ -124,11 +271,52 @@ class TestApplyMutations:
     def test_routes_to_brainstorm(self) -> None:
         """Routes brainstorm stage to apply_brainstorm_mutations."""
         graph = Graph.empty()
+
+        # DREAM stage must run first to create vision node
+        dream_output = {
+            "genre": "test",
+            "tone": ["neutral"],
+            "themes": ["test"],
+            "audience": "adult",
+            "scope": {"story_size": "short"},
+            "human_approved": True,
+        }
+        apply_mutations(graph, "dream", dream_output)
+        graph.set_last_stage("dream")
+
         output = {
             "entities": [
-                {"entity_id": "char_001", "entity_category": "character", "concept": "Test"}
+                {
+                    "entity_id": "char_001",
+                    "entity_category": "character",
+                    "name": "Character",
+                    "concept": "Test",
+                },
+                {
+                    "entity_id": "loc_001",
+                    "entity_category": "location",
+                    "name": "Place 1",
+                    "concept": "Place 1",
+                },
+                {
+                    "entity_id": "loc_002",
+                    "entity_category": "location",
+                    "name": "Place 2",
+                    "concept": "Place 2",
+                },
             ],
-            "dilemmas": [],
+            "dilemmas": [
+                {
+                    "dilemma_id": "d1",
+                    "question": "Q?",
+                    "why_it_matters": "stakes",
+                    "central_entity_ids": ["char_001"],
+                    "answers": [
+                        {"answer_id": "a", "description": "A", "is_canonical": True},
+                        {"answer_id": "b", "description": "B", "is_canonical": False},
+                    ],
+                }
+            ],
         }
 
         apply_mutations(graph, "brainstorm", output)
@@ -138,82 +326,121 @@ class TestApplyMutations:
 
     def test_routes_to_seed(self) -> None:
         """Routes seed stage to apply_seed_mutations."""
-        graph = Graph.empty()
-        # Pre-populate with entity from brainstorm
-        graph.create_node(
-            "entity::char_001",
-            {"type": "entity", "raw_id": "char_001", "disposition": "proposed"},
-        )
-        # Add 2 dilemmas with both answers (required for minimum arc count)
-        for i in range(2):
-            tid = f"dilemma::t{i}"
-            graph.create_node(tid, {"type": "dilemma", "raw_id": f"t{i}"})
-            for alt in ["a", "b"]:
-                alt_id = f"{tid}::alt::{alt}"
-                graph.create_node(alt_id, {"type": "answer", "raw_id": alt})
-                graph.add_edge("has_answer", tid, alt_id)
+        # Use a fully BRAINSTORM-compliant graph (required by validate_seed_output's
+        # _check_upstream_contract, which now runs at SEED exit).
+        graph = _create_compliant_brainstorm_graph()
+        # Also mark the mentor entity as "proposed" so SEED can update its disposition.
+        graph.get_node("character::mentor")["disposition"] = "proposed"
 
         output = {
-            "entities": [{"entity_id": "char_001", "disposition": "retained"}],
+            "entities": [
+                {"entity_id": "mentor", "disposition": "retained"},
+                {"entity_id": "archive", "disposition": "retained"},
+                {"entity_id": "tower", "disposition": "retained"},
+            ],
             "dilemmas": [
-                {"dilemma_id": "t0", "explored": ["a", "b"], "unexplored": []},
-                {"dilemma_id": "t1", "explored": ["a", "b"], "unexplored": []},
+                {"dilemma_id": "trust", "explored": ["protector", "manipulator"], "unexplored": []},
             ],
             "paths": [
-                {"path_id": "path_0", "dilemma_id": "t0", "answer_id": "a"},
-                {"path_id": "path_1", "dilemma_id": "t0", "answer_id": "b"},
-                {"path_id": "path_2", "dilemma_id": "t1", "answer_id": "a"},
-                {"path_id": "path_3", "dilemma_id": "t1", "answer_id": "b"},
+                {
+                    "path_id": "trust__protector",
+                    "dilemma_id": "trust",
+                    "answer_id": "protector",
+                    "name": "Protector Arc",
+                    "description": "The mentor protects.",
+                    "path_importance": "major",
+                },
+                {
+                    "path_id": "trust__manipulator",
+                    "dilemma_id": "trust",
+                    "answer_id": "manipulator",
+                    "name": "Manipulator Arc",
+                    "description": "The mentor manipulates.",
+                    "path_importance": "major",
+                },
             ],
+            "consequences": [
+                {
+                    "consequence_id": "c_protector",
+                    "path_id": "trust__protector",
+                    "description": "Mentor's protection bears fruit.",
+                    "narrative_effects": ["protagonist gains powerful ally"],
+                },
+                {
+                    "consequence_id": "c_manipulator",
+                    "path_id": "trust__manipulator",
+                    "description": "Mentor's manipulation is exposed.",
+                    "narrative_effects": ["protagonist must face danger alone"],
+                },
+            ],
+            "human_approved_paths": True,
             "initial_beats": [
-                # Each path needs a commits beat AND at least one post-commit
-                # consequence beat (enforced by COMPLETENESS validation).
                 {
-                    "beat_id": "b0",
-                    "paths": ["path_0"],
-                    "dilemma_impacts": [{"dilemma_id": "t0", "effect": "commits"}],
+                    "beat_id": "shared_pre",
+                    "summary": "Both players encounter the mentor's cryptic hint.",
+                    "path_id": "trust__protector",
+                    "also_belongs_to": "trust__manipulator",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
+                    "entities": ["mentor"],
                 },
                 {
-                    "beat_id": "b0c",
-                    "paths": ["path_0"],
-                    "dilemma_impacts": [{"dilemma_id": "t0", "effect": "advances"}],
+                    "beat_id": "commit_protector",
+                    "summary": "Protagonist trusts the mentor.",
+                    "path_id": "trust__protector",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "commits"}],
+                    "entities": ["mentor"],
                 },
                 {
-                    "beat_id": "b1",
-                    "paths": ["path_1"],
-                    "dilemma_impacts": [{"dilemma_id": "t0", "effect": "commits"}],
+                    "beat_id": "post_protector_1",
+                    "summary": "Mentor reveals a vital secret.",
+                    "path_id": "trust__protector",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
+                    "entities": ["mentor"],
                 },
                 {
-                    "beat_id": "b1c",
-                    "paths": ["path_1"],
-                    "dilemma_impacts": [{"dilemma_id": "t0", "effect": "advances"}],
+                    "beat_id": "post_protector_2",
+                    "summary": "Ally bond confirmed.",
+                    "path_id": "trust__protector",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
+                    "entities": ["mentor"],
                 },
                 {
-                    "beat_id": "b2",
-                    "paths": ["path_2"],
-                    "dilemma_impacts": [{"dilemma_id": "t1", "effect": "commits"}],
+                    "beat_id": "commit_manipulator",
+                    "summary": "Protagonist distrusts the mentor.",
+                    "path_id": "trust__manipulator",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "commits"}],
+                    "entities": ["mentor"],
                 },
                 {
-                    "beat_id": "b2c",
-                    "paths": ["path_2"],
-                    "dilemma_impacts": [{"dilemma_id": "t1", "effect": "advances"}],
+                    "beat_id": "post_manipulator_1",
+                    "summary": "Mentor's true motive surfaces.",
+                    "path_id": "trust__manipulator",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
+                    "entities": ["mentor"],
                 },
                 {
-                    "beat_id": "b3",
-                    "paths": ["path_3"],
-                    "dilemma_impacts": [{"dilemma_id": "t1", "effect": "commits"}],
+                    "beat_id": "post_manipulator_2",
+                    "summary": "Protagonist faces danger alone.",
+                    "path_id": "trust__manipulator",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
+                    "entities": ["mentor"],
                 },
+            ],
+            "dilemma_analyses": [
                 {
-                    "beat_id": "b3c",
-                    "paths": ["path_3"],
-                    "dilemma_impacts": [{"dilemma_id": "t1", "effect": "advances"}],
+                    "dilemma_id": "trust",
+                    "dilemma_role": "hard",
+                    "payoff_budget": 2,
+                    "reasoning": "Binary trust question.",
+                    "ending_salience": "high",
+                    "residue_weight": "heavy",
                 },
             ],
         }
 
         apply_mutations(graph, "seed", output)
 
-        assert graph.get_node("entity::char_001")["disposition"] == "retained"
+        assert graph.get_node("character::mentor")["disposition"] == "retained"
 
     def test_unknown_stage_raises(self) -> None:
         """Unknown stage raises ValueError."""
@@ -236,6 +463,8 @@ class TestDreamMutations:
             "themes": ["trust", "betrayal"],
             "audience": "adult",
             "style_notes": "First person narration",
+            "scope": {"story_size": "short"},
+            "human_approved": True,
         }
 
         apply_dream_mutations(graph, output)
@@ -255,7 +484,17 @@ class TestDreamMutations:
         graph = Graph.empty()
         graph.create_node("vision", {"type": "vision", "genre": "fantasy"})
 
-        apply_dream_mutations(graph, {"genre": "noir", "themes": [], "tone": []})
+        apply_dream_mutations(
+            graph,
+            {
+                "genre": "noir",
+                "themes": ["trust"],
+                "tone": ["dark"],
+                "audience": "adult",
+                "scope": {"story_size": "short"},
+                "human_approved": True,
+            },
+        )
 
         assert graph.get_node("vision")["genre"] == "noir"
 
@@ -267,7 +506,9 @@ class TestDreamMutations:
             "themes": ["intrigue"],
             "tone": ["suspenseful"],
             "audience": "adult",
-            # No subgenre, style_notes, scope, content_notes
+            "scope": {"story_size": "medium"},
+            # No subgenre, style_notes, content_notes
+            "human_approved": True,
         }
 
         apply_dream_mutations(graph, output)
@@ -282,21 +523,18 @@ class TestDreamMutations:
         graph = Graph.empty()
         output = {
             "genre": "fantasy",
-            "themes": [],
-            "tone": [],
+            "themes": ["adventure"],
+            "tone": ["light"],
             "audience": "ya",
-            "scope": {
-                "estimated_passages": 50,
-                "target_word_count": 25000,
-                "branching_depth": "moderate",
-            },
+            "scope": {"story_size": "medium"},
+            "human_approved": True,
         }
 
         apply_dream_mutations(graph, output)
 
         vision = graph.get_node("vision")
         assert vision is not None
-        assert vision["scope"]["estimated_passages"] == 50
+        assert vision["scope"]["story_size"] == "medium"
 
     def test_includes_pov_fields_if_present(self) -> None:
         """Includes POV hint fields if present."""
@@ -306,15 +544,17 @@ class TestDreamMutations:
             "themes": ["fear"],
             "tone": ["tense"],
             "audience": "adult",
-            "pov_style": "second",
+            "scope": {"story_size": "short"},
+            "pov_style": "second_person",
             "protagonist_defined": True,
+            "human_approved": True,
         }
 
         apply_dream_mutations(graph, output)
 
         vision = graph.get_node("vision")
         assert vision is not None
-        assert vision["pov_style"] == "second"
+        assert vision["pov_style"] == "second_person"
         assert vision["protagonist_defined"] is True
 
     def test_pov_fields_default_correctly(self) -> None:
@@ -325,7 +565,9 @@ class TestDreamMutations:
             "themes": ["adventure"],
             "tone": ["light"],
             "audience": "ya",
+            "scope": {"story_size": "medium"},
             # No pov_style or protagonist_defined
+            "human_approved": True,
         }
 
         apply_dream_mutations(graph, output)
@@ -390,21 +632,42 @@ class TestBrainstormMutations:
     def test_creates_entity_nodes(self) -> None:
         """Creates entity nodes from brainstorm output."""
         graph = Graph.empty()
+        _create_compliant_vision(graph)
+
         output = {
             "entities": [
                 {
                     "entity_id": "kay",
                     "entity_category": "character",
+                    "name": "Kay",
                     "concept": "Young archivist",
                     "notes": "Curious and brave",
                 },
                 {
                     "entity_id": "archive",
                     "entity_category": "location",
+                    "name": "Archive",
                     "concept": "Ancient repository",
                 },
+                {
+                    "entity_id": "tower",
+                    "entity_category": "location",
+                    "name": "Tower",
+                    "concept": "Tall structure",
+                },
             ],
-            "dilemmas": [],
+            "dilemmas": [
+                {
+                    "dilemma_id": "d1",
+                    "question": "Q?",
+                    "why_it_matters": "stakes",
+                    "central_entity_ids": ["kay"],
+                    "answers": [
+                        {"answer_id": "a", "description": "A", "is_canonical": True},
+                        {"answer_id": "b", "description": "B", "is_canonical": False},
+                    ],
+                }
+            ],
         }
 
         apply_brainstorm_mutations(graph, output)
@@ -426,6 +689,8 @@ class TestBrainstormMutations:
     def test_stores_entity_name(self) -> None:
         """Entity.name is stored on graph node when provided (#1010)."""
         graph = Graph.empty()
+        _create_compliant_vision(graph)
+
         output = {
             "entities": [
                 {
@@ -437,11 +702,28 @@ class TestBrainstormMutations:
                 {
                     "entity_id": "manor",
                     "entity_category": "location",
+                    "name": "Manor House",
                     "concept": "A crumbling estate",
-                    # name omitted — should not appear on node
+                },
+                {
+                    "entity_id": "tower",
+                    "entity_category": "location",
+                    "name": "The Tower",
+                    "concept": "A tall tower",
                 },
             ],
-            "dilemmas": [],
+            "dilemmas": [
+                {
+                    "dilemma_id": "d1",
+                    "question": "Q?",
+                    "why_it_matters": "stakes",
+                    "central_entity_ids": ["beatrice"],
+                    "answers": [
+                        {"answer_id": "a", "description": "A", "is_canonical": True},
+                        {"answer_id": "b", "description": "B", "is_canonical": False},
+                    ],
+                }
+            ],
         }
 
         apply_brainstorm_mutations(graph, output)
@@ -452,23 +734,39 @@ class TestBrainstormMutations:
 
         manor = graph.get_node("location::manor")
         assert manor is not None
-        assert "name" not in manor  # _clean_dict removes None values
+        assert manor["name"] == "Manor House"
 
     def test_strips_scope_prefixes_in_raw_ids(self) -> None:
         """Scoped IDs are stored unscoped in raw_id fields."""
         graph = Graph.empty()
+        _create_compliant_vision(graph)
+
         output = {
             "entities": [
                 {
                     "entity_id": "entity::kay",
                     "entity_category": "character",
+                    "name": "Kay",
                     "concept": "Young archivist",
-                }
+                },
+                {
+                    "entity_id": "entity::archive",
+                    "entity_category": "location",
+                    "name": "Archive",
+                    "concept": "Archive",
+                },
+                {
+                    "entity_id": "entity::tower",
+                    "entity_category": "location",
+                    "name": "Tower",
+                    "concept": "Tower",
+                },
             ],
             "dilemmas": [
                 {
                     "dilemma_id": "dilemma::mentor_trust",
                     "question": "Can the mentor be trusted?",
+                    "why_it_matters": "stakes",
                     "central_entity_ids": ["entity::kay"],
                     "answers": [
                         {
@@ -511,10 +809,34 @@ class TestBrainstormMutations:
     def test_creates_dilemma_with_alternatives(self) -> None:
         """Creates dilemma nodes with linked answers."""
         graph = Graph.empty()
+        _create_compliant_vision(graph)
+
         output = {
             "entities": [
-                {"entity_id": "kay", "entity_category": "character", "concept": "Protagonist"},
-                {"entity_id": "mentor", "entity_category": "character", "concept": "Guide"},
+                {
+                    "entity_id": "kay",
+                    "entity_category": "character",
+                    "name": "Kay",
+                    "concept": "Protagonist",
+                },
+                {
+                    "entity_id": "mentor",
+                    "entity_category": "character",
+                    "name": "Mentor",
+                    "concept": "Guide",
+                },
+                {
+                    "entity_id": "archive",
+                    "entity_category": "location",
+                    "name": "Archive",
+                    "concept": "Archive",
+                },
+                {
+                    "entity_id": "tower",
+                    "entity_category": "location",
+                    "name": "Tower",
+                    "concept": "Tower",
+                },
             ],
             "dilemmas": [
                 {
@@ -566,13 +888,75 @@ class TestBrainstormMutations:
         assert len(edges) == 2
 
     def test_handles_empty_brainstorm(self) -> None:
-        """Handles empty entities and dilemmas."""
+        """Handles minimum required output with locations and one dilemma."""
         graph = Graph.empty()
-        output = {"entities": [], "dilemmas": []}
+        _create_compliant_vision(graph)
+
+        output = {
+            "entities": [
+                {
+                    "entity_id": "archive",
+                    "entity_category": "location",
+                    "name": "Archive",
+                    "concept": "Archive",
+                },
+                {
+                    "entity_id": "tower",
+                    "entity_category": "location",
+                    "name": "Tower",
+                    "concept": "Tower",
+                },
+            ],
+            "dilemmas": [
+                {
+                    "dilemma_id": "d1",
+                    "question": "Q?",
+                    "why_it_matters": "stakes",
+                    "central_entity_ids": ["archive"],  # At least one entity must be anchored
+                    "answers": [
+                        {"answer_id": "a", "description": "A", "is_canonical": True},
+                        {"answer_id": "b", "description": "B", "is_canonical": False},
+                    ],
+                }
+            ],
+        }
 
         apply_brainstorm_mutations(graph, output)
 
-        assert len(graph.to_dict()["nodes"]) == 0
+        # Should have vision node + 2 location nodes + 1 dilemma node + 2 answer nodes
+        assert len(graph.to_dict()["nodes"]) == 6
+
+    def test_apply_brainstorm_mutations_fails_on_unresolvable_entity(self) -> None:
+        """R-3.6: dilemma referencing non-existent entity must raise, not silently drop."""
+        graph = Graph.empty()
+        output = {
+            "entities": [
+                {
+                    "entity_id": "kay",
+                    "entity_category": "character",
+                    "name": "Kay",
+                    "concept": "archivist",
+                },
+                {"entity_id": "a", "entity_category": "location", "name": "A", "concept": "x"},
+                {"entity_id": "b", "entity_category": "location", "name": "B", "concept": "x"},
+            ],
+            "dilemmas": [
+                {
+                    "dilemma_id": "dilemma::mentor_trust",
+                    "question": "Can we trust?",
+                    "why_it_matters": "stakes",
+                    "central_entity_ids": ["character::ghost"],  # does not exist
+                    "answers": [
+                        {"answer_id": "yes", "description": "d", "is_canonical": True},
+                        {"answer_id": "no", "description": "d", "is_canonical": False},
+                    ],
+                }
+            ],
+        }
+
+        with pytest.raises((MutationError, ValueError)) as exc_info:
+            apply_brainstorm_mutations(graph, output)
+        assert "ghost" in str(exc_info.value) or "anchored_to" in str(exc_info.value).lower()
 
 
 class TestValidateBrainstormMutations:
@@ -584,6 +968,8 @@ class TestValidateBrainstormMutations:
             "entities": [
                 {"entity_id": "kay", "entity_category": "character", "concept": "Archivist"},
                 {"entity_id": "mentor", "entity_category": "character", "concept": "Mentor"},
+                {"entity_id": "archive", "entity_category": "location", "concept": "Archive"},
+                {"entity_id": "tower", "entity_category": "location", "concept": "Tower"},
             ],
             "dilemmas": [
                 {
@@ -616,6 +1002,16 @@ class TestValidateBrainstormMutations:
                     "entity_category": "character",
                     "concept": "Mentor",
                 },
+                {
+                    "entity_id": "entity::archive",
+                    "entity_category": "location",
+                    "concept": "Archive",
+                },
+                {
+                    "entity_id": "entity::tower",
+                    "entity_category": "location",
+                    "concept": "Tower",
+                },
             ],
             "dilemmas": [
                 {
@@ -639,6 +1035,8 @@ class TestValidateBrainstormMutations:
         output = {
             "entities": [
                 {"entity_id": "kay", "entity_category": "character", "concept": "Archivist"},
+                {"entity_id": "archive", "entity_category": "location", "concept": "Archive"},
+                {"entity_id": "tower", "entity_category": "location", "concept": "Tower"},
             ],
             "dilemmas": [
                 {
@@ -668,7 +1066,7 @@ class TestValidateBrainstormMutations:
                 {
                     "dilemma_id": "trust",
                     "question": "Can the mentor be trusted?",
-                    "central_entity_ids": [],
+                    "central_entity_ids": ["location::archive"],
                     "answers": [
                         {"answer_id": "option_a", "description": "A", "is_canonical": True},
                         {
@@ -687,15 +1085,80 @@ class TestValidateBrainstormMutations:
         duplicate_errors = [e for e in errors if "Duplicate" in e.issue]
         assert len(duplicate_errors) == 1
 
-    def test_no_default_path_detected(self) -> None:
-        """Detects when no answer has is_canonical=True."""
+    def test_empty_central_entity_ids_detected(self) -> None:
+        """R-3.6: empty central_entity_ids fires the in-retry validator (#1524).
+
+        Defense-in-depth alongside the Pydantic min_length=1 — the semantic
+        validator catches None/coercion edge cases that bypass Pydantic and
+        delivers the error with the concrete entity ID list (via
+        BrainstormMutationError.to_feedback) rather than a generic message.
+        """
         output = {
-            "entities": [],
+            "entities": [
+                {"entity_id": "archive", "entity_category": "location", "concept": "Archive"},
+                {"entity_id": "tower", "entity_category": "location", "concept": "Tower"},
+            ],
             "dilemmas": [
                 {
                     "dilemma_id": "trust",
                     "question": "Can the mentor be trusted?",
-                    "central_entity_ids": [],
+                    "central_entity_ids": [],  # R-3.6 violation — empty
+                    "answers": [
+                        {"answer_id": "yes", "description": "Yes", "is_canonical": True},
+                        {"answer_id": "no", "description": "No", "is_canonical": False},
+                    ],
+                }
+            ],
+        }
+
+        errors = validate_brainstorm_mutations(output)
+
+        # The empty central_entity_ids check fires BEFORE the per-ID existence loop,
+        # so it produces exactly one error (not one per missing ID).
+        assert len(errors) == 1
+        assert "no central_entity_ids" in errors[0].issue
+        assert "R-3.6" in errors[0].issue
+        # Available entity IDs are echoed for the repair feedback path
+        assert "archive" in errors[0].available
+        assert "tower" in errors[0].available
+
+    def test_missing_central_entity_ids_key_detected(self) -> None:
+        """R-3.6: missing central_entity_ids key (None) is treated as empty (#1524)."""
+        output = {
+            "entities": [
+                {"entity_id": "archive", "entity_category": "location", "concept": "Archive"},
+                {"entity_id": "tower", "entity_category": "location", "concept": "Tower"},
+            ],
+            "dilemmas": [
+                {
+                    "dilemma_id": "trust",
+                    "question": "Can the mentor be trusted?",
+                    # central_entity_ids key intentionally absent
+                    "answers": [
+                        {"answer_id": "yes", "description": "Yes", "is_canonical": True},
+                        {"answer_id": "no", "description": "No", "is_canonical": False},
+                    ],
+                }
+            ],
+        }
+
+        errors = validate_brainstorm_mutations(output)
+
+        assert len(errors) == 1
+        assert "no central_entity_ids" in errors[0].issue
+
+    def test_no_default_path_detected(self) -> None:
+        """Detects when no answer has is_canonical=True."""
+        output = {
+            "entities": [
+                {"entity_id": "archive", "entity_category": "location", "concept": "Archive"},
+                {"entity_id": "tower", "entity_category": "location", "concept": "Tower"},
+            ],
+            "dilemmas": [
+                {
+                    "dilemma_id": "trust",
+                    "question": "Can the mentor be trusted?",
+                    "central_entity_ids": ["location::archive"],
                     "answers": [
                         {"answer_id": "yes", "description": "Yes", "is_canonical": False},
                         {"answer_id": "no", "description": "No", "is_canonical": False},
@@ -712,12 +1175,15 @@ class TestValidateBrainstormMutations:
     def test_multiple_default_paths_detected(self) -> None:
         """Detects when multiple answers have is_canonical=True."""
         output = {
-            "entities": [],
+            "entities": [
+                {"entity_id": "archive", "entity_category": "location", "concept": "Archive"},
+                {"entity_id": "tower", "entity_category": "location", "concept": "Tower"},
+            ],
             "dilemmas": [
                 {
                     "dilemma_id": "trust",
                     "question": "Can the mentor be trusted?",
-                    "central_entity_ids": [],
+                    "central_entity_ids": ["location::archive"],
                     "answers": [
                         {"answer_id": "yes", "description": "Yes", "is_canonical": True},
                         {"answer_id": "no", "description": "No", "is_canonical": True},
@@ -752,14 +1218,16 @@ class TestValidateBrainstormMutations:
 
         errors = validate_brainstorm_mutations(output)
 
-        # Should find: 2 phantom entity errors + 1 no default error
-        assert len(errors) == 3
+        # Should find: 2 phantom entity errors + 1 no default error + 1 location count error
+        assert len(errors) == 4
 
     def test_empty_dilemmas_valid(self) -> None:
         """Empty dilemmas list is valid."""
         output = {
             "entities": [
                 {"entity_id": "kay", "entity_category": "character", "concept": "Archivist"},
+                {"entity_id": "archive", "entity_category": "location", "concept": "Archive"},
+                {"entity_id": "tower", "entity_category": "location", "concept": "Tower"},
             ],
             "dilemmas": [],
         }
@@ -771,12 +1239,15 @@ class TestValidateBrainstormMutations:
     def test_empty_alternatives_detected(self) -> None:
         """Dilemma with no answers fails default path validation."""
         output = {
-            "entities": [],
+            "entities": [
+                {"entity_id": "archive", "entity_category": "location", "concept": "Archive"},
+                {"entity_id": "tower", "entity_category": "location", "concept": "Tower"},
+            ],
             "dilemmas": [
                 {
                     "dilemma_id": "trust",
                     "question": "Can the mentor be trusted?",
-                    "central_entity_ids": [],
+                    "central_entity_ids": ["location::archive"],
                     "answers": [],  # No answers at all
                 }
             ],
@@ -866,7 +1337,7 @@ class TestValidateBrainstormMutations:
                 {
                     "dilemma_id": "trust_or_betray",
                     "question": "Can the mentor be trusted?",
-                    "central_entity_ids": [],
+                    "central_entity_ids": ["location::archive"],
                     "answers": [
                         {"answer_id": "trust", "description": "Trust", "is_canonical": True},
                         {"answer_id": "betray", "description": "Betray", "is_canonical": False},
@@ -875,7 +1346,7 @@ class TestValidateBrainstormMutations:
                 {
                     "dilemma_id": "trust_or_betray",
                     "question": "Duplicate dilemma",
-                    "central_entity_ids": [],
+                    "central_entity_ids": ["location::archive"],
                     "answers": [
                         {"answer_id": "a", "description": "A", "is_canonical": True},
                         {"answer_id": "b", "description": "B", "is_canonical": False},
@@ -890,6 +1361,34 @@ class TestValidateBrainstormMutations:
         assert len(duplicate_errors) == 1
         assert "trust_or_betray" in duplicate_errors[0].issue
         assert "index 0" in duplicate_errors[0].issue
+
+    def test_validate_brainstorm_mutations_requires_two_locations(self) -> None:
+        """R-2.4: BRAINSTORM output with <2 locations must fail validation."""
+        output = {
+            "entities": [
+                {"entity_id": "kay", "entity_category": "character", "name": "Kay", "concept": "x"},
+                {
+                    "entity_id": "archive",
+                    "entity_category": "location",
+                    "name": "Archive",
+                    "concept": "x",
+                },
+            ],
+            "dilemmas": [
+                {
+                    "dilemma_id": "dilemma::x",
+                    "question": "Q?",
+                    "why_it_matters": "stakes",
+                    "central_entity_ids": ["character::kay"],
+                    "answers": [
+                        {"answer_id": "y", "description": "d", "is_canonical": True},
+                        {"answer_id": "n", "description": "d", "is_canonical": False},
+                    ],
+                }
+            ],
+        }
+        errors = validate_brainstorm_mutations(output)
+        assert any("location" in e.issue.lower() for e in errors)
 
 
 class TestBrainstormMutationError:
@@ -935,6 +1434,67 @@ class TestBrainstormMutationError:
         assert "phantom8" not in feedback  # 9th error hidden
         assert "... and 4 more errors" in feedback
 
+    def test_to_feedback_inlines_valid_entity_ids_when_available(self) -> None:
+        """When errors carry `available` IDs, retry feedback inlines them.
+
+        Per @prompt-engineer Rule 5, the small model on retry has lost the system prompt
+        context, so the bottom-line hint must list the authoritative entity IDs
+        rather than the generic "use entity_id values from the entities list".
+        """
+        errors = [
+            BrainstormValidationError(
+                field_path="dilemmas.0.central_entity_ids",
+                issue="Entity 'phantom' not in entities list",
+                available=["character::kay", "character::mentor", "location::archive"],
+                provided="phantom",
+            ),
+        ]
+        error = BrainstormMutationError(errors)
+        feedback = error.to_feedback()
+
+        assert "Valid entity_id values:" in feedback
+        assert "`character::kay`" in feedback
+        assert "`character::mentor`" in feedback
+        assert "`location::archive`" in feedback
+        # Generic fallback hint must not appear when we have a real list.
+        assert "Use entity_id values from the entities list." not in feedback
+
+    def test_to_feedback_truncates_long_id_list_with_count(self) -> None:
+        """When >15 valid IDs are available, feedback shows 15 with a count suffix."""
+        long_available = [f"character::npc_{i:02d}" for i in range(20)]
+        errors = [
+            BrainstormValidationError(
+                field_path="dilemmas.0.central_entity_ids",
+                issue="Entity 'phantom' not in entities list",
+                available=long_available,
+                provided="phantom",
+            ),
+        ]
+        error = BrainstormMutationError(errors)
+        feedback = error.to_feedback()
+
+        assert "showing 15 of 20" in feedback
+        # First 15 (sorted alphabetically) should be present; last 5 should not.
+        assert "`character::npc_00`" in feedback
+        assert "`character::npc_14`" in feedback
+        assert "`character::npc_19`" not in feedback
+
+    def test_to_feedback_falls_back_when_no_available_ids(self) -> None:
+        """No `available` IDs anywhere → keep the generic hint, don't emit empty list."""
+        errors = [
+            BrainstormValidationError(
+                field_path="dilemmas.0.answers",
+                issue="Duplicate answer_id 'yes' appears 2 times",
+                available=[],
+                provided="yes",
+            ),
+        ]
+        error = BrainstormMutationError(errors)
+        feedback = error.to_feedback()
+
+        assert "Use entity_id values from the entities list." in feedback
+        assert "Valid entity_id values:" not in feedback
+
 
 class TestSeedMutations:
     """Test SEED stage mutations."""
@@ -979,19 +1539,32 @@ class TestSeedMutations:
 
     def test_updates_entity_dispositions(self) -> None:
         """Updates entity dispositions from seed output."""
-        graph = Graph.empty()
-        # Pre-populate entities from brainstorm (with raw_id for validation)
-        graph.create_node(
-            "entity::kay",
-            {"type": "entity", "raw_id": "kay", "disposition": "proposed"},
-        )
-        graph.create_node(
-            "entity::mentor",
-            {"type": "entity", "raw_id": "mentor", "disposition": "proposed"},
-        )
-        graph.create_node(
-            "entity::extra",
-            {"type": "entity", "raw_id": "extra", "disposition": "proposed"},
+        # Use a fully BRAINSTORM-compliant graph (required by validate_seed_output's
+        # _check_upstream_contract). The base graph gives us mentor/archive/tower plus
+        # a dilemma. We add kay (character) and extra (character) for the triage test.
+        graph = _create_compliant_brainstorm_graph(
+            extra_entities=[
+                (
+                    "character::kay",
+                    {
+                        "type": "entity",
+                        "raw_id": "kay",
+                        "category": "character",
+                        "name": "Kay",
+                        "concept": "Young archivist",
+                    },
+                ),
+                (
+                    "character::extra",
+                    {
+                        "type": "entity",
+                        "raw_id": "extra",
+                        "category": "character",
+                        "name": "Extra",
+                        "concept": "Minor character",
+                    },
+                ),
+            ]
         )
 
         output = {
@@ -999,37 +1572,100 @@ class TestSeedMutations:
                 {"entity_id": "kay", "disposition": "retained"},  # Raw IDs from LLM
                 {"entity_id": "mentor", "disposition": "retained"},
                 {"entity_id": "extra", "disposition": "cut"},
+                {"entity_id": "archive", "disposition": "retained"},
+                {"entity_id": "tower", "disposition": "retained"},
             ],
-            "paths": [],
-            "initial_beats": [],
+            "dilemmas": [
+                {"dilemma_id": "trust", "explored": ["protector"], "unexplored": ["manipulator"]},
+            ],
+            "paths": [
+                {
+                    "path_id": "trust__protector",
+                    "dilemma_id": "trust",
+                    "answer_id": "protector",
+                    "name": "Protector Arc",
+                    "description": "Trust path.",
+                    "path_importance": "major",
+                }
+            ],
+            "consequences": [
+                {
+                    "consequence_id": "c_protector",
+                    "path_id": "trust__protector",
+                    "description": "Mentor's protection confirmed.",
+                    "narrative_effects": ["protagonist gains ally"],
+                }
+            ],
+            "initial_beats": [
+                {
+                    "beat_id": "commit",
+                    "summary": "Trust decided.",
+                    "path_id": "trust__protector",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "commits"}],
+                    "entities": ["mentor"],
+                },
+                {
+                    "beat_id": "post_1",
+                    "summary": "Aftermath follows.",
+                    "path_id": "trust__protector",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+                {
+                    "beat_id": "post_2",
+                    "summary": "Ally bond forms.",
+                    "path_id": "trust__protector",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+            ],
+            "human_approved_paths": True,
+            "dilemma_analyses": [
+                {
+                    "dilemma_id": "trust",
+                    "dilemma_role": "soft",
+                    "payoff_budget": 2,
+                    "reasoning": "Trust question.",
+                    "ending_salience": "low",
+                    "residue_weight": "light",
+                },
+            ],
         }
 
         apply_seed_mutations(graph, output)
 
-        assert graph.get_node("entity::kay")["disposition"] == "retained"
-        assert graph.get_node("entity::mentor")["disposition"] == "retained"
-        assert graph.get_node("entity::extra")["disposition"] == "cut"
+        assert graph.get_node("character::kay")["disposition"] == "retained"
+        assert graph.get_node("character::mentor")["disposition"] == "retained"
+        assert graph.get_node("character::extra")["disposition"] == "cut"
 
     def test_creates_paths(self) -> None:
         """Creates path nodes from seed output."""
-        graph = Graph.empty()
-        # Pre-populate dilemma and answer from brainstorm (with raw_id for validation)
-        graph.create_node(
-            "dilemma::mentor_trust",
-            {"type": "dilemma", "raw_id": "mentor_trust", "question": "Can the mentor be trusted?"},
-        )
-        graph.create_node(
-            "dilemma::mentor_trust::alt::protector",
-            {"type": "answer", "raw_id": "protector", "description": "Mentor protects"},
-        )
-        # Link dilemma to answer (add_edge takes edge_type, from_id, to_id)
-        graph.add_edge(
-            "has_answer", "dilemma::mentor_trust", "dilemma::mentor_trust::alt::protector"
+        # The base compliant graph has dilemma::trust with protector/manipulator answers.
+        # We use a separate dilemma name (mentor_trust) to match the test's intent while
+        # satisfying the full BRAINSTORM contract required by validate_seed_output.
+        graph = _create_compliant_brainstorm_graph(
+            extra_dilemmas=[
+                (
+                    "mentor_trust",
+                    "Can the mentor be trusted?",
+                    [
+                        ("protector", "Mentor protects.", True),
+                        ("deceiver", "Mentor deceives.", False),
+                    ],
+                    "character::mentor",
+                ),
+            ]
         )
 
         output = {
-            "entities": [],
+            "entities": [
+                {"entity_id": "mentor", "disposition": "retained"},
+                {"entity_id": "archive", "disposition": "retained"},
+                {"entity_id": "tower", "disposition": "retained"},
+            ],
             "dilemmas": [
+                # Base dilemma must also have a decision
+                {"dilemma_id": "trust", "explored": ["protector"], "unexplored": ["manipulator"]},
                 {"dilemma_id": "mentor_trust", "explored": ["protector"], "unexplored": []},
             ],
             "paths": [
@@ -1039,24 +1675,98 @@ class TestSeedMutations:
                     "dilemma_id": "mentor_trust",  # Raw dilemma ID from LLM
                     "answer_id": "protector",  # Local alt ID, not full path
                     "description": "Exploring mentor relationship",
-                }
+                    "path_importance": "major",
+                },
+                {
+                    "path_id": "trust__protector",
+                    "name": "Trust Arc",
+                    "dilemma_id": "trust",
+                    "answer_id": "protector",
+                    "description": "Trust the mentor.",
+                    "path_importance": "major",
+                },
+            ],
+            "consequences": [
+                {
+                    "consequence_id": "c_mentor",
+                    "path_id": "path_mentor_trust",
+                    "description": "Mentor revealed.",
+                    "narrative_effects": ["trust established"],
+                },
+                {
+                    "consequence_id": "c_trust",
+                    "path_id": "trust__protector",
+                    "description": "Trust confirmed.",
+                    "narrative_effects": ["ally gained"],
+                },
             ],
             "initial_beats": [
                 {
                     "beat_id": "resolution",
-                    "summary": "Mentor's true nature revealed",
-                    "paths": ["path_mentor_trust"],
+                    "summary": "Mentor's true nature revealed.",
+                    "path_id": "path_mentor_trust",
                     "dilemma_impacts": [
                         {"dilemma_id": "mentor_trust", "effect": "commits", "note": "Locked in"}
                     ],
+                    "entities": ["mentor"],
                 },
                 {
                     "beat_id": "resolution_post",
-                    "summary": "Consequences of the revelation",
-                    "paths": ["path_mentor_trust"],
+                    "summary": "Consequences of the revelation.",
+                    "path_id": "path_mentor_trust",
                     "dilemma_impacts": [
                         {"dilemma_id": "mentor_trust", "effect": "advances", "note": "Fallout"}
                     ],
+                    "entities": ["mentor"],
+                },
+                {
+                    "beat_id": "resolution_post_2",
+                    "summary": "Aftermath settles.",
+                    "path_id": "path_mentor_trust",
+                    "dilemma_impacts": [
+                        {"dilemma_id": "mentor_trust", "effect": "advances", "note": "Settling"}
+                    ],
+                    "entities": ["mentor"],
+                },
+                {
+                    "beat_id": "trust_commit",
+                    "summary": "Trust resolved.",
+                    "path_id": "trust__protector",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "commits"}],
+                    "entities": ["mentor"],
+                },
+                {
+                    "beat_id": "trust_post_1",
+                    "summary": "Trust aftermath.",
+                    "path_id": "trust__protector",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+                {
+                    "beat_id": "trust_post_2",
+                    "summary": "Trust settled.",
+                    "path_id": "trust__protector",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+            ],
+            "human_approved_paths": True,
+            "dilemma_analyses": [
+                {
+                    "dilemma_id": "trust",
+                    "dilemma_role": "soft",
+                    "payoff_budget": 2,
+                    "reasoning": "Trust.",
+                    "ending_salience": "low",
+                    "residue_weight": "light",
+                },
+                {
+                    "dilemma_id": "mentor_trust",
+                    "dilemma_role": "soft",
+                    "payoff_budget": 2,
+                    "reasoning": "Mentor trust.",
+                    "ending_salience": "low",
+                    "residue_weight": "light",
                 },
             ],
         }
@@ -1076,43 +1786,23 @@ class TestSeedMutations:
         assert edges[0]["to"] == "dilemma::mentor_trust::alt::protector"
 
     def test_path_is_canonical_from_answer(self) -> None:
-        """Path's is_canonical is set from answer's is_canonical."""
-        graph = Graph.empty()
-        # Create dilemma with two answers - one canonical, one not
-        graph.create_node(
-            "dilemma::mentor_trust",
-            {"type": "dilemma", "raw_id": "mentor_trust", "question": "Can the mentor be trusted?"},
-        )
-        graph.create_node(
-            "dilemma::mentor_trust::alt::protector",
-            {
-                "type": "answer",
-                "raw_id": "protector",
-                "description": "Mentor protects",
-                "is_canonical": True,  # This is the canonical path
-            },
-        )
-        graph.create_node(
-            "dilemma::mentor_trust::alt::manipulator",
-            {
-                "type": "answer",
-                "raw_id": "manipulator",
-                "description": "Mentor manipulates",
-                "is_canonical": False,  # Branch path
-            },
-        )
-        graph.add_edge(
-            "has_answer", "dilemma::mentor_trust", "dilemma::mentor_trust::alt::protector"
-        )
-        graph.add_edge(
-            "has_answer", "dilemma::mentor_trust", "dilemma::mentor_trust::alt::manipulator"
-        )
+        """Path's is_canonical is set from answer's is_canonical.
+
+        The base compliant graph already has dilemma::trust with canonical answer
+        'protector' (is_canonical=True) and 'manipulator' (is_canonical=False).
+        We explore both answers and verify that paths inherit is_canonical.
+        """
+        graph = _create_compliant_brainstorm_graph()
 
         output = {
-            "entities": [],
+            "entities": [
+                {"entity_id": "mentor", "disposition": "retained"},
+                {"entity_id": "archive", "disposition": "retained"},
+                {"entity_id": "tower", "disposition": "retained"},
+            ],
             "dilemmas": [
                 {
-                    "dilemma_id": "mentor_trust",
+                    "dilemma_id": "trust",
                     "explored": ["protector", "manipulator"],
                     "unexplored": [],
                 },
@@ -1121,50 +1811,107 @@ class TestSeedMutations:
                 {
                     "path_id": "mentor_protects",
                     "name": "Mentor Protects Arc",
-                    "dilemma_id": "mentor_trust",
-                    "answer_id": "protector",  # Canonical
+                    "dilemma_id": "trust",
+                    "answer_id": "protector",  # Canonical answer
                     "description": "The mentor genuinely protects",
+                    "path_importance": "major",
                 },
                 {
                     "path_id": "mentor_manipulates",
                     "name": "Mentor Manipulates Arc",
-                    "dilemma_id": "mentor_trust",
-                    "answer_id": "manipulator",  # Non-canonical
+                    "dilemma_id": "trust",
+                    "answer_id": "manipulator",  # Non-canonical answer
                     "description": "The mentor is manipulating",
+                    "path_importance": "major",
+                },
+            ],
+            "consequences": [
+                {
+                    "consequence_id": "c_protects",
+                    "path_id": "mentor_protects",
+                    "description": "Protection confirmed.",
+                    "narrative_effects": ["ally gained"],
+                },
+                {
+                    "consequence_id": "c_manipulates",
+                    "path_id": "mentor_manipulates",
+                    "description": "Manipulation exposed.",
+                    "narrative_effects": ["protagonist alone"],
                 },
             ],
             "initial_beats": [
                 {
+                    "beat_id": "shared_setup",
+                    "summary": "Both paths share this setup beat.",
+                    "path_id": "mentor_protects",
+                    "also_belongs_to": "mentor_manipulates",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+                {
                     "beat_id": "protects_beat_01",
-                    "summary": "Mentor reveals protection",
-                    "paths": ["mentor_protects"],
+                    "summary": "Mentor reveals protection.",
+                    "path_id": "mentor_protects",
                     "dilemma_impacts": [
-                        {"dilemma_id": "mentor_trust", "effect": "commits", "note": "Locked"}
+                        {"dilemma_id": "trust", "effect": "commits", "note": "Locked"}
                     ],
+                    "entities": ["mentor"],
                 },
                 {
                     "beat_id": "protects_beat_02",
-                    "summary": "Protection confirmed",
-                    "paths": ["mentor_protects"],
+                    "summary": "Protection confirmed.",
+                    "path_id": "mentor_protects",
                     "dilemma_impacts": [
-                        {"dilemma_id": "mentor_trust", "effect": "advances", "note": "Fallout"}
+                        {"dilemma_id": "trust", "effect": "advances", "note": "Fallout"}
                     ],
+                    "entities": ["mentor"],
+                },
+                {
+                    "beat_id": "protects_beat_03",
+                    "summary": "Ally bond solidifies.",
+                    "path_id": "mentor_protects",
+                    "dilemma_impacts": [
+                        {"dilemma_id": "trust", "effect": "advances", "note": "Growth"}
+                    ],
+                    "entities": ["mentor"],
                 },
                 {
                     "beat_id": "manipulates_beat_01",
-                    "summary": "Mentor reveals manipulation",
-                    "paths": ["mentor_manipulates"],
+                    "summary": "Mentor reveals manipulation.",
+                    "path_id": "mentor_manipulates",
                     "dilemma_impacts": [
-                        {"dilemma_id": "mentor_trust", "effect": "commits", "note": "Locked"}
+                        {"dilemma_id": "trust", "effect": "commits", "note": "Locked"}
                     ],
+                    "entities": ["mentor"],
                 },
                 {
                     "beat_id": "manipulates_beat_02",
-                    "summary": "Manipulation confirmed",
-                    "paths": ["mentor_manipulates"],
+                    "summary": "Manipulation confirmed.",
+                    "path_id": "mentor_manipulates",
                     "dilemma_impacts": [
-                        {"dilemma_id": "mentor_trust", "effect": "advances", "note": "Fallout"}
+                        {"dilemma_id": "trust", "effect": "advances", "note": "Fallout"}
                     ],
+                    "entities": ["mentor"],
+                },
+                {
+                    "beat_id": "manipulates_beat_03",
+                    "summary": "Protagonist must stand alone.",
+                    "path_id": "mentor_manipulates",
+                    "dilemma_impacts": [
+                        {"dilemma_id": "trust", "effect": "advances", "note": "Hardship"}
+                    ],
+                    "entities": ["mentor"],
+                },
+            ],
+            "human_approved_paths": True,
+            "dilemma_analyses": [
+                {
+                    "dilemma_id": "trust",
+                    "dilemma_role": "hard",
+                    "payoff_budget": 2,
+                    "reasoning": "Binary trust question.",
+                    "ending_salience": "high",
+                    "residue_weight": "heavy",
                 },
             ],
         }
@@ -1182,84 +1929,136 @@ class TestSeedMutations:
         assert manipulates_path.get("is_canonical") is False
 
     def test_creates_beats(self) -> None:
-        """Creates beat nodes from seed output."""
-        graph = Graph.empty()
-        # Pre-populate entities from brainstorm (with raw_id for validation)
-        graph.create_node(
-            "entity::kay", {"type": "entity", "raw_id": "kay", "concept": "Young archivist"}
-        )
-        graph.create_node(
-            "entity::mentor", {"type": "entity", "raw_id": "mentor", "concept": "Senior archivist"}
-        )
-        graph.create_node(
-            "entity::archive",
-            {"type": "entity", "raw_id": "archive", "concept": "Ancient repository"},
-        )
-        # Pre-populate dilemma and answer from brainstorm (for path validation)
-        graph.create_node(
-            "dilemma::mentor_trust",
-            {"type": "dilemma", "raw_id": "mentor_trust", "question": "Can the mentor be trusted?"},
-        )
-        graph.create_node(
-            "dilemma::mentor_trust::alt::protector",
-            {"type": "answer", "raw_id": "protector", "description": "Mentor protects"},
-        )
-        # Link dilemma to answer (add_edge takes edge_type, from_id, to_id)
-        graph.add_edge(
-            "has_answer", "dilemma::mentor_trust", "dilemma::mentor_trust::alt::protector"
+        """Creates beat nodes from seed output with correctly prefixed entity/location IDs."""
+        # _create_compliant_brainstorm_graph provides:
+        #   character::mentor, location::archive, location::tower, dilemma::trust
+        # We add character::kay as an extra entity to reference in beats.
+        graph = _create_compliant_brainstorm_graph(
+            extra_entities=[
+                (
+                    "character::kay",
+                    {
+                        "type": "entity",
+                        "raw_id": "kay",
+                        "category": "character",
+                        "name": "Kay",
+                        "concept": "Young archivist",
+                    },
+                )
+            ]
         )
 
         output = {
-            # Completeness: decisions for all entities
             "entities": [
                 {"entity_id": "kay", "disposition": "retained"},
                 {"entity_id": "mentor", "disposition": "retained"},
                 {"entity_id": "archive", "disposition": "retained"},
+                {"entity_id": "tower", "disposition": "retained"},
             ],
-            # Completeness: decisions for all dilemmas
             "dilemmas": [
-                {"dilemma_id": "mentor_trust", "explored": ["protector"], "unexplored": []},
+                {"dilemma_id": "trust", "explored": ["protector", "manipulator"], "unexplored": []},
             ],
-            # Path must be in SEED output for beat path references to validate
             "paths": [
                 {
-                    "path_id": "path_mentor_trust",
-                    "name": "Mentor Trust Arc",
-                    "dilemma_id": "mentor_trust",
+                    "path_id": "trust__protector",
+                    "name": "Protector Arc",
+                    "dilemma_id": "trust",
                     "answer_id": "protector",
-                    "description": "The mentor trust path",
-                }
+                    "description": "Mentor protects protagonist.",
+                    "path_importance": "major",
+                },
+                {
+                    "path_id": "trust__manipulator",
+                    "name": "Manipulator Arc",
+                    "dilemma_id": "trust",
+                    "answer_id": "manipulator",
+                    "description": "Mentor manipulates protagonist.",
+                    "path_importance": "major",
+                },
+            ],
+            "consequences": [
+                {
+                    "consequence_id": "c_protector",
+                    "path_id": "trust__protector",
+                    "description": "Protagonist gains a powerful ally.",
+                    "narrative_effects": ["Trust becomes an asset in the final confrontation"],
+                },
+                {
+                    "consequence_id": "c_manipulator",
+                    "path_id": "trust__manipulator",
+                    "description": "Protagonist must face danger alone.",
+                    "narrative_effects": ["Isolation defines the climax"],
+                },
             ],
             "initial_beats": [
+                # Shared pre-commit beat (dual belongs_to via also_belongs_to)
                 {
                     "beat_id": "opening_001",
                     "summary": "Kay meets the mentor for the first time",
-                    "paths": ["path_mentor_trust"],  # Raw path IDs from LLM
-                    "dilemma_impacts": [
-                        {"dilemma_id": "mentor_trust", "effect": "advances", "note": "Trust begins"}
-                    ],
-                    "entities": ["kay", "mentor"],  # Raw entity IDs from LLM
-                    "location": "archive",  # Raw location ID from LLM
-                },
-                {
-                    "beat_id": "resolution_001",
-                    "summary": "Mentor's loyalty confirmed",
-                    "paths": ["path_mentor_trust"],
-                    "dilemma_impacts": [
-                        {"dilemma_id": "mentor_trust", "effect": "commits", "note": "Locked in"}
-                    ],
+                    "path_id": "trust__protector",
+                    "also_belongs_to": "trust__manipulator",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
                     "entities": ["kay", "mentor"],
                     "location": "archive",
                 },
+                # Commit beat for protector path
                 {
-                    "beat_id": "aftermath_001",
-                    "summary": "Trust shapes the journey ahead",
-                    "paths": ["path_mentor_trust"],
-                    "dilemma_impacts": [
-                        {"dilemma_id": "mentor_trust", "effect": "advances", "note": "Fallout"}
-                    ],
+                    "beat_id": "commit_protector",
+                    "summary": "Kay decides to trust the mentor.",
+                    "path_id": "trust__protector",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "commits"}],
+                    "entities": ["kay", "mentor"],
+                },
+                # Post-commit beats for protector path (need 2-4)
+                {
+                    "beat_id": "post_protector_1",
+                    "summary": "Mentor reveals a vital secret.",
+                    "path_id": "trust__protector",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+                {
+                    "beat_id": "post_protector_2",
+                    "summary": "Ally bond confirmed.",
+                    "path_id": "trust__protector",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+                # Commit beat for manipulator path
+                {
+                    "beat_id": "commit_manipulator",
+                    "summary": "Kay distrusts the mentor.",
+                    "path_id": "trust__manipulator",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "commits"}],
+                    "entities": ["kay", "mentor"],
+                },
+                # Post-commit beats for manipulator path
+                {
+                    "beat_id": "post_manipulator_1",
+                    "summary": "Mentor's true motive surfaces.",
+                    "path_id": "trust__manipulator",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+                {
+                    "beat_id": "post_manipulator_2",
+                    "summary": "Protagonist faces danger alone.",
+                    "path_id": "trust__manipulator",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
+                    "entities": ["kay"],
                 },
             ],
+            "dilemma_analyses": [
+                {
+                    "dilemma_id": "trust",
+                    "dilemma_role": "hard",
+                    "payoff_budget": 2,
+                    "reasoning": "Binary trust question that defines story spine.",
+                    "ending_salience": "high",
+                    "residue_weight": "heavy",
+                },
+            ],
+            "human_approved_paths": True,
         }
 
         apply_seed_mutations(graph, output)
@@ -1270,105 +2069,240 @@ class TestSeedMutations:
         assert beat["type"] == "beat"
         assert beat["raw_id"] == "opening_001"
         assert beat["summary"] == "Kay meets the mentor for the first time"
-        # Entities and location are prefixed in storage
-        assert beat["entities"] == ["entity::kay", "entity::mentor"]
-        assert beat["location"] == "entity::archive"
+        # Entities are stored with category-prefix (character::) not bare entity::
+        assert beat["entities"] == ["character::kay", "character::mentor"]
+        assert beat["location"] == "location::archive"
 
-        # Check belongs_to edge - links to prefixed path ID
+        # Check belongs_to edges — shared pre-commit beat gets dual edges
         edges = graph.get_edges(from_id="beat::opening_001", edge_type="belongs_to")
-        assert len(edges) == 1
-        assert edges[0]["to"] == "path::path_mentor_trust"
+        assert len(edges) == 2
+        to_paths = {e["to"] for e in edges}
+        assert "path::trust__protector" in to_paths
+        assert "path::trust__manipulator" in to_paths
 
     def test_temporal_hint_stored_on_beat(self) -> None:
-        """Temporal hint is stored on beat node with prefixed dilemma ID."""
-        graph = Graph.empty()
-        graph.create_node(
-            "entity::kay", {"type": "entity", "raw_id": "kay", "concept": "Archivist"}
+        """Temporal hint is stored on beat node with prefixed dilemma ID.
+
+        Uses the base trust dilemma (protector/manipulator) as the primary dilemma
+        and adds fight_or_flee as a second dilemma for the temporal_hint reference.
+        """
+        graph = _create_compliant_brainstorm_graph(
+            extra_dilemmas=[
+                (
+                    "fight_or_flee",
+                    "Fight or flee?",
+                    [
+                        ("fight", "Character stands and fights.", True),
+                        ("flee", "Character escapes the danger.", False),
+                    ],
+                    "character::mentor",
+                ),
+            ]
         )
-        graph.create_node(
-            "dilemma::mentor_trust",
-            {"type": "dilemma", "raw_id": "mentor_trust", "question": "Trust?"},
-        )
-        # fight_or_flee: referenced by temporal_hint, must also be a brainstorm dilemma
-        graph.create_node(
-            "dilemma::fight_or_flee",
-            {"type": "dilemma", "raw_id": "fight_or_flee", "question": "Fight?"},
-        )
-        graph.create_node(
-            "dilemma::mentor_trust::alt::protector",
-            {"type": "answer", "raw_id": "protector", "description": "Protects"},
-        )
-        graph.add_edge(
-            "has_answer", "dilemma::mentor_trust", "dilemma::mentor_trust::alt::protector"
-        )
-        graph.create_node(
-            "dilemma::fight_or_flee::alt::fight",
-            {"type": "answer", "raw_id": "fight", "description": "Fights"},
-        )
-        graph.add_edge("has_answer", "dilemma::fight_or_flee", "dilemma::fight_or_flee::alt::fight")
 
         output = {
-            "entities": [{"entity_id": "kay", "disposition": "retained"}],
+            "entities": [
+                {"entity_id": "mentor", "disposition": "retained"},
+                {"entity_id": "archive", "disposition": "retained"},
+                {"entity_id": "tower", "disposition": "retained"},
+            ],
             "dilemmas": [
-                {"dilemma_id": "mentor_trust", "explored": ["protector"], "unexplored": []},
-                {"dilemma_id": "fight_or_flee", "explored": ["fight"], "unexplored": []},
+                {"dilemma_id": "trust", "explored": ["protector", "manipulator"], "unexplored": []},
+                {"dilemma_id": "fight_or_flee", "explored": ["fight", "flee"], "unexplored": []},
             ],
             "paths": [
                 {
-                    "path_id": "path_mentor_trust",
-                    "name": "Trust Arc",
-                    "dilemma_id": "mentor_trust",
+                    "path_id": "trust__protector",
+                    "name": "Protector Arc",
+                    "dilemma_id": "trust",
                     "answer_id": "protector",
-                    "description": "The mentor trust path",
+                    "description": "Mentor protects.",
+                    "path_importance": "major",
                 },
                 {
-                    "path_id": "path_fight",
+                    "path_id": "trust__manipulator",
+                    "name": "Manipulator Arc",
+                    "dilemma_id": "trust",
+                    "answer_id": "manipulator",
+                    "description": "Mentor manipulates.",
+                    "path_importance": "major",
+                },
+                {
+                    "path_id": "fight_or_flee__fight",
                     "name": "Fight Arc",
                     "dilemma_id": "fight_or_flee",
                     "answer_id": "fight",
-                    "description": "The fight path",
+                    "description": "Character fights.",
+                    "path_importance": "major",
+                },
+                {
+                    "path_id": "fight_or_flee__flee",
+                    "name": "Flee Arc",
+                    "dilemma_id": "fight_or_flee",
+                    "answer_id": "flee",
+                    "description": "Character flees.",
+                    "path_importance": "minor",
+                },
+            ],
+            "consequences": [
+                {
+                    "consequence_id": "c_protector",
+                    "path_id": "trust__protector",
+                    "description": "Protagonist gains an ally.",
+                    "narrative_effects": ["Trust shapes the climax"],
+                },
+                {
+                    "consequence_id": "c_manipulator",
+                    "path_id": "trust__manipulator",
+                    "description": "Protagonist faces danger alone.",
+                    "narrative_effects": ["Isolation defines the climax"],
+                },
+                {
+                    "consequence_id": "c_fight",
+                    "path_id": "fight_or_flee__fight",
+                    "description": "Character is wounded but prevails.",
+                    "narrative_effects": ["Battle scars define later choices"],
+                },
+                {
+                    "consequence_id": "c_flee",
+                    "path_id": "fight_or_flee__flee",
+                    "description": "Character escapes but loses ground.",
+                    "narrative_effects": ["Cowardice haunts later scenes"],
                 },
             ],
             "initial_beats": [
+                # Shared pre-commit beat for trust dilemma
+                {
+                    "beat_id": "trust_pre",
+                    "summary": "Protagonist encounters the mentor",
+                    "path_id": "trust__protector",
+                    "also_belongs_to": "trust__manipulator",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+                # Commit beat for protector — with temporal_hint referencing fight_or_flee
                 {
                     "beat_id": "opening_001",
-                    "summary": "Kay meets the mentor",
-                    "paths": ["path_mentor_trust"],
-                    "dilemma_impacts": [
-                        {"dilemma_id": "mentor_trust", "effect": "commits", "note": "Locked"}
-                    ],
-                    "entities": ["kay"],
+                    "summary": "Kay decides to trust the mentor",
+                    "path_id": "trust__protector",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "commits"}],
+                    "entities": ["mentor"],
                     "temporal_hint": {
                         "relative_to": "fight_or_flee",
                         "position": "before_commit",
                     },
                 },
+                # Post-commit beats for protector path
                 {
-                    "beat_id": "fight_001",
-                    "summary": "Kay prepares for battle",
-                    "paths": ["path_fight"],
-                    "dilemma_impacts": [
-                        {"dilemma_id": "fight_or_flee", "effect": "commits", "note": "Engaged"}
-                    ],
-                    "entities": ["kay"],
+                    "beat_id": "post_protector_1",
+                    "summary": "Mentor shares vital information.",
+                    "path_id": "trust__protector",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
+                    "entities": ["mentor"],
                 },
                 {
-                    "beat_id": "opening_001_post",
-                    "summary": "Trust consequences unfold",
-                    "paths": ["path_mentor_trust"],
-                    "dilemma_impacts": [
-                        {"dilemma_id": "mentor_trust", "effect": "advances", "note": "Fallout"}
-                    ],
+                    "beat_id": "post_protector_2",
+                    "summary": "Ally bond confirmed.",
+                    "path_id": "trust__protector",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+                # Commit beat for manipulator path
+                {
+                    "beat_id": "commit_manipulator",
+                    "summary": "Kay distrusts the mentor.",
+                    "path_id": "trust__manipulator",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "commits"}],
+                    "entities": ["mentor"],
+                },
+                # Post-commit beats for manipulator path
+                {
+                    "beat_id": "post_manipulator_1",
+                    "summary": "Mentor's true motive surfaces.",
+                    "path_id": "trust__manipulator",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
+                    "entities": ["mentor"],
                 },
                 {
-                    "beat_id": "fight_001_post",
-                    "summary": "Battle aftermath",
-                    "paths": ["path_fight"],
-                    "dilemma_impacts": [
-                        {"dilemma_id": "fight_or_flee", "effect": "advances", "note": "Fallout"}
-                    ],
+                    "beat_id": "post_manipulator_2",
+                    "summary": "Protagonist faces danger alone.",
+                    "path_id": "trust__manipulator",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+                # Shared pre-commit beat for fight_or_flee
+                {
+                    "beat_id": "fight_pre",
+                    "summary": "Danger approaches.",
+                    "path_id": "fight_or_flee__fight",
+                    "also_belongs_to": "fight_or_flee__flee",
+                    "dilemma_impacts": [{"dilemma_id": "fight_or_flee", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+                # Commit beats for fight_or_flee paths
+                {
+                    "beat_id": "commit_fight",
+                    "summary": "Character stands and fights.",
+                    "path_id": "fight_or_flee__fight",
+                    "dilemma_impacts": [{"dilemma_id": "fight_or_flee", "effect": "commits"}],
+                    "entities": ["mentor"],
+                },
+                {
+                    "beat_id": "commit_flee",
+                    "summary": "Character flees the danger.",
+                    "path_id": "fight_or_flee__flee",
+                    "dilemma_impacts": [{"dilemma_id": "fight_or_flee", "effect": "commits"}],
+                    "entities": ["mentor"],
+                },
+                # Post-commit beats
+                {
+                    "beat_id": "post_fight_1",
+                    "summary": "Wounds slow the journey.",
+                    "path_id": "fight_or_flee__fight",
+                    "dilemma_impacts": [{"dilemma_id": "fight_or_flee", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+                {
+                    "beat_id": "post_fight_2",
+                    "summary": "Victory is hollow.",
+                    "path_id": "fight_or_flee__fight",
+                    "dilemma_impacts": [{"dilemma_id": "fight_or_flee", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+                {
+                    "beat_id": "post_flee_1",
+                    "summary": "Cowardice haunts.",
+                    "path_id": "fight_or_flee__flee",
+                    "dilemma_impacts": [{"dilemma_id": "fight_or_flee", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+                {
+                    "beat_id": "post_flee_2",
+                    "summary": "Escape has a price.",
+                    "path_id": "fight_or_flee__flee",
+                    "dilemma_impacts": [{"dilemma_id": "fight_or_flee", "effect": "advances"}],
+                    "entities": ["mentor"],
                 },
             ],
+            "dilemma_analyses": [
+                {
+                    "dilemma_id": "trust",
+                    "dilemma_role": "hard",
+                    "payoff_budget": 2,
+                    "reasoning": "Binary trust question.",
+                    "ending_salience": "high",
+                    "residue_weight": "heavy",
+                },
+                {
+                    "dilemma_id": "fight_or_flee",
+                    "dilemma_role": "soft",
+                    "payoff_budget": 1,
+                    "reasoning": "Action question with moderate impact.",
+                    "ending_salience": "low",
+                    "residue_weight": "light",
+                },
+            ],
+            "human_approved_paths": True,
         }
 
         apply_seed_mutations(graph, output)
@@ -1379,58 +2313,139 @@ class TestSeedMutations:
             "position": "before_commit",
         }
 
-    def test_temporal_hint_absent_not_stored(self) -> None:
-        """Beat without temporal_hint does not have the key in node data."""
-        graph = Graph.empty()
-        graph.create_node(
-            "entity::kay", {"type": "entity", "raw_id": "kay", "concept": "Archivist"}
-        )
-        graph.create_node(
-            "dilemma::mentor_trust",
-            {"type": "dilemma", "raw_id": "mentor_trust", "question": "Trust?"},
-        )
-        graph.create_node(
-            "dilemma::mentor_trust::alt::protector",
-            {"type": "answer", "raw_id": "protector", "description": "Protects"},
-        )
-        graph.add_edge(
-            "has_answer", "dilemma::mentor_trust", "dilemma::mentor_trust::alt::protector"
-        )
+    @staticmethod
+    def _trust_compliant_output(commit_beat_extra: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Build a fully contract-compliant SEED output using only the trust dilemma.
 
-        output = {
-            "entities": [{"entity_id": "kay", "disposition": "retained"}],
+        Provides two paths (trust__protector, trust__manipulator) with:
+        - one shared pre-commit beat (dual belongs_to via also_belongs_to)
+        - one commit beat per path
+        - two post-commit beats per path
+        - consequences with ripples
+        - dilemma_analyses with all three required fields
+
+        Args:
+            commit_beat_extra: Extra fields merged into the protector commit beat.
+        """
+        commit_beat: dict[str, Any] = {
+            "beat_id": "opening_001",
+            "summary": "Kay decides to trust the mentor",
+            "path_id": "trust__protector",
+            "dilemma_impacts": [{"dilemma_id": "trust", "effect": "commits"}],
+            "entities": ["mentor"],
+        }
+        if commit_beat_extra:
+            commit_beat.update(commit_beat_extra)
+
+        return {
+            "entities": [
+                {"entity_id": "mentor", "disposition": "retained"},
+                {"entity_id": "archive", "disposition": "retained"},
+                {"entity_id": "tower", "disposition": "retained"},
+            ],
             "dilemmas": [
-                {"dilemma_id": "mentor_trust", "explored": ["protector"], "unexplored": []},
+                {"dilemma_id": "trust", "explored": ["protector", "manipulator"], "unexplored": []},
             ],
             "paths": [
                 {
-                    "path_id": "path_mentor_trust",
-                    "name": "Trust Arc",
-                    "dilemma_id": "mentor_trust",
+                    "path_id": "trust__protector",
+                    "name": "Protector Arc",
+                    "dilemma_id": "trust",
                     "answer_id": "protector",
-                    "description": "The mentor trust path",
-                }
+                    "description": "Mentor protects protagonist.",
+                    "path_importance": "major",
+                },
+                {
+                    "path_id": "trust__manipulator",
+                    "name": "Manipulator Arc",
+                    "dilemma_id": "trust",
+                    "answer_id": "manipulator",
+                    "description": "Mentor manipulates protagonist.",
+                    "path_importance": "major",
+                },
+            ],
+            "consequences": [
+                {
+                    "consequence_id": "c_protector",
+                    "path_id": "trust__protector",
+                    "description": "Protagonist gains an ally.",
+                    "narrative_effects": ["Trust shapes the climax"],
+                },
+                {
+                    "consequence_id": "c_manipulator",
+                    "path_id": "trust__manipulator",
+                    "description": "Protagonist faces danger alone.",
+                    "narrative_effects": ["Isolation defines the climax"],
+                },
             ],
             "initial_beats": [
+                # Shared pre-commit beat (dual belongs_to)
                 {
-                    "beat_id": "opening_001",
-                    "summary": "Kay meets the mentor",
-                    "paths": ["path_mentor_trust"],
-                    "dilemma_impacts": [
-                        {"dilemma_id": "mentor_trust", "effect": "commits", "note": "Locked"}
-                    ],
-                    "entities": ["kay"],
+                    "beat_id": "trust_pre",
+                    "summary": "Protagonist encounters the mentor",
+                    "path_id": "trust__protector",
+                    "also_belongs_to": "trust__manipulator",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+                # Commit beat for protector (may have extra fields from caller)
+                commit_beat,
+                # Post-commit beats for protector
+                {
+                    "beat_id": "post_protector_1",
+                    "summary": "Mentor shares vital information.",
+                    "path_id": "trust__protector",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
+                    "entities": ["mentor"],
                 },
                 {
-                    "beat_id": "opening_001_post",
-                    "summary": "Trust consequences",
-                    "paths": ["path_mentor_trust"],
-                    "dilemma_impacts": [
-                        {"dilemma_id": "mentor_trust", "effect": "advances", "note": "Fallout"}
-                    ],
+                    "beat_id": "post_protector_2",
+                    "summary": "Ally bond confirmed.",
+                    "path_id": "trust__protector",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+                # Commit beat for manipulator
+                {
+                    "beat_id": "commit_manipulator",
+                    "summary": "Kay distrusts the mentor.",
+                    "path_id": "trust__manipulator",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "commits"}],
+                    "entities": ["mentor"],
+                },
+                # Post-commit beats for manipulator
+                {
+                    "beat_id": "post_manipulator_1",
+                    "summary": "Mentor's true motive surfaces.",
+                    "path_id": "trust__manipulator",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+                {
+                    "beat_id": "post_manipulator_2",
+                    "summary": "Protagonist faces danger alone.",
+                    "path_id": "trust__manipulator",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
+                    "entities": ["mentor"],
                 },
             ],
+            "dilemma_analyses": [
+                {
+                    "dilemma_id": "trust",
+                    "dilemma_role": "hard",
+                    "payoff_budget": 2,
+                    "reasoning": "Binary trust question that defines story spine.",
+                    "ending_salience": "high",
+                    "residue_weight": "heavy",
+                },
+            ],
+            "human_approved_paths": True,
         }
+
+    def test_temporal_hint_absent_not_stored(self) -> None:
+        """Beat without temporal_hint does not have the key in node data."""
+        graph = _create_compliant_brainstorm_graph()
+        output = self._trust_compliant_output()
 
         apply_seed_mutations(graph, output)
 
@@ -1440,60 +2455,15 @@ class TestSeedMutations:
 
     def test_temporal_hint_partial_not_stored(self) -> None:
         """Temporal hint with null position is discarded, not stored malformed."""
-        graph = Graph.empty()
-        graph.create_node(
-            "entity::kay", {"type": "entity", "raw_id": "kay", "concept": "Archivist"}
-        )
-        graph.create_node(
-            "dilemma::mentor_trust",
-            {"type": "dilemma", "raw_id": "mentor_trust", "question": "Trust?"},
-        )
-        graph.create_node(
-            "dilemma::mentor_trust::alt::protector",
-            {"type": "answer", "raw_id": "protector", "description": "Protects"},
-        )
-        graph.add_edge(
-            "has_answer", "dilemma::mentor_trust", "dilemma::mentor_trust::alt::protector"
-        )
-
-        output = {
-            "entities": [{"entity_id": "kay", "disposition": "retained"}],
-            "dilemmas": [
-                {"dilemma_id": "mentor_trust", "explored": ["protector"], "unexplored": []},
-            ],
-            "paths": [
-                {
-                    "path_id": "path_mentor_trust",
-                    "name": "Trust Arc",
-                    "dilemma_id": "mentor_trust",
-                    "answer_id": "protector",
-                    "description": "The mentor trust path",
+        graph = _create_compliant_brainstorm_graph()
+        output = self._trust_compliant_output(
+            commit_beat_extra={
+                "temporal_hint": {
+                    "relative_to": "fight_or_flee",
+                    "position": None,
                 }
-            ],
-            "initial_beats": [
-                {
-                    "beat_id": "opening_001",
-                    "summary": "Kay meets the mentor",
-                    "paths": ["path_mentor_trust"],
-                    "dilemma_impacts": [
-                        {"dilemma_id": "mentor_trust", "effect": "commits", "note": "Locked"}
-                    ],
-                    "entities": ["kay"],
-                    "temporal_hint": {
-                        "relative_to": "fight_or_flee",
-                        "position": None,
-                    },
-                },
-                {
-                    "beat_id": "opening_001_post",
-                    "summary": "Trust consequences",
-                    "paths": ["path_mentor_trust"],
-                    "dilemma_impacts": [
-                        {"dilemma_id": "mentor_trust", "effect": "advances", "note": "Fallout"}
-                    ],
-                },
-            ],
-        }
+            }
+        )
 
         apply_seed_mutations(graph, output)
 
@@ -1528,14 +2498,6 @@ class TestSeedMutations:
         error = exc_info.value.errors[0]
         assert "missing" in error.provided
         assert "kay" in error.available  # Shows valid options
-
-    def test_handles_empty_seed(self) -> None:
-        """Handles empty seed output."""
-        graph = Graph.empty()
-        output = {"entities": [], "paths": [], "initial_beats": []}
-
-        apply_seed_mutations(graph, output)
-        # No errors, no changes
 
 
 class TestSeedCompletenessValidation:
@@ -2266,8 +3228,8 @@ class TestBeatDilemmaAlignment:
 class TestSeedArcStructureValidation:
     """Test SEED validation checks 14-15: arc structure warnings.
 
-    Doc 1 Part 2: "This scaffold must be complete — the arc from beginning
-    to end must be present." Checks:
+    "How Branching Stories Work", Part 2: "This scaffold must be complete —
+    the arc from beginning to end must be present." Checks:
     14. Each path has advances/reveals before its commit beat.
     15. Each path has at least one beat after its commit beat.
 
@@ -2299,6 +3261,7 @@ class TestSeedArcStructureValidation:
                 }
             ],
             "initial_beats": initial_beats,
+            "human_approved_paths": True,
         }
 
     def test_complete_arc_no_warnings(self) -> None:
@@ -2406,7 +3369,7 @@ class TestSeedArcStructureValidation:
         assert "advances" in warnings[0].issue
         assert "reveals" in warnings[0].issue
         assert "before" in warnings[0].issue
-        assert warnings[0].field_path == "paths.trust_arc.arc_structure"
+        assert warnings[0].field_path == "initial_beats.trust_arc.arc_structure"
 
     def test_missing_post_commit_beat_warns(self) -> None:
         """Commit without any following beat produces a COMPLETENESS error."""
@@ -2440,7 +3403,7 @@ class TestSeedArcStructureValidation:
         assert blocking[0].category == SeedErrorCategory.COMPLETENESS
         assert "after" in blocking[0].issue
         assert "consequence" in blocking[0].issue
-        assert blocking[0].field_path == "paths.trust_arc.arc_structure"
+        assert blocking[0].field_path == "initial_beats.trust_arc.arc_structure"
         assert warnings == []
 
     def test_single_commit_beat_produces_both_warnings(self) -> None:
@@ -2512,41 +3475,139 @@ class TestSeedArcStructureValidation:
     def test_warnings_do_not_block_apply_seed_mutations(self) -> None:
         """apply_seed_mutations succeeds when only WARNING-category issues are present.
 
-        The pre-commit development check (check 14) is still a WARNING.
-        A complete arc with advances→commits→consequence produces no errors.
-        A commits-only beat now raises COMPLETENESS (blocking), so this test
-        uses a fixture that has the post-commit beat but lacks pre-commit development.
+        The pre-commit development check (check 14) produces a WARNING when a path
+        jumps straight to commits without a prior advances/reveals beat.  This test
+        verifies that apply_seed_mutations does NOT raise even in that case.
+
+        Uses _create_compliant_brainstorm_graph() to satisfy the upstream contract,
+        then builds a two-path output (trust dilemma) where one path triggers the
+        WARNING by having no advances beat before its commit.
         """
-        graph = self._make_graph()
-        output = self._make_output(
-            [
+        graph = _create_compliant_brainstorm_graph()
+
+        # Use trust__protector / trust__manipulator paths.
+        # trust__manipulator has commits without prior advances → WARNING only.
+        output = {
+            "entities": [
+                {"entity_id": "mentor", "disposition": "retained"},
+                {"entity_id": "archive", "disposition": "retained"},
+                {"entity_id": "tower", "disposition": "retained"},
+            ],
+            "dilemmas": [
                 {
-                    "beat_id": "commit",
-                    "summary": "Trust decided",
-                    "paths": ["trust_arc"],
-                    "dilemma_impacts": [
-                        {"dilemma_id": "trust", "effect": "commits", "note": "Locked in"}
-                    ],
+                    "dilemma_id": "trust",
+                    "explored": ["protector", "manipulator"],
+                    "unexplored": [],
+                },
+            ],
+            "paths": [
+                {
+                    "path_id": "trust__protector",
+                    "name": "Protector Arc",
+                    "dilemma_id": "trust",
+                    "answer_id": "protector",
+                    "description": "Mentor protects.",
+                    "path_importance": "major",
                 },
                 {
-                    "beat_id": "aftermath",
-                    "summary": "Trust consequences",
-                    "paths": ["trust_arc"],
-                    "dilemma_impacts": [
-                        {"dilemma_id": "trust", "effect": "advances", "note": "Fallout"}
-                    ],
+                    "path_id": "trust__manipulator",
+                    "name": "Manipulator Arc",
+                    "dilemma_id": "trust",
+                    "answer_id": "manipulator",
+                    "description": "Mentor manipulates.",
+                    "path_importance": "major",
                 },
-            ]
-        )
+            ],
+            "consequences": [
+                {
+                    "consequence_id": "c_protector",
+                    "path_id": "trust__protector",
+                    "description": "Protagonist gains an ally.",
+                    "narrative_effects": ["Trust shapes the climax"],
+                },
+                {
+                    "consequence_id": "c_manipulator",
+                    "path_id": "trust__manipulator",
+                    "description": "Protagonist faces danger alone.",
+                    "narrative_effects": ["Isolation defines the climax"],
+                },
+            ],
+            "initial_beats": [
+                # Shared pre-commit beat (only advances protector; manipulator has no advances)
+                {
+                    "beat_id": "trust_pre",
+                    "summary": "Protagonist encounters the mentor",
+                    "path_id": "trust__protector",
+                    "also_belongs_to": "trust__manipulator",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+                # Commit beat for protector (has prior advances via shared beat)
+                {
+                    "beat_id": "commit_protector",
+                    "summary": "Trust decided — protagonist sides with mentor.",
+                    "path_id": "trust__protector",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "commits"}],
+                    "entities": ["mentor"],
+                },
+                # Post-commit beats for protector
+                {
+                    "beat_id": "post_protector_1",
+                    "summary": "Mentor reveals a vital secret.",
+                    "path_id": "trust__protector",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+                {
+                    "beat_id": "post_protector_2",
+                    "summary": "Ally bond confirmed.",
+                    "path_id": "trust__protector",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+                # Commit beat for manipulator — no prior advances; triggers WARNING
+                {
+                    "beat_id": "commit_manipulator",
+                    "summary": "Trust betrayed — protagonist distrusts mentor.",
+                    "path_id": "trust__manipulator",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "commits"}],
+                    "entities": ["mentor"],
+                },
+                # Post-commit beats for manipulator
+                {
+                    "beat_id": "post_manipulator_1",
+                    "summary": "Mentor's true motive surfaces.",
+                    "path_id": "trust__manipulator",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+                {
+                    "beat_id": "post_manipulator_2",
+                    "summary": "Protagonist faces danger alone.",
+                    "path_id": "trust__manipulator",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+            ],
+            "dilemma_analyses": [
+                {
+                    "dilemma_id": "trust",
+                    "dilemma_role": "hard",
+                    "payoff_budget": 2,
+                    "reasoning": "Binary trust question.",
+                    "ending_salience": "high",
+                    "residue_weight": "heavy",
+                },
+            ],
+            "human_approved_paths": True,
+        }
 
         # Should not raise: pre-commit development check (check 14) is WARNING only
         apply_seed_mutations(graph, output)
 
         # Verify mutation was applied (beat nodes exist)
-        beat_node = graph.get_node("beat::commit")
-        assert beat_node is not None
-        aftermath_node = graph.get_node("beat::aftermath")
-        assert aftermath_node is not None
+        assert graph.get_node("beat::commit_protector") is not None
+        assert graph.get_node("beat::post_protector_1") is not None
 
     def test_path_without_commits_skips_arc_checks(self) -> None:
         """Paths missing a commit beat get an error for check 13, not arc warnings."""
@@ -2687,6 +3748,8 @@ class TestMutationIntegration:
             "tone": ["atmospheric", "morally ambiguous"],
             "themes": ["forbidden knowledge", "trust"],
             "audience": "adult",
+            "scope": {"story_size": "short"},
+            "human_approved": True,
         }
         apply_mutations(graph, "dream", dream_output)
         graph.set_last_stage("dream")
@@ -2694,11 +3757,29 @@ class TestMutationIntegration:
         # BRAINSTORM stage
         brainstorm_output = {
             "entities": [
-                {"entity_id": "kay", "entity_category": "character", "concept": "Young archivist"},
+                {
+                    "entity_id": "kay",
+                    "entity_category": "character",
+                    "name": "Kay",
+                    "concept": "Young archivist",
+                },
                 {
                     "entity_id": "mentor",
                     "entity_category": "character",
+                    "name": "Mentor",
                     "concept": "Senior archivist",
+                },
+                {
+                    "entity_id": "archive",
+                    "entity_category": "location",
+                    "name": "Archive",
+                    "concept": "Ancient library",
+                },
+                {
+                    "entity_id": "tower",
+                    "entity_category": "location",
+                    "name": "Tower",
+                    "concept": "Tall observatory",
                 },
             ],
             "dilemmas": [
@@ -2726,42 +3807,121 @@ class TestMutationIntegration:
         graph.set_last_stage("brainstorm")
 
         # SEED stage - uses raw IDs as LLM would produce
+        # Explores both answers (protector + manipulator) to satisfy contract.
         seed_output = {
             "entities": [
                 {"entity_id": "kay", "disposition": "retained"},
                 {"entity_id": "mentor", "disposition": "retained"},
+                {"entity_id": "archive", "disposition": "retained"},
+                {"entity_id": "tower", "disposition": "retained"},
             ],
-            # Completeness: decisions for all dilemmas
             "dilemmas": [
-                {"dilemma_id": "mentor_trust", "explored": ["protector"], "unexplored": []},
+                {
+                    "dilemma_id": "mentor_trust",
+                    "explored": ["protector", "manipulator"],
+                    "unexplored": [],
+                },
             ],
             "paths": [
                 {
-                    "path_id": "path_mentor",
-                    "name": "Mentor Arc",
-                    "dilemma_id": "mentor_trust",  # Raw dilemma ID
-                    "answer_id": "protector",  # Local alt ID
-                    "description": "The mentor relationship path",
-                }
+                    "path_id": "mentor_trust__protector",
+                    "name": "Protector Arc",
+                    "dilemma_id": "mentor_trust",
+                    "answer_id": "protector",
+                    "description": "The mentor genuinely protects.",
+                    "path_importance": "major",
+                },
+                {
+                    "path_id": "mentor_trust__manipulator",
+                    "name": "Manipulator Arc",
+                    "dilemma_id": "mentor_trust",
+                    "answer_id": "manipulator",
+                    "description": "The mentor secretly manipulates.",
+                    "path_importance": "major",
+                },
+            ],
+            "consequences": [
+                {
+                    "consequence_id": "c_protector",
+                    "path_id": "mentor_trust__protector",
+                    "description": "Protagonist gains a loyal ally.",
+                    "narrative_effects": ["Trust becomes a shield in the final confrontation"],
+                },
+                {
+                    "consequence_id": "c_manipulator",
+                    "path_id": "mentor_trust__manipulator",
+                    "description": "Protagonist must face danger alone.",
+                    "narrative_effects": ["Isolation defines the climax"],
+                },
             ],
             "initial_beats": [
+                # Shared pre-commit beat (dual belongs_to)
                 {
                     "beat_id": "opening",
-                    "summary": "Kay meets the mentor",
-                    "paths": ["path_mentor"],  # Raw path IDs
-                    "dilemma_impacts": [
-                        {"dilemma_id": "mentor_trust", "effect": "commits", "note": "Locked in"}
-                    ],
+                    "summary": "Kay meets the mentor for the first time",
+                    "path_id": "mentor_trust__protector",
+                    "also_belongs_to": "mentor_trust__manipulator",
+                    "dilemma_impacts": [{"dilemma_id": "mentor_trust", "effect": "advances"}],
+                    "entities": ["kay", "mentor"],
                 },
+                # Commit beat for protector
+                {
+                    "beat_id": "commit_protector",
+                    "summary": "Kay decides to trust the mentor",
+                    "path_id": "mentor_trust__protector",
+                    "dilemma_impacts": [{"dilemma_id": "mentor_trust", "effect": "commits"}],
+                    "entities": ["mentor"],
+                },
+                # Post-commit beats for protector
+                {
+                    "beat_id": "post_protector_1",
+                    "summary": "The mentor reveals a vital secret.",
+                    "path_id": "mentor_trust__protector",
+                    "dilemma_impacts": [{"dilemma_id": "mentor_trust", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+                {
+                    "beat_id": "post_protector_2",
+                    "summary": "Ally bond confirmed.",
+                    "path_id": "mentor_trust__protector",
+                    "dilemma_impacts": [{"dilemma_id": "mentor_trust", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+                # Commit beat for manipulator
+                {
+                    "beat_id": "commit_manipulator",
+                    "summary": "Kay distrusts the mentor.",
+                    "path_id": "mentor_trust__manipulator",
+                    "dilemma_impacts": [{"dilemma_id": "mentor_trust", "effect": "commits"}],
+                    "entities": ["mentor"],
+                },
+                # Post-commit beats for manipulator
                 {
                     "beat_id": "opening_post",
                     "summary": "The mentor's nature becomes clear",
-                    "paths": ["path_mentor"],
-                    "dilemma_impacts": [
-                        {"dilemma_id": "mentor_trust", "effect": "advances", "note": "Fallout"}
-                    ],
+                    "path_id": "mentor_trust__manipulator",
+                    "dilemma_impacts": [{"dilemma_id": "mentor_trust", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+                {
+                    "beat_id": "manipulator_end",
+                    "summary": "Protagonist faces danger alone.",
+                    "path_id": "mentor_trust__manipulator",
+                    "dilemma_impacts": [{"dilemma_id": "mentor_trust", "effect": "advances"}],
+                    "entities": ["kay"],
                 },
             ],
+            "dilemma_analyses": [
+                {
+                    "dilemma_id": "mentor_trust",
+                    "dilemma_role": "hard",
+                    "payoff_budget": 2,
+                    "reasoning": "Binary trust question.",
+                    "ending_salience": "high",
+                    "residue_weight": "heavy",
+                },
+            ],
+            "human_approved_paths": True,
         }
         apply_mutations(graph, "seed", seed_output)
         graph.set_last_stage("seed")
@@ -2773,24 +3933,25 @@ class TestMutationIntegration:
         assert graph.has_node("character::mentor")  # Category-based entity ID
         assert graph.has_node("dilemma::mentor_trust")
         assert graph.has_node("dilemma::mentor_trust::alt::protector")
-        assert graph.has_node("path::path_mentor")
+        assert graph.has_node("path::mentor_trust__protector")
         assert graph.has_node("beat::opening")
 
         # Check entity dispositions
         assert graph.get_node("character::kay")["disposition"] == "retained"
 
-        # Check edges
+        # Check edges — 2 paths now (protector + manipulator both explored)
         assert len(graph.get_edges(edge_type="has_answer")) == 2
-        assert len(graph.get_edges(edge_type="explores")) == 1
-        assert len(graph.get_edges(edge_type="belongs_to")) == 2
+        assert len(graph.get_edges(edge_type="explores")) == 2  # one per path
+        # belongs_to: shared pre-commit beat has 2 edges; 6 per-path beats have 1 each = 8 total
+        assert len(graph.get_edges(edge_type="belongs_to")) == 8
 
         # Check node counts by type
         assert len(graph.get_nodes_by_type("vision")) == 1
-        assert len(graph.get_nodes_by_type("entity")) == 2
+        assert len(graph.get_nodes_by_type("entity")) == 4  # kay, mentor, archive, tower
         assert len(graph.get_nodes_by_type("dilemma")) == 1
         assert len(graph.get_nodes_by_type("answer")) == 2
-        assert len(graph.get_nodes_by_type("path")) == 1
-        assert len(graph.get_nodes_by_type("beat")) == 2
+        assert len(graph.get_nodes_by_type("path")) == 2  # protector + manipulator
+        assert len(graph.get_nodes_by_type("beat")) == 7  # 1 shared + 3 per path = 7
 
 
 class TestSeedErrorCategory:
@@ -4613,104 +5774,135 @@ class TestBackfillIntegrationWithApplySeedMutations:
     """Test that backfill runs before validation in apply_seed_mutations."""
 
     def test_backfill_runs_before_validation(self) -> None:
-        """Backfill fixes data before validation, preventing 11c errors."""
-        graph = Graph.empty()
-        # Create dilemma node
-        graph.create_node(
-            "dilemma::choice_a_or_b",
-            {
-                "type": "dilemma",
-                "raw_id": "choice_a_or_b",
-            },
-        )
-        # Create answer nodes
-        graph.create_node(
-            "dilemma::choice_a_or_b::alt::option_a",
-            {"type": "answer", "raw_id": "option_a", "is_canonical": True},
-        )
-        graph.create_node(
-            "dilemma::choice_a_or_b::alt::option_b",
-            {"type": "answer", "raw_id": "option_b", "is_canonical": False},
-        )
-        # Create has_answer edges (required for validation)
-        graph.add_edge(
-            "has_answer",
-            "dilemma::choice_a_or_b",
-            "dilemma::choice_a_or_b::alt::option_a",
-        )
-        graph.add_edge(
-            "has_answer",
-            "dilemma::choice_a_or_b",
-            "dilemma::choice_a_or_b::alt::option_b",
-        )
+        """Backfill fixes data before validation, preventing 11c errors.
+
+        Uses _create_compliant_brainstorm_graph() to satisfy the upstream contract.
+        The trust dilemma (protector/manipulator) stands in for the legacy
+        choice_a_or_b pattern.  Empty explored=[] gets backfilled from paths before
+        validation runs, so no 11c error is raised.
+        """
+        graph = _create_compliant_brainstorm_graph()
 
         # Legacy data pattern: paths exist but explored is empty
         output = {
-            "entities": [],
+            "entities": [
+                {"entity_id": "mentor", "disposition": "retained"},
+                {"entity_id": "archive", "disposition": "retained"},
+                {"entity_id": "tower", "disposition": "retained"},
+            ],
             "dilemmas": [
                 {
-                    "dilemma_id": "choice_a_or_b",
-                    "explored": [],
-                },  # empty explored - should be backfilled
+                    "dilemma_id": "trust",
+                    "explored": [],  # empty — backfill should fill from paths
+                },
             ],
             "paths": [
                 {
-                    "path_id": "path1",
-                    "dilemma_id": "choice_a_or_b",
-                    "answer_id": "option_a",
-                    "name": "Path One",
+                    "path_id": "trust__protector",
+                    "dilemma_id": "trust",
+                    "answer_id": "protector",
+                    "name": "Protector Arc",
+                    "description": "Mentor protects.",
+                    "path_importance": "major",
                 },
                 {
-                    "path_id": "path2",
-                    "dilemma_id": "choice_a_or_b",
-                    "answer_id": "option_b",
-                    "name": "Path Two",
+                    "path_id": "trust__manipulator",
+                    "dilemma_id": "trust",
+                    "answer_id": "manipulator",
+                    "name": "Manipulator Arc",
+                    "description": "Mentor manipulates.",
+                    "path_importance": "major",
                 },
             ],
-            "consequences": [],
-            "initial_beats": [
+            "consequences": [
                 {
-                    "beat_id": "b1",
-                    "summary": "Test",
-                    "paths": ["path1"],
-                    "dilemma_impacts": [
-                        {"dilemma_id": "choice_a_or_b", "effect": "commits", "note": "Commits"}
-                    ],
+                    "consequence_id": "c_protector",
+                    "path_id": "trust__protector",
+                    "description": "Protagonist gains an ally.",
+                    "narrative_effects": ["Trust shapes the climax"],
                 },
                 {
-                    "beat_id": "b1_post",
-                    "summary": "Path one aftermath",
-                    "paths": ["path1"],
-                    "dilemma_impacts": [
-                        {"dilemma_id": "choice_a_or_b", "effect": "advances", "note": "Fallout"}
-                    ],
+                    "consequence_id": "c_manipulator",
+                    "path_id": "trust__manipulator",
+                    "description": "Protagonist faces danger alone.",
+                    "narrative_effects": ["Isolation defines the climax"],
+                },
+            ],
+            "initial_beats": [
+                # Shared pre-commit beat (dual belongs_to)
+                {
+                    "beat_id": "trust_pre",
+                    "summary": "Protagonist encounters the mentor",
+                    "path_id": "trust__protector",
+                    "also_belongs_to": "trust__manipulator",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+                # Commit beats
+                {
+                    "beat_id": "b1",
+                    "summary": "Kay trusts the mentor.",
+                    "path_id": "trust__protector",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "commits"}],
+                    "entities": ["mentor"],
                 },
                 {
                     "beat_id": "b2",
-                    "summary": "Test",
-                    "paths": ["path2"],
-                    "dilemma_impacts": [
-                        {"dilemma_id": "choice_a_or_b", "effect": "commits", "note": "Commits"}
-                    ],
+                    "summary": "Kay distrusts the mentor.",
+                    "path_id": "trust__manipulator",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "commits"}],
+                    "entities": ["mentor"],
+                },
+                # Post-commit beats
+                {
+                    "beat_id": "b1_post",
+                    "summary": "Protector path aftermath",
+                    "path_id": "trust__protector",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+                {
+                    "beat_id": "b1_post2",
+                    "summary": "Protector path continues",
+                    "path_id": "trust__protector",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
+                    "entities": ["mentor"],
                 },
                 {
                     "beat_id": "b2_post",
-                    "summary": "Path two aftermath",
-                    "paths": ["path2"],
-                    "dilemma_impacts": [
-                        {"dilemma_id": "choice_a_or_b", "effect": "advances", "note": "Fallout"}
-                    ],
+                    "summary": "Manipulator path aftermath",
+                    "path_id": "trust__manipulator",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+                {
+                    "beat_id": "b2_post2",
+                    "summary": "Manipulator path continues",
+                    "path_id": "trust__manipulator",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
+                    "entities": ["mentor"],
                 },
             ],
+            "dilemma_analyses": [
+                {
+                    "dilemma_id": "trust",
+                    "dilemma_role": "hard",
+                    "payoff_budget": 2,
+                    "reasoning": "Binary trust question.",
+                    "ending_salience": "high",
+                    "residue_weight": "heavy",
+                },
+            ],
+            "human_approved_paths": True,
         }
 
         # Should NOT raise because backfill fixes the data before validation
         apply_seed_mutations(graph, output)
 
         # Verify the dilemma node was updated with backfilled explored
-        dilemma_node = graph.get_node("dilemma::choice_a_or_b")
+        dilemma_node = graph.get_node("dilemma::trust")
         assert dilemma_node is not None
-        assert sorted(dilemma_node.get("explored", [])) == ["option_a", "option_b"]
+        assert sorted(dilemma_node.get("explored", [])) == ["manipulator", "protector"]
 
 
 class TestValidateSeedPovCharacter:
@@ -4886,51 +6078,85 @@ class TestApplySeedConvergenceAnalysis:
     """Test convergence analysis mutations (sections 7+8) in apply_seed_mutations."""
 
     def _graph_with_dilemmas(self) -> Graph:
-        """Build a graph with two brainstorm dilemmas and entities."""
-        graph = Graph.empty()
-        graph.create_node(
-            "entity::kay",
-            {"type": "entity", "raw_id": "kay", "entity_type": "character"},
+        """Build a fully BRAINSTORM-compliant graph with two extra dilemmas.
+
+        Uses _create_compliant_brainstorm_graph() as the base (providing vision,
+        mentor/archive/tower entities, and the trust dilemma).  Adds two extra
+        dilemmas (trust_or_not and stay_or_go) that the convergence-analysis
+        tests exercise.  The base trust dilemma is also explored in _base_output
+        to satisfy the completeness validator.
+        """
+        return _create_compliant_brainstorm_graph(
+            extra_dilemmas=[
+                (
+                    "trust_or_not",
+                    "Trust the mentor or not?",
+                    [
+                        ("trust", "Protagonist trusts the mentor.", True),
+                        ("distrust", "Protagonist distrusts the mentor.", False),
+                    ],
+                    "character::mentor",
+                ),
+                (
+                    "stay_or_go",
+                    "Stay at the archive or leave?",
+                    [
+                        ("stay", "Protagonist stays at the archive.", True),
+                        ("go", "Protagonist leaves for unknown territory.", False),
+                    ],
+                    "location::archive",
+                ),
+            ]
         )
-        graph.create_node(
-            "dilemma::trust_or_not",
-            {
-                "type": "dilemma",
-                "raw_id": "trust_or_not",
-                "question": "Trust the mentor?",
-            },
-        )
-        graph.add_edge("anchored_to", "dilemma::trust_or_not", "entity::kay")
-        graph.create_node(
-            "dilemma::trust_or_not::alt::trust",
-            {"type": "answer", "raw_id": "trust", "is_canonical": True},
-        )
-        graph.add_edge("has_answer", "dilemma::trust_or_not", "dilemma::trust_or_not::alt::trust")
-        graph.create_node(
-            "dilemma::stay_or_go",
-            {
-                "type": "dilemma",
-                "raw_id": "stay_or_go",
-                "question": "Stay or leave?",
-            },
-        )
-        graph.add_edge("anchored_to", "dilemma::stay_or_go", "entity::kay")
-        graph.create_node(
-            "dilemma::stay_or_go::alt::stay",
-            {"type": "answer", "raw_id": "stay", "is_canonical": True},
-        )
-        graph.add_edge("has_answer", "dilemma::stay_or_go", "dilemma::stay_or_go::alt::stay")
-        return graph
 
     def _base_output(self) -> dict:
-        """Minimal SEED output dict with two dilemmas, paths, and beats."""
+        """Fully contract-compliant SEED output exploring three dilemmas.
+
+        Covers all graph dilemmas (trust, trust_or_not, stay_or_go).
+        Consequences have ripples.  Each path has exactly one commit beat and
+        two post-commit beats.  All beats have non-empty entities.
+        dilemma_analyses covers all three dilemmas.
+        """
         return {
-            "entities": [{"entity_id": "kay", "disposition": "retained"}],
+            "entities": [
+                {"entity_id": "mentor", "disposition": "retained"},
+                {"entity_id": "archive", "disposition": "retained"},
+                {"entity_id": "tower", "disposition": "retained"},
+            ],
             "dilemmas": [
-                {"dilemma_id": "trust_or_not", "explored": ["trust"], "unexplored": []},
-                {"dilemma_id": "stay_or_go", "explored": ["stay"], "unexplored": []},
+                {
+                    "dilemma_id": "trust",
+                    "explored": ["protector", "manipulator"],
+                    "unexplored": [],
+                },
+                {
+                    "dilemma_id": "trust_or_not",
+                    "explored": ["trust", "distrust"],
+                    "unexplored": [],
+                },
+                {
+                    "dilemma_id": "stay_or_go",
+                    "explored": ["stay", "go"],
+                    "unexplored": [],
+                },
             ],
             "paths": [
+                {
+                    "path_id": "trust__protector",
+                    "name": "Protector Arc",
+                    "dilemma_id": "trust",
+                    "answer_id": "protector",
+                    "path_importance": "major",
+                    "description": "Mentor protects protagonist.",
+                },
+                {
+                    "path_id": "trust__manipulator",
+                    "name": "Manipulator Arc",
+                    "dilemma_id": "trust",
+                    "answer_id": "manipulator",
+                    "path_importance": "major",
+                    "description": "Mentor manipulates protagonist.",
+                },
                 {
                     "path_id": "trust_or_not__trust",
                     "name": "Trust Path",
@@ -4940,6 +6166,14 @@ class TestApplySeedConvergenceAnalysis:
                     "description": "Trust the mentor",
                 },
                 {
+                    "path_id": "trust_or_not__distrust",
+                    "name": "Distrust Path",
+                    "dilemma_id": "trust_or_not",
+                    "answer_id": "distrust",
+                    "path_importance": "major",
+                    "description": "Distrust the mentor",
+                },
+                {
                     "path_id": "stay_or_go__stay",
                     "name": "Stay Path",
                     "dilemma_id": "stay_or_go",
@@ -4947,34 +6181,235 @@ class TestApplySeedConvergenceAnalysis:
                     "path_importance": "major",
                     "description": "Stay at the location",
                 },
+                {
+                    "path_id": "stay_or_go__go",
+                    "name": "Go Path",
+                    "dilemma_id": "stay_or_go",
+                    "answer_id": "go",
+                    "path_importance": "minor",
+                    "description": "Leave for unknown territory",
+                },
             ],
-            "consequences": [],
+            "consequences": [
+                {
+                    "consequence_id": "c_trust_protector",
+                    "path_id": "trust__protector",
+                    "description": "Protagonist gains a loyal ally.",
+                    "narrative_effects": ["Trust shapes the climax"],
+                },
+                {
+                    "consequence_id": "c_trust_manipulator",
+                    "path_id": "trust__manipulator",
+                    "description": "Protagonist faces danger alone.",
+                    "narrative_effects": ["Isolation defines the climax"],
+                },
+                {
+                    "consequence_id": "c_trust_or_not_trust",
+                    "path_id": "trust_or_not__trust",
+                    "description": "Protagonist gains an ally.",
+                    "narrative_effects": ["Alliance unlocks new paths"],
+                },
+                {
+                    "consequence_id": "c_trust_or_not_distrust",
+                    "path_id": "trust_or_not__distrust",
+                    "description": "Protagonist acts alone.",
+                    "narrative_effects": ["Solo path limits options"],
+                },
+                {
+                    "consequence_id": "c_stay",
+                    "path_id": "stay_or_go__stay",
+                    "description": "Safety of the archive.",
+                    "narrative_effects": ["Security enables research"],
+                },
+                {
+                    "consequence_id": "c_go",
+                    "path_id": "stay_or_go__go",
+                    "description": "Unknown territory awaits.",
+                    "narrative_effects": ["Risk brings discovery"],
+                },
+            ],
             "initial_beats": [
+                # trust dilemma — shared pre-commit + per-path beats
+                {
+                    "beat_id": "trust_pre",
+                    "summary": "Mentor encounter",
+                    "path_id": "trust__protector",
+                    "also_belongs_to": "trust__manipulator",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+                {
+                    "beat_id": "trust_commit_protector",
+                    "summary": "Kay trusts the mentor.",
+                    "path_id": "trust__protector",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "commits"}],
+                    "entities": ["mentor"],
+                },
+                {
+                    "beat_id": "trust_post_p1",
+                    "summary": "Mentor reveals vital secret.",
+                    "path_id": "trust__protector",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+                {
+                    "beat_id": "trust_post_p2",
+                    "summary": "Ally bond confirmed.",
+                    "path_id": "trust__protector",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+                {
+                    "beat_id": "trust_commit_manipulator",
+                    "summary": "Kay distrusts the mentor.",
+                    "path_id": "trust__manipulator",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "commits"}],
+                    "entities": ["mentor"],
+                },
+                {
+                    "beat_id": "trust_post_m1",
+                    "summary": "Mentor's true motive surfaces.",
+                    "path_id": "trust__manipulator",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+                {
+                    "beat_id": "trust_post_m2",
+                    "summary": "Protagonist faces danger alone.",
+                    "path_id": "trust__manipulator",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+                # trust_or_not dilemma — shared pre-commit + per-path beats
+                {
+                    "beat_id": "ton_pre",
+                    "summary": "Trust question arises.",
+                    "path_id": "trust_or_not__trust",
+                    "also_belongs_to": "trust_or_not__distrust",
+                    "dilemma_impacts": [{"dilemma_id": "trust_or_not", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
                 {
                     "beat_id": "b_trust",
                     "summary": "Commit trust",
-                    "paths": ["trust_or_not__trust"],
+                    "path_id": "trust_or_not__trust",
                     "dilemma_impacts": [{"dilemma_id": "trust_or_not", "effect": "commits"}],
+                    "entities": ["mentor"],
                 },
                 {
                     "beat_id": "b_trust_post",
                     "summary": "Trust aftermath",
-                    "paths": ["trust_or_not__trust"],
+                    "path_id": "trust_or_not__trust",
                     "dilemma_impacts": [{"dilemma_id": "trust_or_not", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+                {
+                    "beat_id": "b_trust_post2",
+                    "summary": "Trust confirmed.",
+                    "path_id": "trust_or_not__trust",
+                    "dilemma_impacts": [{"dilemma_id": "trust_or_not", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+                {
+                    "beat_id": "b_distrust",
+                    "summary": "Commit distrust",
+                    "path_id": "trust_or_not__distrust",
+                    "dilemma_impacts": [{"dilemma_id": "trust_or_not", "effect": "commits"}],
+                    "entities": ["mentor"],
+                },
+                {
+                    "beat_id": "b_distrust_post",
+                    "summary": "Distrust aftermath",
+                    "path_id": "trust_or_not__distrust",
+                    "dilemma_impacts": [{"dilemma_id": "trust_or_not", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+                {
+                    "beat_id": "b_distrust_post2",
+                    "summary": "Distrust confirmed.",
+                    "path_id": "trust_or_not__distrust",
+                    "dilemma_impacts": [{"dilemma_id": "trust_or_not", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+                # stay_or_go dilemma — shared pre-commit + per-path beats
+                {
+                    "beat_id": "sog_pre",
+                    "summary": "The choice to stay or leave.",
+                    "path_id": "stay_or_go__stay",
+                    "also_belongs_to": "stay_or_go__go",
+                    "dilemma_impacts": [{"dilemma_id": "stay_or_go", "effect": "advances"}],
+                    "entities": ["mentor"],
                 },
                 {
                     "beat_id": "b_stay",
                     "summary": "Commit stay",
-                    "paths": ["stay_or_go__stay"],
+                    "path_id": "stay_or_go__stay",
                     "dilemma_impacts": [{"dilemma_id": "stay_or_go", "effect": "commits"}],
+                    "entities": ["mentor"],
                 },
                 {
                     "beat_id": "b_stay_post",
                     "summary": "Stay aftermath",
-                    "paths": ["stay_or_go__stay"],
+                    "path_id": "stay_or_go__stay",
                     "dilemma_impacts": [{"dilemma_id": "stay_or_go", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+                {
+                    "beat_id": "b_stay_post2",
+                    "summary": "Safety confirmed.",
+                    "path_id": "stay_or_go__stay",
+                    "dilemma_impacts": [{"dilemma_id": "stay_or_go", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+                {
+                    "beat_id": "b_go",
+                    "summary": "Commit go",
+                    "path_id": "stay_or_go__go",
+                    "dilemma_impacts": [{"dilemma_id": "stay_or_go", "effect": "commits"}],
+                    "entities": ["mentor"],
+                },
+                {
+                    "beat_id": "b_go_post",
+                    "summary": "Go aftermath",
+                    "path_id": "stay_or_go__go",
+                    "dilemma_impacts": [{"dilemma_id": "stay_or_go", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+                {
+                    "beat_id": "b_go_post2",
+                    "summary": "Discovery confirmed.",
+                    "path_id": "stay_or_go__go",
+                    "dilemma_impacts": [{"dilemma_id": "stay_or_go", "effect": "advances"}],
+                    "entities": ["mentor"],
                 },
             ],
+            "dilemma_analyses": [
+                {
+                    "dilemma_id": "trust",
+                    "dilemma_role": "hard",
+                    "payoff_budget": 2,
+                    "reasoning": "Binary trust question.",
+                    "ending_salience": "high",
+                    "residue_weight": "heavy",
+                },
+                {
+                    "dilemma_id": "trust_or_not",
+                    "dilemma_role": "hard",
+                    "payoff_budget": 4,
+                    "reasoning": "Core trust choice.",
+                    "ending_salience": "high",
+                    "residue_weight": "heavy",
+                },
+                {
+                    "dilemma_id": "stay_or_go",
+                    "dilemma_role": "soft",
+                    "payoff_budget": 2,
+                    "reasoning": "Spatial choice.",
+                    "ending_salience": "low",
+                    "residue_weight": "light",
+                },
+            ],
+            "human_approved_paths": True,
         }
 
     def test_dilemma_role_stored_on_dilemma_node(self) -> None:
@@ -5170,8 +6605,12 @@ class TestApplySeedConvergenceAnalysis:
         node = graph.get_node("dilemma::stay_or_go")
         assert node["ending_salience"] == "none"
 
-    def test_absent_ending_salience_not_stored(self) -> None:
-        """When ending_salience is absent from analysis dict, it is not added."""
+    def test_absent_ending_salience_uses_default(self) -> None:
+        """When ending_salience is absent from analysis dict, the default 'none' is stored.
+
+        R-7.3 requires every dilemma to have ending_salience on the graph node.
+        The mutations code defaults to 'none' when not provided.
+        """
         graph = self._graph_with_dilemmas()
         output = self._base_output()
         output["dilemma_analyses"] = [
@@ -5180,12 +6619,23 @@ class TestApplySeedConvergenceAnalysis:
                 "dilemma_role": "hard",
                 "payoff_budget": 4,
                 "reasoning": "test",
+                "residue_weight": "heavy",
+                # ending_salience intentionally absent
+            },
+            {
+                "dilemma_id": "stay_or_go",
+                "dilemma_role": "soft",
+                "payoff_budget": 2,
+                "reasoning": "minor choice",
+                "ending_salience": "low",
+                "residue_weight": "light",
             },
         ]
         apply_seed_mutations(graph, output)
 
         node = graph.get_node("dilemma::trust_or_not")
-        assert "ending_salience" not in node
+        # Default "none" is applied when absent
+        assert node["ending_salience"] == "none"
 
     def test_residue_weight_stored_on_dilemma_node(self) -> None:
         """residue_weight from analysis is stored on the dilemma graph node."""
@@ -5223,8 +6673,12 @@ class TestApplySeedConvergenceAnalysis:
         node = graph.get_node("dilemma::stay_or_go")
         assert node["residue_weight"] == "cosmetic"
 
-    def test_absent_residue_weight_not_stored(self) -> None:
-        """When residue_weight is absent from analysis dict, it is not added."""
+    def test_absent_residue_weight_uses_default(self) -> None:
+        """When residue_weight is absent from analysis dict, the default 'cosmetic' is stored.
+
+        R-7.2 requires every dilemma to have residue_weight on the graph node.
+        The mutations code defaults to 'cosmetic' when not provided.
+        """
         graph = self._graph_with_dilemmas()
         output = self._base_output()
         output["dilemma_analyses"] = [
@@ -5233,9 +6687,1360 @@ class TestApplySeedConvergenceAnalysis:
                 "dilemma_role": "hard",
                 "payoff_budget": 4,
                 "reasoning": "test",
+                "ending_salience": "high",
+                # residue_weight intentionally absent
+            },
+            {
+                "dilemma_id": "stay_or_go",
+                "dilemma_role": "soft",
+                "payoff_budget": 2,
+                "reasoning": "minor choice",
+                "ending_salience": "low",
+                "residue_weight": "light",
             },
         ]
         apply_seed_mutations(graph, output)
 
         node = graph.get_node("dilemma::trust_or_not")
-        assert "residue_weight" not in node
+        # Default "cosmetic" is applied when absent
+        assert node["residue_weight"] == "cosmetic"
+
+
+# ---------------------------------------------------------------------------
+# Tasks 19 + 20 — concurrent normalization (R-8.3) and shared_entity rejection (R-8.4)
+# ---------------------------------------------------------------------------
+
+
+class TestApplySeedConcurrentOrdering:
+    """R-8.3: concurrent ordering must be stored with lex-smaller dilemma_id as dilemma_a."""
+
+    def _graph_with_two_dilemmas(self) -> Graph:
+        """Build a fully BRAINSTORM-compliant graph with two extra dilemmas.
+
+        Uses mentor_trust and z_later (lex order matters for R-8.3 tests).
+        Each has two answers with descriptions and an anchored_to edge.
+        """
+        return _create_compliant_brainstorm_graph(
+            extra_dilemmas=[
+                (
+                    "mentor_trust",
+                    "Trust the mentor?",
+                    [
+                        ("yes", "Protagonist trusts the mentor.", True),
+                        ("no", "Protagonist distrusts the mentor.", False),
+                    ],
+                    "character::mentor",
+                ),
+                (
+                    "z_later",
+                    "Go later?",
+                    [
+                        ("yes", "Protagonist goes later.", True),
+                        ("no", "Protagonist goes now.", False),
+                    ],
+                    "location::archive",
+                ),
+            ]
+        )
+
+    def _base_output(self) -> dict:
+        """Fully contract-compliant SEED output for concurrent ordering tests.
+
+        Covers all three dilemmas (trust, mentor_trust, z_later).
+        """
+        return {
+            "entities": [
+                {"entity_id": "mentor", "disposition": "retained"},
+                {"entity_id": "archive", "disposition": "retained"},
+                {"entity_id": "tower", "disposition": "retained"},
+            ],
+            "dilemmas": [
+                {
+                    "dilemma_id": "trust",
+                    "explored": ["protector", "manipulator"],
+                    "unexplored": [],
+                },
+                {
+                    "dilemma_id": "mentor_trust",
+                    "explored": ["yes", "no"],
+                    "unexplored": [],
+                },
+                {
+                    "dilemma_id": "z_later",
+                    "explored": ["yes", "no"],
+                    "unexplored": [],
+                },
+            ],
+            "paths": [
+                {
+                    "path_id": "trust__protector",
+                    "name": "Protector Arc",
+                    "dilemma_id": "trust",
+                    "answer_id": "protector",
+                    "path_importance": "major",
+                    "description": "Mentor protects.",
+                },
+                {
+                    "path_id": "trust__manipulator",
+                    "name": "Manipulator Arc",
+                    "dilemma_id": "trust",
+                    "answer_id": "manipulator",
+                    "path_importance": "major",
+                    "description": "Mentor manipulates.",
+                },
+                {
+                    "path_id": "mentor_trust__yes",
+                    "name": "Trust",
+                    "dilemma_id": "mentor_trust",
+                    "answer_id": "yes",
+                    "path_importance": "major",
+                    "description": "Trust the mentor",
+                },
+                {
+                    "path_id": "mentor_trust__no",
+                    "name": "No Trust",
+                    "dilemma_id": "mentor_trust",
+                    "answer_id": "no",
+                    "path_importance": "major",
+                    "description": "Distrust the mentor",
+                },
+                {
+                    "path_id": "z_later__yes",
+                    "name": "Later",
+                    "dilemma_id": "z_later",
+                    "answer_id": "yes",
+                    "path_importance": "major",
+                    "description": "Go later",
+                },
+                {
+                    "path_id": "z_later__no",
+                    "name": "Now",
+                    "dilemma_id": "z_later",
+                    "answer_id": "no",
+                    "path_importance": "minor",
+                    "description": "Go now",
+                },
+            ],
+            "consequences": [
+                {
+                    "consequence_id": "c_trust_p",
+                    "path_id": "trust__protector",
+                    "description": "Ally gained.",
+                    "narrative_effects": ["Trust shapes the climax"],
+                },
+                {
+                    "consequence_id": "c_trust_m",
+                    "path_id": "trust__manipulator",
+                    "description": "Danger alone.",
+                    "narrative_effects": ["Isolation defines the climax"],
+                },
+                {
+                    "consequence_id": "c_mt_yes",
+                    "path_id": "mentor_trust__yes",
+                    "description": "Mentor trusted.",
+                    "narrative_effects": ["Alliance unlocks new paths"],
+                },
+                {
+                    "consequence_id": "c_mt_no",
+                    "path_id": "mentor_trust__no",
+                    "description": "Mentor distrusted.",
+                    "narrative_effects": ["Solo path limits options"],
+                },
+                {
+                    "consequence_id": "c_zl_yes",
+                    "path_id": "z_later__yes",
+                    "description": "Delayed action.",
+                    "narrative_effects": ["Patience enables preparation"],
+                },
+                {
+                    "consequence_id": "c_zl_no",
+                    "path_id": "z_later__no",
+                    "description": "Immediate action.",
+                    "narrative_effects": ["Speed sacrifices planning"],
+                },
+            ],
+            "initial_beats": [
+                # trust dilemma
+                {
+                    "beat_id": "trust_pre",
+                    "summary": "Mentor encounter",
+                    "path_id": "trust__protector",
+                    "also_belongs_to": "trust__manipulator",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+                {
+                    "beat_id": "trust_cp",
+                    "summary": "Kay trusts.",
+                    "path_id": "trust__protector",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "commits"}],
+                    "entities": ["mentor"],
+                },
+                {
+                    "beat_id": "trust_pp1",
+                    "summary": "Secret revealed.",
+                    "path_id": "trust__protector",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+                {
+                    "beat_id": "trust_pp2",
+                    "summary": "Bond confirmed.",
+                    "path_id": "trust__protector",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+                {
+                    "beat_id": "trust_cm",
+                    "summary": "Kay distrusts.",
+                    "path_id": "trust__manipulator",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "commits"}],
+                    "entities": ["mentor"],
+                },
+                {
+                    "beat_id": "trust_pm1",
+                    "summary": "Motive exposed.",
+                    "path_id": "trust__manipulator",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+                {
+                    "beat_id": "trust_pm2",
+                    "summary": "Danger alone.",
+                    "path_id": "trust__manipulator",
+                    "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+                # mentor_trust dilemma
+                {
+                    "beat_id": "mt_pre",
+                    "summary": "Trust question",
+                    "path_id": "mentor_trust__yes",
+                    "also_belongs_to": "mentor_trust__no",
+                    "dilemma_impacts": [{"dilemma_id": "mentor_trust", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+                {
+                    "beat_id": "b1",
+                    "summary": "Commit mentor trust",
+                    "path_id": "mentor_trust__yes",
+                    "dilemma_impacts": [{"dilemma_id": "mentor_trust", "effect": "commits"}],
+                    "entities": ["mentor"],
+                },
+                {
+                    "beat_id": "b1_post",
+                    "summary": "After mentor trust",
+                    "path_id": "mentor_trust__yes",
+                    "dilemma_impacts": [{"dilemma_id": "mentor_trust", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+                {
+                    "beat_id": "b1_post2",
+                    "summary": "Trust confirmed.",
+                    "path_id": "mentor_trust__yes",
+                    "dilemma_impacts": [{"dilemma_id": "mentor_trust", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+                {
+                    "beat_id": "b1_no",
+                    "summary": "Commit no trust",
+                    "path_id": "mentor_trust__no",
+                    "dilemma_impacts": [{"dilemma_id": "mentor_trust", "effect": "commits"}],
+                    "entities": ["mentor"],
+                },
+                {
+                    "beat_id": "b1_no_post",
+                    "summary": "Distrust aftermath.",
+                    "path_id": "mentor_trust__no",
+                    "dilemma_impacts": [{"dilemma_id": "mentor_trust", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+                {
+                    "beat_id": "b1_no_post2",
+                    "summary": "Distrust confirmed.",
+                    "path_id": "mentor_trust__no",
+                    "dilemma_impacts": [{"dilemma_id": "mentor_trust", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+                # z_later dilemma
+                {
+                    "beat_id": "zl_pre",
+                    "summary": "Later question",
+                    "path_id": "z_later__yes",
+                    "also_belongs_to": "z_later__no",
+                    "dilemma_impacts": [{"dilemma_id": "z_later", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+                {
+                    "beat_id": "b2",
+                    "summary": "Commit z later",
+                    "path_id": "z_later__yes",
+                    "dilemma_impacts": [{"dilemma_id": "z_later", "effect": "commits"}],
+                    "entities": ["mentor"],
+                },
+                {
+                    "beat_id": "b2_post",
+                    "summary": "After z later",
+                    "path_id": "z_later__yes",
+                    "dilemma_impacts": [{"dilemma_id": "z_later", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+                {
+                    "beat_id": "b2_post2",
+                    "summary": "Later confirmed.",
+                    "path_id": "z_later__yes",
+                    "dilemma_impacts": [{"dilemma_id": "z_later", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+                {
+                    "beat_id": "b2_no",
+                    "summary": "Commit go now",
+                    "path_id": "z_later__no",
+                    "dilemma_impacts": [{"dilemma_id": "z_later", "effect": "commits"}],
+                    "entities": ["mentor"],
+                },
+                {
+                    "beat_id": "b2_no_post",
+                    "summary": "Now aftermath.",
+                    "path_id": "z_later__no",
+                    "dilemma_impacts": [{"dilemma_id": "z_later", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+                {
+                    "beat_id": "b2_no_post2",
+                    "summary": "Now confirmed.",
+                    "path_id": "z_later__no",
+                    "dilemma_impacts": [{"dilemma_id": "z_later", "effect": "advances"}],
+                    "entities": ["mentor"],
+                },
+            ],
+            "dilemma_analyses": [
+                {
+                    "dilemma_id": "trust",
+                    "dilemma_role": "hard",
+                    "payoff_budget": 2,
+                    "reasoning": "Binary trust question.",
+                    "ending_salience": "high",
+                    "residue_weight": "heavy",
+                },
+                {
+                    "dilemma_id": "mentor_trust",
+                    "dilemma_role": "hard",
+                    "payoff_budget": 4,
+                    "reasoning": "Core trust choice.",
+                    "ending_salience": "high",
+                    "residue_weight": "heavy",
+                },
+                {
+                    "dilemma_id": "z_later",
+                    "dilemma_role": "soft",
+                    "payoff_budget": 2,
+                    "reasoning": "Timing question.",
+                    "ending_salience": "low",
+                    "residue_weight": "light",
+                },
+            ],
+            "human_approved_paths": True,
+        }
+
+    def test_concurrent_ordering_normalized_to_lex_smaller_a(self) -> None:
+        """R-8.3: reversed concurrent pair is normalized so lex-smaller dilemma is dilemma_a."""
+        graph = self._graph_with_two_dilemmas()
+        output = self._base_output()
+        output["dilemma_relationships"] = [
+            {
+                "dilemma_a": "z_later",  # lex-larger — should be swapped
+                "dilemma_b": "mentor_trust",
+                "ordering": "concurrent",
+                "description": "Both run at the same time.",
+                "reasoning": "They overlap narratively.",
+            }
+        ]
+        apply_seed_mutations(graph, output)
+
+        # Edge should exist FROM lex-smaller (mentor_trust) TO lex-larger (z_later)
+        edges_from_mentor = graph.get_edges(from_id="dilemma::mentor_trust", edge_type="concurrent")
+        assert len(edges_from_mentor) == 1
+        assert edges_from_mentor[0]["to"] == "dilemma::z_later"
+
+        # No edge in the reversed direction
+        edges_from_z = graph.get_edges(from_id="dilemma::z_later", edge_type="concurrent")
+        assert len(edges_from_z) == 0
+
+    def test_concurrent_already_ordered_unchanged(self) -> None:
+        """R-8.3: pair already in lex order is written as-is."""
+        graph = self._graph_with_two_dilemmas()
+        output = self._base_output()
+        output["dilemma_relationships"] = [
+            {
+                "dilemma_a": "mentor_trust",  # lex-smaller — already correct
+                "dilemma_b": "z_later",
+                "ordering": "concurrent",
+                "description": "Both run at the same time.",
+                "reasoning": "They overlap.",
+            }
+        ]
+        apply_seed_mutations(graph, output)
+        edges = graph.get_edges(from_id="dilemma::mentor_trust", edge_type="concurrent")
+        assert len(edges) == 1
+        assert edges[0]["to"] == "dilemma::z_later"
+
+    def test_shared_entity_relationship_raises_mutation_error(self) -> None:
+        """R-8.4: shared_entity is derived, never declared; apply_seed_mutations must raise."""
+        from questfoundry.graph.mutations import MutationError
+
+        graph = self._graph_with_two_dilemmas()
+        output = self._base_output()
+        output["dilemma_relationships"] = [
+            {
+                "dilemma_a": "mentor_trust",
+                "dilemma_b": "z_later",
+                "ordering": "shared_entity",  # forbidden
+                "description": "They share an entity.",
+                "reasoning": "Same entity.",
+            }
+        ]
+        with pytest.raises(MutationError, match="shared_entity"):
+            apply_seed_mutations(graph, output)
+
+
+# ---------------------------------------------------------------------------
+# Phase 2 - Y-shape dual belongs_to tests (Tasks 2.1-2.7)
+# ---------------------------------------------------------------------------
+
+
+def test_get_path_ids_from_beat_post_commit_returns_one() -> None:
+    from questfoundry.graph.mutations import _get_path_ids_from_beat
+
+    beat = {"path_id": "path::a"}
+    assert _get_path_ids_from_beat(beat) == ("path::a",)
+
+
+def test_get_path_ids_from_beat_pre_commit_returns_both() -> None:
+    from questfoundry.graph.mutations import _get_path_ids_from_beat
+
+    beat = {"path_id": "path::a", "also_belongs_to": "path::b"}
+    assert _get_path_ids_from_beat(beat) == ("path::a", "path::b")
+
+
+def test_get_path_ids_from_beat_legacy_paths_list_returns_all() -> None:
+    from questfoundry.graph.mutations import _get_path_ids_from_beat
+
+    beat = {"paths": ["path::a", "path::b"]}
+    assert _get_path_ids_from_beat(beat) == ("path::a", "path::b")
+
+
+def test_get_path_ids_from_beat_empty_returns_empty_tuple() -> None:
+    from questfoundry.graph.mutations import _get_path_ids_from_beat
+
+    assert _get_path_ids_from_beat({}) == ()
+
+
+# ---------------------------------------------------------------------------
+# Shared helpers for Y-shape guard rail tests
+# ---------------------------------------------------------------------------
+
+
+def _trust_graph() -> Graph:
+    """Return a BRAINSTORM-contract-compliant graph for the trust dilemma.
+
+    Contains ONLY ``dilemma::trust_protector_or_manipulator`` (no base ``trust``
+    dilemma) so that ``_trust_seed_output`` only needs decisions for one dilemma.
+    Includes vision, proper category-prefixed entity IDs, and ≥2 location
+    entities so the SEED exit validator passes.
+    Matches the seed returned by :func:`_trust_seed_output`.
+    """
+    g = Graph.empty()
+    _create_compliant_vision(g)
+    g.create_node(
+        "character::mentor",
+        {
+            "type": "entity",
+            "raw_id": "mentor",
+            "category": "character",
+            "name": "Mentor",
+            "concept": "Senior archivist with hidden motives",
+        },
+    )
+    g.create_node(
+        "location::archive",
+        {
+            "type": "entity",
+            "raw_id": "archive",
+            "category": "location",
+            "name": "The Archive",
+            "concept": "Ancient repository of forbidden texts",
+        },
+    )
+    g.create_node(
+        "location::tower",
+        {
+            "type": "entity",
+            "raw_id": "tower",
+            "category": "location",
+            "name": "The Tower",
+            "concept": "Tall observatory on the hill",
+        },
+    )
+    g.create_node(
+        "dilemma::trust_protector_or_manipulator",
+        {
+            "type": "dilemma",
+            "raw_id": "trust_protector_or_manipulator",
+            "question": "Should the protagonist trust the mentor as protector or see through manipulation?",
+            "why_it_matters": "Trust defines whether the protagonist gains an ally or faces a foe.",
+        },
+    )
+    g.create_node(
+        "dilemma::trust_protector_or_manipulator::alt::protector",
+        {
+            "type": "answer",
+            "raw_id": "protector",
+            "description": "The mentor genuinely protects the protagonist.",
+            "is_canonical": True,
+        },
+    )
+    g.create_node(
+        "dilemma::trust_protector_or_manipulator::alt::manipulator",
+        {
+            "type": "answer",
+            "raw_id": "manipulator",
+            "description": "The mentor is secretly manipulating for personal gain.",
+            "is_canonical": False,
+        },
+    )
+    g.add_edge(
+        "has_answer",
+        "dilemma::trust_protector_or_manipulator",
+        "dilemma::trust_protector_or_manipulator::alt::protector",
+    )
+    g.add_edge(
+        "has_answer",
+        "dilemma::trust_protector_or_manipulator",
+        "dilemma::trust_protector_or_manipulator::alt::manipulator",
+    )
+    g.add_edge("anchored_to", "dilemma::trust_protector_or_manipulator", "character::mentor")
+    return g
+
+
+def _trust_seed_output(initial_beats: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    """SEED output for the trust_protector_or_manipulator dilemma with two paths.
+
+    Callers supply ``initial_beats``; defaults to a minimal compliant beat
+    structure (1 shared pre-commit + 2 commit beats + 2 post-commit beats).
+    All beats include ``entities`` to satisfy R-3.13.
+
+    The base graph also contains ``dilemma::trust`` (from
+    ``_create_compliant_brainstorm_graph``); that dilemma is left unexplored
+    here — this is allowed by the SEED contract.
+    """
+    if initial_beats is None:
+        initial_beats = [
+            {
+                "beat_id": "shared_setup",
+                "summary": "Protagonist observes the mentor's first move.",
+                "path_id": "trust_protector_or_manipulator__protector",
+                "also_belongs_to": "trust_protector_or_manipulator__manipulator",
+                "entities": ["character::mentor"],
+                "dilemma_impacts": [
+                    {
+                        "dilemma_id": "trust_protector_or_manipulator",
+                        "effect": "advances",
+                        "note": "sets up the choice",
+                    }
+                ],
+            },
+            {
+                "beat_id": "commit_protector",
+                "summary": "Protagonist decides to trust the mentor.",
+                "path_id": "trust_protector_or_manipulator__protector",
+                "entities": ["character::mentor"],
+                "dilemma_impacts": [
+                    {
+                        "dilemma_id": "trust_protector_or_manipulator",
+                        "effect": "commits",
+                        "note": "locked in trust",
+                    }
+                ],
+            },
+            {
+                "beat_id": "post_protector_1",
+                "summary": "Mentor reveals hidden allies.",
+                "path_id": "trust_protector_or_manipulator__protector",
+                "entities": ["character::mentor"],
+                "dilemma_impacts": [
+                    {
+                        "dilemma_id": "trust_protector_or_manipulator",
+                        "effect": "advances",
+                        "note": "fallout begins",
+                    }
+                ],
+            },
+            {
+                "beat_id": "post_protector_2",
+                "summary": "Protagonist gains mentor's full support.",
+                "path_id": "trust_protector_or_manipulator__protector",
+                "entities": ["character::mentor"],
+                "dilemma_impacts": [
+                    {
+                        "dilemma_id": "trust_protector_or_manipulator",
+                        "effect": "advances",
+                        "note": "resolution",
+                    }
+                ],
+            },
+            {
+                "beat_id": "commit_manipulator",
+                "summary": "Protagonist sees through the mentor's deception.",
+                "path_id": "trust_protector_or_manipulator__manipulator",
+                "entities": ["character::mentor"],
+                "dilemma_impacts": [
+                    {
+                        "dilemma_id": "trust_protector_or_manipulator",
+                        "effect": "commits",
+                        "note": "locked in distrust",
+                    }
+                ],
+            },
+            {
+                "beat_id": "post_manipulator_1",
+                "summary": "Protagonist confronts the mentor.",
+                "path_id": "trust_protector_or_manipulator__manipulator",
+                "entities": ["character::mentor"],
+                "dilemma_impacts": [
+                    {
+                        "dilemma_id": "trust_protector_or_manipulator",
+                        "effect": "advances",
+                        "note": "confrontation",
+                    }
+                ],
+            },
+            {
+                "beat_id": "post_manipulator_2",
+                "summary": "Mentor escapes with stolen knowledge.",
+                "path_id": "trust_protector_or_manipulator__manipulator",
+                "entities": ["character::mentor"],
+                "dilemma_impacts": [
+                    {
+                        "dilemma_id": "trust_protector_or_manipulator",
+                        "effect": "advances",
+                        "note": "resolution",
+                    }
+                ],
+            },
+        ]
+    return {
+        "entities": [
+            {"entity_id": "mentor", "disposition": "retained"},
+            {"entity_id": "archive", "disposition": "retained"},
+            {"entity_id": "tower", "disposition": "retained"},
+        ],
+        "dilemmas": [
+            {
+                "dilemma_id": "trust_protector_or_manipulator",
+                "explored": ["protector", "manipulator"],
+                "unexplored": [],
+            }
+        ],
+        "paths": [
+            {
+                "path_id": "trust_protector_or_manipulator__protector",
+                "dilemma_id": "trust_protector_or_manipulator",
+                "answer_id": "protector",
+                "name": "Protector",
+                "description": "The mentor genuinely protects the protagonist throughout.",
+            },
+            {
+                "path_id": "trust_protector_or_manipulator__manipulator",
+                "dilemma_id": "trust_protector_or_manipulator",
+                "answer_id": "manipulator",
+                "name": "Manipulator",
+                "description": "The mentor secretly manipulates the protagonist for personal gain.",
+            },
+        ],
+        "consequences": [
+            {
+                "consequence_id": "mentor_trusted",
+                "path_id": "trust_protector_or_manipulator__protector",
+                "description": "Trust is established; the mentor becomes a genuine ally.",
+                "narrative_effects": ["protagonist gains access to hidden archives"],
+            },
+            {
+                "consequence_id": "mentor_distrusted",
+                "path_id": "trust_protector_or_manipulator__manipulator",
+                "description": "Betrayal is exposed; the mentor becomes an antagonist.",
+                "narrative_effects": ["protagonist must act without support"],
+            },
+        ],
+        "dilemma_analyses": [
+            {
+                "dilemma_id": "trust_protector_or_manipulator",
+                "dilemma_role": "soft",
+                "payoff_budget": 2,
+                "ending_salience": "none",
+                "residue_weight": "cosmetic",
+            }
+        ],
+        "initial_beats": initial_beats,
+        "human_approved_paths": True,
+    }
+
+
+def _two_dilemma_graph() -> Graph:
+    """Return a BRAINSTORM-contract-compliant graph with two unrelated dilemmas.
+
+    Contains ONLY ``dilemma_a`` and ``dilemma_b`` (no base ``trust`` dilemma)
+    so that ``_two_dilemma_seed_output`` only needs decisions for two dilemmas.
+    Includes vision node, proper category-prefixed entity IDs, and ≥2 location
+    entities (R-2.4).
+    """
+    g = Graph.empty()
+    _create_compliant_vision(g)
+    g.create_node(
+        "character::mentor",
+        {
+            "type": "entity",
+            "raw_id": "mentor",
+            "category": "character",
+            "name": "Mentor",
+            "concept": "Senior archivist with hidden motives",
+        },
+    )
+    g.create_node(
+        "location::archive",
+        {
+            "type": "entity",
+            "raw_id": "archive",
+            "category": "location",
+            "name": "The Archive",
+            "concept": "Ancient repository of forbidden texts",
+        },
+    )
+    g.create_node(
+        "location::tower",
+        {
+            "type": "entity",
+            "raw_id": "tower",
+            "category": "location",
+            "name": "The Tower",
+            "concept": "Tall observatory on the hill",
+        },
+    )
+    # Dilemma A
+    g.create_node(
+        "dilemma::dilemma_a",
+        {
+            "type": "dilemma",
+            "raw_id": "dilemma_a",
+            "question": "Should the protagonist choose answer A1 or A2?",
+            "why_it_matters": "This choice defines the confrontation arc.",
+        },
+    )
+    g.create_node(
+        "dilemma::dilemma_a::alt::answer_a1",
+        {
+            "type": "answer",
+            "raw_id": "answer_a1",
+            "description": "Taking path A1 leads to confrontation.",
+            "is_canonical": True,
+        },
+    )
+    g.create_node(
+        "dilemma::dilemma_a::alt::answer_a2",
+        {
+            "type": "answer",
+            "raw_id": "answer_a2",
+            "description": "Taking path A2 avoids open conflict.",
+            "is_canonical": False,
+        },
+    )
+    g.add_edge("has_answer", "dilemma::dilemma_a", "dilemma::dilemma_a::alt::answer_a1")
+    g.add_edge("has_answer", "dilemma::dilemma_a", "dilemma::dilemma_a::alt::answer_a2")
+    g.add_edge("anchored_to", "dilemma::dilemma_a", "character::mentor")
+    # Dilemma B
+    g.create_node(
+        "dilemma::dilemma_b",
+        {
+            "type": "dilemma",
+            "raw_id": "dilemma_b",
+            "question": "Should the protagonist choose answer B1 or B2?",
+            "why_it_matters": "This choice defines the alliance arc.",
+        },
+    )
+    g.create_node(
+        "dilemma::dilemma_b::alt::answer_b1",
+        {
+            "type": "answer",
+            "raw_id": "answer_b1",
+            "description": "Taking path B1 forges a new alliance.",
+            "is_canonical": True,
+        },
+    )
+    g.create_node(
+        "dilemma::dilemma_b::alt::answer_b2",
+        {
+            "type": "answer",
+            "raw_id": "answer_b2",
+            "description": "Taking path B2 preserves independence.",
+            "is_canonical": False,
+        },
+    )
+    g.add_edge("has_answer", "dilemma::dilemma_b", "dilemma::dilemma_b::alt::answer_b1")
+    g.add_edge("has_answer", "dilemma::dilemma_b", "dilemma::dilemma_b::alt::answer_b2")
+    g.add_edge("anchored_to", "dilemma::dilemma_b", "character::mentor")
+    return g
+
+
+def _two_dilemma_seed_output(initial_beats: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    """SEED output for two unrelated dilemmas with one explored path each.
+
+    All tests using this helper pass custom ``initial_beats`` that trigger guard
+    rail errors BEFORE the exit validator runs, so the default beats here are a
+    minimal compliant fallback (not exercised by any current test).
+    """
+    if initial_beats is None:
+        initial_beats = [
+            {
+                "beat_id": "commit_a",
+                "summary": "Dilemma A commits.",
+                "path_id": "dilemma_a__answer_a1",
+                "entities": ["character::mentor"],
+                "dilemma_impacts": [{"dilemma_id": "dilemma_a", "effect": "commits", "note": "x"}],
+            },
+            {
+                "beat_id": "post_a_1",
+                "summary": "Dilemma A aftermath.",
+                "path_id": "dilemma_a__answer_a1",
+                "entities": ["character::mentor"],
+                "dilemma_impacts": [{"dilemma_id": "dilemma_a", "effect": "advances", "note": "x"}],
+            },
+            {
+                "beat_id": "post_a_2",
+                "summary": "Dilemma A resolution.",
+                "path_id": "dilemma_a__answer_a1",
+                "entities": ["character::mentor"],
+                "dilemma_impacts": [{"dilemma_id": "dilemma_a", "effect": "advances", "note": "x"}],
+            },
+            {
+                "beat_id": "commit_b",
+                "summary": "Dilemma B commits.",
+                "path_id": "dilemma_b__answer_b1",
+                "entities": ["character::mentor"],
+                "dilemma_impacts": [{"dilemma_id": "dilemma_b", "effect": "commits", "note": "x"}],
+            },
+            {
+                "beat_id": "post_b_1",
+                "summary": "Dilemma B aftermath.",
+                "path_id": "dilemma_b__answer_b1",
+                "entities": ["character::mentor"],
+                "dilemma_impacts": [{"dilemma_id": "dilemma_b", "effect": "advances", "note": "x"}],
+            },
+            {
+                "beat_id": "post_b_2",
+                "summary": "Dilemma B resolution.",
+                "path_id": "dilemma_b__answer_b1",
+                "entities": ["character::mentor"],
+                "dilemma_impacts": [{"dilemma_id": "dilemma_b", "effect": "advances", "note": "x"}],
+            },
+        ]
+    return {
+        "entities": [
+            {"entity_id": "mentor", "disposition": "retained"},
+            {"entity_id": "archive", "disposition": "retained"},
+            {"entity_id": "tower", "disposition": "retained"},
+        ],
+        "dilemmas": [
+            {"dilemma_id": "dilemma_a", "explored": ["answer_a1"], "unexplored": ["answer_a2"]},
+            {"dilemma_id": "dilemma_b", "explored": ["answer_b1"], "unexplored": ["answer_b2"]},
+        ],
+        "paths": [
+            {
+                "path_id": "dilemma_a__answer_a1",
+                "dilemma_id": "dilemma_a",
+                "answer_id": "answer_a1",
+                "name": "A1 Path",
+                "description": "The confrontation path for dilemma A.",
+            },
+            {
+                "path_id": "dilemma_b__answer_b1",
+                "dilemma_id": "dilemma_b",
+                "answer_id": "answer_b1",
+                "name": "B1 Path",
+                "description": "The alliance-forging path for dilemma B.",
+            },
+        ],
+        "consequences": [
+            {
+                "consequence_id": "c_a",
+                "path_id": "dilemma_a__answer_a1",
+                "description": "Confrontation reshapes the protagonist's standing.",
+                "narrative_effects": ["protagonist gains respect through conflict"],
+            },
+            {
+                "consequence_id": "c_b",
+                "path_id": "dilemma_b__answer_b1",
+                "description": "Alliance shifts the balance of power.",
+                "narrative_effects": ["protagonist gains a powerful ally"],
+            },
+        ],
+        "dilemma_analyses": [
+            {
+                "dilemma_id": "dilemma_a",
+                "dilemma_role": "soft",
+                "payoff_budget": 2,
+                "ending_salience": "none",
+                "residue_weight": "cosmetic",
+            },
+            {
+                "dilemma_id": "dilemma_b",
+                "dilemma_role": "soft",
+                "payoff_budget": 2,
+                "ending_salience": "none",
+                "residue_weight": "cosmetic",
+            },
+        ],
+        "initial_beats": initial_beats,
+        "human_approved_paths": True,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Task 2.3: dual belongs_to edge emission
+# ---------------------------------------------------------------------------
+
+
+def test_apply_seed_mutations_emits_dual_belongs_to_for_pre_commit_beat() -> None:
+    """Pre-commit beats with ``also_belongs_to`` get two ``belongs_to`` edges."""
+    from questfoundry.graph.mutations import apply_seed_mutations
+
+    graph = _trust_graph()
+    seed = _trust_seed_output(
+        initial_beats=[
+            {
+                "beat_id": "shared_setup",
+                "summary": "Both players see this setup.",
+                "path_id": "trust_protector_or_manipulator__protector",
+                "also_belongs_to": "trust_protector_or_manipulator__manipulator",
+                "entities": ["character::mentor"],
+                "dilemma_impacts": [
+                    {
+                        "dilemma_id": "trust_protector_or_manipulator",
+                        "effect": "advances",
+                        "note": "x",
+                    },
+                ],
+            },
+            # Each path needs a commit beat and ≥2 post-commit beats (R-3.12).
+            {
+                "beat_id": "commit_protector",
+                "summary": "Protector path commits.",
+                "path_id": "trust_protector_or_manipulator__protector",
+                "entities": ["character::mentor"],
+                "dilemma_impacts": [
+                    {
+                        "dilemma_id": "trust_protector_or_manipulator",
+                        "effect": "commits",
+                        "note": "locked",
+                    }
+                ],
+            },
+            {
+                "beat_id": "post_protector_1",
+                "summary": "Protector aftermath begins.",
+                "path_id": "trust_protector_or_manipulator__protector",
+                "entities": ["character::mentor"],
+                "dilemma_impacts": [
+                    {
+                        "dilemma_id": "trust_protector_or_manipulator",
+                        "effect": "advances",
+                        "note": "fallout",
+                    }
+                ],
+            },
+            {
+                "beat_id": "post_protector_2",
+                "summary": "Protector path resolves.",
+                "path_id": "trust_protector_or_manipulator__protector",
+                "entities": ["character::mentor"],
+                "dilemma_impacts": [
+                    {
+                        "dilemma_id": "trust_protector_or_manipulator",
+                        "effect": "advances",
+                        "note": "resolution",
+                    }
+                ],
+            },
+            {
+                "beat_id": "commit_manipulator",
+                "summary": "Manipulator path commits.",
+                "path_id": "trust_protector_or_manipulator__manipulator",
+                "entities": ["character::mentor"],
+                "dilemma_impacts": [
+                    {
+                        "dilemma_id": "trust_protector_or_manipulator",
+                        "effect": "commits",
+                        "note": "locked",
+                    }
+                ],
+            },
+            {
+                "beat_id": "post_manipulator_1",
+                "summary": "Manipulator aftermath begins.",
+                "path_id": "trust_protector_or_manipulator__manipulator",
+                "entities": ["character::mentor"],
+                "dilemma_impacts": [
+                    {
+                        "dilemma_id": "trust_protector_or_manipulator",
+                        "effect": "advances",
+                        "note": "fallout",
+                    }
+                ],
+            },
+            {
+                "beat_id": "post_manipulator_2",
+                "summary": "Manipulator path resolves.",
+                "path_id": "trust_protector_or_manipulator__manipulator",
+                "entities": ["character::mentor"],
+                "dilemma_impacts": [
+                    {
+                        "dilemma_id": "trust_protector_or_manipulator",
+                        "effect": "advances",
+                        "note": "resolution",
+                    }
+                ],
+            },
+        ]
+    )
+    apply_seed_mutations(graph, seed)
+
+    edges = [
+        e for e in graph.get_edges(edge_type="belongs_to") if e["from"] == "beat::shared_setup"
+    ]
+    to_ids = {e["to"] for e in edges}
+    assert to_ids == {
+        "path::trust_protector_or_manipulator__protector",
+        "path::trust_protector_or_manipulator__manipulator",
+    }
+
+
+# ---------------------------------------------------------------------------
+# Task 2.4: guard rail 1 - cross-dilemma dual belongs_to is forbidden
+# ---------------------------------------------------------------------------
+
+
+def test_apply_seed_mutations_rejects_cross_dilemma_dual_belongs_to() -> None:
+    """Guard rail 1: pre-commit beats must share a dilemma across both paths."""
+    from questfoundry.graph.mutations import apply_seed_mutations
+
+    graph = _two_dilemma_graph()
+    seed = _two_dilemma_seed_output(
+        initial_beats=[
+            {
+                "beat_id": "bad_dual",
+                "summary": "Cross-dilemma.",
+                "path_id": "dilemma_a__answer_a1",
+                "also_belongs_to": "dilemma_b__answer_b1",
+                "dilemma_impacts": [
+                    {"dilemma_id": "dilemma_a", "effect": "advances", "note": "x"},
+                ],
+            },
+            # Still need commits beats for validation to pass other checks.
+            {
+                "beat_id": "commit_a",
+                "summary": "Dilemma A commits.",
+                "path_id": "dilemma_a__answer_a1",
+                "dilemma_impacts": [{"dilemma_id": "dilemma_a", "effect": "commits", "note": "x"}],
+            },
+            {
+                "beat_id": "post_a",
+                "summary": "Dilemma A aftermath.",
+                "path_id": "dilemma_a__answer_a1",
+                "dilemma_impacts": [{"dilemma_id": "dilemma_a", "effect": "advances", "note": "x"}],
+            },
+            {
+                "beat_id": "commit_b",
+                "summary": "Dilemma B commits.",
+                "path_id": "dilemma_b__answer_b1",
+                "dilemma_impacts": [{"dilemma_id": "dilemma_b", "effect": "commits", "note": "x"}],
+            },
+            {
+                "beat_id": "post_b",
+                "summary": "Dilemma B aftermath.",
+                "path_id": "dilemma_b__answer_b1",
+                "dilemma_impacts": [{"dilemma_id": "dilemma_b", "effect": "advances", "note": "x"}],
+            },
+        ]
+    )
+
+    with pytest.raises(ValueError, match="cross-dilemma dual belongs_to"):
+        apply_seed_mutations(graph, seed)
+
+
+def test_apply_seed_mutations_rejects_also_belongs_to_equal_path_id() -> None:
+    """Raw-dict input with path_id == also_belongs_to must be rejected (defense-in-depth)."""
+    # Bypass Pydantic by constructing the seed dict directly.
+    from questfoundry.graph.mutations import apply_seed_mutations
+
+    graph = _two_dilemma_graph()
+    seed = _two_dilemma_seed_output(
+        initial_beats=[
+            {
+                "beat_id": "bad_beat",
+                "summary": "Same path twice.",
+                "path_id": "dilemma_a__answer_a1",
+                "also_belongs_to": "dilemma_a__answer_a1",
+                "dilemma_impacts": [
+                    {
+                        "dilemma_id": "dilemma_a",
+                        "effect": "advances",
+                        "note": "x",
+                    }
+                ],
+            },
+            {
+                "beat_id": "commit_a",
+                "summary": "Dilemma A commits.",
+                "path_id": "dilemma_a__answer_a1",
+                "dilemma_impacts": [{"dilemma_id": "dilemma_a", "effect": "commits", "note": "x"}],
+            },
+            {
+                "beat_id": "post_a",
+                "summary": "Dilemma A aftermath.",
+                "path_id": "dilemma_a__answer_a1",
+                "dilemma_impacts": [{"dilemma_id": "dilemma_a", "effect": "advances", "note": "x"}],
+            },
+            {
+                "beat_id": "commit_b",
+                "summary": "Dilemma B commits.",
+                "path_id": "dilemma_b__answer_b1",
+                "dilemma_impacts": [{"dilemma_id": "dilemma_b", "effect": "commits", "note": "x"}],
+            },
+            {
+                "beat_id": "post_b",
+                "summary": "Dilemma B aftermath.",
+                "path_id": "dilemma_b__answer_b1",
+                "dilemma_impacts": [{"dilemma_id": "dilemma_b", "effect": "advances", "note": "x"}],
+            },
+        ]
+    )
+    with pytest.raises(ValueError, match="must be distinct paths"):
+        apply_seed_mutations(graph, seed)
+
+
+# ---------------------------------------------------------------------------
+# Task 2.5: guard rail 2 - commit beats must be single-membership
+# ---------------------------------------------------------------------------
+
+
+def test_apply_seed_mutations_rejects_dual_on_commit_beat() -> None:
+    """Guard rail 2: a beat with ``effect=commits`` must have only one belongs_to."""
+    from questfoundry.graph.mutations import apply_seed_mutations
+
+    graph = _trust_graph()
+    # Provide valid commit beats for each path (so validation passes),
+    # then the bad_commit beat with dual membership + commits effect hits guard rail 2.
+    seed = _trust_seed_output(
+        initial_beats=[
+            {
+                "beat_id": "bad_commit",
+                "summary": "A commit beat cannot be pre-commit.",
+                "path_id": "trust_protector_or_manipulator__protector",
+                "also_belongs_to": "trust_protector_or_manipulator__manipulator",
+                "dilemma_impacts": [
+                    {
+                        "dilemma_id": "trust_protector_or_manipulator",
+                        "effect": "commits",
+                        "note": "Bad: commit with dual.",
+                    },
+                ],
+            },
+            # Valid single-membership commit beats so the per-path validation passes.
+            {
+                "beat_id": "commit_protector",
+                "summary": "Protector commits.",
+                "path_id": "trust_protector_or_manipulator__protector",
+                "dilemma_impacts": [
+                    {
+                        "dilemma_id": "trust_protector_or_manipulator",
+                        "effect": "commits",
+                        "note": "locked",
+                    }
+                ],
+            },
+            {
+                "beat_id": "post_protector",
+                "summary": "Protector aftermath.",
+                "path_id": "trust_protector_or_manipulator__protector",
+                "dilemma_impacts": [
+                    {
+                        "dilemma_id": "trust_protector_or_manipulator",
+                        "effect": "advances",
+                        "note": "fallout",
+                    }
+                ],
+            },
+            {
+                "beat_id": "commit_manipulator",
+                "summary": "Manipulator commits.",
+                "path_id": "trust_protector_or_manipulator__manipulator",
+                "dilemma_impacts": [
+                    {
+                        "dilemma_id": "trust_protector_or_manipulator",
+                        "effect": "commits",
+                        "note": "locked",
+                    }
+                ],
+            },
+            {
+                "beat_id": "post_manipulator",
+                "summary": "Manipulator aftermath.",
+                "path_id": "trust_protector_or_manipulator__manipulator",
+                "dilemma_impacts": [
+                    {
+                        "dilemma_id": "trust_protector_or_manipulator",
+                        "effect": "advances",
+                        "note": "fallout",
+                    }
+                ],
+            },
+        ]
+    )
+    with pytest.raises(ValueError, match="guard rail 2"):
+        apply_seed_mutations(graph, seed)
+
+
+# ---------------------------------------------------------------------------
+# Task 11 (#1282): write-time cross-dilemma rejection (R-3.6 / R-3.9)
+# ---------------------------------------------------------------------------
+
+
+def test_apply_seed_mutations_rejects_precommit_with_mismatched_dilemmas() -> None:
+    """R-3.6 / R-3.9: pre-commit dual belongs_to must reference paths of the
+    same dilemma. Mismatched dilemmas must raise at write time, not slip
+    through to the exit validator."""
+    from questfoundry.graph.mutations import apply_seed_mutations
+
+    # Reuse the two-dilemma fixture: dilemma_a and dilemma_b are separate.
+    graph = _two_dilemma_graph()
+    seed = _two_dilemma_seed_output(
+        initial_beats=[
+            {
+                "beat_id": "bad_precommit",
+                "summary": "Cross-dilemma pre-commit beat.",
+                "path_id": "dilemma_a__answer_a1",
+                "also_belongs_to": "dilemma_b__answer_b1",
+                "dilemma_impacts": [
+                    {"dilemma_id": "dilemma_a", "effect": "advances", "note": "x"},
+                ],
+            },
+            # Commits for each path to satisfy other validation rules.
+            {
+                "beat_id": "commit_a",
+                "summary": "Dilemma A commits.",
+                "path_id": "dilemma_a__answer_a1",
+                "dilemma_impacts": [{"dilemma_id": "dilemma_a", "effect": "commits", "note": "x"}],
+            },
+            {
+                "beat_id": "post_a",
+                "summary": "Dilemma A aftermath.",
+                "path_id": "dilemma_a__answer_a1",
+                "dilemma_impacts": [{"dilemma_id": "dilemma_a", "effect": "advances", "note": "x"}],
+            },
+            {
+                "beat_id": "commit_b",
+                "summary": "Dilemma B commits.",
+                "path_id": "dilemma_b__answer_b1",
+                "dilemma_impacts": [{"dilemma_id": "dilemma_b", "effect": "commits", "note": "x"}],
+            },
+            {
+                "beat_id": "post_b",
+                "summary": "Dilemma B aftermath.",
+                "path_id": "dilemma_b__answer_b1",
+                "dilemma_impacts": [{"dilemma_id": "dilemma_b", "effect": "advances", "note": "x"}],
+            },
+        ]
+    )
+
+    # Must raise at write time (before the exit validator is reached).
+    with pytest.raises((ValueError, Exception), match="cross-dilemma dual belongs_to"):
+        apply_seed_mutations(graph, seed)
+
+
+# ---------------------------------------------------------------------------
+# Task 12 (#1283): post-apply property test — no beat has cross-dilemma
+# belongs_to edges in the resulting graph (R-3.9).
+#
+# This test covers the *broader* prohibition: not just the primary path_id +
+# also_belongs_to pair, but any beat in the graph after apply completes.
+# If future code adds a second belongs_to write path this test catches it.
+# ---------------------------------------------------------------------------
+
+
+def test_apply_seed_mutations_never_produces_cross_dilemma_belongs_to() -> None:
+    """R-3.9: after the beat-write phase of apply_seed_mutations, no beat in the
+    graph has ``belongs_to`` edges to paths of more than one dilemma.
+
+    The exit validator is patched so we can focus on the graph-state invariant
+    independently of fixture completeness. This is a property test of the write
+    path, not of the exit validator.
+
+    Broader than Task 11 (#1282): that test guards the primary path_id +
+    also_belongs_to pair; this test inspects the full resulting graph."""
+    from unittest.mock import patch
+
+    from questfoundry.graph.mutations import apply_seed_mutations
+
+    graph = _two_dilemma_graph()
+    seed = _two_dilemma_seed_output(
+        initial_beats=[
+            {
+                "beat_id": "commit_a",
+                "summary": "Dilemma A commits.",
+                "path_id": "dilemma_a__answer_a1",
+                "dilemma_impacts": [{"dilemma_id": "dilemma_a", "effect": "commits", "note": "x"}],
+            },
+            {
+                "beat_id": "post_a",
+                "summary": "Dilemma A aftermath.",
+                "path_id": "dilemma_a__answer_a1",
+                "dilemma_impacts": [{"dilemma_id": "dilemma_a", "effect": "advances", "note": "x"}],
+            },
+            {
+                "beat_id": "commit_b",
+                "summary": "Dilemma B commits.",
+                "path_id": "dilemma_b__answer_b1",
+                "dilemma_impacts": [{"dilemma_id": "dilemma_b", "effect": "commits", "note": "x"}],
+            },
+            {
+                "beat_id": "post_b",
+                "summary": "Dilemma B aftermath.",
+                "path_id": "dilemma_b__answer_b1",
+                "dilemma_impacts": [{"dilemma_id": "dilemma_b", "effect": "advances", "note": "x"}],
+            },
+        ]
+    )
+
+    # Patch exit validator so we can inspect the graph state without requiring
+    # a fully-compliant fixture (R-7.1/R-7.2/R-7.3/R-6.4/etc. would fail).
+    with patch("questfoundry.graph.mutations.validate_seed_output", return_value=[]):
+        apply_seed_mutations(graph, seed)
+
+    # Collect all belongs_to edges and group by source beat.
+    beat_to_paths: dict[str, list[str]] = {}
+    for edge in graph.get_edges(edge_type="belongs_to"):
+        src = edge["from"]
+        tgt = edge["to"]
+        beat_to_paths.setdefault(src, []).append(tgt)
+
+    # For every beat, all its belongs_to targets must share one dilemma_id.
+    for beat_id, path_ids in beat_to_paths.items():
+        dilemmas: set[str | None] = set()
+        for pid in path_ids:
+            node = graph.get_node(pid)
+            if node:
+                dilemmas.add(node.get("dilemma_id"))
+        dilemmas.discard(None)
+        assert len(dilemmas) <= 1, (
+            f"Beat {beat_id!r} has cross-dilemma belongs_to edges: "
+            f"paths {path_ids!r} span dilemmas {dilemmas!r}"
+        )

@@ -43,6 +43,21 @@ def test_seed_stage_name() -> None:
 # --- Execute Tests ---
 
 
+@pytest.fixture(autouse=True)
+def _bypass_brainstorm_entry_validator(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Bypass SEED's BRAINSTORM-output entry validator (#1347) for all
+    tests in this file. Test fixtures use thin mock graphs that don't
+    satisfy the full BRAINSTORM contract; the seam-validation
+    integration is exercised in test_contract_chaining.py instead.
+
+    Patches the source module so the deferred local import inside
+    ``SeedStage.execute()`` picks up the bypassed version at call time.
+    """
+    from questfoundry.graph import brainstorm_validation as _bv
+
+    monkeypatch.setattr(_bv, "validate_brainstorm_output", lambda _g: [])
+
+
 @pytest.mark.asyncio
 async def test_execute_requires_project_path() -> None:
     """Execute raises error when project_path is not provided."""
@@ -68,7 +83,13 @@ async def test_execute_requires_brainstorm_in_graph() -> None:
     ):
         MockGraph.load.return_value = mock_graph
 
-        with pytest.raises(SeedStageError, match="SEED requires BRAINSTORM"):
+        # Now caught by the BRAINSTORM-output entry validator (#1347)
+        # rather than the legacy "SEED requires BRAINSTORM" sentinel,
+        # but the upshot is identical: SEED refuses to run on an empty
+        # graph.
+        with pytest.raises(
+            SeedStageError, match=r"BRAINSTORM output validation failed|SEED requires BRAINSTORM"
+        ):
             await stage.execute(
                 model=mock_model,
                 user_prompt="test",
@@ -94,6 +115,8 @@ async def test_execute_calls_all_three_phases() -> None:
 
     with (
         patch("questfoundry.pipeline.stages.seed.Graph") as MockGraph,
+        # BRAINSTORM-output entry validator bypass is provided by the
+        # autouse _bypass_brainstorm_entry_validator fixture above.
         patch("questfoundry.pipeline.stages.seed.run_discuss_phase") as mock_discuss,
         patch("questfoundry.pipeline.stages.seed.summarize_seed_chunked") as mock_summarize,
         patch("questfoundry.pipeline.stages.seed.serialize_seed_as_function") as mock_serialize,
@@ -132,6 +155,7 @@ async def test_execute_calls_all_three_phases() -> None:
                     "beat_id": "beat1",
                     "summary": "Opening beat",
                     "path_id": "path::trust__yes",
+                    "entities": ["entity::kay"],
                 }
             ],
         )
@@ -184,6 +208,8 @@ async def test_execute_emits_phase_progress() -> None:
 
     with (
         patch("questfoundry.pipeline.stages.seed.Graph") as MockGraph,
+        # BRAINSTORM-output entry validator bypass is provided by the
+        # autouse _bypass_brainstorm_entry_validator fixture above.
         patch("questfoundry.pipeline.stages.seed.run_discuss_phase") as mock_discuss,
         patch("questfoundry.pipeline.stages.seed.summarize_seed_chunked") as mock_summarize,
         patch("questfoundry.pipeline.stages.seed.serialize_seed_as_function") as mock_serialize,
@@ -234,6 +260,8 @@ async def test_execute_passes_brainstorm_context_to_discuss() -> None:
 
     with (
         patch("questfoundry.pipeline.stages.seed.Graph") as MockGraph,
+        # BRAINSTORM-output entry validator bypass is provided by the
+        # autouse _bypass_brainstorm_entry_validator fixture above.
         patch("questfoundry.pipeline.stages.seed.run_discuss_phase") as mock_discuss,
         patch("questfoundry.pipeline.stages.seed.summarize_seed_chunked") as mock_summarize,
         patch("questfoundry.pipeline.stages.seed.serialize_seed_as_function") as mock_serialize,
@@ -279,6 +307,8 @@ async def test_execute_uses_iterative_serialization() -> None:
 
     with (
         patch("questfoundry.pipeline.stages.seed.Graph") as MockGraph,
+        # BRAINSTORM-output entry validator bypass is provided by the
+        # autouse _bypass_brainstorm_entry_validator fixture above.
         patch("questfoundry.pipeline.stages.seed.run_discuss_phase") as mock_discuss,
         patch("questfoundry.pipeline.stages.seed.summarize_seed_chunked") as mock_summarize,
         patch("questfoundry.pipeline.stages.seed.serialize_seed_as_function") as mock_serialize,
@@ -319,6 +349,8 @@ async def test_execute_passes_graph_to_chunked_summarize() -> None:
 
     with (
         patch("questfoundry.pipeline.stages.seed.Graph") as MockGraph,
+        # BRAINSTORM-output entry validator bypass is provided by the
+        # autouse _bypass_brainstorm_entry_validator fixture above.
         patch("questfoundry.pipeline.stages.seed.run_discuss_phase") as mock_discuss,
         patch("questfoundry.pipeline.stages.seed.summarize_seed_chunked") as mock_summarize,
         patch("questfoundry.pipeline.stages.seed.serialize_seed_as_function") as mock_serialize,
@@ -361,6 +393,8 @@ async def test_execute_returns_artifact_as_dict() -> None:
 
     with (
         patch("questfoundry.pipeline.stages.seed.Graph") as MockGraph,
+        # BRAINSTORM-output entry validator bypass is provided by the
+        # autouse _bypass_brainstorm_entry_validator fixture above.
         patch("questfoundry.pipeline.stages.seed.run_discuss_phase") as mock_discuss,
         patch("questfoundry.pipeline.stages.seed.summarize_seed_chunked") as mock_summarize,
         patch("questfoundry.pipeline.stages.seed.serialize_seed_as_function") as mock_serialize,
@@ -389,6 +423,7 @@ async def test_execute_returns_artifact_as_dict() -> None:
                     "beat_id": "beat1",
                     "summary": "Test beat",
                     "path_id": "path::t1__a1",
+                    "entities": ["entity::kay"],
                 }
             ],
         )
@@ -485,6 +520,7 @@ def test_seed_output_model_validates() -> None:
                 "beat_id": "beat1",
                 "summary": "Opening scene",
                 "path_id": "path::trust__yes",
+                "entities": ["entity::kay"],
             }
         ],
     )
@@ -577,6 +613,8 @@ async def test_outer_loop_retries_on_semantic_errors() -> None:
 
     with (
         patch("questfoundry.pipeline.stages.seed.Graph") as MockGraph,
+        # BRAINSTORM-output entry validator bypass is provided by the
+        # autouse _bypass_brainstorm_entry_validator fixture above.
         patch("questfoundry.pipeline.stages.seed.run_discuss_phase") as mock_discuss,
         patch("questfoundry.pipeline.stages.seed.summarize_seed_chunked") as mock_summarize,
         patch("questfoundry.pipeline.stages.seed.serialize_seed_as_function") as mock_serialize,
@@ -645,6 +683,8 @@ async def test_outer_loop_appends_feedback_to_messages() -> None:
 
     with (
         patch("questfoundry.pipeline.stages.seed.Graph") as MockGraph,
+        # BRAINSTORM-output entry validator bypass is provided by the
+        # autouse _bypass_brainstorm_entry_validator fixture above.
         patch("questfoundry.pipeline.stages.seed.run_discuss_phase") as mock_discuss,
         patch("questfoundry.pipeline.stages.seed.summarize_seed_chunked") as mock_summarize,
         patch("questfoundry.pipeline.stages.seed.serialize_seed_as_function") as mock_serialize,
@@ -708,6 +748,8 @@ async def test_outer_loop_respects_max_retries() -> None:
 
     with (
         patch("questfoundry.pipeline.stages.seed.Graph") as MockGraph,
+        # BRAINSTORM-output entry validator bypass is provided by the
+        # autouse _bypass_brainstorm_entry_validator fixture above.
         patch("questfoundry.pipeline.stages.seed.run_discuss_phase") as mock_discuss,
         patch("questfoundry.pipeline.stages.seed.summarize_seed_chunked") as mock_summarize,
         patch("questfoundry.pipeline.stages.seed.serialize_seed_as_function") as mock_serialize,
@@ -764,6 +806,8 @@ async def test_outer_loop_exhaustion_skips_convergence_analysis() -> None:
 
     with (
         patch("questfoundry.pipeline.stages.seed.Graph") as MockGraph,
+        # BRAINSTORM-output entry validator bypass is provided by the
+        # autouse _bypass_brainstorm_entry_validator fixture above.
         patch("questfoundry.pipeline.stages.seed.run_discuss_phase") as mock_discuss,
         patch("questfoundry.pipeline.stages.seed.summarize_seed_chunked") as mock_summarize,
         patch("questfoundry.pipeline.stages.seed.serialize_seed_as_function") as mock_serialize,
@@ -807,6 +851,8 @@ async def test_outer_loop_success_on_first_try() -> None:
 
     with (
         patch("questfoundry.pipeline.stages.seed.Graph") as MockGraph,
+        # BRAINSTORM-output entry validator bypass is provided by the
+        # autouse _bypass_brainstorm_entry_validator fixture above.
         patch("questfoundry.pipeline.stages.seed.run_discuss_phase") as mock_discuss,
         patch("questfoundry.pipeline.stages.seed.summarize_seed_chunked") as mock_summarize,
         patch("questfoundry.pipeline.stages.seed.serialize_seed_as_function") as mock_serialize,
@@ -856,6 +902,8 @@ async def test_low_arc_count_raises_seed_stage_error() -> None:
 
     with (
         patch("questfoundry.pipeline.stages.seed.Graph") as MockGraph,
+        # BRAINSTORM-output entry validator bypass is provided by the
+        # autouse _bypass_brainstorm_entry_validator fixture above.
         patch("questfoundry.pipeline.stages.seed.run_discuss_phase") as mock_discuss,
         patch("questfoundry.pipeline.stages.seed.summarize_seed_chunked") as mock_summarize,
         patch("questfoundry.pipeline.stages.seed.serialize_seed_as_function") as mock_serialize,
@@ -879,6 +927,132 @@ async def test_low_arc_count_raises_seed_stage_error() -> None:
             )
 
 
+# --- Path Freeze Approval Gate Tests (R-6.4) ---
+
+
+def _make_seed_mocks(mock_artifact: SeedOutput) -> dict:
+    """Return a dict of patch targets and their return values for a minimal SEED execute run."""
+    return {
+        "mock_artifact": mock_artifact,
+    }
+
+
+def _build_mock_graph_with_data() -> MagicMock:
+    """Build a MagicMock graph with minimal entity/dilemma data for SEED."""
+    mock_graph = MagicMock()
+    mock_graph.get_nodes_by_type.side_effect = lambda t: (
+        {"entity1": {"type": "entity", "concept": "Protagonist"}}
+        if t == "entity"
+        else {"dilemma1": {"type": "dilemma", "question": "?"}}
+        if t == "dilemma"
+        else {}
+    )
+    mock_graph.get_edges.return_value = []
+    return mock_graph
+
+
+async def _run_seed_execute(stage: SeedStage, mock_artifact: SeedOutput, **execute_kwargs):
+    """Run SeedStage.execute with all phases mocked; return (artifact, llm_calls, tokens)."""
+    mock_graph = _build_mock_graph_with_data()
+    with (
+        patch("questfoundry.pipeline.stages.seed.Graph") as MockGraph,
+        # BRAINSTORM-output entry validator bypass is provided by the
+        # autouse _bypass_brainstorm_entry_validator fixture above.
+        patch("questfoundry.pipeline.stages.seed.run_discuss_phase") as mock_discuss,
+        patch("questfoundry.pipeline.stages.seed.summarize_seed_chunked") as mock_summarize,
+        patch("questfoundry.pipeline.stages.seed.serialize_seed_as_function") as mock_serialize,
+        patch(
+            "questfoundry.pipeline.stages.seed.serialize_convergence_analysis"
+        ) as mock_convergence,
+        patch(
+            "questfoundry.pipeline.stages.seed.serialize_dilemma_relationships"
+        ) as mock_constraints,
+        patch("questfoundry.pipeline.stages.seed.get_all_research_tools") as mock_tools,
+        patch("questfoundry.pipeline.stages.seed.get_interactive_tools", return_value=[]),
+        patch("questfoundry.pipeline.stages.seed.compute_arc_count", return_value=4),
+    ):
+        MockGraph.load.return_value = mock_graph
+        mock_tools.return_value = []
+        mock_discuss.return_value = ([], 1, 100)
+        mock_summarize.return_value = (_MOCK_SECTION_BRIEFS, 50)
+        mock_serialize.return_value = SerializeResult(
+            artifact=mock_artifact, tokens_used=100, semantic_errors=[]
+        )
+        mock_convergence.return_value = ([], 10, 1)
+        mock_constraints.return_value = ([], 10, 1)
+
+        return await stage.execute(
+            model=MagicMock(),
+            user_prompt="test",
+            project_path=Path("/test/project"),
+            **execute_kwargs,
+        )
+
+
+@pytest.mark.asyncio
+async def test_seed_non_interactive_pre_approves() -> None:
+    """Non-interactive mode implies Path Freeze pre-approval (R-6.4)."""
+    stage = SeedStage()
+    mock_artifact = SeedOutput(entities=[], dilemmas=[], paths=[], initial_beats=[])
+
+    artifact, _, _ = await _run_seed_execute(stage, mock_artifact, interactive=False)
+
+    assert artifact["human_approved_paths"] is True
+
+
+@pytest.mark.asyncio
+async def test_seed_interactive_approved_sets_paths_approved() -> None:
+    """Interactive 'y' response sets human_approved_paths True (R-6.4)."""
+    stage = SeedStage()
+    mock_artifact = SeedOutput(entities=[], dilemmas=[], paths=[], initial_beats=[])
+
+    async def user_input_fn_yes() -> str:
+        return "y"
+
+    artifact, _, _ = await _run_seed_execute(
+        stage,
+        mock_artifact,
+        interactive=True,
+        user_input_fn=user_input_fn_yes,
+    )
+
+    assert artifact["human_approved_paths"] is True
+
+
+@pytest.mark.asyncio
+async def test_seed_interactive_rejected_raises_seed_stage_error() -> None:
+    """Interactive 'n' response raises SeedStageError (R-6.4)."""
+    stage = SeedStage()
+    mock_artifact = SeedOutput(entities=[], dilemmas=[], paths=[], initial_beats=[])
+
+    async def user_input_fn_no() -> str:
+        return "n"
+
+    with pytest.raises(SeedStageError, match="rejected by human"):
+        await _run_seed_execute(
+            stage,
+            mock_artifact,
+            interactive=True,
+            user_input_fn=user_input_fn_no,
+        )
+
+
+@pytest.mark.asyncio
+async def test_seed_interactive_no_user_input_fn_pre_approves() -> None:
+    """Interactive mode without user_input_fn auto-approves (headless/test mode)."""
+    stage = SeedStage()
+    mock_artifact = SeedOutput(entities=[], dilemmas=[], paths=[], initial_beats=[])
+
+    artifact, _, _ = await _run_seed_execute(
+        stage,
+        mock_artifact,
+        interactive=True,
+        user_input_fn=None,
+    )
+
+    assert artifact["human_approved_paths"] is True
+
+
 # --- PathBeatsSection Validation Tests ---
 
 
@@ -894,6 +1068,7 @@ class TestPathBeatsSectionValidation:
                 beat_id=f"beat_{i}",
                 summary=f"Beat {i}",
                 paths=["path_a"],
+                entities=["char_x"],
             )
             for i in range(4)
         ]
@@ -905,8 +1080,8 @@ class TestPathBeatsSectionValidation:
         from questfoundry.models.seed import InitialBeat, PathBeatsSection
 
         beats = [
-            InitialBeat(beat_id="beat_0", summary="Start", paths=["path_a"]),
-            InitialBeat(beat_id="beat_1", summary="End", paths=["path_a"]),
+            InitialBeat(beat_id="beat_0", summary="Start", paths=["path_a"], entities=["char_x"]),
+            InitialBeat(beat_id="beat_1", summary="End", paths=["path_a"], entities=["char_x"]),
         ]
         section = PathBeatsSection(initial_beats=beats)
         assert len(section.initial_beats) == 2
@@ -920,7 +1095,9 @@ class TestPathBeatsSectionValidation:
         with pytest.raises(ValidationError, match="initial_beats"):
             PathBeatsSection(
                 initial_beats=[
-                    InitialBeat(beat_id="beat_0", summary="Only one", paths=["path_a"]),
+                    InitialBeat(
+                        beat_id="beat_0", summary="Only one", paths=["path_a"], entities=["char_x"]
+                    ),
                 ]
             )
 
@@ -935,6 +1112,7 @@ class TestPathBeatsSectionValidation:
                 beat_id=f"beat_{i}",
                 summary=f"Beat {i}",
                 paths=["path_a"],
+                entities=["char_x"],
             )
             for i in range(7)
         ]
@@ -948,8 +1126,202 @@ class TestPathBeatsSectionValidation:
         from questfoundry.models.seed import InitialBeat, PathBeatsSection
 
         beats = [
-            InitialBeat(beat_id="same_id", summary="First", paths=["path_a"]),
-            InitialBeat(beat_id="same_id", summary="Second", paths=["path_a"]),
+            InitialBeat(beat_id="same_id", summary="First", paths=["path_a"], entities=["char_x"]),
+            InitialBeat(beat_id="same_id", summary="Second", paths=["path_a"], entities=["char_x"]),
         ]
         with pytest.raises(ValidationError, match="Duplicates found for beat_id"):
             PathBeatsSection(initial_beats=beats)
+
+
+def test_seed_advisory_warning_splits_shared_vs_post_commit(caplog) -> None:
+    """The low-beat warning reports shared and post-commit separately."""
+    import logging
+
+    from questfoundry.pipeline.stages.seed import _log_beat_summary_stats
+
+    # 2 dilemmas x 2 paths = 4 paths, 2 shared beats per dilemma, 2 post
+    # per path. Expected: shared_avg=2.0 per multi-path dilemma, post_avg=
+    # 2.0 per path.
+    artifact_data = {
+        "entities": [],
+        "dilemmas": [{"dilemma_id": "d_a"}, {"dilemma_id": "d_b"}],
+        "paths": [
+            {"path_id": "p_a1", "dilemma_id": "d_a"},
+            {"path_id": "p_a2", "dilemma_id": "d_a"},
+            {"path_id": "p_b1", "dilemma_id": "d_b"},
+            {"path_id": "p_b2", "dilemma_id": "d_b"},
+        ],
+        "initial_beats": [
+            {
+                "beat_id": "b1",
+                "path_id": "p_a1",
+                "also_belongs_to": "p_a2",
+                "dilemma_impacts": [{"dilemma_id": "d_a", "effect": "advances"}],
+            },
+            {
+                "beat_id": "b2",
+                "path_id": "p_a1",
+                "also_belongs_to": "p_a2",
+                "dilemma_impacts": [{"dilemma_id": "d_a", "effect": "advances"}],
+            },
+            {
+                "beat_id": "b3",
+                "path_id": "p_b1",
+                "also_belongs_to": "p_b2",
+                "dilemma_impacts": [{"dilemma_id": "d_b", "effect": "advances"}],
+            },
+            {
+                "beat_id": "b4",
+                "path_id": "p_b1",
+                "also_belongs_to": "p_b2",
+                "dilemma_impacts": [{"dilemma_id": "d_b", "effect": "advances"}],
+            },
+            # 2 post-commit per path (only for p_a1 here — light fixture):
+            {
+                "beat_id": "b5",
+                "path_id": "p_a1",
+                "dilemma_impacts": [{"dilemma_id": "d_a", "effect": "commits"}],
+            },
+            {
+                "beat_id": "b6",
+                "path_id": "p_a1",
+                "dilemma_impacts": [{"dilemma_id": "d_a", "effect": "advances"}],
+            },
+        ],
+    }
+
+    with caplog.at_level(logging.WARNING):
+        _log_beat_summary_stats(artifact_data)
+
+    # post_avg = 2 post-commit beats / 4 paths = 0.5 → below threshold (< 2.0)
+    assert any("seed_low_post_commit_beat_count" in r.message for r in caplog.records), (
+        "Expected advisory warning for low post-commit beat count"
+    )
+
+    # shared_avg = 4 shared beats / 2 multi-path dilemmas = 2.0 → above threshold (< 1.0)
+    assert not any("seed_low_shared_beat_count" in r.message for r in caplog.records), (
+        "Did not expect advisory warning for shared beat count"
+    )
+
+    # No errors should be raised
+    assert not any(r.levelno >= logging.ERROR for r in caplog.records)
+
+
+def test_seed_advisory_no_shared_warning_when_some_dilemmas_single_path(caplog) -> None:
+    """No false positive when only some dilemmas are multi-path (locked-dilemma shadow).
+
+    Regression coverage for #1454. Reproduces the user-reported case:
+    5 dilemmas total, 2 fully explored (multi-path) and 3 left as single-path
+    soft (locked-dilemma shadow). 4 shared pre-commit beats live on the 2
+    multi-path dilemmas. Old code divided by total dilemma count
+    (4/5=0.8) and warned; new code divides by multi-path-dilemma count
+    (4/2=2.0) and stays silent.
+    """
+    import logging
+
+    from questfoundry.pipeline.stages.seed import _log_beat_summary_stats
+
+    artifact_data = {
+        "entities": [],
+        "dilemmas": [{"dilemma_id": f"d_{i}"} for i in range(5)],
+        "paths": [
+            # d_0 multi-path
+            {"path_id": "p_0a", "dilemma_id": "d_0"},
+            {"path_id": "p_0b", "dilemma_id": "d_0"},
+            # d_1 multi-path
+            {"path_id": "p_1a", "dilemma_id": "d_1"},
+            {"path_id": "p_1b", "dilemma_id": "d_1"},
+            # d_2, d_3, d_4 single-path (locked-dilemma shadow)
+            {"path_id": "p_2a", "dilemma_id": "d_2"},
+            {"path_id": "p_3a", "dilemma_id": "d_3"},
+            {"path_id": "p_4a", "dilemma_id": "d_4"},
+        ],
+        "initial_beats": [
+            # 2 shared beats on each multi-path dilemma — 4 total.
+            {"beat_id": "s_0_1", "path_id": "p_0a", "also_belongs_to": "p_0b"},
+            {"beat_id": "s_0_2", "path_id": "p_0a", "also_belongs_to": "p_0b"},
+            {"beat_id": "s_1_1", "path_id": "p_1a", "also_belongs_to": "p_1b"},
+            {"beat_id": "s_1_2", "path_id": "p_1a", "also_belongs_to": "p_1b"},
+            # ≥2 post-commit beats per path so the post warning doesn't fire.
+            *(
+                {"beat_id": f"pc_{i}", "path_id": p_id}
+                for i, p_id in enumerate(
+                    [
+                        "p_0a",
+                        "p_0a",
+                        "p_0b",
+                        "p_0b",
+                        "p_1a",
+                        "p_1a",
+                        "p_1b",
+                        "p_1b",
+                        "p_2a",
+                        "p_2a",
+                        "p_3a",
+                        "p_3a",
+                        "p_4a",
+                        "p_4a",
+                    ]
+                )
+            ),
+        ],
+    }
+
+    with caplog.at_level(logging.WARNING):
+        _log_beat_summary_stats(artifact_data)
+
+    assert not any("seed_low_shared_beat_count" in r.message for r in caplog.records), (
+        "Did not expect shared-beat warning when 4 shared beats span "
+        "the 2 multi-path dilemmas (4/2=2.0 ≥ 1)."
+    )
+    assert not any("seed_low_post_commit_beat_count" in r.message for r in caplog.records), (
+        "Did not expect post-commit warning (2 post-commit beats per path)."
+    )
+
+
+def test_seed_advisory_warns_when_multi_path_dilemma_lacks_shared_beat(caplog) -> None:
+    """Warning DOES fire when a multi-path dilemma has no shared pre-commit beat."""
+    import logging
+
+    from questfoundry.pipeline.stages.seed import _log_beat_summary_stats
+
+    artifact_data = {
+        "entities": [],
+        "dilemmas": [{"dilemma_id": "d_a"}, {"dilemma_id": "d_b"}],
+        "paths": [
+            {"path_id": "p_a1", "dilemma_id": "d_a"},
+            {"path_id": "p_a2", "dilemma_id": "d_a"},
+            {"path_id": "p_b1", "dilemma_id": "d_b"},
+            {"path_id": "p_b2", "dilemma_id": "d_b"},
+        ],
+        "initial_beats": [
+            # Only one shared beat across both multi-path dilemmas → 1/2 = 0.5 < 1.0.
+            {"beat_id": "s_only", "path_id": "p_a1", "also_belongs_to": "p_a2"},
+            # Plenty of post-commit so we isolate the shared warning.
+            *(
+                {"beat_id": f"pc_{i}", "path_id": p_id}
+                for i, p_id in enumerate(
+                    ["p_a1", "p_a1", "p_a2", "p_a2", "p_b1", "p_b1", "p_b2", "p_b2"]
+                )
+            ),
+        ],
+    }
+
+    with caplog.at_level(logging.WARNING):
+        _log_beat_summary_stats(artifact_data)
+
+    # Pull the structured event dict — structlog passes kwargs via record.msg
+    # as a dict — and assert on the actual values, not just the event name.
+    matching = [
+        r.msg
+        for r in caplog.records
+        if isinstance(r.msg, dict) and r.msg.get("event") == "seed_low_shared_beat_count"
+    ]
+    assert len(matching) == 1, (
+        "Expected exactly one shared-beat warning when 1 shared beat covers "
+        f"2 multi-path dilemmas, got {len(matching)}."
+    )
+    event = matching[0]
+    assert event["shared_beats"] == 1
+    assert event["multi_path_dilemmas"] == 2
+    assert event["shared_avg"] == 0.5

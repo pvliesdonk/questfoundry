@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import re
-import warnings
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import lru_cache
@@ -28,7 +27,6 @@ from questfoundry.graph.context import (
 )
 from questfoundry.graph.mutations import (
     SeedErrorCategory,
-    SeedMutationError,
     SeedValidationError,
     _format_available_with_suggestions,
     categorize_error,
@@ -208,6 +206,7 @@ async def serialize_to_artifact(
     semantic_validator: SemanticValidator | None = None,
     semantic_error_class: type[SemanticErrorFormatter] | None = None,
     stage: str = "unknown",
+    extra_repair_hints: list[str] | None = None,
 ) -> tuple[T, int]:
     """Serialize a brief into a structured artifact.
 
@@ -230,6 +229,16 @@ async def serialize_to_artifact(
             for formatting semantic validation errors. Required if semantic_validator
             is provided.
         stage: Pipeline stage name for tracing metadata (e.g., "dream", "seed").
+        extra_repair_hints: Optional caller-supplied reminder strings placed at
+            the START of the validation-failure feedback message on every retry
+            attempt — the validator-error dump follows as supporting context.
+            Used to echo expected values for constraint-to-value mappings the
+            model loses across long context (e.g. SEED shared-beats
+            `also_belongs_to` sibling path id). Per @prompt-engineer Rule 5,
+            the model does not re-read the system prompt on retry — only the
+            new user-message — and small models attend disproportionately to
+            the opening tokens, so the actionable hint must lead and be
+            self-contained.
 
     Returns:
         Tuple of (validated_artifact, tokens_used).
@@ -350,9 +359,9 @@ async def serialize_to_artifact(
                     )
                     return artifact, total_tokens
 
-                # Unexpected result type
+                # Unexpected result type — retry will follow
                 last_errors = [f"Unexpected result type: {type(result).__name__}"]
-                log.warning(
+                log.info(
                     "serialize_unexpected_type",
                     attempt=attempt,
                     result_type=type(result).__name__,
@@ -378,7 +387,7 @@ async def serialize_to_artifact(
 
                 # Add error feedback for retry
                 if attempt < max_retries:
-                    error_feedback = _build_error_feedback(last_errors)
+                    error_feedback = _build_error_feedback(last_errors, extra_repair_hints)
                     messages.append(HumanMessage(content=error_feedback))
 
             except (KeyboardInterrupt, asyncio.CancelledError):
@@ -386,7 +395,7 @@ async def serialize_to_artifact(
 
             except Exception as e:
                 last_errors = [str(e)]
-                log.warning(
+                log.info(
                     "serialize_error",
                     attempt=attempt,
                     error=str(e),
@@ -475,16 +484,37 @@ def _format_validation_errors(error: ValidationError) -> list[str]:
     return errors
 
 
-def _build_error_feedback(errors: list[str]) -> str:
+def _build_error_feedback(errors: list[str], extra_hints: list[str] | None = None) -> str:
     """Build error feedback message for retry.
 
     Args:
         errors: List of validation error messages.
+        extra_hints: Optional caller-supplied hints with the actionable
+            directive (expected values, copy-paste JSON snippets) for
+            constraint-to-value mappings the model loses across long
+            context. When present, hints are placed BEFORE the validator
+            output — small models (qwen3:4b) attend disproportionately to
+            the opening tokens of the most-recent message, and the
+            actionable directive must lead. See @prompt-engineer Rule 5
+            (small-model repair-loop blindness) and the murder4 SEED
+            crash post-mortem (#1521).
 
     Returns:
         Formatted feedback message for the model.
     """
     error_list = "\n".join(f"  - {e}" for e in errors)
+    if extra_hints:
+        # Hint-first ordering: the actionable directive leads, validator
+        # errors follow as supporting context. Reverses the prior layout
+        # where the directive was buried after a multi-line validator dump.
+        hints_block = "\n\n".join(extra_hints)
+        return (
+            f"{hints_block}\n\n"
+            "---\n\n"
+            "Validation errors that triggered this retry:\n"
+            f"{error_list}\n\n"
+            "Resubmit the corrected JSON now."
+        )
     return (
         "The output had validation errors:\n"
         f"{error_list}\n\n"
@@ -500,7 +530,7 @@ _REQUIRED_SECTION_PROMPT_KEYS = [
     "paths_prompt",
     "per_dilemma_paths_prompt",
     "consequences_prompt",
-    "beats_prompt",
+    "shared_beats_prompt",
     "per_path_beats_prompt",
     "dilemma_analyses_prompt",
     "dilemma_relationships_prompt",
@@ -549,7 +579,7 @@ def _load_seed_section_prompts() -> dict[str, str]:
         "dilemmas": data["dilemmas_prompt"],
         "paths": data["paths_prompt"],
         "consequences": data["consequences_prompt"],
-        "beats": data["beats_prompt"],
+        "shared_beats": data["shared_beats_prompt"],
         "per_path_beats": data["per_path_beats_prompt"],
         "per_dilemma_paths": data["per_dilemma_paths_prompt"],
         "dilemma_analyses": data["dilemma_analyses_prompt"],
@@ -785,11 +815,13 @@ def _build_per_path_beat_context(
     path_data: dict[str, Any],
     entity_context: str,
     all_paths: list[dict[str, Any]] | None = None,
+    shared_beats_by_dilemma: dict[str, list[dict[str, Any]]] | None = None,
 ) -> str:
     """Build a brief for generating beats for a single path.
 
     Creates a minimal context containing only:
     - The path's ID and parent dilemma
+    - Shared pre-commit beats already established for this dilemma (if any)
     - Entity IDs for character/location references
     - Sibling path summaries (when all_paths is provided) for location inference
 
@@ -798,6 +830,10 @@ def _build_per_path_beat_context(
         entity_context: Entity IDs section from the full brief.
         all_paths: All paths in the serialization run; used to inject sibling
             summaries that help the LLM populate location_alternatives.
+        shared_beats_by_dilemma: Mapping of dilemma_id (raw, without scope prefix)
+            to list of shared beat dicts already generated for that dilemma. When
+            provided, the beats for this path's dilemma are rendered as a context
+            section so the LLM can narratively continue from the shared setup.
 
     Returns:
         Per-path brief for beat generation.
@@ -819,6 +855,47 @@ def _build_per_path_beat_context(
     ]
     if description:
         lines.append(f"- Description: {description}")
+
+    # Inject shared pre-commit beats for this path's dilemma so the LLM can
+    # write per-path commit/post-commit beats that continue from the shared setup.
+    # Only injected when shared beats actually exist — no empty header otherwise.
+    if shared_beats_by_dilemma is not None:
+        # The grouping loop in serialize_seed_as_function always keys by raw
+        # (non-prefixed) dilemma ID via strip_scope_prefix, so look up with
+        # the raw form only.  No fallback needed — if empty, no beats exist.
+        raw_dilemma = dilemma_id.removeprefix(f"{SCOPE_DILEMMA}::")
+        dilemma_shared = shared_beats_by_dilemma.get(raw_dilemma, [])
+        if dilemma_shared:
+            lines.append("")
+            lines.append(
+                "### Shared pre-commit beats already established for this dilemma\n"
+                "\n"
+                "These beats were generated in a prior step and belong to BOTH paths of "
+                "this dilemma.\n"
+                "Your per-path beats MUST narratively continue from these. "
+                "Do not contradict or repeat them."
+            )
+            for beat in dilemma_shared:
+                beat_id = beat.get("beat_id", "")
+                summary = beat.get("summary", "")
+                location = beat.get("location") or "no location"
+                entities = beat.get("entities", [])
+                entities_str = ", ".join(f"`{e}`" for e in entities) if entities else "none"
+                impacts = beat.get("dilemma_impacts", [])
+                # Render the first impact's effect/note (most beats have one impact)
+                if impacts:
+                    first = impacts[0]
+                    effect = first.get("effect", "")
+                    note = first.get("note", "")
+                    effect_str = f"{effect} — {note}" if note else effect
+                else:
+                    effect_str = "no dilemma impact"
+                lines.append(
+                    f"\n- `{beat_id}`: {summary}\n"
+                    f"  - Location: {location}\n"
+                    f"  - Entities: {entities_str}\n"
+                    f"  - Effect: {effect_str}"
+                )
 
     # Inject sibling path summaries to support location_alternatives decisions.
     # The LLM uses these to identify locations that appear in other paths and
@@ -865,6 +942,7 @@ async def _serialize_path_beats(
     max_retries: int,
     callbacks: list[BaseCallbackHandler] | None,
     all_paths: list[dict[str, Any]] | None = None,
+    shared_beats_by_dilemma: dict[str, list[dict[str, Any]]] | None = None,
 ) -> tuple[list[dict[str, Any]], int]:
     """Serialize beats for a single path.
 
@@ -879,6 +957,9 @@ async def _serialize_path_beats(
         max_retries: Maximum Pydantic validation retries.
         callbacks: LangChain callback handlers.
         all_paths: All paths for sibling context injection.
+        shared_beats_by_dilemma: Mapping of dilemma_id → shared beat dicts so the
+            LLM can narratively continue from the shared pre-commit setup
+            (criterion 3 of #1227).
 
     Returns:
         Tuple of (list of beat dicts, tokens used).
@@ -901,8 +982,13 @@ async def _serialize_path_beats(
         path_name=path_name,
     )
 
-    # Build per-path brief
-    brief = _build_per_path_beat_context(path_data, entity_context, all_paths=all_paths)
+    # Build per-path brief, injecting shared beats for narrative continuity
+    brief = _build_per_path_beat_context(
+        path_data,
+        entity_context,
+        all_paths=all_paths,
+        shared_beats_by_dilemma=shared_beats_by_dilemma,
+    )
 
     log.debug(
         "serialize_path_beats_started",
@@ -943,6 +1029,7 @@ async def _serialize_beats_per_path(
     callbacks: list[BaseCallbackHandler] | None,
     on_phase_progress: PhaseProgressFn | None = None,
     max_concurrency: int = 2,
+    shared_beats_by_dilemma: dict[str, list[dict[str, Any]]] | None = None,
 ) -> tuple[list[dict[str, Any]], int]:
     """Serialize beats for all paths with bounded concurrency.
 
@@ -961,6 +1048,10 @@ async def _serialize_beats_per_path(
         callbacks: LangChain callback handlers.
         on_phase_progress: Callback for progress reporting.
         max_concurrency: Max parallel LLM requests (default 2).
+        shared_beats_by_dilemma: Mapping of raw dilemma_id → shared beat dicts
+            (generated in the prior step). Each per-path call receives the shared
+            beats for its own dilemma so the LLM can narratively continue from
+            the pre-commit setup (#1227 criterion 3).
 
     Returns:
         Tuple of (all beats merged, total tokens used).
@@ -985,6 +1076,7 @@ async def _serialize_beats_per_path(
                 max_retries=max_retries,
                 callbacks=callbacks,
                 all_paths=paths,
+                shared_beats_by_dilemma=shared_beats_by_dilemma,
             )
 
     # Create tasks for all paths (semaphore limits actual concurrency)
@@ -1018,231 +1110,290 @@ async def _serialize_beats_per_path(
     return all_beats, total_tokens
 
 
-@traceable(
-    name="Serialize SEED Iteratively", run_type="chain", tags=["phase:serialize", "stage:seed"]
-)
-async def serialize_seed_iteratively(
-    model: BaseChatModel,
-    brief: str,
-    provider_name: str | None = None,
-    max_retries: int = 3,
-    callbacks: list[BaseCallbackHandler] | None = None,
-    graph: Graph | None = None,
-    max_semantic_retries: int = 2,
-) -> tuple[Any, int]:
-    """Serialize SEED brief in sections to avoid output truncation.
+def _build_shared_beat_context(
+    dilemma_decision: dict[str, Any],
+    paths: list[dict[str, Any]],
+    entity_context: str,
+) -> str:
+    """Build a brief for generating shared pre-commit beats for one dilemma.
 
-    .. deprecated:: 5.2
-        Use serialize_seed_as_function() instead. This function raises
-        SeedMutationError on validation failures; the new function returns
-        a SerializeResult with errors for conversation-level retry.
-
-    Instead of serializing the entire SeedOutput at once (which can cause
-    truncation with complex schemas on smaller models), this function
-    serializes each section independently and merges the results.
-
-    Sections are serialized in order:
-    1. entities (EntityDecision list)
-    2. dilemmas (DilemmaDecision list)
-    3. paths (Path list)
-    4. consequences (Consequence list)
-    5. initial_beats (InitialBeat list)
-    After all sections are merged, if a graph is provided, semantic validation
-    runs to check cross-references against BRAINSTORM data. If validation fails,
-    the problematic sections are re-serialized with feedback.
+    Injects the dilemma context and the two explored paths so the LLM knows
+    which paths to dual-assign each shared beat to.  The entity context gives
+    the LLM the character/location vocabulary from the manifest.
 
     Args:
-        model: Chat model to use for generation.
-        brief: The summary brief from the Summarize phase.
-        provider_name: Provider name for strategy auto-detection.
-        max_retries: Maximum retries per section (Pydantic validation).
-        callbacks: LangChain callback handlers for logging LLM calls.
-        graph: Graph containing BRAINSTORM data for semantic validation.
-            If None, semantic validation is skipped.
-        max_semantic_retries: Maximum retries for semantic validation failures.
+        dilemma_decision: Dilemma decision dict with dilemma_id, explored, question.
+        paths: All serialized paths (used to find sibling path descriptions).
+        entity_context: Entity IDs section for character/location references.
 
     Returns:
-        Tuple of (SeedOutput, total_tokens_used).
-
-    Raises:
-        SerializationError: If any section fails validation after retries.
-        SeedMutationError: If semantic validation fails after all retries.
+        Brief string for shared beat generation.
     """
-    warnings.warn(
-        "serialize_seed_iteratively() is deprecated. Use serialize_seed_as_function() instead.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    from questfoundry.models.seed import (
-        BeatsSection,
-        ConsequencesSection,
-        DilemmasSection,
-        EntitiesSection,
-        PathsSection,
-        SeedOutput,
-    )
+    dilemma_id = dilemma_decision.get("dilemma_id", "")
+    question = dilemma_decision.get("question", "")
+    explored = dilemma_decision.get("explored", [])
 
-    log.info("serialize_seed_iteratively_started")
+    prefixed_dilemma_id = normalize_scoped_id(dilemma_id, SCOPE_DILEMMA)
+    dilemma_name = prefixed_dilemma_id.removeprefix(f"{SCOPE_DILEMMA}::")
 
-    prompts = _load_seed_section_prompts()
-    total_tokens = 0
+    # Build the two explored path IDs (needed for context)
+    path_ids = [f"path::{dilemma_name}__{a}" for a in explored[:2]]
 
-    # Inject valid IDs context if graph is provided
-    # This gives the LLM authoritative ID list upfront to prevent phantom references
-    enhanced_brief = brief
-    if graph is not None:
-        valid_ids_context = format_valid_ids_context(graph, stage="seed")
-        if valid_ids_context:
-            enhanced_brief = f"{valid_ids_context}\n\n---\n\n{brief}"
-            log.debug("valid_ids_context_injected", context_length=len(valid_ids_context))
-
-    # Section configuration: (section_name, schema, output_field)
-    # section_name matches prompt dict keys, output_field matches SeedOutput field names
-    sections: list[tuple[str, type[BaseModel], str]] = [
-        ("entities", EntitiesSection, "entities"),
-        ("dilemmas", DilemmasSection, "dilemmas"),
-        ("paths", PathsSection, "paths"),
-        ("consequences", ConsequencesSection, "consequences"),
-        ("beats", BeatsSection, "initial_beats"),
+    lines = [
+        "## Dilemma Context",
+        f"Dilemma: `{prefixed_dilemma_id}`",
+        f"Question: {question}",
+        "",
+        "## Explored Paths (shared beats belong to BOTH)",
     ]
-
-    collected: dict[str, Any] = {}
-
-    # Track brief with path IDs injected (for beats section)
-    brief_with_paths = enhanced_brief
-
-    for section_name, schema, output_field in sections:
-        log.debug("serialize_section_started", section=section_name)
-
-        # Use brief with path IDs for consequences and beats (paths are known by then)
-        # Consequences reference path_id, so they need path context too
-        current_brief = (
-            brief_with_paths if section_name in ("beats", "consequences") else enhanced_brief
+    for pid in path_ids:
+        # Enrich with path name/description from serialized paths if available
+        matching = next(
+            (p for p in paths if normalize_scoped_id(p.get("path_id", ""), SCOPE_PATH) == pid), None
         )
+        if matching:
+            pname = matching.get("name", "")
+            pdesc = matching.get("description", "")
+            label = f"- `{pid}` ({pname})"
+            if pdesc:
+                label += f": {pdesc}"
+            lines.append(label)
+        else:
+            lines.append(f"- `{pid}`")
 
-        section_prompt = prompts[section_name]
-        section_result, section_tokens = await serialize_to_artifact(
-            model=model,
-            brief=current_brief,
-            schema=schema,
-            provider_name=provider_name,
-            max_retries=max_retries,
-            system_prompt=section_prompt,
-            callbacks=callbacks,
-            stage="seed",
+    lines.append("")
+    lines.append(entity_context)
+
+    return "\n".join(lines)
+
+
+async def _serialize_shared_beats_for_dilemma(
+    model: BaseChatModel,
+    dilemma_decision: dict[str, Any],
+    paths: list[dict[str, Any]],
+    shared_beats_prompt_template: str,
+    entity_context: str,
+    provider_name: str | None,
+    max_retries: int,
+    callbacks: list[BaseCallbackHandler] | None,
+) -> tuple[list[dict[str, Any]], int]:
+    """Serialize shared pre-commit beats for a single dilemma (Y-shape, #1227).
+
+    Issues ONE LLM call that generates the pre-commit beats both explored paths
+    of the dilemma share.  Each returned beat will have ``path_id`` set to the
+    primary explored path and ``also_belongs_to`` set to the sibling path.
+
+    Per Story Graph Ontology Part 8: multi-``belongs_to`` is ONLY valid for
+    pre-commit beats within a single dilemma.
+
+    Args:
+        model: Chat model to use.
+        dilemma_decision: Dilemma decision dict with dilemma_id, explored, question.
+        paths: All serialized paths (for context enrichment).
+        shared_beats_prompt_template: Prompt template with {dilemma_id}, {path_id},
+            {also_belongs_to}, and {dilemma_question} placeholders.
+        entity_context: Entity IDs context for character/location references.
+        provider_name: Provider name for strategy selection.
+        max_retries: Maximum Pydantic validation retries.
+        callbacks: LangChain callback handlers.
+
+    Returns:
+        Tuple of (list of shared beat dicts, tokens used).
+    """
+    from questfoundry.models.seed import SharedBeatsSection
+
+    dilemma_id = dilemma_decision.get("dilemma_id", "")
+    explored = dilemma_decision.get("explored", [])
+    question = dilemma_decision.get("question", "")
+
+    if len(explored) < 2:
+        log.warning(
+            "serialize_shared_beats_skipped",
+            dilemma_id=dilemma_id,
+            reason="fewer_than_2_explored_answers",
+            explored_count=len(explored),
         )
-        total_tokens += section_tokens
+        return [], 0
 
-        # Extract the field value from the section wrapper
-        section_data = section_result.model_dump()
-        if output_field not in section_data:
-            raise ValueError(
-                f"Section {section_name} returned unexpected structure. "
-                f"Expected field '{output_field}', got: {list(section_data.keys())}"
-            )
-        collected[output_field] = section_data[output_field]
+    prefixed_dilemma_id = normalize_scoped_id(dilemma_id, SCOPE_DILEMMA)
+    dilemma_name = prefixed_dilemma_id.removeprefix(f"{SCOPE_DILEMMA}::")
 
-        # After paths are serialized, inject path IDs for subsequent sections
-        if section_name == "paths" and collected.get("paths"):
-            path_ids_context = format_path_ids_context(collected["paths"])
-            if path_ids_context:
-                # Insert path IDs after the valid IDs section
-                brief_with_paths = f"{enhanced_brief}\n\n{path_ids_context}"
-                log.debug("path_ids_context_injected", path_count=len(collected["paths"]))
+    # First explored path is primary; second is the sibling (also_belongs_to)
+    primary_path_id = f"path::{dilemma_name}__{explored[0]}"
+    sibling_path_id = f"path::{dilemma_name}__{explored[1]}"
 
-        log.debug(
-            "serialize_section_completed",
-            section=section_name,
-            items=len(collected[output_field]) if isinstance(collected[output_field], list) else 1,
-            tokens=section_tokens,
-        )
+    # Format the prompt with dilemma-specific values
+    prompt = shared_beats_prompt_template.format(
+        dilemma_id=prefixed_dilemma_id,
+        dilemma_question=question,
+        path_id=primary_path_id,
+        also_belongs_to=sibling_path_id,
+    )
 
-    # Merge all sections into SeedOutput
-    seed_output = SeedOutput.model_validate(collected)
+    brief = _build_shared_beat_context(dilemma_decision, paths, entity_context)
 
-    # Semantic validation (if graph provided)
-    if graph is not None:
-        for semantic_attempt in range(1, max_semantic_retries + 1):
-            all_errors = validate_seed_mutations(graph, seed_output.model_dump())
-            errors = [e for e in all_errors if e.category != SeedErrorCategory.WARNING]
-            if not errors:
-                break
+    log.debug(
+        "serialize_shared_beats_started",
+        dilemma_id=dilemma_id,
+        primary_path_id=primary_path_id,
+        sibling_path_id=sibling_path_id,
+    )
 
-            log.warning(
-                "semantic_validation_failed",
-                attempt=semantic_attempt,
-                max_attempts=max_semantic_retries,
-                error_count=len(errors),
-            )
+    # Per-attempt repair hint — the validator's `also_belongs_to`-missing
+    # error names the field but doesn't echo the value, and small models
+    # (qwen3:4b production default) lose the constraint-to-value mapping
+    # across retry attempts (@prompt-engineer Rule 5 small-model repair-loop
+    # blindness — the model doesn't re-read the system prompt on retry).
+    # The hint is dilemma-specific so it always applies to this call.
+    #
+    # Format chosen for #1521: leads with a copy-paste JSON snippet, names
+    # the type explicitly (STRING not list/null), and includes a
+    # self-contained mini-checklist mirroring the system prompt FINAL CHECK
+    # so the model doesn't need to re-read upstream context on retry.
+    also_belongs_to_hint = (
+        "ACTION REQUIRED — your previous output was rejected.\n\n"
+        "Add this to EVERY beat in `initial_beats` (copy exactly):\n\n"
+        "```json\n"
+        f'  "path_id": "{primary_path_id}",\n'
+        f'  "also_belongs_to": "{sibling_path_id}"\n'
+        "```\n\n"
+        "Type rules for `also_belongs_to`:\n"
+        "  - It is a STRING (not a list, not null).\n"
+        f"  - For this dilemma, the value MUST be `{sibling_path_id}` exactly.\n"
+        "  - Without it, every beat is rejected by the Y-shape guard rail "
+        "(Story Graph Ontology Part 8).\n\n"
+        f"Self-check before submitting (for dilemma `{prefixed_dilemma_id}`):\n"
+        f'  [ ] Every beat has `"path_id": "{primary_path_id}"`\n'
+        f'  [ ] Every beat has `"also_belongs_to": "{sibling_path_id}"` '
+        "(STRING, not list)\n"
+        f'  [ ] No beat has `"effect": "commits"` '
+        "(these are pre-commit beats, not commits)\n"
+        f"  [ ] Every beat's first dilemma_impact has "
+        f'`"dilemma_id": "{prefixed_dilemma_id}"`'
+    )
 
-            if semantic_attempt >= max_semantic_retries:
-                log.error(
-                    "semantic_validation_exhausted",
-                    error_count=len(errors),
-                )
-                raise SeedMutationError(errors)
+    result, tokens = await serialize_to_artifact(
+        model=model,
+        brief=brief,
+        schema=SharedBeatsSection,
+        provider_name=provider_name,
+        max_retries=max_retries,
+        system_prompt=prompt,
+        callbacks=callbacks,
+        stage="seed",
+        extra_repair_hints=[also_belongs_to_hint],
+    )
 
-            # Determine which sections need re-serialization based on error field paths
-            sections_to_retry = _get_sections_to_retry(errors)
-            feedback = SeedMutationError(errors).to_feedback()
+    beats = result.model_dump().get("initial_beats", [])
 
-            log.debug(
-                "semantic_retry_sections",
-                sections=list(sections_to_retry),
-                feedback_length=len(feedback),
-            )
+    log.debug(
+        "serialize_shared_beats_completed",
+        dilemma_id=dilemma_id,
+        beat_count=len(beats),
+        tokens=tokens,
+    )
 
-            # Re-serialize problematic sections with feedback appended to brief
-            brief_with_feedback = (
-                f"{enhanced_brief}\n\n## VALIDATION ERRORS - PLEASE FIX\n\n{feedback}"
-            )
+    return beats, tokens
 
-            for section_name, schema, output_field in sections:
-                if section_name not in sections_to_retry:
-                    continue
 
-                log.debug("semantic_retry_section", section=section_name)
+async def _serialize_shared_beats_per_dilemma(
+    model: BaseChatModel,
+    dilemma_decisions: list[dict[str, Any]],
+    paths: list[dict[str, Any]],
+    shared_beats_prompt_template: str,
+    entity_context: str,
+    provider_name: str | None,
+    max_retries: int,
+    callbacks: list[BaseCallbackHandler] | None,
+    on_phase_progress: PhaseProgressFn | None = None,
+    max_concurrency: int = 2,
+) -> tuple[list[dict[str, Any]], int]:
+    """Serialize shared pre-commit beats for all dilemmas with bounded concurrency.
 
-                section_prompt = prompts[section_name]
-                section_result, section_tokens = await serialize_to_artifact(
-                    model=model,
-                    brief=brief_with_feedback,
-                    schema=schema,
-                    provider_name=provider_name,
-                    max_retries=max_retries,
-                    system_prompt=section_prompt,
-                    callbacks=callbacks,
-                    stage="seed",
-                )
-                total_tokens += section_tokens
+    Filters to dilemmas with at least two explored answers (required for Y-shape
+    dual membership), then issues ONE LLM call per dilemma using a semaphore to
+    bound concurrency.
 
-                section_data = section_result.model_dump()
-                if output_field not in section_data:
-                    raise ValueError(
-                        f"Section {section_name} returned unexpected structure on retry. "
-                        f"Expected field '{output_field}', got: {list(section_data.keys())}"
-                    )
-                collected[output_field] = section_data[output_field]
+    Per Story Graph Ontology Part 8, shared beats require exactly two same-dilemma
+    paths — dilemmas with fewer than two explored answers are silently skipped.
 
-            # Re-merge with updated sections
-            seed_output = SeedOutput.model_validate(collected)
+    Args:
+        model: Chat model to use.
+        dilemma_decisions: List of dilemma decision dicts.
+        paths: All serialized paths (for context enrichment).
+        shared_beats_prompt_template: Prompt template for shared beat generation.
+        entity_context: Entity IDs context for character/location references.
+        provider_name: Provider name for strategy selection.
+        max_retries: Maximum Pydantic validation retries per dilemma.
+        callbacks: LangChain callback handlers.
+        on_phase_progress: Callback for progress reporting.
+        max_concurrency: Max parallel LLM requests (default 2).
+
+    Returns:
+        Tuple of (all shared beats merged, total tokens used).
+    """
+    # Filter to dilemmas with 2+ explored answers (Y-shape requires dual membership)
+    active_dilemmas = [d for d in dilemma_decisions if len(d.get("explored", [])) >= 2]
 
     log.info(
-        "serialize_seed_iteratively_completed",
-        entities=len(seed_output.entities),
-        dilemmas=len(seed_output.dilemmas),
-        paths=len(seed_output.paths),
-        consequences=len(seed_output.consequences),
-        beats=len(seed_output.initial_beats),
-        tokens=total_tokens,
+        "serialize_shared_beats_per_dilemma_started",
+        dilemma_count=len(active_dilemmas),
+        skipped=len(dilemma_decisions) - len(active_dilemmas),
+        max_concurrency=max_concurrency,
     )
 
-    return seed_output, total_tokens
+    if not active_dilemmas:
+        return [], 0
+
+    semaphore = asyncio.Semaphore(max_concurrency)
+
+    async def _limited_serialize(
+        dilemma: dict[str, Any],
+    ) -> tuple[list[dict[str, Any]], int]:
+        async with semaphore:
+            return await _serialize_shared_beats_for_dilemma(
+                model=model,
+                dilemma_decision=dilemma,
+                paths=paths,
+                shared_beats_prompt_template=shared_beats_prompt_template,
+                entity_context=entity_context,
+                provider_name=provider_name,
+                max_retries=max_retries,
+                callbacks=callbacks,
+            )
+
+    tasks = [asyncio.create_task(_limited_serialize(d)) for d in active_dilemmas]
+    dilemma_ids = [str(d.get("dilemma_id", "")) for d in active_dilemmas]
+
+    results = await asyncio.gather(*tasks)
+
+    all_shared_beats: list[dict[str, Any]] = []
+    total_tokens = 0
+    dilemma_count = len(active_dilemmas)
+
+    for i, (beats, tokens) in enumerate(results, start=1):
+        all_shared_beats.extend(beats)
+        total_tokens += tokens
+        if on_phase_progress is not None:
+            did = dilemma_ids[i - 1]
+            detail = f"{did} ({len(beats)} beats)" if did else f"{len(beats)} beats"
+            on_phase_progress(
+                f"serialize shared beats (dilemma {i}/{dilemma_count})", "completed", detail
+            )
+
+    log.info(
+        "serialize_shared_beats_per_dilemma_completed",
+        dilemma_count=len(active_dilemmas),
+        total_beats=len(all_shared_beats),
+        total_tokens=total_tokens,
+    )
+
+    return all_shared_beats, total_tokens
 
 
 # Maps SeedOutput field_path prefixes to section names used in serialization.
-# Note: "initial_beats" → "beats" because the section config uses "beats" as the
-# section_name while SeedOutput uses "initial_beats" as the field name.
+# Note: "initial_beats" → "beats" because the retry router uses "beats" as
+# the routing label while SeedOutput uses "initial_beats" as the field name.
 _FIELD_PATH_TO_SECTION = {
     "entities": "entities",
     "dilemmas": "dilemmas",
@@ -1250,26 +1401,6 @@ _FIELD_PATH_TO_SECTION = {
     "consequences": "consequences",
     "initial_beats": "beats",
 }
-
-
-def _get_sections_to_retry(errors: list[SeedValidationError]) -> set[str]:
-    """Determine which sections need re-serialization based on error field paths.
-
-    Args:
-        errors: List of SeedValidationError objects.
-
-    Returns:
-        Set of section names that have errors.
-    """
-    sections = set()
-    for error in errors:
-        field_path = error.field_path
-        # Extract the top-level field (e.g., "paths.0.dilemma_id" -> "paths")
-        top_level = field_path.split(".")[0] if field_path else ""
-        if top_level in _FIELD_PATH_TO_SECTION:
-            sections.add(_FIELD_PATH_TO_SECTION[top_level])
-
-    return sections
 
 
 # Dependency order for section retries (upstream first).
@@ -1358,6 +1489,14 @@ def _format_section_corrections(errors: list[SeedValidationError]) -> str:
     cross_ref_items: list[str] = []
 
     for error in errors:
+        # Handle arc_structure errors first — their issue text is already
+        # actionable ("Path X has no beat after its commit beat... Add a beat
+        # with effect 'advances' or 'complicates' after the commit beat.").
+        # The generic COMPLETENESS handler would misformat these as "missing items".
+        if error.field_path.endswith(".arc_structure"):
+            corrections.append(f"- ARC FIX: {error.issue}")
+            continue
+
         category = categorize_error(error)
 
         # Handle CROSS_REFERENCE errors (bucket misplacement, answer not in explored)
@@ -1515,7 +1654,7 @@ async def _early_validate_dilemma_answers(
         if not invalid:
             return dilemma_decisions, total_tokens
 
-        log.warning(
+        log.info(
             "early_dilemma_validation_failed",
             attempt=attempt + 1,
             invalid_count=len(invalid),
@@ -1643,7 +1782,7 @@ def _filter_consequences_by_valid_paths(
         else:
             dropped_ids.append(path_id if path_id is not None else "?")
     if dropped_ids:
-        log.warning(
+        log.info(
             "consequences_filtered_invalid_paths",
             dropped=len(dropped_ids),
             total=len(consequences),
@@ -1726,12 +1865,18 @@ async def serialize_seed_as_function(
 
     prompts = dict(_load_seed_section_prompts())  # Copy — cached original is immutable
 
-    # Inject size-aware beat count range into beat prompts
+    # Inject size-aware beat count ranges into the Y-shape beat prompts
     size_vars = size_template_vars(size_profile)
-    beats_range = size_vars["size_beats_per_path"]
-    for key in ("beats", "per_path_beats"):
-        if key in prompts:
-            prompts[key] = prompts[key].replace("{size_beats_per_path}", beats_range)
+    shared_range = size_vars["size_shared_beats_per_dilemma"]
+    post_range = size_vars["size_post_commit_beats_per_path"]
+    if "shared_beats" in prompts:
+        prompts["shared_beats"] = prompts["shared_beats"].replace(
+            "{size_shared_beats_per_dilemma}", shared_range
+        )
+    if "per_path_beats" in prompts:
+        prompts["per_path_beats"] = prompts["per_path_beats"].replace(
+            "{size_post_commit_beats_per_path}", post_range
+        )
 
     total_tokens = 0
 
@@ -1893,14 +2038,6 @@ async def serialize_seed_as_function(
                     dilemma_count=len(collected["dilemmas"]),
                 )
 
-            # Enrich dilemma decisions with question from graph for prompt
-            if graph is not None:
-                for d in collected["dilemmas"]:
-                    node_id = normalize_scoped_id(d.get("dilemma_id", ""), SCOPE_DILEMMA)
-                    node = graph.get_node(node_id)
-                    if node:
-                        d["question"] = node.get("question", "")
-
             # Early validation: check answer IDs against brainstorm truth.
             # Catches hallucinated answer IDs (e.g., "trust_strength" instead of
             # "strength") before they cascade to path generation.
@@ -1918,6 +2055,17 @@ async def serialize_seed_as_function(
                     brainstorm_answers=brainstorm_answers,
                 )
                 total_tokens += early_tokens
+
+            # Enrich dilemma decisions with question from graph for prompt.
+            # Must run AFTER _early_validate_dilemma_answers because that
+            # function may replace the dilemma dicts with fresh model_dump()
+            # output (which strips any extra fields added before the call).
+            if graph is not None:
+                for d in collected["dilemmas"]:
+                    node_id = normalize_scoped_id(d.get("dilemma_id", ""), SCOPE_DILEMMA)
+                    node = graph.get_node(node_id)
+                    if node:
+                        d["question"] = node.get("question", "")
 
             # Generate paths per-dilemma
             paths, paths_tokens = await _serialize_paths_per_dilemma(
@@ -1940,7 +2088,51 @@ async def serialize_seed_as_function(
                     brief_with_paths = f"{enhanced_brief}\n\n{path_ids_context}"
                     log.debug("path_ids_context_injected", path_count=len(collected["paths"]))
 
-            # Generate beats per-path
+            # Generate shared pre-commit beats per dilemma (Y-shape, #1227).
+            # Shared beats belong to BOTH explored paths of a dilemma and must
+            # come BEFORE per-path post-commit beats in the final artifact so
+            # consumers see the shared setup first.
+            shared_beats_by_dilemma: dict[str, list[dict[str, Any]]] = {}
+            if collected.get("paths") and collected.get("dilemmas"):
+                shared_beats, shared_beats_tokens = await _serialize_shared_beats_per_dilemma(
+                    model=model,
+                    dilemma_decisions=collected["dilemmas"],
+                    paths=collected["paths"],
+                    shared_beats_prompt_template=prompts["shared_beats"],
+                    entity_context=entity_context,
+                    provider_name=provider_name,
+                    max_retries=max_retries,
+                    callbacks=callbacks,
+                    on_phase_progress=on_phase_progress,
+                )
+                collected["initial_beats"] = shared_beats
+                total_tokens += shared_beats_tokens
+
+                # Group shared beats by raw dilemma ID so per-path calls receive
+                # only the beats relevant to their own dilemma (#1227 criterion 3).
+                # Each shared beat's primary dilemma is taken from its first
+                # dilemma_impacts entry (the shared-beats prompt pins this to the
+                # generating dilemma).
+                for beat in shared_beats:
+                    impacts = beat.get("dilemma_impacts", [])
+                    if impacts:
+                        raw_did = strip_scope_prefix(impacts[0].get("dilemma_id", ""))
+                    else:
+                        # Fallback for LLM schema deviations: the SharedBeatsSection
+                        # validator and prompt schema normally ensure
+                        # dilemma_impacts[0] is present, but parse the dilemma from
+                        # path_id as a last resort if the LLM omits dilemma_impacts.
+                        path_ref = beat.get("path_id", "")
+                        raw_pid = strip_scope_prefix(path_ref)
+                        # path ID format is <dilemma>__<answer>; take the dilemma part
+                        raw_did = raw_pid.rsplit("__", 1)[0] if "__" in raw_pid else raw_pid
+                    shared_beats_by_dilemma.setdefault(raw_did, []).append(beat)
+
+            # Generate per-path post-commit beats (Y-shape — one call per path).
+            # Results are appended AFTER shared beats so the artifact ordering is
+            # consistent: shared setup first, then path-specific post-commit beats.
+            # shared_beats_by_dilemma is passed so each per-path call knows what
+            # the shared setup established (#1227 criterion 3).
             if collected.get("paths"):
                 beats, beats_tokens = await _serialize_beats_per_path(
                     model=model,
@@ -1951,8 +2143,13 @@ async def serialize_seed_as_function(
                     max_retries=max_retries,
                     callbacks=callbacks,
                     on_phase_progress=on_phase_progress,
+                    shared_beats_by_dilemma=shared_beats_by_dilemma
+                    if shared_beats_by_dilemma
+                    else None,
                 )
-                collected["initial_beats"] = beats
+                # Extend (not replace) so shared beats are preserved at the front
+                existing_beats = collected.get("initial_beats", [])
+                collected["initial_beats"] = existing_beats + beats
                 total_tokens += beats_tokens
 
         log.debug(
@@ -1976,7 +2173,7 @@ async def serialize_seed_as_function(
             if not blocking_errors:
                 break
 
-            log.warning(
+            log.info(
                 "serialize_seed_semantic_errors",
                 attempt=semantic_attempt,
                 max_attempts=max_semantic_retries,
@@ -2133,7 +2330,14 @@ async def serialize_seed_as_function(
                         callbacks=callbacks,
                         on_phase_progress=on_phase_progress,
                     )
-                    collected["initial_beats"] = beats
+                    # Preserve shared pre-commit beats (Y-shape dual belongs_to)
+                    # at the front — _serialize_beats_per_path only produces
+                    # per-path post-commit beats.  The initial serialization
+                    # at line ~2336 does the same prepend; the retry must match.
+                    shared = [
+                        b for b in collected.get("initial_beats", []) if b.get("also_belongs_to")
+                    ]
+                    collected["initial_beats"] = shared + beats
                     total_tokens += beats_tokens
                     retried_any = True
                 except SerializationError as e:
@@ -2259,6 +2463,7 @@ async def serialize_convergence_analysis(
             "seed_analysis_defaulted",
             section="dilemma_analyses",
             reason="serialization_failed",
+            dilemma_ids=[d.dilemma_id for d in seed_artifact.dilemmas],
             error=str(e),
             error_type=type(e).__name__,
         )
@@ -2274,12 +2479,14 @@ async def serialize_dilemma_relationships(
     callbacks: list[BaseCallbackHandler] | None = None,
     on_phase_progress: PhaseProgressFn | None = None,
 ) -> tuple[list[DilemmaRelationship], int, int]:
-    """Run dilemma ordering relationship analysis (Section 8, Doc 3).
+    """Run dilemma ordering relationship analysis (Section 8, Story Graph Ontology).
 
     Identifies pairwise dilemma ordering (wraps, concurrent, serial).
     Runs AFTER pruning so only surviving dilemmas are analyzed.
 
-    Soft failure: if the LLM call fails, logs a WARNING and returns empty.
+    Soft failure: if the LLM call fails, logs a WARNING at WARNING level with
+    the affected dilemma IDs and returns empty (R-8.5). Silent empty-list
+    return is forbidden.
 
     Args:
         model: LLM model for structured output.
@@ -2341,7 +2548,7 @@ async def serialize_dilemma_relationships(
             if a_raw in surviving_ids and b_raw in surviving_ids:
                 valid_relationships.append(r)
             else:
-                log.warning(
+                log.info(
                     "dilemma_relationship_rejected",
                     dilemma_a=r.dilemma_a,
                     dilemma_b=r.dilemma_b,
@@ -2359,6 +2566,7 @@ async def serialize_dilemma_relationships(
             "seed_analysis_defaulted",
             section="dilemma_relationships",
             reason="serialization_failed",
+            dilemma_ids=[d.dilemma_id for d in pruned_artifact.dilemmas],
             error=str(e),
             error_type=type(e).__name__,
         )

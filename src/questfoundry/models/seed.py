@@ -25,7 +25,8 @@ from pydantic import BaseModel, Field, model_validator
 
 # Type aliases for clarity
 EntityDisposition = Literal["retained", "cut"]
-# PathTier has no direct Document 1/3 counterpart but serves a real purpose:
+# PathTier has no direct counterpart in "How Branching Stories Work" or the
+# Story Graph Ontology, but serves a real purpose:
 # dilemma scoring uses it to weight non-canonical paths, and context formatting
 # displays it to guide LLM prose generation. Kept as-is.
 PathTier = Literal["major", "minor"]
@@ -98,7 +99,11 @@ class DilemmaDecision(BaseModel):
     dilemma_id: str = Field(min_length=1, description="Dilemma ID from BRAINSTORM")
     explored: list[str] = Field(
         min_length=1,
-        description="Answer IDs the LLM intended to explore as paths",
+        frozen=True,
+        description=(
+            "Answer IDs the LLM intended to explore as paths. "
+            "Immutable after construction (R-2.3, R-5.2): pruning must not mutate this field."
+        ),
     )
     unexplored: list[str] = Field(
         default_factory=list,
@@ -136,8 +141,8 @@ class Consequence(BaseModel):
     path_id: str = Field(min_length=1, description="Path this belongs to (references path_id)")
     description: str = Field(min_length=1, description="Narrative meaning of this path")
     narrative_effects: list[str] = Field(
-        default_factory=list,
-        description="Story effects this consequence implies (cascading impacts)",
+        min_length=1,
+        description="Concrete downstream story effects (≥1 required per R-3.4).",
     )
 
 
@@ -212,7 +217,7 @@ class TemporalHint(BaseModel):
     Hints are advisory — GROW resolves conflicts in favor of dilemma ordering
     relationships (wraps/serial/concurrent).
 
-    See docs/design/document-3-ontology.md § Temporal Hints.
+    See docs/design/story-graph-ontology.md § Temporal Hints.
 
     Attributes:
         relative_to: The dilemma ID this hint is relative to.
@@ -234,13 +239,28 @@ class TemporalHint(BaseModel):
 class InitialBeat(BaseModel):
     """Initial beat created by SEED.
 
-    Each beat belongs to exactly one path (single ``belongs_to`` edge in the
-    graph).  SEED creates initial beats per path; GROW mutates and adds more.
+    Beats carry either a single or a dual ``belongs_to`` edge to path nodes:
+
+    * **Post-commit beats** (the default) belong to exactly one path via
+      ``path_id``; ``also_belongs_to`` is ``None``. These beats prove one
+      answer and are exclusive to the path they belong to.
+    * **Pre-commit beats** (shared dilemma setup) belong to *both* paths of
+      their dilemma via ``path_id`` and ``also_belongs_to``. This is the
+      Y-shape ratified in #1206/#1208: every player experiences pre-commit
+      beats regardless of which answer they later choose.
+
+    The commit beat itself is single-``belongs_to`` — it is the first beat
+    exclusive to its path.
 
     Attributes:
         beat_id: Unique identifier for the beat.
         summary: What happens in this beat.
-        path_id: The single path this beat belongs to.
+        path_id: Primary path this beat belongs to.
+        also_belongs_to: Sibling path for pre-commit (shared) beats. ``None``
+            for post-commit beats. MUST reference a path that shares the same
+            parent dilemma with ``path_id`` — cross-dilemma dual membership
+            is a Part-8 guard-rail violation and is rejected by the mutation
+            layer.
         dilemma_impacts: How this beat affects dilemmas.
         entities: Entity IDs present in this beat.
         location: Primary location entity ID.
@@ -252,39 +272,80 @@ class InitialBeat(BaseModel):
     summary: str = Field(min_length=1, description="What happens in this beat")
     path_id: str = Field(
         min_length=1,
-        description="Path ID this beat belongs to (single belongs_to edge)",
+        description="Primary path this beat belongs to (first belongs_to edge)",
+    )
+    also_belongs_to: str | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "Sibling path for pre-commit (Y-shape) beats: creates a second "
+            "belongs_to edge. Must be null for post-commit beats. Must "
+            "reference a path with the same parent dilemma as path_id."
+        ),
     )
 
     @model_validator(mode="before")
     @classmethod
     def _migrate_paths_to_path_id(cls, data: Any) -> Any:
-        """Accept legacy ``paths: [single_id]`` and convert to ``path_id``."""
+        """Accept legacy ``paths`` and convert to Y-shape (``path_id`` + optional ``also_belongs_to``).
+
+        - ``paths: [single_id]`` → ``path_id = single_id`` (post-commit beat).
+        - ``paths: [p_a, p_b]`` → ``path_id = p_a``, ``also_belongs_to = p_b``
+          (pre-commit beat, Y-shape dual membership).
+        - ``paths: []`` is rejected — every beat must reference at least one path.
+        - ``paths`` with 3+ entries is rejected — dual membership is bounded to
+          the two paths of one dilemma (Part 8 guard rail 1).
+        """
         if not isinstance(data, dict):
             return data
         if "paths" in data and "path_id" not in data:
             paths = data.pop("paths")
-            if isinstance(paths, list) and len(paths) == 1:
-                data["path_id"] = paths[0]
-            elif isinstance(paths, list) and len(paths) > 1:
+            if not isinstance(paths, list):
+                return data  # Let Pydantic reject the non-list type.
+            if len(paths) == 0:
+                msg = "InitialBeat.paths is empty — each beat must belong to at least one path."
+                raise ValueError(msg)
+            if len(paths) > 2:
+                msg = (
+                    "InitialBeat.paths has at most 2 entries (Y-shape guard rail 1). "
+                    f"Got {len(paths)}: {paths!r}."
+                )
+                raise ValueError(msg)
+            data["path_id"] = paths[0]
+            if len(paths) == 2:
                 warnings.warn(
-                    f"InitialBeat.paths had {len(paths)} entries; using first. "
-                    "Multi-path beats are handled via intersection groups.",
+                    f"InitialBeat.paths=[{paths[0]!r}, {paths[1]!r}] is deprecated — use "
+                    "path_id and also_belongs_to directly.",
                     DeprecationWarning,
                     stacklevel=2,
                 )
-                data["path_id"] = paths[0]
-            elif isinstance(paths, list) and len(paths) == 0:
-                msg = "InitialBeat.paths is empty — each beat must belong to a path."
-                raise ValueError(msg)
+                data["also_belongs_to"] = paths[1]
         return data
 
+    @model_validator(mode="after")
+    def _also_belongs_to_differs_from_path_id(self) -> InitialBeat:
+        """Dual membership requires two distinct path IDs."""
+        if self.also_belongs_to is not None and self.also_belongs_to == self.path_id:
+            msg = "also_belongs_to must differ from path_id — dual membership needs two paths."
+            raise ValueError(msg)
+        return self
+
+    role: Literal["setup", "epilogue"] | None = Field(
+        default=None,
+        description=(
+            "Structural role: 'setup' (story opener before any dilemma is introduced), "
+            "'epilogue' (story closer after all dilemmas resolve), or None for "
+            "dilemma-owned beats. Structural beats have zero belongs_to edges and "
+            "zero dilemma_impacts (R-3.14)."
+        ),
+    )
     dilemma_impacts: list[DilemmaImpact] = Field(
         default_factory=list,
         description="How this beat affects dilemmas",
     )
     entities: list[str] = Field(
-        default_factory=list,
-        description="Entity IDs present in this beat",
+        min_length=1,
+        description="Entity IDs present in this beat (non-empty per R-3.13)",
     )
     location: str | None = Field(
         default=None,
@@ -293,7 +354,7 @@ class InitialBeat(BaseModel):
     location_alternatives: list[str] = Field(
         default_factory=list,
         description="Alternate location entities for intersection flexibility. "
-        "Stored as flexibility edges in graph (Doc 3), not as node property.",
+        "Stored as flexibility edges in graph (Story Graph Ontology), not as node property.",
     )
     temporal_hint: TemporalHint | None = Field(
         default=None,
@@ -329,29 +390,19 @@ class DilemmaAnalysis(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _migrate_legacy_fields(cls, data: Any) -> Any:
-        """Migrate deprecated field names and values.
+        """Migrate deprecated field names.
 
         - ``convergence_policy`` → ``dilemma_role`` (field rename)
-        - ``dilemma_role='flavor'`` → ``'soft'`` with ``residue_weight='cosmetic'``
+
+        Note: ``dilemma_role='flavor'`` was previously migrated to ``'soft'``
+        but is now rejected outright (R-7.1). Flavor-level choices are POLISH
+        false-branch concerns, not dilemma roles.
         """
         if not isinstance(data, dict):
             return data
         # Field-name migration: convergence_policy → dilemma_role
         if "convergence_policy" in data and "dilemma_role" not in data:
             data["dilemma_role"] = data.pop("convergence_policy")
-        # Value migration: flavor → soft
-        if data.get("dilemma_role") == "flavor":
-            import warnings
-
-            warnings.warn(
-                "dilemma_role='flavor' is deprecated — use 'soft' with "
-                "residue_weight='cosmetic' instead (see ADR-013/019)",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            data["dilemma_role"] = "soft"
-            if data.get("residue_weight") is None:
-                data["residue_weight"] = "cosmetic"
         return data
 
     ending_salience: EndingSalience = Field(
@@ -403,7 +454,7 @@ class DilemmaAnalysis(BaseModel):
 
 
 class DilemmaRelationship(BaseModel):
-    """Pairwise dilemma ordering relationship from SEED (Document 3, Part 2).
+    """Pairwise dilemma ordering relationship from SEED (Story Graph Ontology, Part 2).
 
     Serialized as Section 8 (after prune). Tells GROW how two dilemmas
     relate temporally: one wrapping the other, running concurrently, or
@@ -503,6 +554,13 @@ class SeedOutput(BaseModel):
     dilemma_relationships: list[DilemmaRelationship] = Field(
         default_factory=list,
         description="Pairwise dilemma ordering relationships (Section 8, post-prune)",
+    )
+    human_approved_paths: bool = Field(
+        default=False,
+        description=(
+            "True when the human has explicitly approved the Path Freeze "
+            "(--no-interactive implies pre-approval at invocation time)."
+        ),
     )
 
 
@@ -629,15 +687,6 @@ class ConsequencesSection(BaseModel):
         return self
 
 
-class BeatsSection(BaseModel):
-    """Wrapper for serializing initial beats separately."""
-
-    initial_beats: list[InitialBeat] = Field(
-        default_factory=list,
-        description="Initial beats for each path",
-    )
-
-
 class PathBeatsSection(BaseModel):
     """Wrapper for serializing beats for a single path.
 
@@ -657,6 +706,57 @@ class PathBeatsSection(BaseModel):
     def _deduplicate_beats(self) -> PathBeatsSection:
         """Drop identical duplicate beats; raise on conflicting ones."""
         self.initial_beats = _deduplicate_and_check(self.initial_beats, "beat_id", "beat_id")
+        return self
+
+
+class SharedBeatsSection(BaseModel):
+    """Wrapper for serializing shared pre-commit beats for a single dilemma.
+
+    Used by per-dilemma shared-beat serialization (Y-shape, issue #1227).
+    One LLM call per dilemma generates the pre-commit beats that both explored
+    paths share.  Each beat MUST have both ``path_id`` and ``also_belongs_to``
+    set to the two explored paths of the dilemma (Story Graph Ontology Part 8).
+
+    A minimum of 1 beat is required so that every dilemma has at least one
+    shared setup scene.  The maximum of 4 prevents over-stuffing the shared
+    section before the Y-fork.
+    """
+
+    initial_beats: list[InitialBeat] = Field(
+        min_length=1,
+        max_length=4,
+        description="1-4 shared pre-commit beats for this dilemma (range set by size preset)",
+    )
+
+    @model_validator(mode="after")
+    def _deduplicate_beats(self) -> SharedBeatsSection:
+        """Drop identical duplicate beats; raise on conflicting ones."""
+        self.initial_beats = _deduplicate_and_check(self.initial_beats, "beat_id", "beat_id")
+        return self
+
+    @model_validator(mode="after")
+    def _require_also_belongs_to(self) -> SharedBeatsSection:
+        """Assert every shared beat has also_belongs_to set (Part 8 guard rail 2).
+
+        Shared pre-commit beats MUST carry dual ``belongs_to`` edges — one to
+        each explored path of their dilemma.  A beat with ``also_belongs_to``
+        unset would silently become a single-membership post-commit beat,
+        violating the Y-shape invariant.
+
+        Story Graph Ontology Part 8 guard rail 2: multi-``belongs_to`` is ONLY
+        valid for pre-commit beats; ``also_belongs_to`` is the field that signals
+        pre-commit membership.
+        """
+        offending = [b.beat_id for b in self.initial_beats if b.also_belongs_to is None]
+        if offending:
+            beat_ids_str = ", ".join(f"`{bid}`" for bid in offending)
+            msg = (
+                "SharedBeatsSection: every shared beat must have `also_belongs_to` set "
+                "(Story Graph Ontology Part 8 guard rail 2 — pre-commit beats carry dual "
+                "belongs_to edges, one per explored path of their dilemma). "
+                f"Beats missing `also_belongs_to`: {beat_ids_str}"
+            )
+            raise ValueError(msg)
         return self
 
 
@@ -743,7 +843,7 @@ def make_constrained_dilemmas_section(
     class ConstrainedDilemmaDecision(DilemmaDecision):
         """DilemmaDecision with enum-constrained IDs."""
 
-        dilemma_id: DilemmaIdEnum = Field(
+        dilemma_id: DilemmaIdEnum = Field(  # pyright: ignore[reportInvalidTypeForm]
             description="Dilemma ID from BRAINSTORM",
         )
         explored: list[AnswerIdEnum] = Field(  # type: ignore[assignment]

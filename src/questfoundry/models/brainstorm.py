@@ -41,12 +41,11 @@ class Entity(BaseModel):
     entity_category: EntityType = Field(
         description="Entity category: character, location, object, or faction"
     )
-    name: str | None = Field(
-        default=None,
+    name: str = Field(
         min_length=1,
         description=(
-            "Canonical display name if it emerges naturally during brainstorming "
-            "(e.g., 'Dr. Aris Chen', 'Maya's Bakery'). SEED will generate if missing."
+            "Canonical display name (e.g., 'Dr. Aris Chen', 'Maya\u2019s Bakery'). "
+            "Required per R-2.1."
         ),
     )
     concept: str = Field(min_length=1, description="One-line essence of the entity")
@@ -113,12 +112,22 @@ class Dilemma(BaseModel):
             "'dilemma::murder_weapon')"
         ),
     )
-    question: str = Field(min_length=1, description="Dramatic question (should end with ?)")
+    question: str = Field(min_length=1, description="Dramatic question (must end with ?)")
+
+    @field_validator("question")
+    @classmethod
+    def validate_question_ends_with_qmark(cls, v: str) -> str:
+        """R-3.1: dilemma question must end with '?'."""
+        if not v.rstrip().endswith("?"):
+            raise ValueError(f"dilemma question must end with '?' (got {v!r}). See R-3.1.")
+        return v
 
     @field_validator("dilemma_id")
     @classmethod
-    def validate_dilemma_id_no_trailing_or(cls, v: str) -> str:
-        """Reject dilemma IDs ending with '_or_' (common LLM generation error)."""
+    def validate_dilemma_id_format(cls, v: str) -> str:
+        """R-3.7: dilemma_id must have 'dilemma::' prefix; reject trailing '_or_'."""
+        if not v.startswith("dilemma::"):
+            raise ValueError(f"dilemma_id '{v}' missing required 'dilemma::' prefix. See R-3.7.")
         raw = v.removeprefix("dilemma::")
         if raw.endswith("_or_") or raw.endswith("_or"):
             msg = (
@@ -135,8 +144,12 @@ class Dilemma(BaseModel):
         description="Exactly two possible answers",
     )
     central_entity_ids: list[str] = Field(
-        default_factory=list,
-        description="Entity IDs central to this dilemma — stored as anchored_to edges, not node properties",
+        min_length=1,
+        description=(
+            "Entity IDs central to this dilemma — stored as anchored_to edges, "
+            "not node properties. MUST contain ≥1 entry per R-3.6 ('every dilemma "
+            "has at least one anchored_to edge to an entity')."
+        ),
     )
     why_it_matters: str = Field(
         min_length=1,
@@ -167,12 +180,44 @@ class Dilemma(BaseModel):
         return self.answers
 
 
+class BrainstormEntitiesOutput(BaseModel):
+    """Pass-1 partial output of the BRAINSTORM serialize phase.
+
+    Pass 1 produces only entities so that pass 2 can be primed with the
+    authoritative `### Valid Entity IDs` section per @prompt-engineer Rule 1
+    (Valid ID Injection). The merged BrainstormOutput is assembled after
+    pass 2 completes.
+    """
+
+    model_config = {"extra": "forbid"}
+
+    entities: list[Entity] = Field(
+        min_length=1,
+        description="Generated story entities (at least 1 required per R-1.1).",
+    )
+
+
+class BrainstormDilemmasOutput(BaseModel):
+    """Pass-2 partial output of the BRAINSTORM serialize phase.
+
+    Pass 2 produces only dilemmas, with `central_entity_ids` constrained to
+    the entity IDs emitted in pass 1.
+    """
+
+    model_config = {"extra": "forbid"}
+
+    dilemmas: list[Dilemma] = Field(
+        min_length=1,
+        description="Generated dramatic dilemmas (at least 1 required per R-1.1).",
+    )
+
+
 class BrainstormOutput(BaseModel):
     """Complete output of the BRAINSTORM stage.
 
-    This structured output is produced by the LLM after the Discuss phase.
-    It contains all generated entities and dilemmas that will be triaged
-    by SEED into committed story structure.
+    This structured output is the merged result of the two-pass serialize
+    phase (entities pass + dilemmas pass). It contains all generated entities
+    and dilemmas that will be triaged by SEED into committed story structure.
 
     Good BRAINSTORM produces 15-25 entities and 4-8 dilemmas.
 
@@ -181,11 +226,13 @@ class BrainstormOutput(BaseModel):
         dilemmas: All generated dramatic dilemmas.
     """
 
+    model_config = {"extra": "forbid"}
+
     entities: list[Entity] = Field(
-        default_factory=list,
-        description="Generated story entities",
+        min_length=1,
+        description="Generated story entities (at least 1 required per R-1.1).",
     )
     dilemmas: list[Dilemma] = Field(
-        default_factory=list,
-        description="Generated dramatic dilemmas",
+        min_length=1,
+        description="Generated dramatic dilemmas (at least 1 required per R-1.1).",
     )

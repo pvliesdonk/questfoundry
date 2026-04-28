@@ -380,6 +380,62 @@ class TestHelperFunctions:
         assert "count" in feedback
         assert "fix" in feedback.lower()
 
+    def test_build_error_feedback_includes_extra_hints(self) -> None:
+        """Caller-supplied repair hints reach the model with all values echoed.
+
+        Regression for the murder1/murder4 SEED halt: the model needs the
+        expected sibling path id template echoed alongside the validation
+        error so small models (qwen3:4b) can recover from constraint-to-value
+        mapping loss across long context. See @prompt-engineer Rule 5.
+        """
+        errors = ["beats.0.also_belongs_to: Field required"]
+        hint = (
+            "ACTION REQUIRED — your previous output was rejected.\n"
+            "  - `path_id` MUST be `path::x__a`\n"
+            "  - `also_belongs_to` MUST be `path::x__b`"
+        )
+
+        feedback = _build_error_feedback(errors, extra_hints=[hint])
+
+        # Validator output still present
+        assert "validation errors" in feedback.lower()
+        assert "beats.0.also_belongs_to" in feedback
+        # Hint preserved verbatim — sibling path id ECHOED (not just named)
+        assert "path::x__b" in feedback
+        assert "ACTION REQUIRED" in feedback
+
+    def test_build_error_feedback_hints_lead_validator_follows(self) -> None:
+        """Hints precede validator errors so small models attend to the directive first.
+
+        @prompt-engineer audit on the murder4 crash: when the actionable
+        directive is buried after a multi-line validator dump, qwen3:4b
+        attends to the validator output (the opening tokens of the
+        message) and out-attends the directive at the end. The fix
+        reverses ordering — hint-block first, validator errors after.
+        """
+        errors = ["beats.0.also_belongs_to: Field required"]
+        hint_marker = "ACTION REQUIRED — your previous output was rejected."
+
+        feedback = _build_error_feedback(errors, extra_hints=[hint_marker])
+
+        # Hint marker appears strictly before the validator error block
+        assert hint_marker in feedback
+        assert "Validation errors that triggered this retry" in feedback
+        assert feedback.index(hint_marker) < feedback.index(
+            "Validation errors that triggered this retry"
+        )
+
+    def test_build_error_feedback_no_hints_uses_legacy_layout(self) -> None:
+        """Without extra_hints, the output uses the original validator-first form."""
+        errors = ["x: required"]
+        without = _build_error_feedback(errors)
+        with_empty = _build_error_feedback(errors, extra_hints=None)
+        with_empty_list = _build_error_feedback(errors, extra_hints=[])
+        assert without == with_empty == with_empty_list
+        # Legacy phrasing preserved when no hints
+        assert "The output had validation errors:" in without
+        assert "Please fix these issues and try again" in without
+
 
 class TestSerializationError:
     """Test SerializationError exception."""
@@ -395,266 +451,6 @@ class TestSerializationError:
         assert error.attempts == 3
         assert error.last_errors == ["error1", "error2"]
         assert "Failed to serialize" in str(error)
-
-
-class TestGetSectionsToRetry:
-    """Test _get_sections_to_retry helper function."""
-
-    def test_maps_entities_field_to_entities_section(self) -> None:
-        """Should map entities.* errors to entities section."""
-        from questfoundry.agents.serialize import _get_sections_to_retry
-        from questfoundry.graph.mutations import SeedValidationError
-
-        errors = [
-            SeedValidationError(
-                field_path="entities.0.entity_id",
-                issue="Entity not found",
-                available=["a", "b"],
-                provided="x",
-            )
-        ]
-
-        sections = _get_sections_to_retry(errors)
-        assert sections == {"entities"}
-
-    def test_maps_paths_field_to_paths_section(self) -> None:
-        """Should map paths.* errors to paths section."""
-        from questfoundry.agents.serialize import _get_sections_to_retry
-        from questfoundry.graph.mutations import SeedValidationError
-
-        errors = [
-            SeedValidationError(
-                field_path="paths.0.dilemma_id",
-                issue="Dilemma not found",
-                available=[],
-                provided="x",
-            )
-        ]
-
-        sections = _get_sections_to_retry(errors)
-        assert sections == {"paths"}
-
-    def test_maps_initial_beats_to_beats_section(self) -> None:
-        """Should map initial_beats.* errors to beats section."""
-        from questfoundry.agents.serialize import _get_sections_to_retry
-        from questfoundry.graph.mutations import SeedValidationError
-
-        errors = [
-            SeedValidationError(
-                field_path="initial_beats.0.entities",
-                issue="Entity not found",
-                available=[],
-                provided="x",
-            )
-        ]
-
-        sections = _get_sections_to_retry(errors)
-        assert sections == {"beats"}
-
-    def test_multiple_errors_from_different_sections(self) -> None:
-        """Should return all affected sections."""
-        from questfoundry.agents.serialize import _get_sections_to_retry
-        from questfoundry.graph.mutations import SeedValidationError
-
-        errors = [
-            SeedValidationError(
-                field_path="paths.0.dilemma_id",
-                issue="Dilemma not found",
-                available=[],
-                provided="x",
-            ),
-            SeedValidationError(
-                field_path="initial_beats.0.entities",
-                issue="Entity not found",
-                available=[],
-                provided="y",
-            ),
-        ]
-
-        sections = _get_sections_to_retry(errors)
-        assert sections == {"paths", "beats"}
-
-
-class TestSerializeSeedIterativelySemanticValidation:
-    """Test semantic validation in serialize_seed_iteratively."""
-
-    @pytest.mark.asyncio
-    async def test_skips_semantic_validation_when_graph_is_none(self) -> None:
-        """Should skip semantic validation when graph is not provided."""
-        from unittest.mock import MagicMock
-
-        from questfoundry.agents.serialize import serialize_seed_iteratively
-
-        # Create mock model that returns valid section data
-        mock_model = MagicMock()
-
-        # We need to mock serialize_to_artifact since serialize_seed_iteratively calls it
-        with patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_serialize:
-            # Set up mock returns for each section
-            mock_serialize.side_effect = [
-                (MagicMock(model_dump=lambda: {"entities": []}), 10),
-                (MagicMock(model_dump=lambda: {"dilemmas": []}), 10),
-                (MagicMock(model_dump=lambda: {"paths": []}), 10),
-                (MagicMock(model_dump=lambda: {"consequences": []}), 10),
-                (MagicMock(model_dump=lambda: {"initial_beats": []}), 10),
-            ]
-
-            with patch("questfoundry.agents.serialize.validate_seed_mutations") as mock_validate:
-                _result, _tokens = await serialize_seed_iteratively(
-                    model=mock_model,
-                    brief="Test brief",
-                    graph=None,  # No graph - should skip semantic validation
-                )
-
-                # Validate should NOT be called when graph is None
-                mock_validate.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_semantic_validation_passes_on_first_try(self) -> None:
-        """Should not retry when semantic validation passes."""
-        from unittest.mock import MagicMock
-
-        from questfoundry.agents.serialize import serialize_seed_iteratively
-
-        mock_model = MagicMock()
-        mock_graph = MagicMock()
-
-        with patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_serialize:
-            mock_serialize.side_effect = [
-                (MagicMock(model_dump=lambda: {"entities": []}), 10),
-                (MagicMock(model_dump=lambda: {"dilemmas": []}), 10),
-                (MagicMock(model_dump=lambda: {"paths": []}), 10),
-                (MagicMock(model_dump=lambda: {"consequences": []}), 10),
-                (MagicMock(model_dump=lambda: {"initial_beats": []}), 10),
-            ]
-
-            with patch("questfoundry.agents.serialize.validate_seed_mutations", return_value=[]):
-                _result, _tokens = await serialize_seed_iteratively(
-                    model=mock_model,
-                    brief="Test brief",
-                    graph=mock_graph,
-                )
-
-                # Should only call serialize 5 times (once per section)
-                assert mock_serialize.call_count == 5
-
-    @pytest.mark.asyncio
-    async def test_semantic_validation_retries_on_error(self) -> None:
-        """Should retry sections with semantic errors."""
-        from unittest.mock import MagicMock
-
-        from questfoundry.agents.serialize import serialize_seed_iteratively
-        from questfoundry.graph.mutations import SeedValidationError
-
-        mock_model = MagicMock()
-        mock_graph = MagicMock()
-
-        call_count = [0]
-
-        def mock_serialize_side_effect(*_args, **_kwargs):
-            call_count[0] += 1
-            # Map call number to section
-            section_map = {
-                1: "entities",
-                2: "dilemmas",
-                3: "paths",
-                4: "consequences",
-                5: "initial_beats",
-                # Retry calls
-                6: "paths",  # Retry paths section
-            }
-            call_num = call_count[0]
-            section = section_map.get(call_num, "unknown")
-
-            return (MagicMock(model_dump=lambda s=section: {s: []}), 10)
-
-        validation_call_count = [0]
-
-        def mock_validate_side_effect(_graph, _output):
-            validation_call_count[0] += 1
-            if validation_call_count[0] == 1:
-                # First validation: return errors for paths section
-                return [
-                    SeedValidationError(
-                        field_path="paths.0.dilemma_id",
-                        issue="Dilemma not found",
-                        available=["valid_dilemma"],
-                        provided="invalid_dilemma",
-                    )
-                ]
-            # Second validation: pass
-            return []
-
-        with (
-            patch(
-                "questfoundry.agents.serialize.serialize_to_artifact",
-                side_effect=mock_serialize_side_effect,
-            ),
-            patch(
-                "questfoundry.agents.serialize.validate_seed_mutations",
-                side_effect=mock_validate_side_effect,
-            ),
-        ):
-            _result, _tokens = await serialize_seed_iteratively(
-                model=mock_model,
-                brief="Test brief",
-                graph=mock_graph,
-            )
-
-            # Should have called serialize 6 times (5 initial + 1 retry for paths)
-            assert call_count[0] == 6
-            # Should have validated twice
-            assert validation_call_count[0] == 2
-
-    @pytest.mark.asyncio
-    async def test_semantic_validation_raises_after_max_retries(self) -> None:
-        """Should raise SeedMutationError after max_semantic_retries."""
-        from unittest.mock import MagicMock
-
-        from questfoundry.agents.serialize import serialize_seed_iteratively
-        from questfoundry.graph.mutations import SeedMutationError, SeedValidationError
-
-        mock_model = MagicMock()
-        mock_graph = MagicMock()
-
-        # Always return errors
-        errors = [
-            SeedValidationError(
-                field_path="paths.0.dilemma_id",
-                issue="Dilemma not found",
-                available=["valid_dilemma"],
-                provided="invalid_dilemma",
-            )
-        ]
-
-        with (
-            patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_serialize,
-            patch("questfoundry.agents.serialize.validate_seed_mutations", return_value=errors),
-        ):
-            # Set up returns for initial sections + retries
-            mock_serialize.return_value = (
-                MagicMock(
-                    model_dump=lambda: {
-                        "entities": [],
-                        "dilemmas": [],
-                        "paths": [],
-                        "consequences": [],
-                        "initial_beats": [],
-                    }
-                ),
-                10,
-            )
-
-            with pytest.raises(SeedMutationError) as exc_info:
-                await serialize_seed_iteratively(
-                    model=mock_model,
-                    brief="Test brief",
-                    graph=mock_graph,
-                    max_semantic_retries=2,
-                )
-
-            assert len(exc_info.value.errors) == 1
-            assert "paths.0.dilemma_id" in exc_info.value.errors[0].field_path
 
 
 class TestSerializeResult:
@@ -1290,6 +1086,85 @@ class TestFormatSectionCorrections:
         assert "BUCKET MISPLACEMENT" in result
 
 
+class TestArcStructureErrorRouting:
+    """Tests for arc_structure error routing and formatting (#1243 fix).
+
+    Arc structure errors (e.g., 'no beat after commit') are about beat ordering,
+    not path descriptions. They must route to the "beats" section so correction
+    feedback reaches the per_path_beats prompt — not the paths prompt.
+    """
+
+    def test_arc_structure_errors_route_to_beats_section(self) -> None:
+        """arc_structure errors with initial_beats prefix must group into 'beats'."""
+        from questfoundry.agents.serialize import _group_errors_by_section
+        from questfoundry.graph.mutations import SeedErrorCategory, SeedValidationError
+
+        errors = [
+            SeedValidationError(
+                field_path="initial_beats.some_path.arc_structure",
+                issue="Path 'some_path' has no beat after its commit beat.",
+                available=[],
+                provided="",
+                category=SeedErrorCategory.COMPLETENESS,
+            ),
+        ]
+        grouped = _group_errors_by_section(errors)
+        assert "beats" in grouped
+        assert "paths" not in grouped
+
+    def test_arc_structure_corrections_are_actionable(self) -> None:
+        """arc_structure corrections must contain the full issue text, not 'missing items'."""
+        from questfoundry.agents.serialize import _format_section_corrections
+        from questfoundry.graph.mutations import SeedErrorCategory, SeedValidationError
+
+        errors = [
+            SeedValidationError(
+                field_path="initial_beats.trust_arc.arc_structure",
+                issue=(
+                    "Path 'trust_arc' has no beat after its commit beat for "
+                    "dilemma 'trust'. Add a beat with effect 'advances' or "
+                    "'complicates' after the commit beat."
+                ),
+                available=[],
+                provided="",
+                category=SeedErrorCategory.COMPLETENESS,
+            ),
+        ]
+        result = _format_section_corrections(errors)
+        assert "ARC FIX" in result
+        assert "trust_arc" in result
+        assert "after the commit beat" in result
+        # Must NOT be formatted as a "missing item"
+        assert "MISSING ITEMS" not in result
+
+    def test_arc_structure_not_misrouted_to_paths(self) -> None:
+        """Errors with initial_beats prefix must not land in the paths section."""
+        from questfoundry.agents.serialize import _group_errors_by_section
+        from questfoundry.graph.mutations import SeedErrorCategory, SeedValidationError
+
+        errors = [
+            SeedValidationError(
+                field_path="initial_beats.foo.arc_structure",
+                issue="No beat after commit.",
+                available=[],
+                provided="",
+                category=SeedErrorCategory.COMPLETENESS,
+            ),
+            SeedValidationError(
+                field_path="paths.bar.answer_id",
+                issue="Path answer mismatch.",
+                available=["x"],
+                provided="y",
+                category=SeedErrorCategory.SEMANTIC,
+            ),
+        ]
+        grouped = _group_errors_by_section(errors)
+        assert "beats" in grouped
+        assert len(grouped["beats"]) == 1
+        assert "paths" in grouped
+        assert len(grouped["paths"]) == 1
+
+
 class TestBeatRetryAndContextRefresh:
     """Tests for beat retry and path context refresh functionality."""
 
@@ -1374,6 +1249,129 @@ class TestBeatRetryAndContextRefresh:
             assert beat_retry_count[0] == 2
             # Should succeed after retry
             assert result.success is True
+
+    @pytest.mark.asyncio
+    async def test_beats_retry_preserves_shared_beats(self) -> None:
+        """Shared pre-commit beats (with also_belongs_to) must survive beats retry.
+
+        Regression for #1246: the retry code replaced collected["initial_beats"]
+        with only per-path beats, dropping all shared beats and destroying the
+        Y-shape dual belongs_to structure.
+        """
+        from questfoundry.agents.serialize import serialize_seed_as_function
+        from questfoundry.graph.mutations import SeedValidationError
+
+        mock_model = MagicMock()
+        mock_graph = MagicMock()
+
+        # Beat error to trigger retry
+        beat_errors = [
+            SeedValidationError(
+                field_path="initial_beats.commit.arc_structure",
+                issue="No beat after commit.",
+                available=[],
+                provided="",
+            )
+        ]
+
+        # Per-path beats returned by retry (no also_belongs_to)
+        retried_per_path_beats = [
+            {
+                "beat_id": "path_beat_01",
+                "summary": "Post-commit beat",
+                "path_id": "path::test_dilemma__alt1",
+                "also_belongs_to": None,
+                "dilemma_impacts": [
+                    {"dilemma_id": "dilemma::test_dilemma", "effect": "commits", "note": "x"}
+                ],
+                "entities": ["char_test"],
+                "location": "location::place",
+            },
+        ]
+
+        retry_count = [0]
+
+        def mock_beats_retry(*_args, **_kwargs):
+            retry_count[0] += 1
+            return (retried_per_path_beats, 20)
+
+        mock_beats = AsyncMock(side_effect=mock_beats_retry)
+
+        validation_call_count = [0]
+
+        def mock_validate(_graph, _output):
+            validation_call_count[0] += 1
+            if validation_call_count[0] == 1:
+                return beat_errors
+            return []
+
+        mock_path = {
+            "path_id": "path::test_dilemma__alt1",
+            "name": "Test Path",
+            "dilemma_id": "dilemma::test_dilemma",
+            "answer_id": "alt1",
+            "unexplored_answer_ids": [],
+            "path_importance": "major",
+            "description": "desc",
+        }
+
+        # Shared beat that must survive the retry
+        shared_beat = {
+            "beat_id": "shared_setup_01",
+            "summary": "Shared beat",
+            "path_id": "path::test_dilemma__alt1",
+            "also_belongs_to": "path::test_dilemma__alt2",
+            "dilemma_impacts": [
+                {"dilemma_id": "dilemma::test_dilemma", "effect": "reveals", "note": "x"}
+            ],
+            "entities": ["char_test"],
+            "location": "location::place",
+        }
+
+        with (
+            patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_serialize,
+            patch(
+                "questfoundry.agents.serialize._serialize_paths_per_dilemma",
+                return_value=([mock_path], 15),
+            ),
+            patch(
+                "questfoundry.agents.serialize._serialize_beats_per_path",
+                new=mock_beats,
+            ),
+            patch(
+                "questfoundry.agents.serialize._serialize_shared_beats_per_dilemma",
+                return_value=([shared_beat], 10),
+            ),
+            patch(
+                "questfoundry.agents.serialize.validate_seed_mutations",
+                side_effect=mock_validate,
+            ),
+        ):
+            mock_serialize.side_effect = [
+                (MagicMock(model_dump=lambda: {"entities": []}), 10),
+                (MagicMock(model_dump=lambda: {"dilemmas": [_MOCK_DILEMMA]}), 10),
+                (MagicMock(model_dump=lambda: {"consequences": []}), 10),
+            ]
+
+            result = await serialize_seed_as_function(
+                model=mock_model,
+                brief="Test brief",
+                graph=mock_graph,
+                max_semantic_retries=2,
+            )
+
+            assert result.success is True
+            # The retry should have run
+            assert retry_count[0] == 2  # initial + retry
+
+            # Critical: shared beat must survive the retry
+            beats = result.artifact.model_dump()["initial_beats"]
+            shared_in_output = [b for b in beats if b.get("also_belongs_to")]
+            assert len(shared_in_output) == 1, (
+                f"Shared beat dropped during retry! "
+                f"Found {len(shared_in_output)} shared beats, expected 1"
+            )
+            assert shared_in_output[0]["beat_id"] == "shared_setup_01"
 
     @pytest.mark.asyncio
     async def test_path_retry_refreshes_context(self) -> None:
@@ -2026,35 +2024,118 @@ class TestSizeProfileInjectedIntoBeatPrompts:
     """Test that size_profile controls beat count range in prompts."""
 
     def test_size_profile_renders_beats_range_in_prompts(self) -> None:
-        """Beat prompts should use size_beats_per_path from size profile."""
+        """Y-shape beat prompts should use the correct size placeholder per prompt type.
+
+        - per_path_beats: uses {size_post_commit_beats_per_path}
+        - shared_beats: uses {size_shared_beats_per_dilemma}
+        """
         from questfoundry.agents.serialize import _load_seed_section_prompts
         from questfoundry.pipeline.size import get_size_profile, size_template_vars
 
         prompts = _load_seed_section_prompts()
 
-        # Verify the template placeholder exists before rendering
-        assert "{size_beats_per_path}" in prompts["beats"]
-        assert "{size_beats_per_path}" in prompts["per_path_beats"]
+        # Verify the template placeholders exist before rendering
+        assert "{size_post_commit_beats_per_path}" in prompts["per_path_beats"]
+        assert "{size_shared_beats_per_dilemma}" in prompts["shared_beats"]
 
-        # Render with 'long' preset (3-5 beats)
+        # Render with 'long' preset
         long_profile = get_size_profile("long")
         size_vars = size_template_vars(long_profile)
-        beats_range = size_vars["size_beats_per_path"]
+        post_range = size_vars["size_post_commit_beats_per_path"]
+        shared_range = size_vars["size_shared_beats_per_dilemma"]
 
-        rendered_beats = prompts["beats"].replace("{size_beats_per_path}", beats_range)
-        rendered_per_path = prompts["per_path_beats"].replace("{size_beats_per_path}", beats_range)
+        rendered_per_path = prompts["per_path_beats"].replace(
+            "{size_post_commit_beats_per_path}", post_range
+        )
+        rendered_shared = prompts["shared_beats"].replace(
+            "{size_shared_beats_per_dilemma}", shared_range
+        )
 
-        assert "3-5" in rendered_beats
-        assert "3-5" in rendered_per_path
-        assert "{size_beats_per_path}" not in rendered_beats
-        assert "{size_beats_per_path}" not in rendered_per_path
+        # per_path_beats uses post_range (2-3 for long)
+        assert "2-3" in rendered_per_path
+        assert "{size_post_commit_beats_per_path}" not in rendered_per_path
+        # shared_beats uses shared_range (1-2 for long)
+        assert "1-2" in rendered_shared
+        assert "{size_shared_beats_per_dilemma}" not in rendered_shared
 
-    def test_default_profile_uses_standard_range(self) -> None:
-        """Without explicit size_profile, standard preset (2-4) is used."""
+    def test_default_profile_uses_medium_range_for_per_path_beats(self) -> None:
+        """Without explicit size_profile, medium preset (2-3) is used for per-path post-commit beats."""
         from questfoundry.pipeline.size import size_template_vars
 
         size_vars = size_template_vars(None)
-        assert size_vars["size_beats_per_path"] == "2-4"
+        assert size_vars["size_post_commit_beats_per_path"] == "2-3"
+
+
+class TestDilemmasPromptStructure:
+    """Structural tests for the dilemmas_prompt section (#1234).
+
+    These tests verify that the hard constraint and sandwich pattern are in place.
+    They cannot test the prompt's effect on a real LLM — that is an integration concern.
+    """
+
+    def _get_dilemmas_prompt(self) -> str:
+        from questfoundry.agents.serialize import _load_seed_section_prompts
+
+        _load_seed_section_prompts.cache_clear()
+        prompts = _load_seed_section_prompts()
+        return prompts["dilemmas"]
+
+    def test_dilemmas_prompt_is_nonempty(self) -> None:
+        """Dilemmas prompt must load and be non-trivially long."""
+        prompt = self._get_dilemmas_prompt()
+        assert isinstance(prompt, str)
+        assert len(prompt) > 200
+
+    def test_hard_constraint_appears_before_default_rule(self) -> None:
+        """MINIMUM BRANCHING REQUIREMENT must appear before DEFAULT ANSWER RULE.
+
+        This enforces the sandwich-top pattern: hard constraints first, not buried.
+        """
+        prompt = self._get_dilemmas_prompt()
+        assert "MINIMUM BRANCHING REQUIREMENT" in prompt
+        assert "DEFAULT ANSWER RULE" in prompt
+        idx_constraint = prompt.index("MINIMUM BRANCHING REQUIREMENT")
+        idx_default = prompt.index("DEFAULT ANSWER RULE")
+        assert idx_constraint < idx_default, (
+            "MINIMUM BRANCHING REQUIREMENT must appear before DEFAULT ANSWER RULE"
+        )
+
+    def test_final_check_section_present(self) -> None:
+        """FINAL CHECK section must be present (sandwich-bottom pattern)."""
+        prompt = self._get_dilemmas_prompt()
+        assert "FINAL CHECK" in prompt
+
+    def test_final_check_appears_after_hard_constraint(self) -> None:
+        """FINAL CHECK must appear after the main hard constraint (sandwich pattern)."""
+        prompt = self._get_dilemmas_prompt()
+        idx_constraint = prompt.index("MINIMUM BRANCHING REQUIREMENT")
+        idx_final = prompt.index("FINAL CHECK")
+        assert idx_final > idx_constraint
+
+    def test_alternative_may_also_be_explored_language_present(self) -> None:
+        """Prompt must clarify that the alternative answer MAY ALSO be in explored.
+
+        This prevents the old framing where 'default in explored' implied
+        'alternative goes in unexplored'.
+        """
+        prompt = self._get_dilemmas_prompt()
+        # The reframed rule says the alternative MAY ALSO be in explored
+        assert "MAY ALSO be in `explored`" in prompt
+
+    def test_no_dramatic_shadows_framing(self) -> None:
+        """Seductive 'dramatic shadows' framing must be removed.
+
+        That phrase biases small models toward leaving answers unexplored.
+        """
+        prompt = self._get_dilemmas_prompt()
+        assert "dramatic shadows" not in prompt
+
+    def test_bad_example_shows_default_only_is_rejected(self) -> None:
+        """BAD example must explicitly link default-only explored to pipeline failure."""
+        prompt = self._get_dilemmas_prompt()
+        # The bad example should show a pattern that maps to rejection
+        assert "BAD" in prompt
+        assert "REJECTED" in prompt or "FAILS" in prompt or "pipeline fails" in prompt
 
 
 class TestBuildPerPathBeatContext:
@@ -2132,3 +2213,826 @@ class TestBuildPerPathBeatContext:
 
         assert "Sibling paths" in result
         assert "path::dilemma_a__answer_y" in result
+
+    # ------------------------------------------------------------------
+    # Tests for shared_beats_by_dilemma injection (criterion 3 of #1227)
+    # ------------------------------------------------------------------
+
+    def _make_shared_beat(
+        self,
+        beat_id: str = "shared_beat_01",
+        summary: str = "The hero enters the tavern.",
+        dilemma_id: str = "dilemma::dilemma_a",
+        path_id: str = "path::dilemma_a__answer_x",
+        also_belongs_to: str = "path::dilemma_a__answer_y",
+        location: str | None = "location::tavern",
+        entities: list[str] | None = None,
+        effect: str = "advances",
+        note: str = "Sets up the dilemma.",
+    ) -> dict:
+        return {
+            "beat_id": beat_id,
+            "summary": summary,
+            "path_id": path_id,
+            "also_belongs_to": also_belongs_to,
+            "location": location,
+            "entities": entities or ["character::hero"],
+            "dilemma_impacts": [{"dilemma_id": dilemma_id, "effect": effect, "note": note}],
+        }
+
+    def test_shared_beats_section_present_when_dilemma_has_shared_beats(self) -> None:
+        """When shared beats exist for the path's dilemma, the section header appears."""
+        from questfoundry.agents.serialize import _build_per_path_beat_context
+
+        path = self._make_path(
+            path_id="path::dilemma_a__answer_x",
+            dilemma_id="dilemma::dilemma_a",
+        )
+        shared_beat = self._make_shared_beat()
+        shared_beats_by_dilemma = {"dilemma_a": [shared_beat]}
+
+        result = _build_per_path_beat_context(
+            path,
+            "entity_ctx",
+            shared_beats_by_dilemma=shared_beats_by_dilemma,
+        )
+
+        assert "Shared pre-commit beats already established" in result
+        assert "shared_beat_01" in result
+        assert "The hero enters the tavern." in result
+
+    def test_shared_beats_includes_location_entities_effect(self) -> None:
+        """Shared beat renders location, entities, and effect/note correctly."""
+        from questfoundry.agents.serialize import _build_per_path_beat_context
+
+        path = self._make_path(
+            path_id="path::dilemma_a__answer_x",
+            dilemma_id="dilemma::dilemma_a",
+        )
+        shared_beat = self._make_shared_beat(
+            location="location::market",
+            entities=["character::alice", "character::bob"],
+            effect="commits",
+            note="Alice commits to trust.",
+        )
+        shared_beats_by_dilemma = {"dilemma_a": [shared_beat]}
+
+        result = _build_per_path_beat_context(
+            path,
+            "entity_ctx",
+            shared_beats_by_dilemma=shared_beats_by_dilemma,
+        )
+
+        assert "location::market" in result
+        assert "`character::alice`" in result
+        assert "`character::bob`" in result
+        assert "commits" in result
+        assert "Alice commits to trust." in result
+
+    def test_shared_beats_section_absent_when_no_shared_beats_for_dilemma(self) -> None:
+        """When shared_beats_by_dilemma exists but has no entry for this dilemma, no header."""
+        from questfoundry.agents.serialize import _build_per_path_beat_context
+
+        path = self._make_path(
+            path_id="path::dilemma_a__answer_x",
+            dilemma_id="dilemma::dilemma_a",
+        )
+        # Different dilemma's shared beats — should NOT appear for dilemma_a
+        shared_beats_by_dilemma = {"dilemma_b": [self._make_shared_beat()]}
+
+        result = _build_per_path_beat_context(
+            path,
+            "entity_ctx",
+            shared_beats_by_dilemma=shared_beats_by_dilemma,
+        )
+
+        assert "Shared pre-commit beats already established" not in result
+
+    def test_no_shared_beats_section_when_dict_is_none(self) -> None:
+        """When shared_beats_by_dilemma is None (not provided), no section header appears."""
+        from questfoundry.agents.serialize import _build_per_path_beat_context
+
+        path = self._make_path()
+
+        result = _build_per_path_beat_context(
+            path,
+            "entity_ctx",
+            shared_beats_by_dilemma=None,
+        )
+
+        assert "Shared pre-commit beats already established" not in result
+
+    def test_shared_beats_no_location_renders_no_location(self) -> None:
+        """Beat with no location renders 'no location' rather than 'None'."""
+        from questfoundry.agents.serialize import _build_per_path_beat_context
+
+        path = self._make_path(
+            path_id="path::dilemma_a__answer_x",
+            dilemma_id="dilemma::dilemma_a",
+        )
+        shared_beat = self._make_shared_beat(location=None)
+        shared_beats_by_dilemma = {"dilemma_a": [shared_beat]}
+
+        result = _build_per_path_beat_context(
+            path,
+            "entity_ctx",
+            shared_beats_by_dilemma=shared_beats_by_dilemma,
+        )
+
+        assert "no location" in result
+        assert "None" not in result
+
+
+# ---------------------------------------------------------------------------
+# Tests for _serialize_shared_beats_for_dilemma and
+# _serialize_shared_beats_per_dilemma (Y-shape shared pre-commit beats, #1227)
+# ---------------------------------------------------------------------------
+
+_MOCK_DILEMMA_BINARY = {
+    "dilemma_id": "dilemma::host_benevolent_or_selfish",
+    "explored": ["benevolent", "selfish"],
+    "unexplored": [],
+    "question": "Is the host truly benevolent or secretly selfish?",
+}
+
+_MOCK_DILEMMA_SINGLE = {
+    "dilemma_id": "dilemma::artifact_safe_or_dangerous",
+    "explored": ["safe"],
+    "unexplored": ["dangerous"],
+    "question": "Is the artifact safe or dangerous?",
+}
+
+_MOCK_PATHS_FOR_BINARY = [
+    {
+        "path_id": "path::host_benevolent_or_selfish__benevolent",
+        "dilemma_id": "dilemma::host_benevolent_or_selfish",
+        "answer_id": "benevolent",
+        "name": "Benevolent Host",
+        "description": "The host turns out to be genuinely kind.",
+        "path_importance": "major",
+        "unexplored_answer_ids": ["selfish"],
+    },
+    {
+        "path_id": "path::host_benevolent_or_selfish__selfish",
+        "dilemma_id": "dilemma::host_benevolent_or_selfish",
+        "answer_id": "selfish",
+        "name": "Selfish Host",
+        "description": "The host is revealed to be manipulative.",
+        "path_importance": "major",
+        "unexplored_answer_ids": ["benevolent"],
+    },
+]
+
+_SHARED_BEAT_PROMPT = "DID={dilemma_id} Q={dilemma_question} PID={path_id} SIB={also_belongs_to}"
+
+
+class TestSerializeSharedBeatsForDilemma:
+    """Unit tests for _serialize_shared_beats_for_dilemma."""
+
+    @pytest.mark.asyncio
+    async def test_skips_dilemma_with_fewer_than_two_explored(self) -> None:
+        """Should return empty list and 0 tokens when explored has fewer than 2 answers."""
+        from questfoundry.agents.serialize import _serialize_shared_beats_for_dilemma
+
+        mock_model = MagicMock()
+
+        beats, tokens = await _serialize_shared_beats_for_dilemma(
+            model=mock_model,
+            dilemma_decision=_MOCK_DILEMMA_SINGLE,
+            paths=[],
+            shared_beats_prompt_template=_SHARED_BEAT_PROMPT,
+            entity_context="",
+            provider_name=None,
+            max_retries=1,
+            callbacks=None,
+        )
+
+        assert beats == []
+        assert tokens == 0
+        mock_model.with_structured_output.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_issues_exactly_one_llm_call(self) -> None:
+        """Should issue exactly one LLM call for a dilemma with two explored answers."""
+        from questfoundry.agents.serialize import _serialize_shared_beats_for_dilemma
+
+        mock_section = MagicMock()
+        mock_section.model_dump.return_value = {"initial_beats": []}
+
+        with patch(
+            "questfoundry.agents.serialize.serialize_to_artifact",
+            new_callable=AsyncMock,
+            return_value=(mock_section, 42),
+        ) as mock_sat:
+            beats, tokens = await _serialize_shared_beats_for_dilemma(
+                model=MagicMock(),
+                dilemma_decision=_MOCK_DILEMMA_BINARY,
+                paths=_MOCK_PATHS_FOR_BINARY,
+                shared_beats_prompt_template=_SHARED_BEAT_PROMPT,
+                entity_context="",
+                provider_name=None,
+                max_retries=1,
+                callbacks=None,
+            )
+
+        assert mock_sat.call_count == 1
+        assert tokens == 42
+        assert beats == []
+
+    @pytest.mark.asyncio
+    async def test_beat_path_ids_returned_from_llm(self) -> None:
+        """Returned beats should carry path_id and also_belongs_to as set by the LLM."""
+        from questfoundry.agents.serialize import _serialize_shared_beats_for_dilemma
+
+        primary = "path::host_benevolent_or_selfish__benevolent"
+        sibling = "path::host_benevolent_or_selfish__selfish"
+        beat = {
+            "beat_id": "shared_setup_01",
+            "summary": "A shared scene",
+            "path_id": primary,
+            "also_belongs_to": sibling,
+            "dilemma_impacts": [],
+            "entities": [],
+            "location": None,
+            "location_alternatives": [],
+            "temporal_hint": None,
+        }
+        mock_section = MagicMock()
+        mock_section.model_dump.return_value = {"initial_beats": [beat]}
+
+        with patch(
+            "questfoundry.agents.serialize.serialize_to_artifact",
+            new_callable=AsyncMock,
+            return_value=(mock_section, 10),
+        ):
+            beats, _tokens = await _serialize_shared_beats_for_dilemma(
+                model=MagicMock(),
+                dilemma_decision=_MOCK_DILEMMA_BINARY,
+                paths=_MOCK_PATHS_FOR_BINARY,
+                shared_beats_prompt_template=_SHARED_BEAT_PROMPT,
+                entity_context="",
+                provider_name=None,
+                max_retries=1,
+                callbacks=None,
+            )
+
+        assert len(beats) == 1
+        assert beats[0]["path_id"] == primary
+        assert beats[0]["also_belongs_to"] == sibling
+
+    @pytest.mark.asyncio
+    async def test_prompt_interpolated_with_dilemma_context(self) -> None:
+        """The prompt template must be formatted with dilemma/path values."""
+        from questfoundry.agents.serialize import _serialize_shared_beats_for_dilemma
+
+        captured: list[str] = []
+
+        async def _capture(**kw: Any) -> tuple[Any, int]:
+            captured.append(kw.get("system_prompt", ""))
+            sec = MagicMock()
+            sec.model_dump.return_value = {"initial_beats": []}
+            return sec, 5
+
+        with patch("questfoundry.agents.serialize.serialize_to_artifact", side_effect=_capture):
+            await _serialize_shared_beats_for_dilemma(
+                model=MagicMock(),
+                dilemma_decision=_MOCK_DILEMMA_BINARY,
+                paths=[],
+                shared_beats_prompt_template=_SHARED_BEAT_PROMPT,
+                entity_context="",
+                provider_name=None,
+                max_retries=1,
+                callbacks=None,
+            )
+
+        assert len(captured) == 1
+        assert "dilemma::host_benevolent_or_selfish" in captured[0]
+        # dilemma_question placeholder must render non-empty so the LLM has
+        # context for the "MEMORIZE THIS" block; an empty Q= means the graph
+        # enrichment failed to reach this call (see fix in #1232).
+        assert "Q=Is the host truly benevolent or secretly selfish?" in captured[0]
+        assert "path::host_benevolent_or_selfish__benevolent" in captured[0]
+        assert "path::host_benevolent_or_selfish__selfish" in captured[0]
+
+    @pytest.mark.asyncio
+    async def test_prompt_dilemma_question_empty_when_not_enriched(self) -> None:
+        """Regression guard: when the dilemma dict lacks 'question', the prompt
+        renders an empty {dilemma_question} placeholder.  This documents the
+        pre-fix behaviour and ensures the enrichment ordering fix in
+        serialize_seed_as_function (enrichment AFTER _early_validate_dilemma_answers)
+        is the only path that guarantees a populated question."""
+        from questfoundry.agents.serialize import _serialize_shared_beats_for_dilemma
+
+        dilemma_no_question = {
+            "dilemma_id": "dilemma::host_benevolent_or_selfish",
+            "explored": ["benevolent", "selfish"],
+            "unexplored": [],
+            # no "question" key — simulates missing enrichment
+        }
+
+        captured: list[str] = []
+
+        async def _capture(**kw: Any) -> tuple[Any, int]:
+            captured.append(kw.get("system_prompt", ""))
+            sec = MagicMock()
+            sec.model_dump.return_value = {"initial_beats": []}
+            return sec, 5
+
+        with patch("questfoundry.agents.serialize.serialize_to_artifact", side_effect=_capture):
+            await _serialize_shared_beats_for_dilemma(
+                model=MagicMock(),
+                dilemma_decision=dilemma_no_question,
+                paths=[],
+                shared_beats_prompt_template=_SHARED_BEAT_PROMPT,
+                entity_context="",
+                provider_name=None,
+                max_retries=1,
+                callbacks=None,
+            )
+
+        assert len(captured) == 1
+        # Without enrichment, the question is empty — Q= renders with no value.
+        assert "Q=" in captured[0]
+        assert "Q=Is the host" not in captured[0], (
+            "question should be absent when dict lacks 'question'; "
+            "enrichment must happen before calling this function"
+        )
+
+
+class TestSerializeSharedBeatsPerDilemma:
+    """Unit tests for _serialize_shared_beats_per_dilemma (concurrency wrapper)."""
+
+    @pytest.mark.asyncio
+    async def test_issues_one_call_per_eligible_dilemma(self) -> None:
+        """Should dispatch one call per dilemma with 2+ explored; skip singles."""
+        from questfoundry.agents.serialize import _serialize_shared_beats_per_dilemma
+
+        dilemma_a = {
+            "dilemma_id": "dilemma::host_benevolent_or_selfish",
+            "explored": ["benevolent", "selfish"],
+            "unexplored": [],
+            "question": "Q?",
+        }
+        dilemma_b = {
+            "dilemma_id": "dilemma::artifact_natural_or_crafted",
+            "explored": ["natural", "crafted"],
+            "unexplored": [],
+            "question": "Q?",
+        }
+        dilemma_single = {
+            "dilemma_id": "dilemma::mood_happy_or_sad",
+            "explored": ["happy"],
+            "unexplored": ["sad"],
+            "question": "Q?",
+        }
+
+        call_count: list[int] = [0]
+
+        async def _mock_single(**_kw: Any) -> tuple[list[Any], int]:
+            call_count[0] += 1
+            return [], 10
+
+        with patch(
+            "questfoundry.agents.serialize._serialize_shared_beats_for_dilemma",
+            side_effect=_mock_single,
+        ):
+            beats, tokens = await _serialize_shared_beats_per_dilemma(
+                model=MagicMock(),
+                dilemma_decisions=[dilemma_a, dilemma_b, dilemma_single],
+                paths=[],
+                shared_beats_prompt_template=_SHARED_BEAT_PROMPT,
+                entity_context="",
+                provider_name=None,
+                max_retries=1,
+                callbacks=None,
+            )
+
+        assert call_count[0] == 2, "only binary dilemmas get a call"
+        assert beats == []
+        assert tokens == 20
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_when_no_eligible_dilemmas(self) -> None:
+        """Should return empty + 0 tokens when no dilemma has 2+ explored."""
+        from questfoundry.agents.serialize import _serialize_shared_beats_per_dilemma
+
+        beats, tokens = await _serialize_shared_beats_per_dilemma(
+            model=MagicMock(),
+            dilemma_decisions=[_MOCK_DILEMMA_SINGLE],
+            paths=[],
+            shared_beats_prompt_template=_SHARED_BEAT_PROMPT,
+            entity_context="",
+            provider_name=None,
+            max_retries=1,
+            callbacks=None,
+        )
+
+        assert beats == []
+        assert tokens == 0
+
+    @pytest.mark.asyncio
+    async def test_beats_from_all_dilemmas_merged(self) -> None:
+        """Beats from multiple dilemmas should all appear in the merged result."""
+        from questfoundry.agents.serialize import _serialize_shared_beats_per_dilemma
+
+        dilemma_a = {
+            "dilemma_id": "dilemma::host_benevolent_or_selfish",
+            "explored": ["benevolent", "selfish"],
+            "unexplored": [],
+            "question": "Q?",
+        }
+        dilemma_b = {
+            "dilemma_id": "dilemma::artifact_natural_or_crafted",
+            "explored": ["natural", "crafted"],
+            "unexplored": [],
+            "question": "Q?",
+        }
+
+        async def _mock_single(**kw: Any) -> tuple[list[Any], int]:
+            did = kw["dilemma_decision"]["dilemma_id"].replace("dilemma::", "")
+            return [{"beat_id": f"shared_{did}_01", "summary": "s"}], 5
+
+        with patch(
+            "questfoundry.agents.serialize._serialize_shared_beats_for_dilemma",
+            side_effect=_mock_single,
+        ):
+            beats, tokens = await _serialize_shared_beats_per_dilemma(
+                model=MagicMock(),
+                dilemma_decisions=[dilemma_a, dilemma_b],
+                paths=[],
+                shared_beats_prompt_template=_SHARED_BEAT_PROMPT,
+                entity_context="",
+                provider_name=None,
+                max_retries=1,
+                callbacks=None,
+            )
+
+        beat_ids = [b["beat_id"] for b in beats]
+        assert "shared_host_benevolent_or_selfish_01" in beat_ids
+        assert "shared_artifact_natural_or_crafted_01" in beat_ids
+        assert tokens == 10
+
+
+class TestSerializeSeedAsFunctionSharedBeats:
+    """Integration-style tests for shared beats wiring in serialize_seed_as_function."""
+
+    @pytest.mark.asyncio
+    async def test_shared_beats_called_before_per_path_beats(self) -> None:
+        """_serialize_shared_beats_per_dilemma must be called before _serialize_beats_per_path."""
+        from questfoundry.agents.serialize import serialize_seed_as_function
+
+        call_order: list[str] = []
+
+        async def _mock_shared(*_args: Any, **_kwargs: Any) -> tuple[list[Any], int]:
+            call_order.append("shared")
+            return [], 5
+
+        async def _mock_per_path(*_args: Any, **_kwargs: Any) -> tuple[list[Any], int]:
+            call_order.append("per_path")
+            return [], 5
+
+        mock_path = {
+            "path_id": "path::host_benevolent_or_selfish__benevolent",
+            "dilemma_id": "dilemma::host_benevolent_or_selfish",
+            "answer_id": "benevolent",
+            "name": "Benevolent",
+            "description": "desc",
+            "path_importance": "major",
+            "unexplored_answer_ids": [],
+        }
+        mock_dilemma_two = {
+            "dilemma_id": "dilemma::host_benevolent_or_selfish",
+            "explored": ["benevolent", "selfish"],
+            "unexplored": [],
+        }
+
+        with (
+            patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_serialize,
+            patch(
+                "questfoundry.agents.serialize._serialize_paths_per_dilemma",
+                return_value=([mock_path], 10),
+            ),
+            patch(
+                "questfoundry.agents.serialize._serialize_shared_beats_per_dilemma",
+                side_effect=_mock_shared,
+            ),
+            patch(
+                "questfoundry.agents.serialize._serialize_beats_per_path",
+                side_effect=_mock_per_path,
+            ),
+        ):
+            mock_serialize.side_effect = [
+                (MagicMock(model_dump=lambda: {"entities": []}), 10),
+                (MagicMock(model_dump=lambda: {"dilemmas": [mock_dilemma_two]}), 10),
+                (MagicMock(model_dump=lambda: {"consequences": []}), 10),
+            ]
+            with patch("questfoundry.agents.serialize.validate_seed_mutations", return_value=[]):
+                await serialize_seed_as_function(
+                    model=MagicMock(),
+                    brief="brief",
+                    graph=MagicMock(),
+                )
+
+        assert call_order == ["shared", "per_path"]
+
+    @pytest.mark.asyncio
+    async def test_shared_beats_appear_before_per_path_beats_in_artifact(self) -> None:
+        """Shared beats must precede per-path beats in the artifact's initial_beats list."""
+        from questfoundry.agents.serialize import serialize_seed_as_function
+
+        shared_beat = {
+            "beat_id": "shared_host_01",
+            "summary": "Shared setup",
+            "path_id": "path::host_benevolent_or_selfish__benevolent",
+            "also_belongs_to": "path::host_benevolent_or_selfish__selfish",
+            "dilemma_impacts": [],
+            "entities": ["char_test"],
+            "location": None,
+            "location_alternatives": [],
+            "temporal_hint": None,
+        }
+        per_path_beat = {
+            "beat_id": "benevolent_beat_01",
+            "summary": "Post-commit beat",
+            "path_id": "path::host_benevolent_or_selfish__benevolent",
+            "also_belongs_to": None,
+            "dilemma_impacts": [],
+            "entities": ["char_test"],
+            "location": None,
+            "location_alternatives": [],
+            "temporal_hint": None,
+        }
+        mock_path = {
+            "path_id": "path::host_benevolent_or_selfish__benevolent",
+            "dilemma_id": "dilemma::host_benevolent_or_selfish",
+            "answer_id": "benevolent",
+            "name": "Benevolent",
+            "description": "desc",
+            "path_importance": "major",
+            "unexplored_answer_ids": [],
+        }
+        mock_dilemma_two = {
+            "dilemma_id": "dilemma::host_benevolent_or_selfish",
+            "explored": ["benevolent", "selfish"],
+            "unexplored": [],
+        }
+
+        with (
+            patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_serialize,
+            patch(
+                "questfoundry.agents.serialize._serialize_paths_per_dilemma",
+                return_value=([mock_path], 10),
+            ),
+            patch(
+                "questfoundry.agents.serialize._serialize_shared_beats_per_dilemma",
+                return_value=([shared_beat], 5),
+            ),
+            patch(
+                "questfoundry.agents.serialize._serialize_beats_per_path",
+                return_value=([per_path_beat], 5),
+            ),
+        ):
+            mock_serialize.side_effect = [
+                (MagicMock(model_dump=lambda: {"entities": []}), 10),
+                (MagicMock(model_dump=lambda: {"dilemmas": [mock_dilemma_two]}), 10),
+                (MagicMock(model_dump=lambda: {"consequences": []}), 10),
+            ]
+            with patch("questfoundry.agents.serialize.validate_seed_mutations", return_value=[]):
+                result = await serialize_seed_as_function(
+                    model=MagicMock(),
+                    brief="brief",
+                    graph=MagicMock(),
+                )
+
+        beats = result.artifact.initial_beats
+        assert len(beats) == 2
+        assert beats[0].beat_id == "shared_host_01", "shared beat must be first"
+        assert beats[1].beat_id == "benevolent_beat_01", "per-path beat must follow"
+
+    @pytest.mark.asyncio
+    async def test_tokens_from_shared_beats_counted_in_total(self) -> None:
+        """Tokens from shared beats must appear in result.tokens_used."""
+        from questfoundry.agents.serialize import serialize_seed_as_function
+
+        mock_path = {
+            "path_id": "path::host_benevolent_or_selfish__benevolent",
+            "dilemma_id": "dilemma::host_benevolent_or_selfish",
+            "answer_id": "benevolent",
+            "name": "Benevolent",
+            "description": "desc",
+            "path_importance": "major",
+            "unexplored_answer_ids": [],
+        }
+        mock_dilemma_two = {
+            "dilemma_id": "dilemma::host_benevolent_or_selfish",
+            "explored": ["benevolent", "selfish"],
+            "unexplored": [],
+        }
+
+        with (
+            patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_serialize,
+            patch(
+                "questfoundry.agents.serialize._serialize_paths_per_dilemma",
+                return_value=([mock_path], 15),
+            ),
+            patch(
+                "questfoundry.agents.serialize._serialize_shared_beats_per_dilemma",
+                return_value=([], 77),
+            ),
+            patch(
+                "questfoundry.agents.serialize._serialize_beats_per_path",
+                return_value=([], 20),
+            ),
+        ):
+            mock_serialize.side_effect = [
+                (MagicMock(model_dump=lambda: {"entities": []}), 10),
+                (MagicMock(model_dump=lambda: {"dilemmas": [mock_dilemma_two]}), 10),
+                (MagicMock(model_dump=lambda: {"consequences": []}), 10),
+            ]
+            with patch("questfoundry.agents.serialize.validate_seed_mutations", return_value=[]):
+                result = await serialize_seed_as_function(
+                    model=MagicMock(),
+                    brief="brief",
+                    graph=MagicMock(),
+                )
+
+        # 3 sections * 10 + 15 paths + 77 shared + 20 per_path = 142
+        assert result.tokens_used == 142
+
+
+class TestBuildSharedBeatContext:
+    """Unit tests for _build_shared_beat_context."""
+
+    def test_includes_dilemma_id_and_question(self) -> None:
+        from questfoundry.agents.serialize import _build_shared_beat_context
+
+        result = _build_shared_beat_context(_MOCK_DILEMMA_BINARY, [], "entities here")
+
+        assert "dilemma::host_benevolent_or_selfish" in result
+        assert "Is the host truly benevolent or secretly selfish?" in result
+
+    def test_includes_both_explored_path_ids(self) -> None:
+        from questfoundry.agents.serialize import _build_shared_beat_context
+
+        result = _build_shared_beat_context(_MOCK_DILEMMA_BINARY, [], "")
+
+        assert "path::host_benevolent_or_selfish__benevolent" in result
+        assert "path::host_benevolent_or_selfish__selfish" in result
+
+    def test_includes_path_names_when_paths_provided(self) -> None:
+        from questfoundry.agents.serialize import _build_shared_beat_context
+
+        result = _build_shared_beat_context(_MOCK_DILEMMA_BINARY, _MOCK_PATHS_FOR_BINARY, "")
+
+        assert "Benevolent Host" in result
+        assert "Selfish Host" in result
+
+    def test_includes_entity_context(self) -> None:
+        from questfoundry.agents.serialize import _build_shared_beat_context
+
+        result = _build_shared_beat_context(
+            _MOCK_DILEMMA_BINARY, [], "## Entity IDs\n- character::butler"
+        )
+
+        assert "character::butler" in result
+
+
+# ---------------------------------------------------------------------------
+# Task 13 (#1286): R-7.5 convergence-analysis LLM failure logged at WARNING
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_convergence_analysis_llm_failure_logs_warning_not_silent(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """R-7.5: on LLM failure, defaults may be applied but the failure MUST
+    be logged at WARNING with affected dilemma IDs. Silent default application
+    is forbidden."""
+    import logging
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    from questfoundry.agents.serialize import serialize_convergence_analysis
+    from questfoundry.models.seed import DilemmaDecision, SeedOutput
+
+    seed_artifact = SeedOutput(
+        entities=[],
+        dilemmas=[
+            DilemmaDecision(dilemma_id="mentor_trust", explored=["yes"], unexplored=["no"]),
+            DilemmaDecision(dilemma_id="archive_choice", explored=["open"], unexplored=["close"]),
+        ],
+        paths=[],
+        initial_beats=[],
+    )
+
+    mock_model = MagicMock()
+    mock_graph = MagicMock()
+
+    with (
+        caplog.at_level(logging.WARNING),
+        patch(
+            "questfoundry.agents.serialize.serialize_to_artifact",
+            new=AsyncMock(side_effect=RuntimeError("LLM unavailable")),
+        ),
+        patch(
+            "questfoundry.graph.context.format_dilemma_analysis_context",
+            return_value="ctx",
+        ),
+        patch(
+            "questfoundry.agents.serialize._load_seed_section_prompts",
+            return_value={"dilemma_analyses": "{dilemma_context}"},
+        ),
+    ):
+        analyses, tokens, _calls = await serialize_convergence_analysis(
+            model=mock_model,
+            seed_artifact=seed_artifact,
+            graph=mock_graph,
+        )
+
+    # Must return empty list on failure (soft failure).
+    assert analyses == []
+    assert tokens == 0
+
+    # Must log at WARNING — check for the event name and dilemma IDs.
+    warning_messages = [r.message for r in caplog.records if r.levelno >= logging.WARNING]
+    assert any("seed_analysis_defaulted" in msg for msg in warning_messages), (
+        "Expected 'seed_analysis_defaulted' WARNING event on LLM failure; "
+        f"got: {warning_messages!r}"
+    )
+    # The warning must include the affected dilemma IDs so operators know what was skipped.
+    all_warnings = " ".join(warning_messages)
+    assert "mentor_trust" in all_warnings or "archive_choice" in all_warnings, (
+        f"WARNING must include affected dilemma IDs (R-7.5); got: {warning_messages!r}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Task 14 (#1287): R-8.5 dilemma-ordering LLM failure logged at WARNING
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_dilemma_ordering_llm_failure_logs_warning_not_silent(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """R-8.5: on LLM failure, zero relationships may be produced but the
+    failure MUST be logged at WARNING with the affected dilemma pair count
+    or identifiers. Silent empty-list return is forbidden."""
+    import logging
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    from questfoundry.agents.serialize import serialize_dilemma_relationships
+    from questfoundry.models.seed import DilemmaDecision, SeedOutput
+
+    pruned_artifact = SeedOutput(
+        entities=[],
+        dilemmas=[
+            DilemmaDecision(dilemma_id="mentor_trust", explored=["yes"], unexplored=["no"]),
+            DilemmaDecision(dilemma_id="archive_choice", explored=["open"], unexplored=["close"]),
+        ],
+        paths=[],
+        initial_beats=[],
+    )
+
+    mock_model = MagicMock()
+    mock_graph = MagicMock()
+
+    with (
+        caplog.at_level(logging.WARNING),
+        patch(
+            "questfoundry.agents.serialize.serialize_to_artifact",
+            new=AsyncMock(side_effect=RuntimeError("LLM unavailable")),
+        ),
+        patch(
+            "questfoundry.graph.context.format_interaction_candidates_context",
+            return_value="## Candidate pairs\n- mentor_trust x archive_choice",
+        ),
+        patch(
+            "questfoundry.agents.serialize._load_seed_section_prompts",
+            return_value={"dilemma_relationships": "{candidate_pairs_context}"},
+        ),
+    ):
+        relationships, tokens, _calls = await serialize_dilemma_relationships(
+            model=mock_model,
+            pruned_artifact=pruned_artifact,
+            graph=mock_graph,
+        )
+
+    # Must return empty list on failure (soft failure).
+    assert relationships == []
+    assert tokens == 0
+
+    # Must log at WARNING — check for the event name and dilemma information.
+    warning_messages = [r.message for r in caplog.records if r.levelno >= logging.WARNING]
+    assert any("seed_analysis_defaulted" in msg for msg in warning_messages), (
+        "Expected 'seed_analysis_defaulted' WARNING event on LLM failure; "
+        f"got: {warning_messages!r}"
+    )
+    # The warning must include dilemma pair count or identifiers (R-8.5).
+    all_warnings = " ".join(warning_messages)
+    assert (
+        "mentor_trust" in all_warnings
+        or "archive_choice" in all_warnings
+        or "dilemma_pair" in all_warnings
+        or "dilemma_count" in all_warnings
+    ), f"WARNING must include affected dilemma pair info (R-8.5); got: {warning_messages!r}"

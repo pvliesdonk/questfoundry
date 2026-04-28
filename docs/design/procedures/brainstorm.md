@@ -1,475 +1,371 @@
-# BRAINSTORM Procedure
+# BRAINSTORM — Build the cast and dilemmas
 
-> For the narrative description of the BRAINSTORM stage, see [Document 1, Part 1](../how-branching-stories-work.md). This document provides the detailed algorithm specification.
+## Overview
 
-## Summary
+BRAINSTORM is the expansive creative stage: it turns an approved Vision into raw story material — the cast of Entity nodes and the set of binary Dilemma nodes that will drive the story's branching. It is deliberately generative (more material than SEED will keep) and does not produce paths, beats, consequences, or any structural machinery — that begins in SEED.
 
-**Purpose:** Expansive exploration of story possibilities. Generate raw creative material that SEED will triage into committed structure.
+## Stage Input Contract
 
-**Input artifacts:**
-- `01-dream.yaml` (approved vision)
+*Must match DREAM §Stage Output Contract exactly.*
 
-**Output artifacts:**
-- `02-brainstorm.yaml` (entities, dilemmas with answers)
-
-**Mode:** LLM-heavy with human guidance. Discuss → Summarize → Serialize.
-
----
-
-## Prerequisites
-
-### Required Input Files
-
-| File | Required State |
-|------|----------------|
-| `01-dream.yaml` | Complete (approved vision) |
-
-### Required Human Decisions from Prior Stages
-
-- DREAM vision approved (genre, tone, themes, constraints)
-
-### Knowledge Context
-
-Inject for LLM:
-- Full DREAM vision
-- Genre conventions (if relevant corpus documents exist)
-- Story length target (from DREAM)
+1. Exactly one Vision node exists in the graph.
+2. The Vision node has non-empty values for: `genre`, `tone`, `themes`, `audience`, `scope`.
+3. The Vision node has no incoming or outgoing edges.
+4. `pov_style`, if present, is one of `first_person`, `second_person`, `third_person_limited`, `third_person_omniscient`; absent or null if deferred to FILL.
+5. No other node types exist in the graph.
+6. Human approval of DREAM is recorded.
 
 ---
 
-## Core Concepts
+## Phase 1: Discussion
 
-### Expansive Before Selective
+**Purpose:** Generate raw creative material through free-form dialogue seeded by the Vision. Nothing is committed to the graph yet.
 
-BRAINSTORM is deliberately expansive. The goal is to generate more material than needed—SEED will triage it. Don't self-censor during BRAINSTORM.
+### Input Contract
 
-**Good BRAINSTORM:** 20 entities, 8 dilemmas, rich notes
-**Bad BRAINSTORM:** 5 entities, 2 dilemmas, minimal notes
+1. Stage Input Contract satisfied.
+2. Vision fields are available as conversational context.
 
-More raw material gives SEED more options.
+### Operations
 
-### Discuss → Summarize → Serialize
+#### Open Exploration
 
-BRAINSTORM follows a three-phase pattern:
+**What:** The LLM and the human riff on story possibilities — characters, locations, dramatic questions, atmosphere — informed by the Vision. The output is prose discussion notes. High temperature; embrace variety. The expansive mandate is the point: more material here gives SEED more to triage from.
 
-1. **Discuss (High Temperature):** Free-form creative exploration. Riff on possibilities. No structure yet.
+**Rules:**
 
-2. **Summarize (Consolidate):** Extract structured elements from discussion. Identify entities, dilemmas, relationships.
+R-1.1. Discussion aims for abundance. Err toward inclusion — entity and dilemma targets come from the active Size Preset (one of `micro`, `short`, `medium`, `long`), with ranges from 5–10 entities and 2–3 dilemmas (`micro`) up to 20–35 entities and 5–10 dilemmas (`long`); intermediate `short` and `medium` values come from the same preset configuration. SEED will cut; do not pre-triage here.
 
-3. **Serialize (Low Temperature):** Convert to YAML. No creativity—just formatting.
+R-1.2. Discussion writes nothing to the graph. It produces prose notes only. The graph remains empty of BRAINSTORM artifacts through the end of this phase.
 
-This separation keeps creative exploration separate from structural commitment.
+R-1.3. Every proposal must be compatible with the Vision. Genre, tone, themes, and content_notes constrain discussion. A proposal that contradicts the Vision must be flagged and rejected — not silently softened.
 
-### Binary Dilemmas
+R-1.4. The LLM is generative; the human guides. The human redirects unproductive paths and encourages promising ones. Filtering for quality is SEED's job, not the human's here.
 
-Every dilemma has exactly two answers. This keeps contrasts crisp and decisions meaningful.
+**Violations:**
 
-**Good dilemma:**
-- Question: "Can the mentor be trusted?"
-- Answer A: "Mentor is genuine protector" (canonical)
-- Answer B: "Mentor is manipulating Kay" (non-canonical)
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| Discussion ends below the size preset's `entities_min` / `dilemmas_min` | Pre-triaging — self-censored during BRAINSTORM | R-1.1 |
+| Entity node exists in the graph after Phase 1 | Graph write happened during discussion | R-1.2 |
+| Discussion proposes a slapstick comic-relief character in a gritty noir | Vision's tone not enforced; contradiction accepted | R-1.3 |
 
-**Bad dilemma:**
-- Question: "What is the mentor's nature?"
-- Answer A: "Protector"
-- Answer B: "Manipulator"
-- Answer C: "Well-meaning but flawed"
-- Answer D: "Secretly the antagonist"
+### Output Contract
 
-For nuanced situations, use multiple binary dilemmas:
-- Dilemma 1: Mentor alignment (benevolent vs selfish)
-- Dilemma 2: Mentor competence (capable vs flawed)
-
-This yields four combinations while each dilemma remains binary.
-
-### Creative Freedom (No Anchors)
-
-BRAINSTORM generates freely. Entities, locations, and events emerge naturally from creative exploration—don't constrain them for later stage convenience.
-
-Location flexibility for intersection formation is handled in SEED, not here. BRAINSTORM's job is creative richness, not structural optimization.
+1. Prose discussion notes (in-conversation or curated) sufficient for entity and dilemma extraction.
+2. No graph nodes exist yet.
 
 ---
 
-## Algorithm Phases
+## Phase 2: Entity Extraction
 
-### Phase 1: Discussion
+**Purpose:** Distill the discussion notes into Entity nodes — the locked cast that every downstream stage references.
 
-**Purpose:** Free-form creative exploration seeded by DREAM vision.
+### Input Contract
 
-**LLM Involvement:** Discuss (high temperature)
+1. Phase 1 Output Contract satisfied.
+2. Discussion notes are available.
 
-This phase is conversational. LLM and human riff on the story possibilities.
+### Operations
 
-**Discussion prompts:**
+#### Entity Proposal
 
-*Characters:*
-- "Who lives in this world? What makes them interesting?"
-- "Who has something to lose? Who has power?"
-- "What relationships exist? Who's in conflict with whom?"
+**What:** The LLM reviews the discussion and proposes an entity list covering every significant character, location, object, and faction. Each entity gets a concept (one-line essence) and notes (freeform context from discussion). The human reviews and edits.
 
-*Dramatic questions:*
-- "What are the big questions this story asks?"
-- "What could go wrong? What's at stake?"
-- "What secrets might exist? What truths could be hidden?"
+**Rules:**
 
-*Setting:*
-- "What locations are central to this story?"
-- "What's the texture of this world? What makes it feel real?"
-- "What events or moments feel essential?"
+R-2.1. Every Entity node has non-empty `name`, `category`, and `concept`.
 
-**LLM role:** Generative and exploratory. Propose ideas, build on human input, suggest connections. High temperature—embrace variety.
+R-2.2. `category` is one of: `character`, `location`, `object`, `faction`. No other values are permitted.
 
-**Human role:** Guide, prompt, react. Encourage promising directions, redirect unproductive ones. Don't filter too heavily—save that for SEED.
+R-2.3. Entity IDs are scoped by category: `character::mentor`, `location::archive`, `object::cipher_device`. `character::mentor` and `location::mentor` are distinct nodes because the category is part of identity.
 
-**Output:** Discussion notes (can be raw transcript or human-curated highlights)
+R-2.4. At least two distinct `location`-category entities are created. Scene variety and intersection formation downstream require multiple locations — a single-location story cannot support them.
 
-**Human Gate:** Light touch. The gate is "enough raw material generated" not "quality approved."
+R-2.5. The LLM captures what was discussed; it does not invent entities to fill perceived gaps. Missing entities must come from the human, either by surfacing them in discussion first or by adding them explicitly.
+
+**Violations:**
+
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| Entity has `category: "ally"` | Category outside the permitted set — "ally" is a role, not a category | R-2.2 |
+| Entity has empty `concept` | Required field missing — extraction captured only the name | R-2.1 |
+| BRAINSTORM produces only one location entity | Insufficient location variety for scene construction downstream | R-2.4 |
+| Phase 2 adds an entity that was never mentioned in discussion | LLM invented a character to fill a gap | R-2.5 |
+| `archive` exists both as character and location | Category-as-namespace not used; ambiguous ID | R-2.3 |
+
+### Output Contract
+
+1. One or more Entity nodes exist.
+2. Each Entity has non-empty `name`, `category`, `concept`.
+3. `category` ∈ {`character`, `location`, `object`, `faction`} for every Entity.
+4. At least two distinct `location`-category entities exist.
+5. Entity IDs are namespaced by category.
+6. No Dilemma, Answer, Path, Beat, Consequence, or State Flag nodes exist yet.
 
 ---
+
+## Phase 3: Dilemma Formation
+
+**Purpose:** Frame the story's dramatic questions as binary Dilemma nodes, each with two Answer nodes (one canonical) and anchors to the entities they involve. This is the last phase of BRAINSTORM; its Output Contract is the stage's Output Contract.
+
+### Input Contract
+
+1. Phase 2 Output Contract satisfied.
+2. Discussion notes remain available (for `why_it_matters` and answer descriptions).
+
+### Operations
+
+#### Dilemma Proposal
+
+**What:** The LLM extracts dramatic questions from the discussion and frames each as a binary dilemma with exactly two answers, a `why_it_matters` statement, and anchors to relevant entities. The human reviews and approves.
+
+**Rules:**
+
+R-3.1. Every Dilemma node has a non-empty `question` and a non-empty `why_it_matters`. The question ends with `?`. The `why_it_matters` is the seed of residue — what lasting mark the choice leaves. → how-branching-stories-work.md §Common Language (Residue).
+
+R-3.2. Every Dilemma has exactly two `has_answer` edges to two distinct Answer nodes. Three-way or four-way dilemmas are forbidden — for nuanced situations, split into multiple binary dilemmas. → how-branching-stories-work.md §The Dilemmas.
+
+R-3.3. Both answers must be genuinely different and both must be compelling. Shades of gray ("protector" vs "well-meaning-but-flawed") and degenerate contrasts ("save now" vs "save later") are violations — they produce weak drama.
+
+R-3.4. Exactly one Answer per Dilemma has `is_canonical: true`. The canonical answer is operationally privileged (FILL writes its arc first) but not narratively superior — see → ontology §Part 1: Answer.
+
+R-3.5. Every Answer has a non-empty `description` stating what this response means narratively.
+
+R-3.6. Every Dilemma has at least one `anchored_to` edge to an Entity. A dilemma anchored to nothing is meaningless — it has no grip on the world. (Entity triage — cutting entities — is SEED's concern, not BRAINSTORM's.)
+
+R-3.7. Dilemma IDs use the `dilemma::` prefix (e.g., `dilemma::mentor_trust`). Answer IDs are unprefixed and scoped within their parent Dilemma (e.g., `mentor_protector`). Answer ID uniqueness is enforced per Dilemma (the pair `<dilemma_id, answer_id>` is globally unique), not globally — two Dilemmas may each have an answer named `benevolent` without collision.
+
+R-3.8. No Path, Beat, Consequence, State Flag, Passage, or Intersection Group nodes are created. Those belong to later stages.
+
+**Violations:**
+
+| Symptom | Root cause | Broken rule |
+|---------|-----------|-------------|
+| Dilemma has three `has_answer` edges | Three-way dilemma — must be split into binary dilemmas | R-3.2 |
+| Both answers: "Save the village now" / "Save the village later" | Degenerate contrast — both do the same thing, just differently timed | R-3.3 |
+| Dilemma has `is_canonical: true` on both answers | Exactly one canonical per dilemma | R-3.4 |
+| Dilemma has no `is_canonical: true` on either answer | Canonical marking missing | R-3.4 |
+| Dilemma has no `anchored_to` edges | Dilemma has no grip on the world — nothing for SEED to scaffold around | R-3.6 |
+| Dilemma ID is `mentor_trust` (no prefix) | Missing `dilemma::` namespace | R-3.7 |
+| Dilemma has empty `why_it_matters` | Required field missing — no residue seed | R-3.1 |
+| Path node exists in the graph after BRAINSTORM | Path creation is SEED's responsibility | R-3.8 |
+
+### Output Contract
+
+1. One or more Dilemma nodes exist.
+2. Each Dilemma has non-empty `question` (ending `?`) and `why_it_matters`.
+3. Each Dilemma has exactly two `has_answer` edges to distinct Answer nodes.
+4. Each Answer has a non-empty `description`.
+5. Exactly one Answer per Dilemma has `is_canonical: true`.
+6. Each Dilemma has at least one `anchored_to` edge to an Entity.
+7. Dilemma IDs use the `dilemma::` prefix.
+8. No Path, Beat, Consequence, State Flag, Passage, or Intersection Group nodes exist.
+
+---
+
+## Stage Output Contract
+
+1. One or more Entity nodes exist, each with non-empty `name`, `category`, `concept`; `category` ∈ {`character`, `location`, `object`, `faction`}.
+2. At least two distinct `location`-category entities exist.
+3. Entity IDs are namespaced by category (e.g., `character::mentor`).
+4. One or more Dilemma nodes exist, each with non-empty `question` and `why_it_matters`.
+5. Each Dilemma has exactly two `has_answer` edges to two distinct Answer nodes.
+6. Each Answer has a non-empty `description`.
+7. Exactly one Answer per Dilemma has `is_canonical: true`.
+8. Each Dilemma has at least one `anchored_to` edge to an Entity.
+9. Dilemma IDs use the `dilemma::` prefix.
+10. No Path, Beat, Consequence, State Flag, Passage, or Intersection Group nodes exist.
+11. Vision node is unchanged from DREAM's output.
+
+## Implementation Constraints
+
+- **Context Enrichment:** The LLM call that proposes dilemmas must receive the full Vision node (genre, subgenre, tone, themes, audience, scope, content_notes) AND the full Entity list (names, categories, concepts, notes) — not just IDs or a genre string. Bare listings produce generic dilemmas. → CLAUDE.md §Context Enrichment Principle (CRITICAL)
+- **Prompt Context Formatting:** Entity and dilemma lists injected into prompts must be formatted as human-readable text (joined strings, bullet points), never as Python list or dict repr. → CLAUDE.md §Prompt Context Formatting (CRITICAL)
+- **Valid ID Injection:** Any LLM call that references entity IDs (e.g., for `anchored_to` edges) must receive an explicit `### Valid IDs` section listing every Entity ID created in Phase 2. → CLAUDE.md §Valid ID Injection Principle
+- **Small Model Prompt Bias:** BRAINSTORM runs on small models during local dev. Fix the prompt before blaming the model for weak dilemmas. → CLAUDE.md §Small Model Prompt Bias (CRITICAL)
+- **Silent Degradation:** Validation of the binary-dilemma invariant (R-3.2), canonical marking (R-3.4), and anchored-to requirement (R-3.6) must produce hard errors, not fallbacks. A dilemma with three answers, two canonical markings, or zero anchors must halt BRAINSTORM — never silently serialize a partial result. → CLAUDE.md §Anti-Patterns to Avoid (Silent degradation of story structure constraints)
+
+## Cross-References
+
+- Cast and Dilemma narrative concepts → how-branching-stories-work.md §The Raw Material (BRAINSTORM)
+- Entity node schema → story-graph-ontology.md Part 1: Entity
+- Dilemma, Answer node schemas → story-graph-ontology.md Part 1: Dilemma, Answer
+- `has_answer`, `anchored_to` edges → story-graph-ontology.md Part 9: Edge Types
+- Canonical answer operational privilege → story-graph-ontology.md Part 1: Answer
+- Binary dilemma rationale → how-branching-stories-work.md §The Dilemmas
+- Previous stage → dream.md §Stage Output Contract
+- Next stage → seed.md §Stage Input Contract
+
+## Rule Index
+
+R-1.1: Discussion aims for abundance; do not pre-triage.
+R-1.2: Discussion writes nothing to the graph.
+R-1.3: Proposals must be compatible with the Vision; contradictions are flagged and rejected.
+R-1.4: LLM is generative; human guides but does not over-filter in Phase 1.
+R-2.1: Every Entity has non-empty `name`, `category`, `concept`.
+R-2.2: `category` ∈ {character, location, object, faction}.
+R-2.3: Entity IDs are namespaced by category.
+R-2.4: At least two distinct `location` entities exist.
+R-2.5: LLM captures what was discussed; no invention.
+R-3.1: Every Dilemma has non-empty `question` (ending `?`) and `why_it_matters`.
+R-3.2: Every Dilemma has exactly two `has_answer` edges.
+R-3.3: Both answers are genuinely different and both compelling.
+R-3.4: Exactly one Answer per Dilemma has `is_canonical: true`.
+R-3.5: Every Answer has a non-empty `description`.
+R-3.6: Every Dilemma has at least one `anchored_to` edge.
+R-3.7: Dilemma IDs use the `dilemma::` prefix; Answer IDs are unprefixed and scoped within their Dilemma.
+R-3.8: No Path / Beat / Consequence / State Flag / Passage / Intersection Group nodes exist after BRAINSTORM.
+
+---
+
+## Human Gates
+
+| Phase | Gate | Decision |
+|-------|------|----------|
+| 1 | Discussion | Light — "enough raw material?" |
+| 2 | Entity Extraction | Required — review entity list |
+| 3 | Dilemma Formation | Required — review dilemmas, confirm canonical markings |
+
+## Iteration Control
+
+**Forward flow:** Discussion → Entity Extraction → Dilemma Formation.
+
+**Backward loops:**
+
+| From | To | Trigger |
+|------|-----|---------|
+| Entity Extraction | Discussion | Major gaps in entity coverage |
+| Dilemma Formation | Discussion | No clear dramatic questions emerged |
+| Dilemma Formation | Entity Extraction | Dilemma involves an entity not in the list |
+| Any phase | DREAM | Material doesn't fit DREAM vision (genre/tone/constraint conflict) |
+
+**Maximum iterations:**
+
+- Discussion: no fixed limit; human decides when "enough."
+- Entity Extraction: at most 2 revision passes.
+- Dilemma Formation: at most 2 revision passes.
+
+## Failure Modes
+
+| Phase | Failure | Detection | Recovery |
+|-------|---------|-----------|----------|
+| 1. Discussion | Conversation stalls | Human judgment | New prompts, different angle |
+| 1. Discussion | Ideas too generic | Human judgment | Push for specificity; add Vision constraints |
+| 2. Entity Extraction | Missing important entity | Human review | Add manually, note source in notes field |
+| 2. Entity Extraction | Too many entities | Human review | Leave them; SEED will cut |
+| 3. Dilemma Formation | Non-binary dilemma proposed | Validation (R-3.2) | Split into multiple binary dilemmas |
+| 3. Dilemma Formation | Weak contrast between answers | Human review (R-3.3) | Sharpen answers or cut dilemma |
+| 3. Dilemma Formation | No canonical obvious | Human review | Human picks canonical — "narratively equal, operationally privileged" |
+
+**Escalation to DREAM.** Return to DREAM if brainstormed content cannot fit the Vision — genre or tone mismatch emerges, or Vision's content_notes prove too restrictive for any interesting dilemma.
+
+## Context Management
+
+**Standard (≥128k context):** Include full discussion notes in context for Phases 2 and 3. No windowing.
+
+**Constrained (~32k context):** Human curates discussion highlights; pass highlights (not full transcript) to Phase 2 and Phase 3. Trust the curation to preserve material.
+
+## Worked Example
+
+### Input (DREAM output)
+
+```yaml
+vision:
+  genre: "dark fantasy"
+  subgenre: "mystery"
+  tone:
+    - "atmospheric"
+    - "morally ambiguous"
+  themes: ["forbidden knowledge", "trust", "corruption"]
+  audience: "adult readers of literary speculative fiction"
+  scope: short
+  content_notes: ["single protagonist POV", "no explicit magic system", "no graphic violence"]
+  pov_style: third_person_limited
+```
+
+### Phase 1: Discussion (excerpts)
+
+**LLM:** "A dark fantasy mystery with forbidden knowledge — what if the protagonist is an archivist? Someone whose job is to preserve knowledge, now facing knowledge that shouldn't be preserved?"
+
+**Human:** "I like that. What draws them in?"
+
+**LLM:** "A mentor figure — trustworthy on the surface but possibly with their own agenda. The classic 'protecting me or using me?' dilemma."
+
+**Human:** "Yes. And the archive itself should feel alive, dangerous. Layered."
+
+*(Discussion continues, covering characters, locations, artifacts, relationships.)*
 
 ### Phase 2: Entity Extraction
 
-**Purpose:** Distill entities from discussion notes.
-
-**LLM Involvement:** Summarize
-
-LLM reviews discussion and proposes entity list:
-
 ```yaml
 entities:
-  - id: kay
-    type: character
+  - id: character::kay
+    name: "Kay"
+    category: character
     concept: "Young archivist drawn into conspiracy"
     notes: "Curious, principled, out of her depth. Family connection to archive."
 
-  - id: mentor
-    type: character
+  - id: character::mentor
+    name: "The Mentor"
+    category: character
     concept: "Senior archivist with hidden agenda"
-    notes: "Ambiguous loyalty. Knows more than they reveal. Could be protector or manipulator."
+    notes: "Ambiguous loyalty. Knows more than they reveal."
 
-  - id: archive
-    type: location
+  - id: location::archive
+    name: "The Archive"
+    category: location
     concept: "Ancient repository of forbidden knowledge"
-    notes: "Layered structure—public areas, restricted sections, forbidden depths."
+    notes: "Public stacks, restricted collections, forbidden depths."
 
-  - id: cipher_device
-    type: object
+  - id: location::forbidden_depths
+    name: "The Forbidden Depths"
+    category: location
+    concept: "Lowest level of the archive, where the dangerous knowledge lives"
+    notes: "Rumored deaths; few have entered and returned."
+
+  - id: object::cipher_device
+    name: "The Cipher Device"
+    category: object
     concept: "Artifact that reveals hidden text"
-    notes: "Central to both investigation and danger. Origin unclear."
+    notes: "Central to investigation and danger. Origin unclear."
+
+  - id: faction::conspiracy
+    name: "The Conspiracy"
+    category: faction
+    concept: "Group with interest in the archive's secrets"
+    notes: "Unclear whether they want to protect or exploit."
 ```
 
-**Entity types:** character, location, object, faction (extensible)
-
-**For each entity:**
-- `id`: Short identifier
-- `type`: Category
-- `concept`: One-line essence
-- `notes`: Freeform context from discussion
-
-### Entity Type Distribution (Guidelines)
-
-For a typical story targeting 15-25 entities, aim for a balanced mix:
-
-| Type | Range | Purpose |
-|------|-------|---------|
-| Characters | 6-10 | Protagonist, antagonist, allies, suspects, supporting cast |
-| Locations | 4-6 | Scene settings; enables intersection formation and scene variety |
-| Objects | 4-6 | Puzzles, MacGuffins, clues, symbolic items |
-| Factions | 1-3 | Organizations, groups, collectives |
-
-**Location vs Object Classification:**
-- **Location**: Has a physical space where scenes can occur; characters navigate to/from it
-- **Object**: Carried, single-use, or subordinate to a location
-
-Example: "the_clock_in_the_hallway" implies the hallway is a location; the clock is an object within it. If scenes will happen in the hallway, create it as a location.
-
-**Why locations matter:** SEED requires at least 2 different locations for scene variety. A story with only 1 location limits scene pacing and prevents natural intersection formation in GROW.
-
-**Human Gate:** Yes
-
-Human reviews entity list:
-- Any missing? (Add from discussion)
-- Any weak/redundant? (Note for SEED to cut)
-- Any mischaracterized? (Edit concept/notes)
-
-**Artifacts Modified:**
-- Entity list (working draft)
-
-**Completion Criteria:**
-- All significant entities from discussion captured
-- Human has reviewed list
-
----
+Human reviews, approves.
 
 ### Phase 3: Dilemma Formation
-
-**Purpose:** Frame dramatic questions as binary dilemmas.
-
-**LLM Involvement:** Summarize
-
-LLM reviews discussion and proposes dilemmas:
 
 ```yaml
 dilemmas:
   - id: dilemma::mentor_trust
     question: "Can the mentor be trusted?"
+    why_it_matters: "Trust determines whether Kay has an ally or is alone against the conspiracy."
     answers:
       - id: mentor_protector
         description: "Mentor is genuinely protecting Kay from forces she doesn't understand"
-        canonical: true
+        is_canonical: true
       - id: mentor_manipulator
         description: "Mentor is using Kay to access forbidden knowledge"
-        canonical: false
-    involves: [mentor, kay]
-    why_it_matters: "Trust determines whether Kay has an ally or is alone against the conspiracy"
+        is_canonical: false
+    anchored_to: [character::mentor, character::kay]
 
   - id: dilemma::archive_nature
     question: "Is the archive's knowledge salvation or corruption?"
+    why_it_matters: "Determines whether Kay's quest is heroic or tragic."
     answers:
       - id: archive_salvation
         description: "The forbidden knowledge can save the world if used wisely"
-        canonical: true
+        is_canonical: true
       - id: archive_corruption
         description: "The forbidden knowledge corrupts all who access it"
-        canonical: false
-    involves: [archive, kay, cipher_device]
-    why_it_matters: "Determines whether Kay's quest is heroic or tragic"
+        is_canonical: false
+    anchored_to: [location::archive, object::cipher_device, character::kay]
 ```
 
-**For each dilemma:**
-- `id`: Scoped identifier with `dilemma::` prefix
-- `question`: The dramatic question (ends with ?)
-- `answers`: Exactly two (canonical + non-canonical)
-- `involves`: Which entities are central to this dilemma
-- `why_it_matters`: Thematic stakes
-
-**Canonical flag:** One answer is marked `canonical: true`. This becomes the spine path. The non-canonical answer may become a branch if explored in SEED.
-
-**Human Gate:** Yes
-
-Human reviews dilemmas:
-- Are questions genuinely dramatic? (Stakes matter)
-- Are answers genuine contrasts? (Not shades of gray)
-- Is canonical choice appropriate? (Best default story)
-- Are entity involvements correct?
-
-**Artifacts Modified:**
-- Dilemma list (working draft)
-
-**Completion Criteria:**
-- All major dramatic questions captured as dilemmas
-- Each dilemma has exactly two answers
-- Human has reviewed and approved dilemmas
-
----
-
-### Phase 4: Serialization
-
-**Purpose:** Convert approved artifacts to structured YAML.
-
-**LLM Involvement:** None (deterministic formatting)
-
-Take approved entities and dilemmas, format as `02-brainstorm.yaml`:
-
-```yaml
-brainstorm:
-  entities:
-    - id: kay
-      type: character
-      concept: "Young archivist drawn into conspiracy"
-      notes: "Curious, principled, out of her depth..."
-    # ... all entities
-
-  dilemmas:
-    - id: dilemma::mentor_trust
-      question: "Can the mentor be trusted?"
-      answers:
-        - id: mentor_protector
-          description: "Mentor is genuinely protecting Kay..."
-          canonical: true
-        - id: mentor_manipulator
-          description: "Mentor is using Kay..."
-          canonical: false
-      involves: [mentor, kay]
-      why_it_matters: "Trust determines..."
-    # ... all dilemmas
-```
-
-**Human Gate:** No (deterministic)
-
-**Output:** `02-brainstorm.yaml`
-
----
-
-## Human Gates Summary
-
-| Phase | Gate | Decision |
-|-------|------|----------|
-| 1 | Discussion | Light: "enough material?" |
-| 2 | Entity Extraction | Review entity list |
-| 3 | Dilemma Formation | Review dilemmas |
-| 4 | Serialization | None (deterministic) |
-
----
-
-## Iteration Control
-
-### Forward Progress
-
-Normal flow: Phase 1 → 2 → 3 → 4
-
-### Backward Loops
-
-| From Phase | To Phase | Trigger |
-|------------|----------|---------|
-| 2 (Entities) | 1 (Discussion) | Major gaps in entity coverage |
-| 3 (Dilemmas) | 1 (Discussion) | No clear dramatic questions emerged |
-| 3 (Dilemmas) | 2 (Entities) | Dilemma involves entity not in list |
-
-### Maximum Iterations
-
-- Phase 1: No fixed limit (but human decides when "enough")
-- Phases 2-3: Max 2 revision passes each
-- Phase 4: 1 pass (deterministic)
-
----
-
-## Context Management
-
-### Standard (128k+ context)
-
-Include full discussion notes in context for Phases 2-3. No windowing needed.
-
-### Constrained (32k context)
-
-If discussion is very long:
-1. Human curates discussion highlights
-2. Pass highlights (not full transcript) to Phases 2-3
-3. Trust human curation to preserve important material
-
----
-
-## Failure Modes and Recovery
-
-### Phase-Specific Failures
-
-| Phase | Failure | Detection | Recovery |
-|-------|---------|-----------|----------|
-| 1. Discussion | Conversation stalls | Human judgment | New prompts, different angle |
-| 1. Discussion | Ideas too generic | Human judgment | Push for specificity, add constraints |
-| 2. Entities | Missing important entity | Human review | Add manually, note source |
-| 2. Entities | Too many entities | Human review | Note as cut candidates for SEED |
-| 3. Dilemmas | Non-binary dilemma | Validation | Split into multiple binary dilemmas |
-| 3. Dilemmas | Weak contrast | Human review | Sharpen answers or cut dilemma |
-| 3. Dilemmas | No canonical obvious | Human review | Human decides canonical |
-
-### Escalation to DREAM
-
-Return to DREAM if:
-- Brainstormed content doesn't fit DREAM vision
-- Genre/tone mismatch emerges
-- Constraints prove too restrictive for interesting dilemmas
-
----
-
-## Worked Example
-
-### DREAM Input
-
-```yaml
-dream:
-  genre: "dark fantasy mystery"
-  tone: "atmospheric, morally ambiguous"
-  themes: ["forbidden knowledge", "trust", "sacrifice"]
-  constraints: ["single protagonist POV", "no explicit magic system"]
-  length: short
-```
-
-### Phase 1: Discussion (excerpts)
-
-**LLM:** "A dark fantasy mystery with forbidden knowledge... What if the protagonist is an archivist? Someone whose job is to preserve and protect knowledge, now facing knowledge that shouldn't be preserved?"
-
-**Human:** "I like that. What draws them in?"
-
-**LLM:** "Perhaps a mentor figure—someone who seems trustworthy but might have their own agenda. The classic 'is this person protecting me or using me?' dilemma."
-
-**Human:** "Yes. And the archive itself should feel alive, dangerous. Layered."
-
-**LLM:** "Different levels of restriction. Public stacks, restricted collections, forbidden depths. The deeper you go, the more dangerous the knowledge..."
-
-*(Discussion continues, covering characters, locations, artifacts, relationships)*
-
-### Phase 2: Entity Extraction
-
-LLM extracts from discussion:
-- Kay (protagonist archivist)
-- The Mentor (ambiguous guide)
-- The Archive (layered repository)
-- The Cipher Device (artifact)
-- The Forbidden Depths (dangerous location)
-- The Conspiracy (faction)
-- Kay's Predecessor (missing character)
-
-Human reviews: Approves all, notes "Predecessor might merge with another character in SEED"
-
-### Phase 3: Dilemma Formation
-
-LLM proposes:
-- dilemma::mentor_trust: "Can the mentor be trusted?"
-- dilemma::archive_nature: "Is the knowledge salvation or corruption?"
-- dilemma::predecessor_fate: "What happened to Kay's predecessor?"
-- dilemma::conspiracy_goals: "Is the conspiracy protecting or hoarding?"
-
-Human reviews: Approves first three, marks dilemma::conspiracy_goals as "may cut in SEED—overlaps with dilemma::mentor_trust"
-
-### Phase 4: Serialization
-
-All approved artifacts formatted to `02-brainstorm.yaml`
-
----
-
-## Design Principle: Expansive Generation
-
-BRAINSTORM's job is **creative abundance**, not structural precision. Generate more than needed. Include tangential ideas. Capture nuance in notes.
-
-SEED exists to triage. Don't pre-triage in BRAINSTORM.
-
-**LLM should:**
-- Propose many entities, even minor ones
-- Surface multiple possible dilemmas
-- Include rich notes from discussion
-- Err on the side of inclusion
-
-**Human should:**
-- Guide creative direction
-- Encourage exploration
-- Note concerns without blocking
-- Trust SEED to filter
-
----
-
-## Output Checklist
-
-Before BRAINSTORM is complete, verify:
-
-- [ ] Discussion generated sufficient raw material
-- [ ] All significant entities captured with concept and notes
-- [ ] All dramatic questions framed as binary dilemmas
-- [ ] Each dilemma has canonical and non-canonical answers
-- [ ] Entity involvement marked on dilemmas
-- [ ] why_it_matters populated for each dilemma
-- [ ] `02-brainstorm.yaml` written
-
----
-
-## Summary
-
-BRAINSTORM transforms DREAM vision into raw creative material:
-
-| Input | Output |
-|-------|--------|
-| Genre, tone, themes | 15-25 entities |
-| Constraints | 4-8 dilemmas (binary) |
-| Core dilemmas (informal) | Rich notes throughout |
-
-BRAINSTORM generates freely. SEED triages. This separation keeps creative exploration unconstrained while ensuring eventual structure.
+Human reviews, approves. BRAINSTORM complete.

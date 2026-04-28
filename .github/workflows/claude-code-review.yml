@@ -2,16 +2,27 @@ name: Claude Code Review
 
 on:
   pull_request:
-    types: [opened, synchronize]
+    types: [opened, synchronize, ready_for_review, reopened]
+    # Optional: Only run on specific file changes
+    # paths:
+    #   - "src/**/*.ts"
+    #   - "src/**/*.tsx"
+    #   - "src/**/*.js"
+    #   - "src/**/*.jsx"
 
 jobs:
   claude-review:
-    # Skip automated code review for dependabot PRs (just dependency bumps)
-    if: github.actor != 'dependabot[bot]'
+    # Optional: Filter by PR author
+    # if: |
+    #   github.event.pull_request.user.login == 'external-contributor' ||
+    #   github.event.pull_request.user.login == 'new-developer' ||
+    #   github.event.pull_request.author_association == 'FIRST_TIME_CONTRIBUTOR'
+
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: write
+      pull-requests: write  # Required so the review action can post inline comments
+      issues: read
       id-token: write
 
     steps:
@@ -23,38 +34,24 @@ jobs:
       - name: Run Claude Code Review
         id: claude-review
         uses: anthropics/claude-code-action@v1
-        continue-on-error: true
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
+          plugins: 'code-review@claude-code-plugins'
+          # `--comment` tells the plugin to actually post (without it, the plugin
+          # runs the full review and stops silently — burning ~$3/PR for no output).
+          prompt: '/code-review:code-review --comment ${{ github.repository }}/pull/${{ github.event.pull_request.number }}'
+          # Surface progress so a silent failure is visible: a sticky tracking
+          # comment updates during the run, and the Claude Code Report appears
+          # in the job's GitHub Step Summary.
           track_progress: true
-          prompt: |
-            REPO: ${{ github.repository }}
-            PR NUMBER: ${{ github.event.pull_request.number }}
-
-            Perform a DIFFERENTIAL code review. Only review the CHANGES in this PR.
-
-            Steps:
-            1. Run `gh pr diff ${{ github.event.pull_request.number }}` to see what changed
-            2. Read CLAUDE.md for project conventions
-            3. Review the changed code for:
-               - Bugs or logic errors
-               - Security issues
-               - Convention violations (from CLAUDE.md)
-               - Missing tests for new code
-               - Type safety issues
-            4. **Design conformance check** (for PRs touching pipeline stages):
-               - Check if the PR description includes a "## Design Conformance" section
-               - If the PR modifies files under `src/questfoundry/pipeline/stages/` or
-                 `src/questfoundry/graph/`, this section is REQUIRED per CLAUDE.md
-               - If the section is missing, flag it as a blocking issue
-               - If the section is present, verify the claims are plausible:
-                 do the referenced design doc sections exist? Are MISSING/DEAD
-                 findings addressed or deferred with linked issues?
-
-            Use `mcp__github_inline_comment__create_inline_comment` for specific line feedback.
-            Use `gh pr comment` for summary feedback.
-
-            Be concise. Focus on actionable issues. Don't comment on unchanged code.
-
-          claude_args: |
-            --allowedTools mcp__github_inline_comment__create_inline_comment,Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr comment:*),Read,Grep,Glob
+          display_report: true
+          # The action's safety check refuses bot-initiated runs by default.
+          # claude[bot] pushes commits when a `[Fix this →]` link is clicked
+          # from a previous review comment — those pushes trigger a
+          # `pull_request` synchronize event with `actor=claude[bot]`, which
+          # we DO want reviewed. Explicit allowlist so future fix-link cycles
+          # keep flowing through review without manual re-runs.
+          allowed_bots: 'claude'
+          # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
+          # or https://code.claude.com/docs/en/cli-reference for available options

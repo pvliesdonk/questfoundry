@@ -291,36 +291,22 @@ def test_compiler_list_templates(tmp_path: Path) -> None:
 # --- Integration with Project Templates ---
 
 
-def test_dream_template_exists() -> None:
-    """DREAM template exists in project prompts."""
+def test_dream_orphan_template_removed() -> None:
+    """`prompts/templates/dream.yaml` was an orphan (no production loader
+    referenced it; closed via #1427) and was deleted in F-8. This test
+    asserts the orphan stays gone — a future re-addition without wiring
+    in `agents/prompts.py` would re-introduce a copy-paste trap."""
     project_root = Path(__file__).parent.parent.parent
     prompts_path = project_root / "prompts"
 
     compiler = PromptCompiler(prompts_path)
     templates = compiler.list_templates()
 
-    assert "dream" in templates
-
-
-def test_dream_template_compiles() -> None:
-    """DREAM template compiles with context."""
-    project_root = Path(__file__).parent.parent.parent
-    prompts_path = project_root / "prompts"
-
-    compiler = PromptCompiler(prompts_path)
-    # New context structure with mode-aware fields
-    context = {
-        "mode_instructions": "Generate a creative vision directly.",
-        "mode_reminder": "",
-        "user_message": "A noir mystery in 1940s Los Angeles",
-    }
-    prompt = compiler.compile("dream", context)
-
-    assert "creative director" in prompt.system.lower()
-    assert "noir mystery" in prompt.user
-    assert "1940s Los Angeles" in prompt.user
-    assert prompt.token_count > 0
-    assert prompt.template_name == "dream"
+    assert "dream" not in templates, (
+        "Orphan `dream.yaml` template was re-added without wiring in "
+        "`agents/prompts.py`. Active DREAM prompts are built from "
+        "`discuss` / `summarize` / `serialize` (see #1427)."
+    )
 
 
 def test_compiled_prompt_total_tokens() -> None:

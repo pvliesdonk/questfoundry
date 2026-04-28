@@ -27,6 +27,22 @@ def _create_project_with_graph(project_path: Path, *, with_prose: bool = True) -
 
     # Build a graph with passages and choices
     g = Graph()
+    # Voice Document — FILL Output-1 (the SHIP entry validator now
+    # checks for it; older tests pre-dated that contract enforcement).
+    g.create_node(
+        "voice::voice",
+        {
+            "type": "voice",
+            "raw_id": "voice",
+            # No story_title — keeps the test_project_name_from_config
+            # path exercising the config-name fallback in ShipStage.execute.
+            "pov": "third_person_limited",
+            "tense": "past",
+            "voice_register": "literary",
+            "sentence_rhythm": "varied",
+            "tone_words": ["wry"],
+        },
+    )
     g.create_node(
         "passage::intro",
         {
@@ -44,17 +60,14 @@ def _create_project_with_graph(project_path: Path, *, with_prose: bool = True) -
             "is_ending": True,
         },
     )
-    g.create_node(
-        "choice::enter",
-        {
-            "type": "choice",
-            "from_passage": "passage::intro",
-            "to_passage": "passage::castle",
-            "label": "Enter the castle",
-        },
+    # Per ontology Part 4, choices are edges (not nodes) — POLISH writes them
+    # via graph.add_edge("choice", from, to, ...). See #1532.
+    g.add_edge(
+        "choice",
+        "passage::intro",
+        "passage::castle",
+        label="Enter the castle",
     )
-    g.add_edge("choice_from", "choice::enter", "passage::intro")
-    g.add_edge("choice_to", "choice::enter", "passage::castle")
 
     g.save(project_path / "graph.db")
 
@@ -186,7 +199,11 @@ class TestShipStage:
         project.mkdir(parents=True)
 
         stage = ShipStage(project)
-        with pytest.raises(ShipStageError, match="no passages"):
+        # The pre-SHIP entry contract surfaces this as a FILL Output-2
+        # violation (no passage means FILL didn't produce its required
+        # output) — same defensive intent as the previous "no passages"
+        # check, just attributed to the right contract.
+        with pytest.raises(ShipStageError, match="at least one Passage"):
             stage.execute()
 
     def test_missing_prose_raises(self, tmp_path: Path) -> None:
@@ -194,7 +211,7 @@ class TestShipStage:
         _create_project_with_graph(project, with_prose=False)
 
         stage = ShipStage(project)
-        with pytest.raises(ShipStageError, match="missing prose"):
+        with pytest.raises(ShipStageError, match=r"without prose|missing prose"):
             stage.execute()
 
     def test_empty_graph_raises(self, tmp_path: Path) -> None:
@@ -213,7 +230,7 @@ class TestShipStage:
         g.save(project / "graph.db")
 
         stage = ShipStage(project)
-        with pytest.raises(ShipStageError, match="no passages"):
+        with pytest.raises(ShipStageError, match="at least one Passage"):
             stage.execute()
 
     def test_unknown_format_raises(self, tmp_path: Path) -> None:
@@ -241,7 +258,7 @@ class TestShipStage:
         g.save(project / "graph.db")
 
         stage = ShipStage(project)
-        with pytest.raises(ShipStageError, match="missing prose"):
+        with pytest.raises(ShipStageError, match=r"without prose|missing prose"):
             stage.execute()
 
     def test_project_name_from_config(self, tmp_path: Path) -> None:
@@ -262,6 +279,20 @@ class TestShipStage:
         project.mkdir(parents=True, exist_ok=True)
 
         g = Graph()
+        # Voice Document satisfying FILL Output-1 (no story_title so the
+        # config-name fallback path is what's exercised).
+        g.create_node(
+            "voice::voice",
+            {
+                "type": "voice",
+                "raw_id": "voice",
+                "pov": "third_person_limited",
+                "tense": "past",
+                "voice_register": "literary",
+                "sentence_rhythm": "varied",
+                "tone_words": ["wry"],
+            },
+        )
         g.create_node("passage::intro", {"type": "passage", "raw_id": "intro", "prose": "Hello."})
         g.save(project / "graph.db")
 
@@ -278,12 +309,10 @@ class TestShipStage:
         project = tmp_path / "my-story"
         _create_project_with_graph(project)
 
-        # Add a voice node with a generated story title
+        # Replace the fixture's title-less voice node with one carrying
+        # a generated story_title so SHIP picks it up.
         g = Graph.load(project)
-        g.create_node(
-            "voice::voice",
-            {"type": "voice", "raw_id": "voice", "story_title": "The Hollow Crown"},
-        )
+        g.update_node("voice::voice", story_title="The Hollow Crown")
         g.save(project / "graph.db")
 
         stage = ShipStage(project)
@@ -299,9 +328,9 @@ class TestShipStage:
         project = tmp_path / "my-story"
         _create_project_with_graph(project)
 
-        # Voice node exists but without story_title
+        # Fixture already creates a voice node without story_title; SHIP
+        # falls back to the config name.
         g = Graph.load(project)
-        g.create_node("voice::voice", {"type": "voice", "raw_id": "voice"})
         g.save(project / "graph.db")
 
         stage = ShipStage(project)
@@ -318,7 +347,7 @@ class TestShipStage:
         _create_project_with_graph(project)
 
         g = Graph.load(project)
-        g.create_node("voice::voice", {"type": "voice", "raw_id": "voice", "story_title": None})
+        g.update_node("voice::voice", story_title=None)
         g.save(project / "graph.db")
 
         stage = ShipStage(project)
@@ -328,3 +357,97 @@ class TestShipStage:
 
         data = json.loads(result.read_text())
         assert data["title"] == "test-story"
+
+
+class TestShipPhase4Validation:
+    """R-4.1 through R-4.4: SHIP halts with ERROR before delivering a
+    bundle that fails per-format validation. The validator failure
+    message must be embedded in the raised ShipStageError so the user
+    can see exactly what's broken without spelunking through logs.
+    """
+
+    def test_validation_failure_halts_ship(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A validator that raises must surface as ShipStageError, not a
+        silently-delivered broken file (R-4.2).
+        """
+        from questfoundry.export.validation import ExportValidationError
+
+        project = tmp_path / "my-story"
+        _create_project_with_graph(project)
+
+        def _always_fail(_path: Path) -> None:
+            msg = "synthetic broken target: passage::ghost"
+            raise ExportValidationError(msg)
+
+        # Patch the dispatcher's table for the json validator
+        from questfoundry.export import validation as validation_module
+
+        monkeypatch.setitem(validation_module.VALIDATORS, "json", _always_fail)
+
+        stage = ShipStage(project)
+        with pytest.raises(ShipStageError, match="passage::ghost"):
+            stage.execute(export_format="json")
+
+    def test_valid_export_passes_phase_4(self, tmp_path: Path) -> None:
+        """End-to-end: a clean run from the test fixture must satisfy
+        Phase 4 validation without monkey-patching anything.
+        """
+        project = tmp_path / "my-story"
+        _create_project_with_graph(project)
+
+        stage = ShipStage(project)
+        # No exception = Phase 4 passed
+        stage.execute(export_format="twee")
+        stage.execute(export_format="json")
+        stage.execute(export_format="html")
+
+
+class TestShipDeterminism:
+    """R-2.4: SHIP must not mutate the graph; running it twice on the
+    same graph must produce byte-identical output (modulo the metadata
+    generation_timestamp, which the test seam pins).
+    """
+
+    _FIXED_TS = "2026-04-24T00:00:00+00:00"
+
+    @pytest.mark.parametrize("export_format", ["twee", "json", "html"])
+    def test_two_runs_produce_byte_identical_output(
+        self, tmp_path: Path, export_format: str
+    ) -> None:
+        """Same project + same fixed timestamp → identical bytes.
+
+        Confirms SHIP itself is deterministic (no in-memory iteration
+        order leaking into output, no hidden randomness, no graph
+        mutation between runs).
+        """
+        project = tmp_path / "story"
+        _create_project_with_graph(project)
+
+        stage = ShipStage(project)
+        out1 = stage.execute(
+            export_format=export_format,
+            output_dir=tmp_path / f"{export_format}-1",
+            timestamp=self._FIXED_TS,
+        )
+        out2 = stage.execute(
+            export_format=export_format,
+            output_dir=tmp_path / f"{export_format}-2",
+            timestamp=self._FIXED_TS,
+        )
+        assert out1.read_bytes() == out2.read_bytes()
+
+    def test_graph_unchanged_after_ship(self, tmp_path: Path) -> None:
+        """SHIP is read-only: the graph file must be byte-identical
+        before and after a run.
+        """
+        project = tmp_path / "story"
+        _create_project_with_graph(project)
+        graph_path = project / "graph.db"
+        before = graph_path.read_bytes()
+
+        ShipStage(project).execute(export_format="json", timestamp=self._FIXED_TS)
+
+        after = graph_path.read_bytes()
+        assert before == after, "SHIP mutated graph.db (R-2.4 violation)"

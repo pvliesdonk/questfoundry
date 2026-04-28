@@ -216,11 +216,11 @@ class TestGrowPhaseDecorator:
 class TestGlobalRegistry:
     """Tests for the global registry populated by actual GROW phases."""
 
-    def test_global_registry_has_17_phases(self) -> None:
-        """All GROW phases are registered (17 after #1180 added intra_path_predecessors)."""
+    def test_global_registry_has_13_phases(self) -> None:
+        """GROW phases (13 after PR A+B+C of issue #1368)."""
         registry = get_registry()
-        assert len(registry) == 17, (
-            f"Expected 17 phases, got {len(registry)}: {registry.phase_names}"
+        assert len(registry) == 13, (
+            f"Expected 13 phases, got {len(registry)}: {registry.phase_names}"
         )
 
     def test_global_registry_validates(self) -> None:
@@ -230,12 +230,7 @@ class TestGlobalRegistry:
         assert errors == [], f"Registry validation errors: {errors}"
 
     def test_global_registry_execution_order_matches_expected(self) -> None:
-        """Execution order matches the post-#1180 phase structure (17 phases).
-
-        #1124: intersections moved before interleave_beats (clean DAG for compat check).
-        #1123: resolve_temporal_hints inserted between intersections and interleave_beats.
-        #1180: intra_path_predecessors inserted between intersections and resolve_temporal_hints.
-        """
+        """Execution order matches the current phase structure (13 phases)."""
         expected = [
             "validate_dag",
             "intersections",
@@ -243,11 +238,12 @@ class TestGlobalRegistry:
             "resolve_temporal_hints",
             "interleave_beats",
             "scene_types",
-            "narrative_gaps",
-            "pacing_gaps",
-            "atmospheric",
-            "path_arcs",
-            "entity_arcs",
+            # narrative_gaps moved to POLISH Phase 1a (PR A of #1368)
+            # pacing_gaps moved to POLISH Phase 2 (PR C of #1368)
+            # atmospheric moved to POLISH Phase 5e (PR B of #1368)
+            # path_arcs moved to POLISH Phase 5f (PR B of #1368)
+            # entity_arcs moved to POLISH Phase 3 (PR C of #1368)
+            "transition_gaps",
             "enumerate_arcs",
             "divergence",
             "convergence",

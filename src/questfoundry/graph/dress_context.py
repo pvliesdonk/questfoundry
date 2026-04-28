@@ -203,7 +203,8 @@ def format_entity_for_codex(graph: Graph, entity_id: str) -> str:
     raw_id = entity.get("raw_id", strip_scope_prefix(entity_id))
     lines: list[str] = []
 
-    lines.append(f"## Entity: {raw_id}")
+    # Prompt mirrors this header back as entity_id; must match the prefixed form (#1473).
+    lines.append(f"## Entity: {entity_id}")
     lines.append("")
 
     # Basic info
@@ -227,6 +228,29 @@ def format_entity_for_codex(graph: Graph, entity_id: str) -> str:
         if features:
             lines.append(f"**Features:** {', '.join(features)}")
 
+    # Path-specific overlays (per dress.md R-3.8: codex generation must see
+    # the full Entity description — base plus overlays — so spoiler-graduated
+    # tiers can surface path-specific arcs the base concept doesn't capture).
+    overlay_lines: list[str] = []
+    for overlay in entity.get("overlays") or []:
+        flags = overlay.get("when") or []
+        details = overlay.get("details") or {}
+        if not flags or not details:
+            continue
+        flag_str = ", ".join(f"`{f}`" for f in flags)
+        # Format list values explicitly to avoid leaking Python repr
+        # (brackets/quotes) into LLM-facing text per @prompt-engineer Rule 4.
+        # Sorted for deterministic output across runs.
+        detail_str = "; ".join(
+            f"{k}: {', '.join(map(str, v)) if isinstance(v, list) else v}"
+            for k, v in sorted(details.items())
+        )
+        overlay_lines.append(f"- When {flag_str}: {detail_str}")
+    if overlay_lines:
+        lines.append("")
+        lines.append("### Overlays (path-specific arcs)")
+        lines.extend(overlay_lines)
+
     # Related state flags — uses substring matching as a heuristic:
     # a state flag is "related" if the entity's raw_id appears in the
     # state flag's trigger text or raw_id (case-insensitive). This is
@@ -243,11 +267,12 @@ def format_entity_for_codex(graph: Graph, entity_id: str) -> str:
     if related:
         lines.append("")
         lines.append("### Related State Flags (potential codex gates)")
+        # Prefixed `state_flag::` so the LLM mirrors the same form in `visible_when` (#1473).
         for sf_raw, trigger in sorted(related):
             if trigger:
-                lines.append(f"- `{sf_raw}`: {trigger}")
+                lines.append(f"- `state_flag::{sf_raw}`: {trigger}")
             else:
-                lines.append(f"- `{sf_raw}`")
+                lines.append(f"- `state_flag::{sf_raw}`")
 
     return "\n".join(lines).strip()
 

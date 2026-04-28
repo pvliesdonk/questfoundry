@@ -16,12 +16,24 @@ from difflib import SequenceMatcher
 from enum import Enum, auto
 from typing import TYPE_CHECKING, Any
 
+from questfoundry.graph.brainstorm_validation import (
+    BrainstormContractError,
+    validate_brainstorm_output,
+)
 from questfoundry.graph.context import (
     ENTITY_CATEGORIES,
     format_entity_id,
     is_entity_id,
     parse_scoped_id,
     strip_scope_prefix,
+)
+from questfoundry.graph.dream_validation import (
+    DreamContractError,
+    validate_dream_output,
+)
+from questfoundry.graph.seed_validation import (
+    SeedContractError,
+    validate_seed_output,
 )
 from questfoundry.observability.logging import get_logger
 
@@ -32,7 +44,12 @@ log = get_logger(__name__)
 
 # Display limits for error messages
 _MAX_ERRORS_DISPLAY = 8
-_MAX_AVAILABLE_DISPLAY = 5
+# Cap for the per-error "available IDs" line that follows each formatted error.
+_MAX_PER_ERROR_AVAILABLE = 5
+# Cap for the bottom-line "Valid entity_id values: ..." retry hint that
+# aggregates IDs across all errors. Larger because it summarizes the whole
+# set, not just one error's neighbors.
+_MAX_AGGREGATE_AVAILABLE = 15
 _MAX_SIMILARITY_SUGGESTIONS = 3  # Max ranked suggestions in "Did you mean?" output
 
 # Similarity thresholds for ID suggestions.
@@ -109,8 +126,8 @@ def _format_available_with_suggestions(invalid_id: str, available: list[str]) ->
         return "\n".join(lines)
 
     # Low confidence: sorted list only (most similar first)
-    display = [sid for sid, _ in sorted_ids[:_MAX_AVAILABLE_DISPLAY]]
-    suffix = "..." if len(available) > _MAX_AVAILABLE_DISPLAY else ""
+    display = [sid for sid, _ in sorted_ids[:_MAX_PER_ERROR_AVAILABLE]]
+    suffix = "..." if len(available) > _MAX_PER_ERROR_AVAILABLE else ""
     return f"Available IDs (most similar first): {', '.join(display)}{suffix}"
 
 
@@ -136,8 +153,8 @@ def _format_error_available(provided: str, available: list[str]) -> str | None:
             return suggestion
 
     # Fallback for errors without provided value
-    avail = available[:_MAX_AVAILABLE_DISPLAY]
-    suffix = "..." if len(available) > _MAX_AVAILABLE_DISPLAY else ""
+    avail = available[:_MAX_PER_ERROR_AVAILABLE]
+    suffix = "..." if len(available) > _MAX_PER_ERROR_AVAILABLE else ""
     return f"Available: {', '.join(avail)}{suffix}"
 
 
@@ -218,7 +235,25 @@ class BrainstormMutationError(MutationError):
                 lines.append(f"    {suggestion}")
         if len(self.errors) > _MAX_ERRORS_DISPLAY:
             lines.append(f"  ... and {len(self.errors) - _MAX_ERRORS_DISPLAY} more errors")
-        lines.append("Use entity_id values from the entities list.")
+        # Per @prompt-engineer Rule 5, retry feedback must be self-contained — the small
+        # model does not re-read the system prompt on retry. Inline the known-
+        # valid entity IDs collected from each cross-reference error so the
+        # repair attempt has the authoritative list at hand.
+        all_available: set[str] = set()
+        for e in self.errors:
+            all_available.update(e.available)
+        if all_available:
+            sorted_ids = sorted(all_available)
+            shown = sorted_ids[:_MAX_AGGREGATE_AVAILABLE]
+            formatted = ", ".join(f"`{i}`" for i in shown)
+            suffix = (
+                ""
+                if len(sorted_ids) <= _MAX_AGGREGATE_AVAILABLE
+                else f" (showing {_MAX_AGGREGATE_AVAILABLE} of {len(sorted_ids)})"
+            )
+            lines.append(f"Valid entity_id values{suffix}: {formatted}")
+        else:
+            lines.append("Use entity_id values from the entities list.")
         return "\n".join(lines)
 
     def to_feedback(self) -> str:
@@ -561,14 +596,17 @@ def apply_mutations(graph: Graph, stage: str, output: dict[str, Any]) -> None:
 def apply_dream_mutations(graph: Graph, output: dict[str, Any]) -> None:
     """Apply DREAM stage output to graph.
 
-    Creates or replaces the "vision" node with the dream artifact data.
+    Creates or replaces the "vision" node with the dream artifact data and
+    validates the resulting graph against DREAM's Stage Output Contract.
 
     Args:
         graph: Graph to mutate.
         output: DREAM stage output (DreamArtifact fields).
+
+    Raises:
+        DreamContractError: if the resulting vision does not satisfy the
+            DREAM Stage Output Contract.
     """
-    # Extract fields, ensuring we have the right structure
-    # The output from DREAM stage is a DreamArtifact-like dict
     vision_data = {
         "type": "vision",
         "genre": output.get("genre"),
@@ -579,16 +617,21 @@ def apply_dream_mutations(graph: Graph, output: dict[str, Any]) -> None:
         "style_notes": output.get("style_notes"),
         "scope": output.get("scope"),
         "content_notes": output.get("content_notes"),
-        # POV hints (optional, may be None)
         "pov_style": output.get("pov_style"),
         "protagonist_defined": output.get("protagonist_defined", False),
+        # Record human approval. Per R-1.12, absence == unapproved.
+        # Orchestrators running in --no-interactive mode set this True via output.
+        "human_approved": bool(output.get("human_approved", False)),
     }
-
-    # Remove None values for cleaner storage
     vision_data = _clean_dict(vision_data)
-
-    # Use upsert to allow re-running DREAM stage (replaces existing vision)
     graph.upsert_node("vision", vision_data)
+
+    errors = validate_dream_output(graph)
+    if errors:
+        log.error("dream_contract_violated", errors=errors)
+        raise DreamContractError(
+            "DREAM stage output contract violated:\n  - " + "\n  - ".join(errors)
+        )
 
 
 def validate_brainstorm_mutations(output: dict[str, Any]) -> list[BrainstormValidationError]:
@@ -600,6 +643,14 @@ def validate_brainstorm_mutations(output: dict[str, Any]) -> list[BrainstormVali
     3. All central_entity_ids in dilemmas exist in entities list
     4. All answer IDs within a dilemma are unique
     5. Each dilemma has exactly one is_canonical=true answer
+
+    Field-path invariant (LOAD-BEARING — do not break):
+        Every emitted error's ``field_path`` MUST start with either
+        ``"entities"`` or ``"dilemmas"``. The two-pass serialize wrappers in
+        ``pipeline/stages/brainstorm.py`` route errors back to the pass that
+        produced the offending field by checking that prefix. Any new rule
+        that adds an error at a global path (e.g. ``""``) would silently leak
+        into the wrong retry loop and corrupt repair feedback.
 
     Args:
         output: BRAINSTORM stage output (entities, dilemmas).
@@ -663,8 +714,30 @@ def validate_brainstorm_mutations(output: dict[str, Any]) -> list[BrainstormVali
         else:
             seen_dilemma_ids[dilemma_id] = i
 
+        # 0a. R-3.6: central_entity_ids MUST be non-empty.
+        # The Pydantic schema (Dilemma.central_entity_ids min_length=1) catches
+        # this on attempt 1; this in-retry semantic check is defense-in-depth
+        # for None / coercion edge cases that bypass Pydantic, and ensures the
+        # error is delivered with the concrete entity ID list (via
+        # BrainstormMutationError.to_feedback) rather than a generic Pydantic
+        # message. Mirrors the prompt-engineer retry-bypass canon.
+        raw_central_entities = dilemma.get("central_entity_ids") or []
+        if not raw_central_entities:
+            errors.append(
+                BrainstormValidationError(
+                    field_path=f"dilemmas.{i}.central_entity_ids",
+                    issue=(
+                        f"Dilemma '{dilemma_id}' has no central_entity_ids (R-3.6). "
+                        "Every dilemma MUST anchor to ≥1 entity. Add entity IDs "
+                        "from the entities list."
+                    ),
+                    available=sorted_entity_ids,
+                    provided="[]",
+                )
+            )
+
         # 1. Check central_entity_ids reference valid entities
-        for eid in dilemma.get("central_entity_ids", []):
+        for eid in raw_central_entities:
             normalized_eid = strip_scope_prefix(eid)
             if normalized_eid not in entity_ids:
                 errors.append(
@@ -709,6 +782,20 @@ def validate_brainstorm_mutations(output: dict[str, Any]) -> list[BrainstormVali
                     provided=f"found {default_count} defaults",
                 )
             )
+
+    # R-2.4: ≥2 distinct location entities
+    location_count = sum(1 for e in entities if e.get("entity_category") == "location")
+    if location_count < 2:
+        errors.append(
+            BrainstormValidationError(
+                field_path="entities",
+                issue=(
+                    f"R-2.4: BRAINSTORM must produce ≥2 location entities, found {location_count}"
+                ),
+                available=[],
+                provided=f"{location_count} location entities",
+            )
+        )
 
     return errors
 
@@ -765,16 +852,34 @@ def _prefix_entity_id(category: str, raw_id: str) -> str:
     return format_entity_id(category, raw_id)
 
 
-def _get_path_id_from_beat(beat: dict[str, Any]) -> str | None:
-    """Extract path ID from a beat dict, supporting both current and legacy formats.
+def _get_path_ids_from_beat(beat: dict[str, Any]) -> tuple[str, ...]:
+    """Extract path IDs from a beat dict, supporting current and legacy formats.
+
+    Supports:
+    - Y-shape current: ``path_id`` + optional ``also_belongs_to``.
+    - Legacy single: ``path_id`` alone.
+    - Legacy list: ``paths: [p]`` or ``paths: [p_a, p_b]`` (pre-Y-shape).
 
     Args:
-        beat: Beat dict with ``path_id`` (current) or ``paths`` (legacy).
+        beat: Beat dict, either model-dumped or raw LLM output.
 
     Returns:
-        Raw path ID string, or None if not present.
+        Tuple of 0, 1, or 2 raw path IDs in declaration order (``path_id``
+        first, then ``also_belongs_to``). A return of 2 always represents a
+        pre-commit Y-shape beat. A return of 0 means the beat has no path
+        reference (caught by validation).
     """
-    return beat.get("path_id") or (beat.get("paths", [None])[0] if beat.get("paths") else None)
+    if beat.get("path_id"):
+        primary = str(beat["path_id"])
+        also = beat.get("also_belongs_to")
+        if also:
+            return (primary, str(also))
+        return (primary,)
+    # Legacy fallback.
+    paths = beat.get("paths")
+    if isinstance(paths, list) and paths:
+        return tuple(str(p) for p in paths[:2])
+    return ()
 
 
 def _resolve_entity_ref(graph: Graph, entity_ref: str) -> str:
@@ -878,18 +983,20 @@ def apply_brainstorm_mutations(graph: Graph, output: dict[str, Any]) -> None:
         dilemma_node_id = _prefix_id("dilemma", raw_id)
         raw_id = strip_scope_prefix(dilemma_node_id)
 
-        # Resolve entity references for anchored_to edges
+        # Resolve entity references for anchored_to edges.
+        # R-3.6: every Dilemma needs ≥1 anchored_to edge. An unresolvable
+        # reference is a structural failure — raise, do not silently drop.
         raw_central_entities = dilemma.get("central_entity_ids", [])
         prefixed_central_entities = []
         for eid in raw_central_entities:
             try:
                 prefixed_central_entities.append(_resolve_entity_ref(graph, eid))
-            except ValueError:
-                log.warning(
-                    "anchored_to_entity_not_found",
-                    dilemma_id=raw_id,
-                    entity_id=eid,
-                )
+            except ValueError as exc:
+                raise MutationError(
+                    f"Dilemma '{raw_id}' references unknown entity '{eid}' "
+                    f"in central_entity_ids (R-3.6 requires all anchored_to "
+                    f"targets to exist in the entity list)."
+                ) from exc
 
         # Create dilemma node (central entities stored as edges, not properties)
         dilemma_data = {
@@ -924,6 +1031,13 @@ def apply_brainstorm_mutations(graph: Graph, output: dict[str, Any]) -> None:
             answer_data = _clean_dict(answer_data)
             graph.create_node(answer_node_id, answer_data)
             graph.add_edge("has_answer", dilemma_node_id, answer_node_id)
+
+    errors = validate_brainstorm_output(graph)
+    if errors:
+        log.error("brainstorm_contract_violated", errors=errors)
+        raise BrainstormContractError(
+            "BRAINSTORM stage output contract violated:\n  - " + "\n  - ".join(errors)
+        )
 
 
 def _cross_type_hint(
@@ -1066,7 +1180,7 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
     12. Each beat references its path's parent dilemma in dilemma_impacts
     13. Each path has at least one beat with effect="commits" for its dilemma
     14. Each path has advances/reveals beat before commit (WARNING, non-blocking)
-    15. Each path has at least one beat after commit (WARNING, non-blocking)
+    15. Each path has at least one beat after commit (COMPLETENESS, blocking)
 
     Args:
         graph: Graph containing BRAINSTORM data (entities, dilemmas, answers).
@@ -1308,14 +1422,15 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
                     )
                 )
 
-        # 6. Path reference (singular — each beat belongs to exactly one path)
-        raw_path_id = _get_path_id_from_beat(beat)
-        if raw_path_id:
+        # 6. Path references (Y-shape: path_id + optional also_belongs_to).
+        raw_path_ids = _get_path_ids_from_beat(beat)
+        for idx, raw_path_id in enumerate(raw_path_ids):
+            field_name = "path_id" if idx == 0 else "also_belongs_to"
             _validate_id(
                 raw_path_id,
                 "path",
                 seed_path_ids,
-                f"initial_beats.{i}.path_id",
+                f"initial_beats.{i}.{field_name}",
                 errors,
                 sorted_path_ids,
                 cross_type_sets=cross_type_sets,
@@ -1525,10 +1640,13 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
     # Per-path: list of (beat_index, effects_set) for parent dilemma impacts
     path_beat_effects: dict[str, list[tuple[int, set[str]]]] = {}
     for i, beat in enumerate(output.get("initial_beats", [])):
-        # Resolve beat's path (singular path_id, with legacy paths fallback)
-        raw_pid = _get_path_id_from_beat(beat)
-        if not raw_pid:
+        # Resolve beat's primary path; pre-commit beats have a second membership
+        # (also_belongs_to) but the commits-per-path accumulator is only
+        # concerned with single-membership commit beats (guard rail 2).
+        raw_path_ids = _get_path_ids_from_beat(beat)
+        if not raw_path_ids:
             continue  # Missing path — already caught by check 6
+        raw_pid = raw_path_ids[0]
         normalized_pid, _ = _normalize_id(raw_pid, "path")
 
         # Collect normalized dilemma_ids referenced in this beat's impacts
@@ -1600,8 +1718,8 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
 
     # 14. Check arc structure: advances/reveals before commit (WARNING)
     # 15. Check arc structure: beat exists after commit (WARNING)
-    # Doc 1 Part 2: "This scaffold must be complete — the arc from beginning
-    # to end must be present."
+    # "How Branching Stories Work", Part 2: "This scaffold must be complete —
+    # the arc from beginning to end must be present."
     for path_id in sorted(path_dilemma_map.keys()):
         if path_id not in paths_with_commits:
             continue  # No commit beat; already reported as error in check 13
@@ -1630,7 +1748,9 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
             expected_dilemma = path_dilemma_map[path_id]
             errors.append(
                 SeedValidationError(
-                    field_path=f"paths.{path_id}.arc_structure",
+                    # initial_beats prefix → routes to "beats" section for retry,
+                    # where the per_path_beats prompt can act on the feedback.
+                    field_path=f"initial_beats.{path_id}.arc_structure",
                     issue=(
                         f"Path '{path_id}' has no beat with effect 'advances' "
                         f"or 'reveals' before its commit beat for dilemma "
@@ -1649,7 +1769,9 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
             expected_dilemma = path_dilemma_map[path_id]
             errors.append(
                 SeedValidationError(
-                    field_path=f"paths.{path_id}.arc_structure",
+                    # initial_beats prefix → routes to "beats" section for retry,
+                    # where the per_path_beats prompt can act on the feedback.
+                    field_path=f"initial_beats.{path_id}.arc_structure",
                     issue=(
                         f"Path '{path_id}' has no beat after its commit beat "
                         f"for dilemma '{expected_dilemma}'. Every path MUST have "
@@ -1805,7 +1927,9 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
             "raw_id": raw_id,
             "path_id": prefixed_path_id,
             "description": consequence.get("description"),
-            "narrative_effects": consequence.get("narrative_effects", []),
+            # The spec (R-3.4) and validator use "ripples" as the graph field name.
+            # The Pydantic model calls this "narrative_effects"; translate here.
+            "ripples": consequence.get("narrative_effects", []),
         }
         consequence_data = _clean_dict(consequence_data)
         graph.create_node(consequence_id, consequence_data)
@@ -1813,6 +1937,14 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
         # Link consequence to its path (path must exist)
         if prefixed_path_id and graph.has_node(prefixed_path_id):
             graph.add_edge("has_consequence", prefixed_path_id, consequence_id)
+
+    # Build a raw path -> dilemma map for guard-rail 1 enforcement.
+    _path_to_dilemma: dict[str, str] = {}
+    for p in output.get("paths", []):
+        pid = p.get("path_id")
+        did = p.get("dilemma_id")
+        if pid and did:
+            _path_to_dilemma[strip_scope_prefix(str(pid))] = strip_scope_prefix(str(did))
 
     # Create initial beats
     for i, beat in enumerate(output.get("initial_beats", [])):
@@ -1833,7 +1965,7 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
             with contextlib.suppress(ValueError):
                 prefixed_location = _resolve_entity_ref(graph, raw_location)
 
-        # Resolve location_alternatives → flexibility edges (Doc 3)
+        # Resolve location_alternatives → flexibility edges (Story Graph Ontology)
         raw_location_alts = beat.get("location_alternatives", [])
         prefixed_location_alts = []
         for eid in raw_location_alts:
@@ -1870,13 +2002,62 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
         beat_data = _clean_dict(beat_data)
         graph.create_node(beat_id, beat_data)
 
-        # Link beat to its path (singular belongs_to edge)
-        raw_path_id = _get_path_id_from_beat(beat)
-        if raw_path_id:
+        # Link beat to its path(s). Post-commit beats emit one belongs_to;
+        # pre-commit (Y-shape) beats with ``also_belongs_to`` emit two.
+        raw_path_ids = _get_path_ids_from_beat(beat)
+        is_dual = len(raw_path_ids) == 2
+
+        # Guard rail 1 (Story Graph Ontology §8 "Path Membership"):
+        # dual belongs_to must reference paths of the same dilemma.
+        if is_dual:
+            d0 = _path_to_dilemma.get(strip_scope_prefix(raw_path_ids[0]))
+            d1 = _path_to_dilemma.get(strip_scope_prefix(raw_path_ids[1]))
+            if d0 is None:
+                msg = (
+                    f"beat {raw_id!r}: path_id={raw_path_ids[0]!r} has no known dilemma "
+                    "(not in output paths); cannot enforce guard rail 1."
+                )
+                raise ValueError(msg)
+            if d1 is None:
+                msg = (
+                    f"beat {raw_id!r}: also_belongs_to={raw_path_ids[1]!r} has no known dilemma "
+                    "(not in output paths); cannot enforce guard rail 1."
+                )
+                raise ValueError(msg)
+            if d0 != d1:
+                msg = (
+                    "cross-dilemma dual belongs_to is forbidden (guard rail 1). "
+                    f"Beat {raw_id!r} has path_id={raw_path_ids[0]!r} (dilemma={d0!r}) and "
+                    f"also_belongs_to={raw_path_ids[1]!r} (dilemma={d1!r})."
+                )
+                raise ValueError(msg)
+            if strip_scope_prefix(raw_path_ids[0]) == strip_scope_prefix(raw_path_ids[1]):
+                msg = (
+                    f"beat {raw_id!r}: path_id and also_belongs_to must be distinct paths "
+                    f"({raw_path_ids[0]!r} == {raw_path_ids[1]!r})."
+                )
+                raise ValueError(msg)
+
+        # Guard rail 2: commit beats are single-membership. A commit beat is
+        # the first beat exclusive to its path - it cannot also belong to the
+        # sibling path.
+        if is_dual:
+            has_commit = any(
+                imp.get("effect") == "commits" for imp in beat.get("dilemma_impacts", [])
+            )
+            if has_commit:
+                msg = (
+                    "guard rail 2: a beat with effect=commits must have a single "
+                    f"belongs_to (no also_belongs_to). Beat {raw_id!r} has both "
+                    f"a commits impact and also_belongs_to={raw_path_ids[1]!r}."
+                )
+                raise ValueError(msg)
+
+        for raw_path_id in raw_path_ids:
             prefixed_path_id = _prefix_id("path", raw_path_id)
             graph.add_edge("belongs_to", beat_id, prefixed_path_id)
 
-        # Create flexibility edges for location alternatives (Doc 3)
+        # Create flexibility edges for location alternatives (Story Graph Ontology)
         for alt_entity in prefixed_location_alts:
             graph.add_edge("flexibility", beat_id, alt_entity, role="location")
 
@@ -1900,25 +2081,46 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
                     fallback="soft/2",
                 )
             data = analysis or {}
+            # R-7.1/7.2/7.3: all three analysis fields are required on the graph node.
+            # When an analysis entry is absent, fall back to the most conservative defaults
+            # so the SEED contract validator does not reject a partially-analyzed output.
             update_fields: dict[str, Any] = {
                 "dilemma_role": data.get("dilemma_role", "soft"),
                 "payoff_budget": data.get("payoff_budget", 2),
+                "ending_salience": data.get("ending_salience", "none"),
+                "residue_weight": data.get("residue_weight", "cosmetic"),
             }
             for key in (
                 "convergence_point",
                 "residue_note",
                 "ending_tone",
-                "ending_salience",
-                "residue_weight",
             ):
                 if key in data:
                     update_fields[key] = data[key]
             graph.update_node(dilemma_node_id, **update_fields)
 
-    # Create dilemma ordering edges between dilemma pairs (Doc 3, Part 2)
+    # Create dilemma ordering edges between dilemma pairs (Story Graph Ontology, Part 2)
     for relationship in output.get("dilemma_relationships", []):
         a_raw = relationship.get("dilemma_a", "")
         b_raw = relationship.get("dilemma_b", "")
+        edge_type = relationship.get("ordering", "concurrent")
+
+        # R-8.4: shared_entity is derived from anchored_to edges, never declared.
+        if edge_type == "shared_entity":
+            raise MutationError(
+                f"Dilemma relationship 'shared_entity' is forbidden (R-8.4): "
+                "shared_entity is derived from anchored_to edges, not declared. "
+                f"Relationship: dilemma_a={a_raw!r}, dilemma_b={b_raw!r}."
+            )
+
+        # R-8.3: normalize concurrent (symmetric) pairs to lex-smaller dilemma_a.
+        # Directional orderings (wraps, serial) preserve the supplied order.
+        if edge_type == "concurrent":
+            a_node_candidate = _prefix_id("dilemma", a_raw)
+            b_node_candidate = _prefix_id("dilemma", b_raw)
+            if a_node_candidate > b_node_candidate:
+                a_raw, b_raw = b_raw, a_raw
+
         a_node = _prefix_id("dilemma", a_raw)
         b_node = _prefix_id("dilemma", b_raw)
         if not graph.has_node(a_node) or not graph.has_node(b_node):
@@ -1929,12 +2131,26 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
                 reason="node_missing",
             )
             continue
-        edge_type = relationship.get("ordering", "concurrent")
         graph.add_edge(
             edge_type,
             a_node,
             b_node,
             description=relationship.get("description", ""),
+        )
+
+    graph.upsert_node(
+        "seed_freeze",
+        {
+            "type": "seed_freeze",
+            "human_approved": bool(output.get("human_approved_paths", False)),
+        },
+    )
+
+    contract_errors = validate_seed_output(graph)
+    if contract_errors:
+        log.error("seed_contract_violated", errors=contract_errors)
+        raise SeedContractError(
+            "SEED stage output contract violated:\n  - " + "\n  - ".join(contract_errors)
         )
 
 

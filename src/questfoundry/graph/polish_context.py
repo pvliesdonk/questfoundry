@@ -80,19 +80,22 @@ def format_linear_section_context(
         impacts = data.get("dilemma_impacts", [])
         entities = data.get("entities", [])
 
+        # Backtick-wrap IDs per @prompt-engineer Rule 4.
         impact_str = ""
         if impacts:
-            effects = [f"{imp.get('effect', '?')}({imp.get('dilemma_id', '?')})" for imp in impacts]
-            impact_str = f" impacts=[{', '.join(effects)}]"
+            effects = [
+                f"{imp.get('effect', '?')}(`{imp.get('dilemma_id', '?')}`)" for imp in impacts
+            ]
+            impact_str = f" impacts: {', '.join(effects)}"
 
         entity_str = ""
         if entities:
             # Truncate to 5 entities per beat to keep context compact
             display = entities[:5]
             suffix = f" +{len(entities) - 5}" if len(entities) > 5 else ""
-            entity_str = f" entities=[{', '.join(display)}{suffix}]"
+            entity_str = f" entities: {', '.join(f'`{e}`' for e in display)}{suffix}"
 
-        line = f"  {i + 1}. {bid}: [{scene_type}] {summary}{impact_str}{entity_str}"
+        line = f"  {i + 1}. `{bid}`: [{scene_type}] {summary}{impact_str}{entity_str}"
         beat_items.append(ContextItem(id=bid, text=line))
 
     if config:
@@ -104,12 +107,15 @@ def format_linear_section_context(
     before_context = _format_context_beat(beat_nodes, before_beat, "preceding")
     after_context = _format_context_beat(beat_nodes, after_beat, "following")
 
+    # Bullet list per ID; small models lose track of flat comma-separated lists for 8-15 beats.
+    valid_beat_ids_block = "\n".join(f"- `{b}`" for b in beat_ids) if beat_ids else "(none)"
+
     return {
         "section_id": section_id,
-        "beat_details": beat_details,
+        "beat_details": beat_details or "(none)",
         "before_context": before_context,
         "after_context": after_context,
-        "valid_beat_ids": ", ".join(beat_ids),
+        "valid_beat_ids": valid_beat_ids_block,
         "beat_count": str(len(beat_ids)),
     }
 
@@ -141,20 +147,24 @@ def format_pacing_context(
 
         issue_lines.append(f"\n### Pacing Issue: {issue_type}")
         if path_id:
-            issue_lines.append(f"Path: {path_id}")
+            issue_lines.append(f"Path: `{path_id}`")
 
         for bid in beat_ids:
             data = beat_nodes.get(bid, {})
             summary = truncate_summary(data.get("summary", ""), 100)
             scene_type = data.get("scene_type", "unknown")
             entities = data.get("entities", [])
-            entity_str = f" entities=[{', '.join(entities[:3])}]" if entities else ""
-            issue_lines.append(f"  - {bid}: [{scene_type}] {summary}{entity_str}")
+            entity_str = (
+                f" entities: {', '.join(f'`{e}`' for e in entities[:3])}" if entities else ""
+            )
+            issue_lines.append(f"  - `{bid}`: [{scene_type}] {summary}{entity_str}")
 
     pacing_issues = "\n".join(issue_lines) if issue_lines else "No pacing issues detected."
 
-    # Valid entity IDs for micro-beat entity references
-    valid_entity_ids = ", ".join(sorted(entity_nodes.keys()))
+    # Valid entity IDs for micro-beat entity references (backtick-wrapped per
+    # @prompt-engineer Rule 4, with `(none)` fallback matching the sibling
+    # render functions).
+    valid_entity_ids = ", ".join(f"`{e}`" for e in sorted(entity_nodes.keys())) or "(none)"
 
     return {
         "pacing_issues": pacing_issues,
@@ -179,23 +189,25 @@ def format_entity_arc_context(
 
     Returns:
         Dict with keys: entity_id, entity_name, entity_description,
-        beat_appearances, path_ids, valid_path_ids, valid_beat_ids.
+        beat_appearances, overlay_data, anchored_dilemmas, path_ids,
+        valid_path_beats.
     """
     beat_nodes = graph.get_nodes_by_type("beat")
     entity_nodes = graph.get_nodes_by_type("entity")
-    path_nodes = graph.get_nodes_by_type("path")
 
     # Entity info
     entity_data = entity_nodes.get(entity_id, {})
     entity_name = entity_data.get("name", entity_id)
     entity_description = entity_data.get("description", "")
 
-    # Build beat appearance lines with path context
+    # Build beat appearance lines with path context. Pre-commit beats
+    # (Y-shape) belong to both paths of their dilemma — report both.
     belongs_to_edges = graph.get_edges(edge_type="belongs_to")
-    beat_to_path: dict[str, str] = {}
+    _accum: dict[str, set[str]] = {}
     for edge in belongs_to_edges:
         if edge["from"] in beat_nodes:
-            beat_to_path[edge["from"]] = edge["to"]
+            _accum.setdefault(edge["from"], set()).add(edge["to"])
+    beat_to_paths: dict[str, frozenset[str]] = {b: frozenset(p) for b, p in _accum.items()}
 
     beat_items: list[ContextItem] = []
     paths_seen: set[str] = set()
@@ -203,9 +215,8 @@ def format_entity_arc_context(
         data = beat_nodes.get(bid, {})
         summary = truncate_summary(data.get("summary", ""), 100)
         scene_type = data.get("scene_type", "unknown")
-        path_id = beat_to_path.get(bid)
-        if path_id:
-            paths_seen.add(path_id)
+        path_set = beat_to_paths.get(bid, frozenset())
+        paths_seen.update(path_set)
 
         impacts = data.get("dilemma_impacts", [])
         impact_str = ""
@@ -213,14 +224,26 @@ def format_entity_arc_context(
             effects = [imp.get("effect", "?") for imp in impacts]
             impact_str = f" dilemma_effects=[{', '.join(effects)}]"
 
-        path_label = path_id or "unknown"
-        line = f"  - {bid} (path: {path_label}) [{scene_type}]: {summary}{impact_str}"
+        # Backtick-wrap IDs per @prompt-engineer Rule 4 — consistent with the
+        # other ID lists this context dict produces, so a model matching beat
+        # IDs against `valid_path_beats` doesn't have to mentally strip backticks.
+        if not path_set:
+            path_label = "unknown"
+        elif len(path_set) == 1:
+            (only_path,) = path_set
+            path_label = f"`{only_path}`"
+        else:
+            path_label = ", ".join(f"`{p}`" for p in sorted(path_set)) + " (shared pre-commit)"
+        line = f"  - `{bid}` (path: {path_label}) [{scene_type}]: {summary}{impact_str}"
         beat_items.append(ContextItem(id=bid, text=line))
 
     if config:
         beat_text = compact_items(beat_items, config)
     else:
         beat_text = "\n".join(item.text for item in beat_items)
+    # Empty fallback consistent with the four ID list fields below.
+    if not beat_text:
+        beat_text = "  (none)"
 
     # Overlay data (how entity changes based on state flags)
     # Overlays are embedded on the entity node as {when: [state_flag_ids], details: {k: v}}
@@ -230,8 +253,15 @@ def format_entity_arc_context(
         flags = overlay.get("when") or []
         details = overlay.get("details") or {}
         if flags and details:
-            flag_str = ", ".join(flags)
-            detail_str = "; ".join(f"{k}: {v}" for k, v in details.items())
+            # Backtick-wrap flag IDs per @prompt-engineer Rule 4.
+            flag_str = ", ".join(f"`{f}`" for f in flags)
+            # Format list values explicitly to avoid leaking Python repr
+            # (brackets/quotes) into LLM-facing text per @prompt-engineer Rule 4.
+            # Sorted for deterministic output across runs.
+            detail_str = "; ".join(
+                f"{k}: {', '.join(map(str, v)) if isinstance(v, list) else v}"
+                for k, v in sorted(details.items())
+            )
             overlay_lines.append(f"  - When {flag_str}: {truncate_summary(detail_str, 80)}")
 
     overlay_text = "\n".join(overlay_lines) if overlay_lines else "  (no overlays)"
@@ -243,7 +273,30 @@ def format_entity_arc_context(
         if edge["from"] == entity_id:
             anchored_dilemmas.append(edge["to"])
 
-    anchored_text = ", ".join(anchored_dilemmas) if anchored_dilemmas else "(none)"
+    # Backtick-wrap IDs per @prompt-engineer Rule 4.
+    anchored_text = (
+        ", ".join(f"`{d}`" for d in anchored_dilemmas) if anchored_dilemmas else "(none)"
+    )
+
+    # Render each ID list with a `(none)` fallback when empty so the prompt
+    # never receives a bare empty injection. Matches `anchored_text` above.
+    # `path_ids` is scoped to the entity's paths (paths_seen) — the Phase 3
+    # prompt constrains `pivots` / `arcs_per_path` to this set, and showing
+    # the broader story-wide list previously confused models into inventing
+    # arcs for paths the entity never appears in (closes #1410).
+    path_ids_text = ", ".join(f"`{p}`" for p in sorted(paths_seen)) or "(none)"
+
+    # Grouped Valid IDs block: one bullet per path listing the entity's
+    # beats on that path. Y-shape pre-commit beats (multi-belongs_to) appear
+    # under each of their paths. Replaces the two flat ``valid_path_ids`` +
+    # ``valid_beat_ids`` lists that small models had to cross-correlate.
+    valid_path_beats_lines: list[str] = []
+    for pid in sorted(paths_seen):
+        path_beats = [bid for bid in beat_appearances if pid in beat_to_paths.get(bid, frozenset())]
+        if path_beats:
+            beats_str = ", ".join(f"`{b}`" for b in path_beats)
+            valid_path_beats_lines.append(f"  - `{pid}` → {beats_str}")
+    valid_path_beats_block = "\n".join(valid_path_beats_lines) or "  (none)"
 
     return {
         "entity_id": entity_id,
@@ -252,9 +305,8 @@ def format_entity_arc_context(
         "beat_appearances": beat_text,
         "overlay_data": overlay_text,
         "anchored_dilemmas": anchored_text,
-        "path_ids": ", ".join(sorted(paths_seen)),
-        "valid_path_ids": ", ".join(sorted(path_nodes.keys())),
-        "valid_beat_ids": ", ".join(sorted(beat_appearances)),
+        "path_ids": path_ids_text,
+        "valid_path_beats": valid_path_beats_block,
     }
 
 
@@ -293,16 +345,32 @@ def format_choice_label_context(
         from_summary = truncate_summary(from_spec.get("summary", ""), 80)
         to_summary = truncate_summary(to_spec.get("summary", ""), 80)
 
-        grants_str = f" grants=[{', '.join(grants)}]" if grants else ""
+        # Backtick-wrap IDs per @prompt-engineer Rule 4.
+        grants_str = f" grants: {', '.join(f'`{g}`' for g in grants)}" if grants else ""
         choice_lines.append(
-            f"  {i + 1}. From: {from_id} ({from_summary})\n"
-            f"     To: {to_id} ({to_summary}){grants_str}"
+            f"  {i + 1}. From: `{from_id}` ({from_summary})\n"
+            f"     To: `{to_id}` ({to_summary}){grants_str}"
         )
 
+    # Valid passage IDs: every passage_id referenced by any ChoiceSpec, sorted
+    # for determinism. Per @prompt-engineer Rule 1 the LLM must receive an explicit Valid
+    # IDs list rather than be expected to derive IDs from the choice details
+    # block — small models otherwise invent or mangle passage IDs and Phase 6
+    # fails to wire choice edges.
+    valid_passage_ids = sorted(
+        {
+            pid
+            for spec in choice_specs
+            for pid in (spec.get("from_passage", ""), spec.get("to_passage", ""))
+            if pid
+        }
+    )
+
     return {
-        "choice_details": "\n".join(choice_lines),
+        "choice_details": "\n".join(choice_lines) or "(none)",
         "story_context": story_context,
         "choice_count": str(len(choice_specs)),
+        "valid_passage_ids": ", ".join(f"`{p}`" for p in valid_passage_ids) or "(none)",
     }
 
 
@@ -337,13 +405,14 @@ def format_residue_content_context(
         target_spec = passage_lookup.get(target, {})
         target_summary = truncate_summary(target_spec.get("summary", ""), 80)
 
+        # Backtick-wrap IDs per @prompt-engineer Rule 4.
         residue_lines.append(
-            f"  - {residue_id}: flag={flag} path={path_id}\n"
-            f"    Target passage: {target} ({target_summary})"
+            f"  - residue_id: `{residue_id}` flag: `{flag}` path: `{path_id}`\n"
+            f"    Target passage: `{target}` ({target_summary})"
         )
 
     return {
-        "residue_details": "\n".join(residue_lines),
+        "residue_details": "\n".join(residue_lines) or "(none)",
         "story_context": story_context,
         "residue_count": str(len(residue_specs)),
     }
@@ -362,14 +431,15 @@ def format_false_branch_context(
         passage_specs: List of passage spec dicts.
 
     Returns:
-        Dict with keys: candidate_details, story_context, candidate_count.
+        Dict with keys: candidate_details, valid_entity_ids, candidate_count.
     """
     passage_lookup: dict[str, dict[str, Any]] = {}
     for spec in passage_specs:
         passage_lookup[spec["passage_id"]] = spec
 
     entity_nodes = graph.get_nodes_by_type("entity")
-    valid_entity_ids = ", ".join(sorted(entity_nodes.keys()))
+    # Backtick-wrap IDs per @prompt-engineer Rule 4, with `(none)` fallback.
+    valid_entity_ids = ", ".join(f"`{e}`" for e in sorted(entity_nodes.keys())) or "(none)"
 
     candidate_lines: list[str] = []
     for i, cand in enumerate(candidates):
@@ -380,7 +450,7 @@ def format_false_branch_context(
         for pid in passage_ids:
             spec = passage_lookup.get(pid, {})
             summary = truncate_summary(spec.get("summary", ""), 60)
-            passage_details.append(f"    - {pid}: {summary}")
+            passage_details.append(f"    - `{pid}`: {summary}")
 
         candidate_lines.append(
             f"  Candidate {i}:\n"
@@ -389,7 +459,7 @@ def format_false_branch_context(
         )
 
     return {
-        "candidate_details": "\n".join(candidate_lines),
+        "candidate_details": "\n".join(candidate_lines) or "(none)",
         "valid_entity_ids": valid_entity_ids,
         "candidate_count": str(len(candidates)),
     }
@@ -425,13 +495,15 @@ def format_variant_summary_context(
         base_spec = passage_lookup.get(base_id, {})
         base_summary = truncate_summary(base_spec.get("summary", ""), 80)
 
+        # Backtick-wrap IDs per @prompt-engineer Rule 4.
+        requires_str = ", ".join(f"`{r}`" for r in requires) if requires else "(none)"
         variant_lines.append(
-            f"  - {variant_id}: base={base_id} ({base_summary})\n"
-            f"    requires=[{', '.join(requires)}]"
+            f"  - variant_id: `{variant_id}` base: `{base_id}` ({base_summary})\n"
+            f"    requires: {requires_str}"
         )
 
     return {
-        "variant_details": "\n".join(variant_lines),
+        "variant_details": "\n".join(variant_lines) or "(none)",
         "story_context": story_context,
         "variant_count": str(len(variant_specs)),
     }
@@ -488,7 +560,7 @@ def format_ambiguous_feasibility_context(
 
         flags_str = "\n".join(flag_lines)
         case_lines.append(
-            f"  passage_id: {case.passage_id}\n"
+            f"  passage_id: `{case.passage_id}`\n"
             f"  summary: {summary}\n"
             f"  entities: {entities_str}\n"
             f"  flags:\n{flags_str}"
@@ -535,12 +607,12 @@ def format_transition_guidance_context(
             summary = truncate_summary(data.get("summary", ""), 90)
             scene_type = data.get("scene_type", "")
             scene_tag = f"[{scene_type}] " if scene_type else ""
-            beat_lines.append(f"    Beat {i + 1}: {bid} {scene_tag}— {summary}")
+            beat_lines.append(f"    Beat {i + 1}: `{bid}` {scene_tag}— {summary}")
 
         boundary_count = len(beat_ids) - 1
         beats_str = "\n".join(beat_lines)
         passage_lines.append(
-            f"  passage_id: {passage_id}\n"
+            f"  passage_id: `{passage_id}`\n"
             f"  entities: {entities_str}\n"
             f"  beats ({len(beat_ids)} total, {boundary_count} boundary/ies):\n{beats_str}"
         )

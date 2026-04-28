@@ -219,3 +219,91 @@ class TestGrowRegistryBackwardCompat:
         registry = get_registry()
         errors = registry.validate()
         assert errors == [], f"GROW registry validation errors: {errors}"
+
+
+class TestPolishStagePhaseMappingDrift:
+    """Verify PolishStage's hand-maintained phase maps cover every registered phase.
+
+    Regression coverage for #1453 — three @polish_phase-decorated mixin methods
+    were missing from PolishStage._METHOD_PHASES, so phase resolution silently
+    fell back to the unbound mixin function and crashed mid-stage when the
+    execute loop called fn(graph, model) with self unbound.
+    """
+
+    def test_every_mixin_phase_method_is_in_method_phases(self) -> None:
+        """Every @polish_phase-decorated method on _PolishLLMPhaseMixin must be mapped.
+
+        Walks the mixin directly rather than the global registry — the
+        registry singleton is shared across tests in this file, some of
+        which deliberately seed bad-shape phases (cycles, duplicates) into
+        it.
+        """
+        from questfoundry.pipeline.registry import PHASE_META_ATTR
+        from questfoundry.pipeline.stages.polish.llm_phases import _PolishLLMPhaseMixin
+        from questfoundry.pipeline.stages.polish.stage import PolishStage
+
+        registered_via_mixin: set[str] = set()
+        for attr_name in dir(_PolishLLMPhaseMixin):
+            attr = getattr(_PolishLLMPhaseMixin, attr_name)
+            meta = getattr(attr, PHASE_META_ATTR, None)
+            if meta is not None:
+                registered_via_mixin.add(meta.name)
+
+        unmapped = sorted(registered_via_mixin - set(PolishStage._METHOD_PHASES))
+        assert not unmapped, (
+            "@polish_phase mixin methods missing from PolishStage._METHOD_PHASES: "
+            f"{unmapped}. Add an entry for each — phase resolution falls "
+            "back to the unbound mixin function otherwise, which crashes "
+            "when called as fn(graph, model)."
+        )
+
+    def test_every_free_phase_module_function_is_in_free_phases(self) -> None:
+        """Every @polish_phase-decorated free function in stage.py must be mapped.
+
+        Mirror of the mixin check for the deterministic side.
+        """
+        import questfoundry.pipeline.stages.polish.stage as polish_stage_module
+        from questfoundry.pipeline.registry import PHASE_META_ATTR
+        from questfoundry.pipeline.stages.polish.stage import PolishStage
+
+        registered_in_module: set[str] = set()
+        for attr_name in dir(polish_stage_module):
+            attr = getattr(polish_stage_module, attr_name)
+            meta = getattr(attr, PHASE_META_ATTR, None)
+            if meta is not None:
+                registered_in_module.add(meta.name)
+
+        unmapped = sorted(registered_in_module - set(PolishStage._FREE_PHASES))
+        assert not unmapped, (
+            "@polish_phase free functions in polish/stage.py missing from "
+            f"PolishStage._FREE_PHASES: {unmapped}. Add an entry for each."
+        )
+
+    def test_method_phases_target_existing_methods_on_mixin(self) -> None:
+        """Every mapped method name must exist on _PolishLLMPhaseMixin."""
+        from questfoundry.pipeline.stages.polish.llm_phases import _PolishLLMPhaseMixin
+        from questfoundry.pipeline.stages.polish.stage import PolishStage
+
+        for phase_name, method_name in PolishStage._METHOD_PHASES.items():
+            assert hasattr(_PolishLLMPhaseMixin, method_name), (
+                f"_METHOD_PHASES[{phase_name!r}] = {method_name!r}, but that "
+                "method does not exist on _PolishLLMPhaseMixin."
+            )
+
+    def test_free_phases_target_existing_module_functions(self) -> None:
+        """Every mapped free-function name must exist in polish/stage.py.
+
+        Mirror of ``test_method_phases_target_existing_methods_on_mixin``
+        for the deterministic side. Catches typos in ``_FREE_PHASES`` values
+        before they become runtime AttributeErrors at ``_phase_order()``.
+        """
+        import questfoundry.pipeline.stages.polish.stage as polish_stage_module
+        from questfoundry.pipeline.stages.polish.stage import PolishStage
+
+        for phase_name, fn_name in PolishStage._FREE_PHASES.items():
+            assert hasattr(polish_stage_module, fn_name), (
+                f"_FREE_PHASES[{phase_name!r}] = {fn_name!r}, but that "
+                "function is not importable from polish.stage. The free "
+                "function must be re-exported via stage.py for "
+                "_phase_order()'s getattr lookup to find it."
+            )

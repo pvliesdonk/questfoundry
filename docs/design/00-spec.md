@@ -1,10 +1,19 @@
 # QuestFoundry v5 — Unified Specification
 
-**Version:** 2.0
-**Status:** Working draft — partially superseded
-**Supersedes:** qf-v5-vision.md, qf-v5-vision-delta001.md, questfoundry-v5-graph-ontology-v1-1.md
+> **DEPRECATED (2026-04-14):** This document is retained for historical reference only.
+>
+> The authoritative sources for the QuestFoundry v5 design are:
+> - [How Branching Stories Work](./how-branching-stories-work.md) — narrative principles
+> - [Story Graph Ontology](./story-graph-ontology.md) — graph/data model
+> - [`procedures/*.md`](./procedures/) — per-stage algorithm specifications
+>
+> Content that appears only in this document (Anti-Patterns, Design Decisions,
+> Context Budget Analysis, Open Questions, Future Bolt-ons) has not yet been
+> migrated and may be outdated. Do not treat it as authoritative; migrate any
+> still-relevant content to the appropriate new doc before citing.
 
-> **Status update (2026-02-24):** [Document 1](how-branching-stories-work.md) and [Document 3](document-3-ontology.md) are now the authoritative source of truth for QuestFoundry's story model and graph ontology. Sections of this document marked "Superseded" below have been replaced by those documents. Unmarked sections remain valid. See [Issue #977](https://github.com/pvliesdonk/questfoundry/issues/977).
+**Version:** 2.0
+**Supersedes:** qf-v5-vision.md, qf-v5-vision-delta001.md, questfoundry-v5-graph-ontology-v1-1.md
 
 ---
 
@@ -46,7 +55,7 @@ The complexity of the tooling exceeded what an AI coding agent could hold in wor
 
 ## Pipeline Overview
 
-> **Note:** The pipeline now includes a POLISH stage between GROW and FILL. See [Document 1, Part 4](how-branching-stories-work.md).
+> **Note:** The pipeline now includes a POLISH stage between GROW and FILL. See ["How Branching Stories Work", Part 4](how-branching-stories-work.md).
 
 ```
 DREAM → BRAINSTORM → SEED → GROW → POLISH → FILL → DRESS → SHIP
@@ -92,7 +101,7 @@ This keeps human cognitive load manageable while preserving authorial control.
 
 ## Graph Ontology
 
-> **Note:** [Document 3](document-3-ontology.md) is now the authoritative reference for the graph ontology (node types, edge types, properties). The general principles below (unified graph, graph-as-source-of-truth) remain valid. Specific node type definitions, edge types, and property details should be verified against Document 3.
+> **Note:** The [Story Graph Ontology](story-graph-ontology.md) is now the authoritative reference for the graph ontology (node types, edge types, properties). The general principles below (unified graph, graph-as-source-of-truth) remain valid. Specific node type definitions, edge types, and property details should be verified against the Story Graph Ontology.
 
 ### The Unified Graph
 
@@ -275,7 +284,7 @@ overlays:
 
 #### Codeword
 
-> **Superseded by [Document 3, Part 1](document-3-ontology.md).** Document 3 splits the unified "codeword" concept into *state flags* (internal routing markers) and *codewords* (player-facing gamebook markers). State flags are the primary mechanism; codewords are a SHIP-time projection of a subset of state flags. See Document 3, Part 6 for the full model.
+> **Superseded by the [Story Graph Ontology, Part 1](story-graph-ontology.md).** The Story Graph Ontology splits the unified "codeword" concept into *state flags* (internal routing markers) and *codewords* (player-facing gamebook markers). State flags are the primary mechanism; codewords are a SHIP-time projection of a subset of state flags. See the Story Graph Ontology, Part 6 for the full model.
 
 State marker. Universal mechanism for both plot progression and player choice.
 
@@ -580,7 +589,7 @@ Scene type is assigned during GROW (Phase 4: Gap Detection) to ensure pacing var
 
 #### Arc
 
-> **Superseded by [Document 3, Part 3](document-3-ontology.md).** Arcs are now computed DAG traversals (Cartesian product of path choices), not stored graph nodes. Diagnostic snapshots use a `materialized_` prefix to signal derived/read-only data. See Document 3, Appendix item 6.
+> **Superseded by the [Story Graph Ontology, Part 3](story-graph-ontology.md).** Arcs are now computed DAG traversals (Cartesian product of path choices), not stored graph nodes. Diagnostic snapshots use a `materialized_` prefix to signal derived/read-only data. See the Story Graph Ontology, Appendix item 6.
 
 Realized weaving of compatible paths.
 
@@ -642,7 +651,7 @@ illustration_brief:
 
 ## Edge Types
 
-> **Superseded by [Document 3](document-3-ontology.md).** Document 3 provides the authoritative edge type definitions with updated naming, new edge types (e.g., `anchored_to`, dilemma ordering relationships), and the intersection group model.
+> **Superseded by the [Story Graph Ontology](story-graph-ontology.md).** The Story Graph Ontology provides the authoritative edge type definitions with updated naming, new edge types (e.g., `anchored_to`, dilemma ordering relationships), and the intersection group model.
 
 > **Naming Convention:** Persistent edges use PascalCase (Choice, Appears) as they appear
 > in exports. Working edges use snake_case (belongs_to, has_answer) as they're internal only.
@@ -781,7 +790,7 @@ BRAINSTORM generates freely without worrying about path collision. Location flex
 
 ### Stage 3: SEED
 
-> **Terminology transition:** `convergence_policy` → `dilemma_role`, `InteractionConstraint` → dilemma ordering relationships. See [Document 3, Part 2](document-3-ontology.md) and the [procedure doc](procedures/seed.md) for details.
+> **Terminology transition:** `convergence_policy` → `dilemma_role`, `InteractionConstraint` → dilemma ordering relationships. See the [Story Graph Ontology, Part 2](story-graph-ontology.md) and the [procedure doc](procedures/seed.md) for details.
 
 **Purpose:** Triage brainstorm into committed structure. **Path creation gate.**
 
@@ -864,7 +873,7 @@ seed:
 
 #### Convergence: Topology Layer vs Prose Layer
 
-> **Superseded by [Document 3, Part 2](document-3-ontology.md).** The `convergence_policy` field (hard/soft/flavor) is replaced by `dilemma_role` (hard/soft). Convergence behavior is derived from the role. `flavor` is removed — flavor-level choices are handled by POLISH as false branches. The topology/prose layer separation concept is retained but the vocabulary changes. `ending_salience` and `residue_weight` remain as described. See also [Document 1, Part 2](how-branching-stories-work.md).
+> **Superseded by the [Story Graph Ontology, Part 2](story-graph-ontology.md).** The `convergence_policy` field (hard/soft/flavor) is replaced by `dilemma_role` (hard/soft). Convergence behavior is derived from the role. `flavor` is removed — flavor-level choices are handled by POLISH as false branches. The topology/prose layer separation concept is retained but the vocabulary changes. `ending_salience` and `residue_weight` remain as described. See also ["How Branching Stories Work", Part 2](how-branching-stories-work.md).
 
 Convergence control is split into two orthogonal layers:
 
@@ -959,7 +968,7 @@ Every codeword granted must appear in at least one `choice.requires_codewords` g
 
 ### Stage 4: GROW
 
-> **Scope change:** Documents 1 and 3 split the original GROW scope into GROW (beat DAG creation) and POLISH (passage layer). Passages, choices, codeword/state flag creation, and overlay creation move to POLISH. See [Document 1, Part 3–4](how-branching-stories-work.md) and the [procedure doc](procedures/grow.md) for details.
+> **Scope change:** "How Branching Stories Work" and the Story Graph Ontology split the original GROW scope into GROW (beat DAG creation) and POLISH (passage layer). Passages, choices, codeword/state flag creation, and overlay creation move to POLISH. See ["How Branching Stories Work", Part 3–4](how-branching-stories-work.md) and the [procedure doc](procedures/grow.md) for details.
 
 **Purpose:** Generate the complete story topology through graph mutation.
 
@@ -1028,7 +1037,7 @@ Every choice has a diegetic label.
 
 ### Stage 5: FILL
 
-> **Note:** FILL's input now comes from POLISH (not directly from GROW). Poly-state prose has been replaced by residue beats (see ADR-015). See [Document 1, Part 5](how-branching-stories-work.md) and the [procedure doc](procedures/fill.md).
+> **Note:** FILL's input now comes from POLISH (not directly from GROW). Poly-state prose has been replaced by residue beats (see ADR-015). See ["How Branching Stories Work", Part 5](how-branching-stories-work.md) and the [procedure doc](procedures/fill.md).
 
 **Purpose:** Generate prose for each passage.
 
@@ -1590,7 +1599,7 @@ When users run `qf review`:
 
 ## Summary Tables
 
-> **Note:** [Document 3, Appendix](document-3-ontology.md) provides updated summary tables reflecting the new ontology, including the state_flag/codeword split, intersection groups, and computed arcs.
+> **Note:** The [Story Graph Ontology, Appendix](story-graph-ontology.md) provides updated summary tables reflecting the new ontology, including the state_flag/codeword split, intersection groups, and computed arcs.
 
 ### All Node Types
 

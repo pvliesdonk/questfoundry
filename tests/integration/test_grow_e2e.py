@@ -23,6 +23,7 @@ from questfoundry.models.grow import (
     Phase4fOutput,
     Phase8cOutput,
     SceneTypeTag,
+    TransitionGapsOutput,
 )
 from tests.fixtures.grow_fixtures import make_e2e_fixture_graph
 
@@ -33,7 +34,10 @@ if TYPE_CHECKING:
 def _make_e2e_mock_model(graph: Graph) -> MagicMock:
     """Create a mock model that returns valid structured output for all LLM phases.
 
-    Returns empty/minimal results for each phase for simplicity.
+    Returns empty/minimal results for each phase for simplicity.  The fixture
+    graph is arranged with disjoint entity sets across dilemmas so no
+    intersection candidates are produced, which keeps the "empty
+    intersections" Phase 3 response valid under R-2.3/R-2.8.
     """
     beat_nodes = graph.get_nodes_by_type("beat")
 
@@ -67,7 +71,9 @@ def _make_e2e_mock_model(graph: Graph) -> MagicMock:
             for bid in sorted(beat_nodes.keys())
         ],
     )
-    phase4f_output = Phase4fOutput(arcs=[])
+    # Pydantic min_length=1 normally rejects empty arcs; bypass the
+    # constraint here since the test graph has no eligible entities.
+    phase4f_output = Phase4fOutput.model_construct(arcs=[])
 
     # Phase 4e: generic path arc (called per-path with PathMiniArc schema)
     phase4e_output = PathMiniArc(
@@ -77,6 +83,7 @@ def _make_e2e_mock_model(graph: Graph) -> MagicMock:
     )
 
     phase8c_output = Phase8cOutput(overlays=[])
+    transition_gaps_output = TransitionGapsOutput(bridges=[])
 
     # Map schema title -> output (schema is now a dict with "title" field)
     output_by_title: dict[str, object] = {
@@ -87,6 +94,7 @@ def _make_e2e_mock_model(graph: Graph) -> MagicMock:
         "Phase4fOutput": phase4f_output,
         "PathMiniArc": phase4e_output,
         "Phase8cOutput": phase8c_output,
+        "TransitionGapsOutput": transition_gaps_output,
     }
 
     def _with_structured_output(schema: dict[str, Any], **_kwargs: object) -> AsyncMock:
@@ -149,12 +157,14 @@ class TestGrowFullPipeline:
     """E2E tests running all 15 GROW phases on the fixture graph."""
 
     def test_all_phases_complete(self, pipeline_result: dict[str, Any]) -> None:
-        """Verify the stage completes and returns the GrowResult summary."""
+        """Verify the stage completes and returns the GrowResult summary.
+
+        `passage_count` / `choice_count` were removed in #1302 — those live in
+        POLISH's result, not GROW's.
+        """
         result_dict = pipeline_result["result_dict"]
         expected_keys = {
             "arc_count",
-            "passage_count",
-            "choice_count",
             "state_flag_count",
             "overlay_count",
             "spine_arc_id",
@@ -168,17 +178,15 @@ class TestGrowFullPipeline:
         assert result_dict["arc_count"] == 4
         assert result_dict["spine_arc_id"] is not None
 
-    def test_passages_not_created_by_grow(self, pipeline_result: dict[str, Any]) -> None:
-        """Verify GROW does not create passages (moved to POLISH in epic #1057)."""
-        assert pipeline_result["result_dict"]["passage_count"] == 0
+    def test_grow_does_not_create_passages(self, pipeline_result: dict[str, Any]) -> None:
+        """GROW result no longer carries passage/choice counts (#1302)."""
+        result_dict = pipeline_result["result_dict"]
+        assert "passage_count" not in result_dict
+        assert "choice_count" not in result_dict
 
     def test_state_flags_derived(self, pipeline_result: dict[str, Any]) -> None:
         """Verify state flags are created from consequences (4 consequences)."""
         assert pipeline_result["result_dict"]["state_flag_count"] == 4
-
-    def test_choices_not_created_by_grow(self, pipeline_result: dict[str, Any]) -> None:
-        """Verify GROW does not create choices (moved to POLISH in epic #1057)."""
-        assert pipeline_result["result_dict"]["choice_count"] == 0
 
     def test_validation_phase_passes(self, pipeline_result: dict[str, Any]) -> None:
         """Verify the resulting graph is structurally valid."""
@@ -188,13 +196,7 @@ class TestGrowFullPipeline:
     def test_result_structure(self, pipeline_result: dict[str, Any]) -> None:
         """Verify the GrowResult summary contains expected count fields."""
         result_dict = pipeline_result["result_dict"]
-        expected_keys = {
-            "arc_count",
-            "passage_count",
-            "state_flag_count",
-            "choice_count",
-            "overlay_count",
-        }
+        expected_keys = {"arc_count", "state_flag_count", "overlay_count"}
         assert expected_keys.issubset(set(result_dict.keys()))
 
         # LLM calls should be tracked

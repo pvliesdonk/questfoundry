@@ -53,7 +53,7 @@ def bundle_assets(
             log.warning("asset_outside_project", path=str(src), passage=ill.passage_id)
             continue
         if not src_resolved.exists():
-            log.warning("asset_missing", path=str(src), passage=ill.passage_id)
+            log.error("asset_missing", path=str(src), passage=ill.passage_id)
             continue
         dest = output_dir / ill.asset_path
         dest.parent.mkdir(parents=True, exist_ok=True)
@@ -98,7 +98,7 @@ def _embed_illustration(
         log.warning("asset_outside_project", path=str(src), passage=illustration.passage_id)
         return illustration
     if not src.exists() or not src.is_file():
-        log.warning("asset_missing", path=str(src), passage=illustration.passage_id)
+        log.error("asset_missing", path=str(src), passage=illustration.passage_id)
         return illustration
 
     content_type = _guess_mime_type(src)

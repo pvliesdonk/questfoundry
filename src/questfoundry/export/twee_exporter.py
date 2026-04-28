@@ -13,6 +13,7 @@ import uuid
 from typing import TYPE_CHECKING, Any
 
 from questfoundry.export.i18n import get_ui_strings
+from questfoundry.export.metadata import ExportMetadata, build_export_metadata
 from questfoundry.observability.logging import get_logger
 
 if TYPE_CHECKING:
@@ -28,18 +29,40 @@ if TYPE_CHECKING:
 
 log = get_logger(__name__)
 
+# Backward-compatible additive changes only; bump only when the Twee
+# document shape changes (new passage type, removed field, etc.).
+TWEE_FORMAT_VERSION = "1.0.0"
+
+# Fixed UUID5 namespace for deriving Twee IFIDs deterministically from the
+# story title. R-2.4 mandates byte-identical exports for the same graph
+# state, so the IFID — which the IF Technology Foundation defines as a
+# stable identifier for the WORK, not the FILE — must not change between
+# runs. uuid.uuid4() (random) was the original choice and produced a
+# different identifier on every export. Generated once with uuid.uuid4()
+# and pasted here so the namespace itself is stable across machines.
+_QF_TWEE_IFID_NAMESPACE = uuid.UUID("4f0c8c5f-2e1c-4f44-8d1c-7a9c2f3d4e5f")
+
 
 class TweeExporter:
     """Export story as Twee 3 / SugarCube 2 format."""
 
     format_name = "twee"
+    format_version = TWEE_FORMAT_VERSION
 
-    def export(self, context: ExportContext, output_dir: Path) -> Path:
+    def export(
+        self,
+        context: ExportContext,
+        output_dir: Path,
+        *,
+        timestamp: str | None = None,
+    ) -> Path:
         """Write story as a .twee file.
 
         Args:
             context: Extracted story data.
             output_dir: Directory to write output files.
+            timestamp: Optional override for the metadata generation
+                timestamp (test seam for deterministic assertions).
 
         Returns:
             Path to the generated .twee file.
@@ -95,6 +118,13 @@ class TweeExporter:
             lines.extend(_render_art_direction_passage(context.art_direction))
             lines.append("")
 
+        # R-3.6 deterministic metadata block. SugarCube ignores unlinked
+        # passages, so this is safe sidecar storage of pipeline version,
+        # snapshot hash, format version, and timestamp.
+        metadata = build_export_metadata(context, TWEE_FORMAT_VERSION, timestamp=timestamp)
+        lines.extend(_render_metadata_passage(metadata))
+        lines.append("")
+
         content = "\n".join(lines)
         output_file.write_text(content, encoding="utf-8")
 
@@ -116,7 +146,11 @@ def _story_header(
     language: str = "en",
 ) -> list[str]:
     """Generate Twee 3 story header passages."""
-    ifid = str(uuid.uuid4()).upper()
+    # Derive the IFID deterministically from the story title via
+    # uuid.uuid5(). Same title → same IFID across runs; required by
+    # R-2.4 byte-identical determinism and aligned with the IFTF
+    # convention that an IFID identifies the work, not the file.
+    ifid = str(uuid.uuid5(_QF_TWEE_IFID_NAMESPACE, title)).upper()
     header = [
         f":: StoryTitle\n{title}",
         "",
@@ -255,5 +289,15 @@ def _render_art_direction_passage(art_direction: dict[str, Any]) -> list[str]:
     for key, value in sorted(art_direction.items()):
         safe_key = _escape_sugarcube(str(key))
         safe_value = _escape_sugarcube(str(value))
+        lines.append(f"{safe_key}: {safe_value}")
+    return lines
+
+
+def _render_metadata_passage(metadata: ExportMetadata) -> list[str]:
+    """Render R-3.6 metadata header as an unlinked Twee passage."""
+    lines = [':: StoryMetadata {"position":"100,0","size":"100,100"}']
+    for key, value in sorted(metadata.to_dict().items()):
+        safe_key = _escape_sugarcube(key)
+        safe_value = _escape_sugarcube(value)
         lines.append(f"{safe_key}: {safe_value}")
     return lines

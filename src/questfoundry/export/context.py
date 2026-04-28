@@ -24,6 +24,27 @@ if TYPE_CHECKING:
 
 log = get_logger(__name__)
 
+# R-1.7 playability threshold: gamebooks become unwieldy when the player
+# must track many codewords by hand. Spec phrases the bound as "typically
+# under 10," so projecting MORE than 10 (i.e. count > _CODEWORD_PLAYABILITY_THRESHOLD)
+# triggers a WARNING for human review.
+_CODEWORD_PLAYABILITY_THRESHOLD = 10
+
+# R-3.9 partial-DRESS check: art_direction nodes that are present but
+# missing core visual fields produce silently degraded exports (e.g.
+# illustrations rendered without a palette). These are the fields the
+# DRESS Pydantic model declares as required; when any are absent or
+# blank we warn so the user can re-run DRESS rather than ship the gap.
+# (R-3.8 covers DRESS *skipped entirely*; R-3.9 covers DRESS *partial*.)
+_REQUIRED_ART_DIRECTION_FIELDS = (
+    "style",
+    "medium",
+    "palette",
+    "composition_notes",
+    "negative_defaults",
+    "aspect_ratio",
+)
+
 
 def build_export_context(graph: Graph, project_name: str, *, language: str = "en") -> ExportContext:
     """Extract player-facing data from the story graph.
@@ -48,19 +69,46 @@ def build_export_context(graph: Graph, project_name: str, *, language: str = "en
     _mark_start_and_endings(passages, choices)
 
     illustrations, cover = _extract_illustrations(graph)
+    codewords = _extract_codewords(graph)
+    _warn_codeword_playability(codewords)
 
     return ExportContext(
         title=project_name,
         passages=passages,
         choices=choices,
         entities=_extract_entities(graph),
-        codewords=_extract_codewords(graph),
+        codewords=codewords,
         illustrations=illustrations,
         cover=cover,
         codex_entries=_extract_codex_entries(graph),
         art_direction=_extract_art_direction(graph),
+        voice=_extract_voice(graph),
         language=language,
     )
+
+
+def _warn_codeword_playability(codewords: list[ExportCodeword]) -> None:
+    """Emit a R-1.7 playability WARNING when codeword count exceeds the threshold.
+
+    A WARNING (not an error) so the export still proceeds; downstream
+    decision is human-driven (rework state flags, switch format, accept).
+    """
+    count = len(codewords)
+    if count > _CODEWORD_PLAYABILITY_THRESHOLD:
+        # ExportContext is built once and reused across formats, so we cannot
+        # tell here whether gamebook is the actual target. Phrase the warning
+        # conditionally to avoid alarming Twee/HTML/JSON-only authors.
+        log.warning(
+            "codeword_count_exceeds_threshold",
+            count=count,
+            threshold=_CODEWORD_PLAYABILITY_THRESHOLD,
+            detail=(
+                "Gamebook playability suffers above this threshold if that "
+                "format is targeted; consider reducing soft dilemmas or "
+                "routing more decisions through hard dilemmas (R-1.7). "
+                "Digital-only exports (Twee/HTML/JSON) are unaffected."
+            ),
+        )
 
 
 def _extract_passages(graph: Graph) -> list[ExportPassage]:
@@ -76,18 +124,31 @@ def _extract_passages(graph: Graph) -> list[ExportPassage]:
 
 
 def _extract_choices(graph: Graph) -> list[ExportChoice]:
-    """Extract choice nodes (navigation links between passages)."""
-    nodes = graph.get_nodes_by_type("choice")
+    """Extract choice edges (navigation links between passages).
+
+    POLISH stores choices as graph edges (`add_edge("choice", ...)` in
+    `pipeline/stages/polish/deterministic.py`) — never as nodes. The
+    earlier node-based read silently produced an empty list, leaving
+    every export with zero navigable links and tripping SHIP's
+    reachability check on every project (#1532).
+    """
+    edges = graph.get_edges(edge_type="choice")
     return [
         ExportChoice(
-            from_passage=data["from_passage"],
-            to_passage=data["to_passage"],
-            label=data.get("label", "continue"),
-            requires_codewords=data.get("requires_state_flags", data.get("requires_codewords", [])),
-            grants=data.get("grants", []),
-            is_return=data.get("is_return", False),
+            from_passage=edge["from"],
+            to_passage=edge["to"],
+            label=edge.get("label", "continue"),
+            # POLISH writes the gate-condition key as `"requires"` (see
+            # `_create_choice_edge` in pipeline/stages/polish/deterministic.py).
+            # Older fixtures used `requires_state_flags` / `requires_codewords`
+            # — those fallbacks are kept for migration safety.
+            requires_codewords=edge.get(
+                "requires", edge.get("requires_state_flags", edge.get("requires_codewords", []))
+            ),
+            grants=edge.get("grants", []),
+            is_return=edge.get("is_return", False),
         )
-        for _node_id, data in sorted(nodes.items())
+        for edge in sorted(edges, key=lambda e: (e["from"], e["to"], e.get("label", "")))
     ]
 
 
@@ -130,7 +191,7 @@ def _extract_entities(graph: Graph) -> list[ExportEntity]:
 def _project_state_flags_to_codewords(graph: Graph) -> list[ExportCodeword]:
     """Project state flags to player-facing codewords based on dilemma role.
 
-    Per Document 3 ontology: soft dilemma state flags become codewords
+    Per the Story Graph Ontology: soft dilemma state flags become codewords
     (the player carries state across convergence points). Hard dilemma
     state flags remain internal routing machinery and are not exported.
 
@@ -296,11 +357,52 @@ def _extract_codex_entries(graph: Graph) -> list[ExportCodexEntry]:
     return result
 
 
+def _extract_voice(graph: Graph) -> dict[str, Any] | None:
+    """Extract the FILL voice document for downstream presentation use.
+
+    Returns ``None`` when FILL has not produced a voice document yet
+    (R-3.3 styling falls back to defaults). When present, the dict
+    carries the VoiceDocument fields verbatim — exporters cherry-pick
+    what they need (HTML uses ``voice_register`` and ``sentence_rhythm``
+    for CSS class selection; other formats may ignore it entirely).
+    """
+    node = graph.get_node("voice::voice")
+    if not node:
+        return None
+    return {k: v for k, v in node.items() if k not in ("type", "raw_id")}
+
+
 def _extract_art_direction(graph: Graph) -> dict[str, Any] | None:
-    """Extract art direction node if DRESS stage was run."""
+    """Extract art direction node if DRESS stage was run.
+
+    R-3.9: graceful degradation when DRESS is partial. If the node
+    exists but is missing required visual fields (e.g. style present,
+    palette absent), warn so the user knows the export downstream will
+    have visual gaps. We still return the partial dict — degrading is
+    valid, but it should not be silent. (R-3.8 covers DRESS skipped
+    entirely; that branch is the ``return None`` above.)
+    """
     nodes = graph.get_nodes_by_type("art_direction")
     if not nodes:
         return None
     # There's typically one art_direction::main node
-    _node_id, data = next(iter(nodes.items()))
-    return {k: v for k, v in data.items() if k not in ("type", "raw_id")}
+    node_id, data = next(iter(nodes.items()))
+    extracted = {k: v for k, v in data.items() if k not in ("type", "raw_id")}
+
+    missing = [
+        field
+        for field in _REQUIRED_ART_DIRECTION_FIELDS
+        if not (value := extracted.get(field)) or (isinstance(value, str) and not value.strip())
+    ]
+    if missing:
+        log.warning(
+            "art_direction_partial",
+            node_id=node_id,
+            missing_fields=missing,
+            detail=(
+                "Art direction is present but missing required visual fields. "
+                "Illustrations and visual metadata will be partial; rerun DRESS "
+                "to fill the gaps (R-3.9)."
+            ),
+        )
+    return extracted

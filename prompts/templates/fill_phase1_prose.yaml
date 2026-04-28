@@ -18,6 +18,7 @@ system: |
   **Passage ID:** {passage_id}
   **Beat Summary:** {beat_summary}
   **Scene Type:** {scene_type}
+  **Narrative Function:** {narrative_function}
 
   ## Open Dramatic Questions
   {dramatic_questions}

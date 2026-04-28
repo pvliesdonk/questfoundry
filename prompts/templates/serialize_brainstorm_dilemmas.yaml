@@ -1,0 +1,88 @@
+name: serialize_brainstorm_dilemmas
+description: Pass 2 of two-pass BRAINSTORM serialize — convert brief into dilemmas with valid entity IDs injected
+
+system: |
+  You are converting a brainstorming brief into a structured list of dilemmas
+  for a BrainstormOutput artifact. This is **pass 2 of 2**: entities have already
+  been serialized in pass 1, and their authoritative IDs are listed below in the
+  `### Valid Entity IDs` section. Reference ONLY those IDs from `central_entity_ids` —
+  inventing new entity names will cause downstream validation failures.
+
+  ### Valid Entity IDs
+
+  {valid_entity_ids}
+
+  ## Dilemma Structure
+
+  Dilemmas represent binary dramatic questions with exactly TWO answers:
+  - `dilemma_id`: Descriptive snake_case identifier showing the binary choice
+  - `question`: The dramatic question (should end with "?")
+  - `answers`: Exactly 2 items, each with:
+    - `answer_id`: Unique short identifier for THIS answer (e.g., "guilty", "framed", "dagger", "poison")
+    - `description`: Full description
+    - `is_canonical`: true for ONE answer (the default path), false for the other
+  - `central_entity_ids`: **REQUIRED — MUST be non-empty.** List ≥1 **namespaced** `entity_id` values FROM the `### Valid Entity IDs` section above (e.g., `character::mentor`, `location::archive`). An empty list `[]` or omitted field is rejected at validation per R-3.6 ("every dilemma has at least one anchored_to edge"). Bare IDs without the category prefix, or IDs not in the section above, also fail R-2.3 / R-3.6.
+
+    GOOD: `"central_entity_ids": ["character::elara_thorne", "object::silver_locket"]` (≥1 namespaced entity ID)
+    BAD:  `"central_entity_ids": []` — empty list, R-3.6 violation, pipeline rejects
+    BAD:  field omitted entirely — same as empty, same failure
+    BAD:  `"central_entity_ids": ["elara_thorne"]` — bare ID without category prefix, R-2.3 violation
+  - `why_it_matters`: Thematic stakes
+
+  ## Dilemma ID Naming (CRITICAL)
+
+  Dilemma IDs use the pattern: `dilemma::subject_optionA_or_optionB`. **Every dilemma ID MUST start with the `dilemma::` namespace prefix** — the serializer rejects any ID that does not. The word `_or_` appears exactly ONCE, between the two options. The ID MUST END with optionB.
+
+  GOOD examples (generate YOUR OWN based on your story):
+  - `dilemma::mentor_benevolent_or_manipulative` (ends with `manipulative`)
+  - `dilemma::artifact_blessed_or_cursed` (ends with `cursed`)
+  - `dilemma::faction_allied_or_hostile` (ends with `hostile`)
+
+  BAD examples (will cause downstream failures):
+  - `mentor_benevolent_or_manipulative` (MISSING `dilemma::` prefix — most common failure)
+  - `dilemma::mentor_benevolent_or_manipulative_or_` (WRONG: trailing `_or_`)
+  - `dilemma::artifact_blessed_or_cursed_or_` (WRONG: trailing `_or_`)
+  - `dilemma::d1`, `dilemma::d2`, `dilemma::dilemma_a` (too short, not descriptive — even with the prefix)
+  - `dilemma::character_motivation` (ambiguous, could be confused with path name)
+  - `dilemma::trust_issue` (too vague)
+  - `dilemma::single_word` (could be mistaken for a path ID)
+
+  NEVER end a dilemma ID with `_or_` — the last word must always be the second option. NEVER omit the `dilemma::` prefix.
+
+  **DO NOT copy IDs from other stories** — generate IDs specific to YOUR story.
+
+  ## Rules (MUST follow)
+
+  - Extract ALL dilemmas / dramatic questions mentioned in the brief.
+  - Do NOT emit entities on this pass — they were serialized in pass 1.
+  - Do NOT invent new details beyond what is in the brief.
+  - Use snake_case for all IDs (lowercase with underscores).
+  - Each dilemma MUST have exactly ONE answer with `is_canonical=true`.
+  - `answer_id` values MUST be unique per dilemma and MUST be short outcome labels (e.g., `guilty`, `framed`), NOT entity references.
+  - ONLY use `entity_id` values listed in `### Valid Entity IDs` above. Do NOT invent new entity IDs.
+  - Every dilemma MUST have ≥1 entry in `central_entity_ids`. The dilemma's question or `why_it_matters` mentioning an entity by name is NOT enough — the entity ID must appear in the `central_entity_ids` list itself.
+  {output_language_instruction}
+
+  ## REMINDER — central_entity_ids is REQUIRED (R-3.6)
+
+  Before generating JSON: for EACH dilemma, identify which entities from `### Valid Entity IDs` above are directly involved. Write those IDs into `central_entity_ids`. Do NOT output `"central_entity_ids": []` — empty lists are the most common failure for this field.
+
+  ## Output
+
+  Return ONLY valid JSON matching the BrainstormDilemmasOutput schema (dilemmas only — no entities key):
+  {{
+    "dilemmas": [
+      {{
+        "dilemma_id": "dilemma::...",
+        "question": "...?",
+        "answers": [
+          {{"answer_id": "...", "description": "...", "is_canonical": true}},
+          {{"answer_id": "...", "description": "...", "is_canonical": false}}
+        ],
+        "central_entity_ids": ["character::elara_thorne", "object::silver_locket"],
+        "why_it_matters": "..."
+      }}
+    ]
+  }}
+
+components: []

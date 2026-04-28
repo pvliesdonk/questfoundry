@@ -17,14 +17,14 @@ from questfoundry.pipeline.size import (
 
 class TestSizeProfile:
     def test_all_presets_exist(self) -> None:
-        assert {"vignette", "short", "standard", "long"} == VALID_PRESETS
+        assert {"micro", "short", "medium", "long"} == VALID_PRESETS
         for name in VALID_PRESETS:
             profile = get_size_profile(name)
             assert profile.preset == name
 
-    def test_standard_matches_current_hardcoded_values(self) -> None:
+    def test_medium_matches_current_hardcoded_values(self) -> None:
         """Standard preset must exactly match current hardcoded defaults."""
-        s = get_size_profile("standard")
+        s = get_size_profile("medium")
         # seed.py:431 — max_arcs=16
         assert s.max_arcs == 16
         # seed_pruning.py:57 — log2(16) = 4 fully explored
@@ -44,9 +44,6 @@ class TestSizeProfile:
         # discuss_brainstorm.yaml — 15-25 entities
         assert s.entities_min == 15
         assert s.entities_max == 25
-        # discuss_seed.yaml — 2-4 beats per path
-        assert s.beats_per_path_min == 2
-        assert s.beats_per_path_max == 4
         # fill_phase0_voice.yaml — 3-5 tone words
         assert s.tone_words_min == 3
         assert s.tone_words_max == 5
@@ -56,37 +53,37 @@ class TestSizeProfile:
             get_size_profile("huge")
 
     def test_presets_are_frozen(self) -> None:
-        profile = get_size_profile("standard")
+        profile = get_size_profile("medium")
         with pytest.raises(AttributeError):
             profile.max_arcs = 32  # type: ignore[misc]
 
     def test_range_str_formatting(self) -> None:
-        profile = get_size_profile("standard")
+        profile = get_size_profile("medium")
         assert profile.range_str("characters") == "5-10"
         assert profile.range_str("dilemmas") == "4-8"
         assert profile.range_str("locations") == "3-6"
         assert profile.range_str("tone_words") == "3-5"
 
     def test_range_str_invalid_prefix_raises(self) -> None:
-        profile = get_size_profile("standard")
+        profile = get_size_profile("medium")
         with pytest.raises(AttributeError):
             profile.range_str("nonexistent")
 
     def test_preset_ordering_max_arcs(self) -> None:
         """Presets scale monotonically by max_arcs."""
-        order = ["vignette", "short", "standard", "long"]
+        order = ["micro", "short", "medium", "long"]
         arcs = [get_size_profile(name).max_arcs for name in order]
         assert arcs == sorted(arcs)
         assert len(set(arcs)) == 4  # All distinct
 
     def test_preset_ordering_est_passages(self) -> None:
         """Estimated passages scale monotonically."""
-        order = ["vignette", "short", "standard", "long"]
+        order = ["micro", "short", "medium", "long"]
         passages = [get_size_profile(name).est_passages_max for name in order]
         assert passages == sorted(passages)
 
     def test_preset_ordering_fully_explored(self) -> None:
-        order = ["vignette", "short", "standard", "long"]
+        order = ["micro", "short", "medium", "long"]
         explored = [get_size_profile(name).fully_explored for name in order]
         assert explored == sorted(explored)
 
@@ -98,7 +95,6 @@ class TestSizeProfile:
             "objects",
             "dilemmas",
             "entities",
-            "beats_per_path",
             "convergence_points",
             "est_passages",
             "est_words",
@@ -106,6 +102,20 @@ class TestSizeProfile:
         ]
         for name, profile in PRESETS.items():
             for prefix in range_prefixes:
+                lo = getattr(profile, f"{prefix}_min")
+                hi = getattr(profile, f"{prefix}_max")
+                assert lo <= hi, f"{name}.{prefix}: {lo} > {hi}"
+
+    def test_medium_has_y_shape_beat_fields(self) -> None:
+        s = get_size_profile("medium")
+        assert s.shared_beats_per_dilemma_min == 1
+        assert s.shared_beats_per_dilemma_max == 2
+        assert s.post_commit_beats_per_path_min == 2
+        assert s.post_commit_beats_per_path_max == 3
+
+    def test_all_presets_have_consistent_y_shape_ranges(self) -> None:
+        for name, profile in PRESETS.items():
+            for prefix in ("shared_beats_per_dilemma", "post_commit_beats_per_path"):
                 lo = getattr(profile, f"{prefix}_min")
                 hi = getattr(profile, f"{prefix}_max")
                 assert lo <= hi, f"{name}.{prefix}: {lo} > {hi}"
@@ -125,18 +135,18 @@ class TestResolveSizeFromGraph:
         assert profile.preset == "short"
         assert profile.max_arcs == 8
 
-    def test_missing_vision_node_defaults_to_standard(self) -> None:
+    def test_missing_vision_node_defaults_to_medium(self) -> None:
         graph = Graph.empty()
         profile = resolve_size_from_graph(graph)
-        assert profile.preset == "standard"
+        assert profile.preset == "medium"
 
-    def test_missing_scope_defaults_to_standard(self) -> None:
+    def test_missing_scope_defaults_to_medium(self) -> None:
         graph = Graph.empty()
         graph.create_node("vision", {"type": "vision", "genre": "fantasy"})
         profile = resolve_size_from_graph(graph)
-        assert profile.preset == "standard"
+        assert profile.preset == "medium"
 
-    def test_missing_story_size_field_defaults_to_standard(self) -> None:
+    def test_missing_story_size_field_defaults_to_medium(self) -> None:
         graph = Graph.empty()
         graph.create_node(
             "vision",
@@ -146,9 +156,9 @@ class TestResolveSizeFromGraph:
             },
         )
         profile = resolve_size_from_graph(graph)
-        assert profile.preset == "standard"
+        assert profile.preset == "medium"
 
-    def test_invalid_story_size_defaults_to_standard(self) -> None:
+    def test_invalid_story_size_defaults_to_medium(self) -> None:
         graph = Graph.empty()
         graph.create_node(
             "vision",
@@ -158,19 +168,19 @@ class TestResolveSizeFromGraph:
             },
         )
         profile = resolve_size_from_graph(graph)
-        assert profile.preset == "standard"
+        assert profile.preset == "medium"
 
-    def test_vignette_from_graph(self) -> None:
+    def test_micro_from_graph(self) -> None:
         graph = Graph.empty()
         graph.create_node(
             "vision",
             {
                 "type": "vision",
-                "scope": {"story_size": "vignette"},
+                "scope": {"story_size": "micro"},
             },
         )
         profile = resolve_size_from_graph(graph)
-        assert profile.preset == "vignette"
+        assert profile.preset == "micro"
         assert profile.max_arcs == 2
 
     def test_long_from_graph(self) -> None:
@@ -197,8 +207,8 @@ class TestScopeStorySize:
             Scope()  # type: ignore[call-arg]
 
     def test_explicit_story_size(self) -> None:
-        scope = Scope(story_size="vignette", estimated_passages=10, target_word_count=3000)
-        assert scope.story_size == "vignette"
+        scope = Scope(story_size="micro", estimated_passages=10, target_word_count=3000)
+        assert scope.story_size == "micro"
 
     def test_story_size_in_model_dump(self) -> None:
         scope = Scope(story_size="short", estimated_passages=20, target_word_count=10000)
@@ -224,25 +234,25 @@ class TestScopeStorySize:
 
 
 class TestSizeTemplateVars:
-    def test_standard_template_vars(self) -> None:
-        profile = get_size_profile("standard")
+    def test_medium_template_vars(self) -> None:
+        profile = get_size_profile("medium")
         vars_ = size_template_vars(profile)
         assert vars_["size_characters"] == "5-10"
         assert vars_["size_dilemmas"] == "4-8"
         assert vars_["size_locations"] == "3-6"
-        assert vars_["size_beats_per_path"] == "2-4"
-        assert vars_["size_preset"] == "standard"
+        assert vars_["size_post_commit_beats_per_path"] == "2-3"
+        assert vars_["size_preset"] == "medium"
 
-    def test_vignette_template_vars(self) -> None:
-        profile = get_size_profile("vignette")
+    def test_micro_template_vars(self) -> None:
+        profile = get_size_profile("micro")
         vars_ = size_template_vars(profile)
         assert vars_["size_characters"] == "2-4"
         assert vars_["size_dilemmas"] == "2-3"
         assert vars_["size_locations"] == "1-2"
 
-    def test_default_uses_standard(self) -> None:
+    def test_default_uses_medium(self) -> None:
         vars_ = size_template_vars(None)
-        assert vars_["size_preset"] == "standard"
+        assert vars_["size_preset"] == "medium"
         assert vars_["size_characters"] == "5-10"
 
     def test_all_expected_keys_present(self) -> None:
@@ -253,7 +263,8 @@ class TestSizeTemplateVars:
             "size_objects",
             "size_dilemmas",
             "size_entities",
-            "size_beats_per_path",
+            "size_shared_beats_per_dilemma",
+            "size_post_commit_beats_per_path",
             "size_convergence_points",
             "size_est_passages",
             "size_est_words",
@@ -261,3 +272,9 @@ class TestSizeTemplateVars:
             "size_preset",
         }
         assert set(vars_.keys()) == expected
+
+    def test_medium_y_shape_template_vars(self) -> None:
+        profile = get_size_profile("medium")
+        vars_ = size_template_vars(profile)
+        assert vars_["size_shared_beats_per_dilemma"] == "1-2"
+        assert vars_["size_post_commit_beats_per_path"] == "2-3"

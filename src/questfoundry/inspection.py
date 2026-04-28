@@ -520,7 +520,10 @@ def _run_validation(graph: Graph) -> list[dict[str, str]]:
     try:
         report = run_all_checks(graph)
     except Exception as exc:
-        log.warning("validation_skipped", reason=str(exc))
-        return [{"name": "validation", "severity": "warn", "message": f"Skipped: {exc}"}]
+        # The validation framework itself raised — this is an internal
+        # failure, not a benign skip.  Surface it as error-severity so
+        # the UI reports it as such and the log level matches.
+        log.error("validation_skipped", reason=str(exc))
+        return [{"name": "validation", "severity": "error", "message": f"Skipped: {exc}"}]
 
     return [{"name": c.name, "severity": c.severity, "message": c.message} for c in report.checks]

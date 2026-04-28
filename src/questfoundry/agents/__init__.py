@@ -2,8 +2,10 @@
 
 from questfoundry.agents.discuss import create_discuss_agent, run_discuss_phase
 from questfoundry.agents.prompts import (
+    format_brainstorm_valid_entity_ids,
     get_brainstorm_discuss_prompt,
-    get_brainstorm_serialize_prompt,
+    get_brainstorm_serialize_dilemmas_prompt,
+    get_brainstorm_serialize_entities_prompt,
     get_brainstorm_summarize_prompt,
     get_discuss_prompt,
     get_seed_discuss_prompt,
@@ -20,7 +22,6 @@ from questfoundry.agents.serialize import (
     serialize_dilemma_relationships,
     serialize_post_prune_analysis,
     serialize_seed_as_function,
-    serialize_seed_iteratively,
     serialize_to_artifact,
 )
 from questfoundry.agents.summarize import summarize_discussion, summarize_seed_chunked
@@ -29,8 +30,10 @@ __all__ = [
     "SerializationError",
     "SerializeResult",
     "create_discuss_agent",
+    "format_brainstorm_valid_entity_ids",
     "get_brainstorm_discuss_prompt",
-    "get_brainstorm_serialize_prompt",
+    "get_brainstorm_serialize_dilemmas_prompt",
+    "get_brainstorm_serialize_entities_prompt",
     "get_brainstorm_summarize_prompt",
     "get_discuss_prompt",
     "get_seed_discuss_prompt",
@@ -44,7 +47,6 @@ __all__ = [
     "serialize_dilemma_relationships",
     "serialize_post_prune_analysis",
     "serialize_seed_as_function",
-    "serialize_seed_iteratively",
     "serialize_to_artifact",
     "summarize_discussion",
     "summarize_seed_chunked",

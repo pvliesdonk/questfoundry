@@ -12,11 +12,40 @@ system: |
   - **Path-specific** — reflect the emotional state from the player's choices
   - **Non-duplicating** — do NOT repeat the shared passage's content
 
+  ### `content_hint` length (CRITICAL — R-5.6)
+  GOOD: "You enter the vault with quiet confidence, the mentor's words still ringing in your ears" (1 sentence, mood-setter)
+  BAD: "You spent years preparing for this moment. The vault door is cold to the touch. Behind you, the city sleeps, unaware of what you're about to uncover, and the weight of every choice you've made up to this point presses against your chest." (too long — keep it to a single mood-setter sentence)
+
   ## Story Context
   {story_context}
 
   ## Residue Beats to Write
+  Format per residue (IDs backtick-wrapped to match the Valid IDs
+  convention elsewhere in POLISH prompts):
+  ```
+  - residue_id: `<id>` flag: `<state_flag_id>` path: `<path_id>`
+    Target passage: `<passage_id>` (<short summary of the shared scene>)
+  ```
+  Each residue's `content_hint` must reflect the emotional state of THIS
+  residue's `path` (the player chose that branch). The sibling path's
+  flag is intentionally absent, so the hint should not allude to it.
   {residue_details}
+
+  ## Mapping Strategy (choose per residue)
+  For each residue, also choose a **mapping_strategy**:
+
+  - **"residue_passage_with_variants"** — creates a single residue passage with
+    variant prose per flag combination. Use this when all variants describe the
+    same scene with subtle mood differences (e.g., entering the same room
+    confidently vs. nervously).
+
+  - **"parallel_passages"** — creates sibling passages that branch from the
+    predecessor and rejoin at the target passage. Use this when variants
+    describe meaningfully different scenes (different locations, entities,
+    or actions — e.g., one path goes through a garden, another through a
+    market).
+
+  When in doubt, prefer **"residue_passage_with_variants"**.
 
   ## Output Format
   Return a JSON object with a "residue_content" array. One entry per residue above.
@@ -26,21 +55,25 @@ system: |
     "residue_content": [
       {{
         "residue_id": "residue::single_2_dilemma__d1_path__brave",
-        "content_hint": "You enter the vault with quiet confidence, the mentor's words still ringing in your ears"
+        "content_hint": "You enter the vault with quiet confidence, the mentor's words still ringing in your ears",
+        "mapping_strategy": "residue_passage_with_variants"
       }}
     ]
   }}
 
   ## What NOT to Do
-  - Do NOT write full passages — just a mood-setting hint (1-2 sentences max)
+  - Do NOT write full passages — just one mood-setter sentence (see the CRITICAL block above)
   - Do NOT duplicate content from the target passage
   - Do NOT skip any residue — provide content for every residue listed
   - Do NOT add prose before or after the JSON output
+  - Do NOT omit the mapping_strategy field — it is required for every entry
 
 user: |
-  Generate a mood-setting content hint for each of the {residue_count} residue beats listed above.
+  Generate a mood-setting content hint and choose a mapping_strategy for each of the {residue_count} residue beats listed above.
   Each hint should reflect the emotional tone established by the player's path choices.
 
-  REMINDER: Return ONLY valid JSON. Provide exactly one content hint per residue.
+  REMINDER: Return ONLY valid JSON. Provide exactly one entry per residue, with both
+  "content_hint" and "mapping_strategy" fields filled in.
+  REMINDER: `mapping_strategy` MUST be exactly one of: `residue_passage_with_variants`, `parallel_passages`.
 
 components: []

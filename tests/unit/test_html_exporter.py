@@ -321,3 +321,129 @@ class TestHtmlExporter:
         content = result.read_text()
 
         assert 'lang="en"' in content
+
+
+# ---------------------------------------------------------------------------
+# R-3.3: voice-document-driven CSS
+# ---------------------------------------------------------------------------
+
+
+def _voice(register: str = "literary", rhythm: str = "flowing") -> dict[str, object]:
+    return {
+        "pov": "third_person_limited",
+        "tense": "past",
+        "voice_register": register,
+        "sentence_rhythm": rhythm,
+        "tone_words": ["wry"],
+    }
+
+
+class TestHtmlVoiceStyling:
+    """R-3.3: HTML uses voice-document-informed CSS/typography when available.
+
+    No voice → baseline (no body class, no extra rules).
+    Voice present → body carries register-* / rhythm-* classes and the
+    matching scoped CSS rule blocks are appended to <style>.
+    """
+
+    def test_no_voice_baseline_styling(self, tmp_path: Path) -> None:
+        ctx = _simple_context()
+        assert ctx.voice is None
+        result = HtmlExporter().export(ctx, tmp_path / "out")
+        content = result.read_text()
+
+        # body tag has no class attribute
+        assert "<body>" in content
+        assert "<body class=" not in content
+        # No voice CSS leaked into <style>
+        assert "register-" not in content
+        assert "rhythm-" not in content
+
+    def test_voice_register_and_rhythm_classes_applied(self, tmp_path: Path) -> None:
+        ctx = _simple_context()
+        ctx.voice = _voice(register="literary", rhythm="flowing")
+
+        result = HtmlExporter().export(ctx, tmp_path / "out")
+        content = result.read_text()
+
+        # body carries both classes
+        assert '<body class="register-literary rhythm-flowing">' in content
+        # Scoped rule blocks appear in <style>
+        assert "body.register-literary .prose" in content
+        assert "body.rhythm-flowing .prose" in content
+
+    def test_only_register_present(self, tmp_path: Path) -> None:
+        """Missing rhythm field doesn't break export — only register class added."""
+        ctx = _simple_context()
+        ctx.voice = {"voice_register": "sparse"}
+
+        result = HtmlExporter().export(ctx, tmp_path / "out")
+        content = result.read_text()
+
+        assert '<body class="register-sparse">' in content
+        assert "body.register-sparse .prose" in content
+        # No rhythm artifacts
+        assert "rhythm-" not in content
+
+    def test_only_rhythm_present(self, tmp_path: Path) -> None:
+        """Symmetric to test_only_register_present: missing register field
+        doesn't break export — only rhythm class added.
+        """
+        ctx = _simple_context()
+        ctx.voice = {"sentence_rhythm": "punchy"}
+
+        result = HtmlExporter().export(ctx, tmp_path / "out")
+        content = result.read_text()
+
+        assert '<body class="rhythm-punchy">' in content
+        assert "body.rhythm-punchy .prose" in content
+        # No register artifacts
+        assert "register-" not in content
+
+    def test_all_unknown_values_no_body_class(self, tmp_path: Path) -> None:
+        """Both fields unknown → no class= attribute at all (not class="").
+
+        Pinning this behaviour: an empty class attribute would be valid
+        HTML but signals "voice was attempted" when in fact nothing
+        useful was applied.
+        """
+        ctx = _simple_context()
+        ctx.voice = {"voice_register": "shouty", "sentence_rhythm": "chaotic"}
+        result = HtmlExporter().export(ctx, tmp_path / "out")
+        content = result.read_text()
+
+        assert "<body>" in content
+        assert "<body class=" not in content
+
+    def test_unknown_register_silently_ignored(self, tmp_path: Path) -> None:
+        """Out-of-vocabulary register doesn't emit a body class.
+
+        Defensive: VoiceDocument's Literal type guarantees the value at
+        FILL time, but a hand-edited graph could carry anything.
+        Unknown values fall back to baseline rather than emitting an
+        unscoped CSS class.
+        """
+        ctx = _simple_context()
+        ctx.voice = {"voice_register": "shouty", "sentence_rhythm": "punchy"}
+
+        result = HtmlExporter().export(ctx, tmp_path / "out")
+        content = result.read_text()
+
+        # rhythm class present, register absent (no register-shouty)
+        assert '<body class="rhythm-punchy">' in content
+        assert "register-shouty" not in content
+
+    def test_each_register_value_has_distinct_css(self, tmp_path: Path) -> None:
+        """Sanity: registers don't all collapse to the same CSS rule."""
+        rendered = []
+        for register in ("formal", "conversational", "literary", "sparse"):
+            ctx = _simple_context()
+            ctx.voice = _voice(register=register)
+            out = HtmlExporter().export(ctx, tmp_path / register)
+            rendered.append(out.read_text())
+
+        # Each rendered HTML mentions its own register, not the others
+        for i, register in enumerate(("formal", "conversational", "literary", "sparse")):
+            assert f"register-{register}" in rendered[i]
+        # And the rendered docs differ
+        assert len(set(rendered)) == 4

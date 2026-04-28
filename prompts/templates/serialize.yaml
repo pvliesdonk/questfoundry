@@ -22,25 +22,81 @@ system: |
 
   ## scope field (REQUIRED — validation will reject output without it)
   The "scope" object is REQUIRED. You MUST include it with a "story_size" value.
-  Pick one of: "vignette", "short", "standard", "long".
+  Pick one of: "micro", "short", "medium", "long".
 
-  Example: "scope": {"story_size": "vignette"}
+  Example: "scope": {"story_size": "micro"}
 
-  If the brief says "vignette-length" or "vignette" → use "vignette".
+  If the brief says "micro", "vignette", or "vignette-length" → use "micro".
   If the brief says "short" → use "short".
+  If the brief says "medium" or "standard" → use "medium".
   If the brief says "long" → use "long".
-  If no size is mentioned → use "standard".
+  If no size is mentioned → use "medium".
+
+  ## `content_notes` field (optional nested object)
+  If the brief mentions content advisories or themes to include/exclude,
+  output `content_notes` using THIS nested structure (NOT a flat list,
+  NOT a string):
+
+  ```
+  "content_notes": {
+    "includes": ["slow-burn pacing", "unreliable narrator voice"],
+    "excludes": ["graphic violence", "explicit magic systems"]
+  }
+  ```
+
+  Both `includes` and `excludes` are lists of short strings. Either may
+  be empty `[]`. If no content notes were discussed, OMIT the field
+  entirely (do NOT emit `null` or `{}`).
+
+  ## `pov_style` field (optional)
+  If a POV preference was discussed, set `pov_style` to EXACTLY one of
+  these four values:
+  - `"first_person"`
+  - `"second_person"`
+  - `"third_person_limited"`
+  - `"third_person_omniscient"`
+
+  Any other value (e.g. `"first"`, `"limited"`, `"omniscient"`,
+  `"third"`) will fail validation. If no POV preference was stated in
+  the brief, OMIT the field entirely.
+
+  ## `protagonist_defined` field (boolean)
+  Set `protagonist_defined: true` if the brief established a specific
+  main character (named or clearly identified by role). Set to `false`
+  if the protagonist is left open for BRAINSTORM/SEED to define. Default
+  is `false` if unstated.
 
   ## Scope Boundary (for DREAM artifacts)
   DREAM artifacts capture HIGH-LEVEL VISION only. Even if the brief contains
   detailed content, include ONLY:
-  - genre, subgenre, tone, audience, themes (high-level descriptors)
-  - style_notes (prose guidance, 50-200 chars, NOT plot summaries)
-  - scope (REQUIRED — see above)
-  - content_notes (warnings/guidance, NOT specific scenes or character arcs)
+  - `genre`, `subgenre`, `tone`, `audience`, `themes` (high-level descriptors)
+  - `style_notes` (prose guidance, 50-200 chars, NOT plot summaries)
+  - `scope` (REQUIRED — see above)
+  - `content_notes` (warnings/guidance, NOT specific scenes or character arcs)
+  - `pov_style` (POV preference hint for FILL — see above)
+  - `protagonist_defined` (boolean — see above)
 
   Do NOT serialize specific characters, scenes, endings, or mechanics into
   DREAM fields. Those belong in BRAINSTORM/SEED stages.
+
+  ## Output skeleton (fill in the values; omit `← optional` fields if absent)
+  ```
+  {
+    "genre": "...",
+    "subgenre": "...",                      ← optional
+    "tone": ["...", "..."],
+    "themes": ["...", "..."],
+    "audience": "...",
+    "scope": {"story_size": "short"},       ← required; choose: micro|short|medium|long
+    "style_notes": "...",                   ← optional
+    "content_notes": {"includes": [...], "excludes": [...]},  ← optional, nested
+    "pov_style": "first_person",            ← optional, Literal
+    "protagonist_defined": false
+  }
+  ```
+
+  Output ONE flat JSON object at the top level. Do NOT wrap it in a
+  `{"dream": {...}}` envelope or any other key.
 
   REMINDER: "scope" is required. Do not omit it.
 

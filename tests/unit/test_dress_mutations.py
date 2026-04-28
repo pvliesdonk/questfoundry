@@ -524,3 +524,114 @@ class TestValidateDressCodexEntries:
             ],
         )
         assert any("unknown state flag" in e for e in errors)
+
+
+# ---------------------------------------------------------------------------
+# R-1.3 / R-1.4: validate_entity_visual_coverage (DRESS PR for #1326)
+# ---------------------------------------------------------------------------
+
+
+class TestValidateEntityVisualCoverage:
+    """Spec R-1.3 + R-1.4: every appearing entity has an EntityVisual with
+    a non-empty reference_prompt_fragment after Phase 0."""
+
+    @staticmethod
+    def _seed_appearing_entity(graph: Graph, entity_id: str = "character::mentor") -> str:
+        graph.create_node(
+            entity_id,
+            {"type": "entity", "raw_id": entity_id.split("::")[1]},
+        )
+        graph.create_node(
+            "passage::p1",
+            {"type": "passage", "raw_id": "p1"},
+        )
+        graph.add_edge("appears", entity_id, "passage::p1")
+        return entity_id
+
+    def test_no_appearing_entities_no_errors(self) -> None:
+        from questfoundry.graph.dress_mutations import validate_entity_visual_coverage
+
+        g = Graph.empty()
+        assert validate_entity_visual_coverage(g) == []
+
+    def test_appearing_entity_with_visual_no_errors(self) -> None:
+        from questfoundry.graph.dress_mutations import validate_entity_visual_coverage
+
+        g = Graph.empty()
+        self._seed_appearing_entity(g)
+        g.create_node(
+            "entity_visual::mentor",
+            {
+                "type": "entity_visual",
+                "reference_prompt_fragment": "tall, weathered, with calm eyes",
+            },
+        )
+        errors = validate_entity_visual_coverage(g)
+        assert errors == [], f"Expected clean run, got: {errors}"
+
+    def test_appearing_entity_without_visual_errors(self) -> None:
+        from questfoundry.graph.dress_mutations import validate_entity_visual_coverage
+
+        g = Graph.empty()
+        self._seed_appearing_entity(g)
+        errors = validate_entity_visual_coverage(g)
+        assert len(errors) == 1
+        assert "R-1.3" in errors[0]
+        assert "mentor" in errors[0]
+
+    def test_appearing_entity_with_empty_fragment_errors(self) -> None:
+        from questfoundry.graph.dress_mutations import validate_entity_visual_coverage
+
+        g = Graph.empty()
+        self._seed_appearing_entity(g)
+        g.create_node(
+            "entity_visual::mentor",
+            {"type": "entity_visual", "reference_prompt_fragment": "   "},
+        )
+        errors = validate_entity_visual_coverage(g)
+        assert len(errors) == 1
+        assert "R-1.4" in errors[0]
+
+
+# ---------------------------------------------------------------------------
+# R-3.2: rank=1 visible_when=[] invariant (DRESS PR for #1330)
+# ---------------------------------------------------------------------------
+
+
+class TestRankOneVisibleWhenInvariant:
+    """Spec R-3.2: the rank=1 codex entry MUST be unconditional."""
+
+    def test_rank_one_with_empty_visible_when_passes(self) -> None:
+        from questfoundry.graph.dress_mutations import validate_dress_codex_entries
+
+        g = Graph.empty()
+        g.create_node("entity::mentor", {"type": "entity", "raw_id": "mentor"})
+        errors = validate_dress_codex_entries(
+            g,
+            "mentor",
+            [{"rank": 1, "content": "base", "visible_when": []}],
+        )
+        assert errors == [], f"Expected clean, got: {errors}"
+
+    def test_rank_one_with_visible_when_gate_errors(self) -> None:
+        from questfoundry.graph.dress_mutations import validate_dress_codex_entries
+
+        g = Graph.empty()
+        g.create_node("entity::mentor", {"type": "entity", "raw_id": "mentor"})
+        g.create_node(
+            "state_flag::mentor_revealed",
+            {"type": "state_flag", "raw_id": "mentor_revealed"},
+        )
+        errors = validate_dress_codex_entries(
+            g,
+            "mentor",
+            [
+                {
+                    "rank": 1,
+                    "content": "base",
+                    "visible_when": ["mentor_revealed"],
+                }
+            ],
+        )
+        assert any("R-3.2" in e for e in errors)
+        assert any("rank=1" in e and "empty visible_when" in e for e in errors)

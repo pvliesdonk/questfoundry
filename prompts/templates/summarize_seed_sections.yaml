@@ -48,19 +48,60 @@ dilemmas_system: |
   Use dilemma IDs and answer IDs EXACTLY as listed below. Copy-paste them.
   Do NOT reconstruct IDs from dilemma names or descriptions.
 
-  ## DEFAULT ANSWER RULE (MOST IMPORTANT RULE)
+  ## MINIMUM BRANCHING REQUIREMENT (HARD CONSTRAINT — READ FIRST)
+
+  At least 2 dilemmas MUST have ALL their answers in `explored` (with `unexplored=[]`).
+  This is required for the story to have meaningful branching. A story with fewer than
+  2 fully-explored dilemmas produces a near-linear story and WILL BE REJECTED downstream.
+
+  BAD (rejected): only one answer per dilemma in `explored` → no real branching → pipeline fails
+  ```
+  - dilemma::host_benevolent_or_selfish: explored=[protector], unexplored=[manipulator]
+  - dilemma::artifact_safe_or_dangerous: explored=[safe], unexplored=[dangerous]
+  ```
+  GOOD (valid): 2 dilemmas fully explored → 4 arcs → passes
+  ```
+  - dilemma::host_benevolent_or_selfish: explored=[protector, manipulator], unexplored=[]
+  - dilemma::artifact_safe_or_dangerous: explored=[safe, dangerous], unexplored=[]
+  ```
+
+  ## EXTRACTION FIDELITY (CRITICAL)
+  If the discussion says "EXPLORE BOTH" / "explore both answers" / similar for a dilemma,
+  that dilemma MUST appear with both answers in `explored` (and `unexplored=[]`).
+  Do NOT downgrade an "EXPLORE BOTH" decision to single-answer-explored — that drops
+  branching information the discussion already established and produces a linear story.
+
+  ## DEFAULT ANSWER RULE
   In the answer list below, one answer per dilemma is marked `(default)`.
   The `(default)` answer is the canonical story spine. It MUST ALWAYS go in `explored`.
   You may NEVER put the `(default)` answer in `unexplored`.
+  The alternative (non-default) answer MAY ALSO be in `explored` — and for binary
+  dilemmas (2 answers), it SHOULD be in `explored` most of the time.
 
   EXAMPLE: answers are [`reliable` (default), `falsified`]
-  - CORRECT: explored=[reliable, falsified], unexplored=[]
-  - CORRECT: explored=[reliable], unexplored=[falsified]
+  - CORRECT: explored=[reliable, falsified], unexplored=[]  ← PREFERRED for binary
+  - ALSO CORRECT: explored=[reliable], unexplored=[falsified]  ← only if you must limit scope
   - WRONG:   explored=[falsified], unexplored=[reliable]  <-- default in unexplored!
 
   COMMON MISTAKE: The discussion may say "explore canonical only (X as shadow)".
   "X as shadow" means X goes in `unexplored`. The CANONICAL answer (the one marked
   `(default)` below) goes in `explored`. Do NOT put the shadow answer in explored.
+
+  ## When to Leave an Answer Unexplored
+
+  "Soft" dilemmas (only the default explored) add flavor without adding branching arcs.
+  Use them sparingly — at most 30-50% of your dilemmas. The rest MUST be fully explored
+  to drive branching. Leaving the alternative unexplored is a deliberate scope reduction,
+  not a default behavior.
+
+  GOOD branching distribution for 8 dilemmas:
+  - 4 fully explored (both answers in `explored`): creates 8 branching arcs
+  - 4 default-only (only default in `explored`): adds 4 flavor arcs
+  - TOTAL: 12 arcs, 8 branching — passes validation, rich story
+
+  BAD distribution for 8 dilemmas:
+  - 0 fully explored: 8 arcs total, all default-only, no branching
+  - 0 arcs with real choices → FAILS validation downstream
 
   ## Required Dilemma IDs ({dilemma_count} total)
   {dilemma_manifest}
@@ -79,11 +120,35 @@ dilemmas_system: |
   dilemma names.
 
   ## Output Format
-  List EVERY dilemma with its decision:
+  List EVERY dilemma with its decision. The example below shows a healthy 4-fully + 4-default-only
+  distribution for an 8-dilemma story (50% soft cap):
   ```
-  - dilemma::trust_or_betray: explored=[trust, betray], unexplored=[]
-  - dilemma::weather_storm_or_clear: explored=[storm], unexplored=[clear]
+  - dilemma::host_benevolent_or_selfish: explored=[protector, manipulator], unexplored=[]
+  - dilemma::artifact_safe_or_dangerous: explored=[safe, dangerous], unexplored=[]
+  - dilemma::mentor_trust_or_betray:     explored=[trust, betray], unexplored=[]
+  - dilemma::ending_hope_or_despair:     explored=[hope, despair], unexplored=[]
+  - dilemma::faction_help_or_hinder:     explored=[help], unexplored=[hinder]
+  - dilemma::weather_storm_or_clear:     explored=[storm], unexplored=[clear]
+  - dilemma::city_quiet_or_loud:         explored=[quiet], unexplored=[loud]
+  - dilemma::artifact_old_or_new:        explored=[old], unexplored=[new]
   ```
+
+  ## What NOT to Do
+  - Do NOT explore only the default answer for every dilemma — that produces no branching
+  - Do NOT put the `(default)` answer in `unexplored` — it MUST be in `explored`
+  - Do NOT downgrade "EXPLORE BOTH" decisions from the discussion to single-answer-explored
+  - Do NOT invent answer IDs not in the Valid Answer IDs list
+
+  ## FINAL CHECK before returning
+  Count how many of your dilemmas have ALL answers in `explored` (`unexplored=[]`).
+  If that count is less than 2, **OVERRIDE the discussion's exploration choices**:
+  for any dilemma whose discussion did NOT explicitly say "explore both", you
+  MAY move its non-default answer from `unexplored` into `explored` (and clear
+  it from `unexplored`) until the fully-explored count reaches 2. Pick whichever
+  remaining dilemmas best serve the story.
+  A story with fewer than 2 fully-explored dilemmas is REJECTED downstream;
+  the override is required, not optional.
+
   VERIFY: Your list MUST have exactly {dilemma_count} items.
   VERIFY: For each dilemma, EVERY answer ID MUST appear in EITHER explored OR unexplored (not both, not missing).
   VERIFY: The `(default)` answer for each dilemma is in `explored`, NEVER in `unexplored`.
@@ -110,8 +175,23 @@ paths_system: |
   - ripples: downstream story effects
 
   ## Path ID Convention
-  Path IDs follow the pattern: `dilemma_id__answer_id` (double underscore).
-  Example: dilemma `mentor_trust_or_betrayal` with answer `trust` becomes path `mentor_trust_or_betrayal__trust`.
+  Path IDs follow the pattern: `path::dilemma_id__answer_id` (note the
+  `path::` prefix and the **double underscore** between dilemma_id and
+  answer_id).
+
+  GOOD examples:
+  - `path::mentor_trust_or_betrayal__trust`
+  - `path::artifact_blessed_or_cursed__cursed`
+  - `path::keeper_honest_or_hiding__hiding`
+
+  BAD examples:
+  - `mentor_trust_or_betrayal__trust` (MISSING `path::` prefix)
+  - `path::mentor_trust_or_betrayal_trust` (single underscore — must be double)
+  - `path::mentor_trust` (drops the answer_id)
+  - `mentor_loyalty` (free-form name; pattern is mechanical)
+
+  The path's `pov_character` is OPTIONAL — set it only if a specific
+  character anchors the player's perspective on this path; otherwise omit.
 
   ## Output Format
   For each explored answer, describe the path and its consequences clearly.
@@ -120,7 +200,10 @@ paths_system: |
 
 beats_system: |
   You are sketching initial beats (opening scenes) for a branching story.
-  Each path needs {size_beats_per_path} opening beats.
+  Each dilemma is Y-shaped: shared pre-commit beats (belong to both
+  paths) + a commit beat per path (the fork) + post-commit beats per
+  path. Sketch a small number of shared beats per dilemma and a small
+  number of post-commit beats per path.
 
   ## NO DELEGATION
   Write the actual beat sketches directly.
@@ -133,17 +216,26 @@ beats_system: |
   **Location Diversity**: Use at least 2 different locations across your beats.
 
   ## Your Task
-  For each path, sketch {size_beats_per_path} opening beats:
-  - beat_id: unique identifier
-  - summary: one sentence describing what happens
-  - location: a RETAINED location entity ID
-  - entities: key entity IDs present in this beat
-  - paths: which path IDs this beat serves
+  For each dilemma, sketch the shared setup first; then for each explored
+  path of that dilemma, sketch the commit and the consequence beats.
+  - `beat_id`: unique identifier
+  - `summary`: one sentence describing what happens
+  - `location`: a RETAINED location entity ID
+  - `entities`: key entity IDs present in this beat
+  - `path_id`: the beat's primary path (REQUIRED, single path ID)
+  - `also_belongs_to`: for SHARED pre-commit beats, the sibling path ID as
+    a PLAIN STRING (not a list). E.g., `path::keeper_hiding` on a shared
+    beat whose `path_id` is `path::keeper_honest`. For COMMIT and
+    POST-COMMIT beats, use `null`.
 
-  Beats can serve multiple paths (shared opening scenes).
+    GOOD: `also_belongs_to: path::keeper_hiding`  (plain string)
+    BAD:  `also_belongs_to: [path::keeper_hiding]`  (list — REJECTED)
+
+  **Do NOT use the legacy `paths: [a, b]` list field — it was deprecated
+  in the Y-shape refactor (#1206) and the serializer will reject it.**
 
   ## Output Format
-  List beats grouped by the path(s) they serve.
+  List beats grouped by the dilemma they belong to, then by path.
   {output_language_instruction}
 
 convergence_system: |

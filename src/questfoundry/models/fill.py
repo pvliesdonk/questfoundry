@@ -31,12 +31,16 @@ class VoiceDocument(BaseModel):
     DREAM's high-level vision doesn't specify.
     """
 
-    pov: Literal["first", "second", "third_limited", "third_omniscient"] = Field(
-        description="Narrative point of view"
-    )
+    pov: Literal[
+        "first_person", "second_person", "third_person_limited", "third_person_omniscient"
+    ] = Field(description="Narrative point of view")
     pov_character: str = Field(
-        default="",  # Empty string valid for omniscient/second POV
-        description="Whose perspective (for limited POVs). Empty string for omniscient/second.",
+        default="",
+        description=(
+            "POV character (required for first_person and third_person_limited; "
+            "empty for second_person and third_person_omniscient). See fill.md R-1.3."
+        ),
+        json_schema_extra={"strip_whitespace": True},
     )
     tense: Literal["past", "present"] = Field(description="Narrative tense")
     voice_register: Literal["formal", "conversational", "literary", "sparse"] = Field(
@@ -55,6 +59,31 @@ class VoiceDocument(BaseModel):
         default_factory=list,
         description="Patterns to avoid (e.g. adverb-heavy, said-bookisms)",
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _strip_pov_character_whitespace(cls, data: Any) -> Any:
+        """Strip whitespace from pov_character before the bidirectional check."""
+        if isinstance(data, dict) and isinstance(data.get("pov_character"), str):
+            data["pov_character"] = data["pov_character"].strip()
+        return data
+
+    @model_validator(mode="after")
+    def _check_pov_character(self) -> VoiceDocument:
+        # `pov_character` has already been whitespace-stripped by the before-validator,
+        # so a truthiness check suffices here.
+        if self.pov in ("first_person", "third_person_limited") and not self.pov_character:
+            raise ValueError(
+                f"pov_character is required when pov is {self.pov!r}; "
+                "set it to the raw character ID whose perspective the prose follows. "
+                "See fill.md R-1.3."
+            )
+        if self.pov in ("second_person", "third_person_omniscient") and self.pov_character:
+            raise ValueError(
+                f"pov_character must be empty when pov is {self.pov!r}; "
+                "narration is not attached to a single character. See fill.md R-1.3."
+            )
+        return self
 
 
 # ---------------------------------------------------------------------------
@@ -236,6 +265,40 @@ class FillPhaseResult(PhaseResult):
     Inherits all fields from PhaseResult. Allows FILL-specific
     fields to be added without affecting other stages.
     """
+
+
+class FillEscalation(BaseModel):
+    """A FILL escalation event collected during the run.
+
+    Escalations represent contract violations that the stage cannot
+    resolve locally — a missing entity (R-2.14) needs SEED, persistent
+    quality issues after the final cycle (R-5.2) need POLISH or upstream
+    fixes. The stage collects them rather than failing fast on the
+    first one (so the user sees the full set), then raises
+    ``FillContractError`` at stage exit if any were recorded.
+    """
+
+    kind: Literal[
+        "missing_entity",
+        "unresolved_review_flags",
+        "voice_research_failed",
+        "blueprint_validation_failed",
+        "entity_extract_failed",
+        "expand_batch_failed",
+        "review_batch_failed",
+        "revision_failed",
+    ] = Field(description="What kind of escalation this is.")
+    passage_id: str = Field(
+        description="Passage where the escalation was raised. Empty string if not passage-scoped."
+    )
+    detail: str = Field(
+        description="Human-readable description of the specific violation.",
+    )
+    upstream_stage: Literal["SEED", "GROW", "POLISH", "FILL"] = Field(
+        description="Which stage owns the fix. ``FILL`` for self-owned failures "
+        "(LLM call failures during voice research, blueprint validation, or "
+        "entity extraction — rerun FILL or adjust provider settings).",
+    )
 
 
 class FillResult(BaseModel):

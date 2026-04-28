@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -21,9 +22,12 @@ from questfoundry.models.dress import (
     CodexEntry,
     DressPhase0Output,
     DressPhase1Output,
+    DressPhase2Output,
     DressPhaseResult,
     EntityVisualWithId,
     IllustrationBrief,
+    SpoilerCheckResult,
+    SpoilerLeak,
 )
 from questfoundry.pipeline.stages.dress import (
     DressStage,
@@ -119,6 +123,25 @@ def mock_phase0_output() -> DressPhase0Output:
     )
 
 
+@pytest.fixture(autouse=True)
+def _bypass_seam_validators(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Bypass DRESS's new FILL-output entry validator (#1347) and the
+    DRESS-output exit validator (#1348) for all tests in this file.
+    Test fixtures use minimal FILL graphs that don't satisfy the full
+    contracts; the seam-validation integration is exercised in
+    test_contract_chaining.py instead.
+    """
+    from questfoundry.graph import (
+        dress_output_validation as _dov,
+    )
+    from questfoundry.graph import (
+        fill_output_validation as _fov,
+    )
+
+    monkeypatch.setattr(_fov, "validate_fill_output", lambda _g: [])
+    monkeypatch.setattr(_dov, "validate_dress_output", lambda _g: [])
+
+
 # ---------------------------------------------------------------------------
 # Stage basics
 # ---------------------------------------------------------------------------
@@ -205,6 +228,54 @@ class TestDressStageResume:
 
 
 # ---------------------------------------------------------------------------
+# Shared mock helpers
+# ---------------------------------------------------------------------------
+
+
+def _make_dispatch_mock(
+    *,
+    brief_output: Any = None,
+    codex_batch_output: BatchedCodexOutput | None = None,
+    spoiler_result: SpoilerCheckResult | None = None,
+    codex_retry_output: DressPhase2Output | None = None,
+) -> Any:
+    """Build a side_effect that dispatches by template name.
+
+    Phase 2 now issues a per-entity spoiler-check call after every batch
+    (R-3.6). Tests that previously enumerated a fixed call list as side
+    effects break when the new call slots in. This helper routes by
+    ``template_name`` so the test stays declarative.
+
+    Default ``spoiler_result`` is "no leak" so existing tests keep
+    passing without changes to their assertions.
+    """
+    safe = spoiler_result or SpoilerCheckResult(has_leak=False, leaks=[], reason="")
+
+    async def _dispatch(
+        _model: Any,
+        template_name: str,
+        _context: dict[str, Any],
+        _schema: type,
+        **_kwargs: Any,
+    ) -> tuple:
+        if template_name == "dress_codex_spoiler_check":
+            return (safe, 1, 25)
+        if template_name == "dress_codex_batch":
+            assert codex_batch_output is not None, "codex_batch_output not provided"
+            return (codex_batch_output, 1, 50)
+        if template_name == "dress_codex":
+            assert codex_retry_output is not None, "codex_retry_output not provided"
+            return (codex_retry_output, 1, 50)
+        if template_name in {"dress_brief", "dress_brief_batch"}:
+            assert brief_output is not None, "brief_output not provided"
+            return (brief_output, 1, 50)
+        msg = f"Unexpected template_name in dispatch mock: {template_name}"
+        raise AssertionError(msg)
+
+    return _dispatch
+
+
+# ---------------------------------------------------------------------------
 # Phase 0: Art Direction
 # ---------------------------------------------------------------------------
 
@@ -270,12 +341,10 @@ class TestPhase0ArtDirection:
                 stage,
                 "_dress_llm_call",
                 new_callable=AsyncMock,
-                # Phase 1: 1 passage (per-passage call).
-                # Phase 2: 1 batch with both entities (batch size 4).
-                side_effect=[
-                    (mock_brief_output, 1, 50),  # Phase 1: opening passage
-                    (mock_codex_out, 1, 50),  # Phase 2: batch of 2 entities
-                ],
+                side_effect=_make_dispatch_mock(
+                    brief_output=mock_brief_output,
+                    codex_batch_output=mock_codex_out,
+                ),
             ),
         ):
             await stage.execute(MagicMock(), "Establish art direction")
@@ -286,6 +355,91 @@ class TestPhase0ArtDirection:
         assert graph.get_node("entity_visual::protagonist") is not None
         assert graph.get_node("entity_visual::aldric") is not None
         assert graph.get_last_stage() == "dress"
+
+    @pytest.mark.asyncio()
+    async def test_phase0_halts_when_appearing_entity_lacks_visual(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """R-1.3 / R-1.4: Phase 0 raises DressStageError if any entity
+        with appears edges ends up without an EntityVisual (or with an
+        empty reference_prompt_fragment) after the LLM call."""
+        from questfoundry.pipeline.stages.dress import DressStageError
+
+        g = Graph()
+        g.set_last_stage("fill")
+        g.create_node(
+            "vision::main",
+            {
+                "type": "vision",
+                "genre": "dark fantasy",
+                "tone": "brooding",
+                "themes": ["betrayal"],
+                "scope": {"story_size": "short"},
+            },
+        )
+        g.create_node(
+            "entity::protagonist",
+            {"type": "entity", "raw_id": "protagonist", "entity_type": "character"},
+        )
+        g.create_node(
+            "entity::ghost",
+            {"type": "entity", "raw_id": "ghost", "entity_type": "character"},
+        )
+        g.create_node("passage::opening", {"type": "passage", "raw_id": "opening"})
+        # Both entities appear in the prose
+        g.add_edge("appears", "entity::protagonist", "passage::opening")
+        g.add_edge("appears", "entity::ghost", "passage::opening")
+        g.save(tmp_path / "graph.db")
+
+        # LLM provides a visual for protagonist only — ghost is missing
+        partial_output = DressPhase0Output(
+            art_direction=ArtDirection(
+                style="ink",
+                medium="brush ink on rice paper",
+                palette=["midnight blue"],
+                composition_notes="balanced framing",
+                negative_defaults="cartoon",
+                aspect_ratio="16:9",
+            ),
+            entity_visuals=[
+                EntityVisualWithId(
+                    entity_id="protagonist",
+                    description="Young scholar",
+                    distinguishing_features=["focused eyes"],
+                    color_associations=["indigo"],
+                    reference_prompt_fragment="young scholar, focused eyes",
+                ),
+            ],
+        )
+
+        stage = DressStage(project_path=tmp_path)
+        # _unload_after_discuss / _unload_after_summarize are normally
+        # bound by execute() (model lifecycle hooks). When invoking the
+        # phase directly we bypass execute(), so set them to no-op
+        # defaults to satisfy the attribute access. Brittle if those
+        # attrs ever get renamed; rename them here too if so.
+        stage._unload_after_discuss = None  # type: ignore[attr-defined]
+        stage._unload_after_summarize = None  # type: ignore[attr-defined]
+        with (
+            patch(
+                "questfoundry.pipeline.stages.dress.run_discuss_phase",
+                new_callable=AsyncMock,
+                return_value=([AIMessage(content="ok")], 1, 100),
+            ),
+            patch(
+                "questfoundry.pipeline.stages.dress.summarize_discussion",
+                new_callable=AsyncMock,
+                return_value=("brief", 50),
+            ),
+            patch(
+                "questfoundry.pipeline.stages.dress.serialize_to_artifact",
+                new_callable=AsyncMock,
+                return_value=(partial_output, 100),
+            ),
+            pytest.raises(DressStageError, match="EntityVisual coverage"),
+        ):
+            await stage._phase_0_art_direction(g, MagicMock())
 
     @pytest.mark.asyncio()
     async def test_phase0_counts_metrics(
@@ -376,8 +530,8 @@ class TestPhase0ArtDirection:
 
 class TestPhase3Review:
     @pytest.mark.asyncio()
-    async def test_selects_all_briefs(self) -> None:
-        """Auto-approve mode selects all briefs sorted by priority."""
+    async def test_selects_briefs_within_priority_cutoff(self) -> None:
+        """Default cutoff (_min_priority=3) selects priorities 1, 2, 3 sorted."""
         g = Graph()
         g.create_node(
             "illustration_brief::opening",
@@ -396,7 +550,7 @@ class TestPhase3Review:
 
         selection = g.get_node("dress_meta::selection")
         assert selection is not None
-        # Should be sorted by priority (1 first)
+        # Sorted by priority (1 first)
         assert selection["selected_briefs"][0] == "illustration_brief::climax"
 
     @pytest.mark.asyncio()
@@ -405,6 +559,70 @@ class TestPhase3Review:
         stage = DressStage()
         result = await stage._phase_3_review(g, MagicMock())
         assert result.detail == "no briefs to review"
+
+    @pytest.mark.asyncio()
+    async def test_priority_cutoff_excludes_low_priority_briefs(self) -> None:
+        """R-2.1 + R-4.1: low-priority briefs exist (no pre-filter) but
+        Gate 2 selection respects the min_priority budget."""
+        g = Graph()
+        g.create_node(
+            "illustration_brief::high",
+            {"type": "illustration_brief", "priority": 1, "subject": "high"},
+        )
+        g.create_node(
+            "illustration_brief::low",
+            {"type": "illustration_brief", "priority": 4, "subject": "low"},
+        )
+
+        stage = DressStage()
+        stage._min_priority = 2  # tight budget — only priority 1+2 render
+        result = await stage._phase_3_review(g, MagicMock())
+
+        assert result.status == "completed"
+        assert "1 of 2" in result.detail
+        selection = g.get_node("dress_meta::selection")
+        assert selection["selected_briefs"] == ["illustration_brief::high"]
+        # The low-priority brief still EXISTS (no pre-filter at Phase 1) —
+        # it's just not selected for rendering.
+        assert g.get_node("illustration_brief::low") is not None
+
+    @pytest.mark.asyncio()
+    async def test_review_records_approval_stamp(self) -> None:
+        """R-4.4: dress_meta::selection carries approved_at + approval_mode + budget."""
+        g = Graph()
+        g.create_node(
+            "illustration_brief::a",
+            {"type": "illustration_brief", "priority": 1, "subject": "a"},
+        )
+
+        stage = DressStage()
+        # Default mode is non-interactive (False)
+        await stage._phase_3_review(g, MagicMock())
+        sel = g.get_node("dress_meta::selection")
+        assert sel is not None
+        assert sel.get("approved_at"), "approved_at timestamp must be set"
+        # Selection runs without a human prompt in either mode today, so
+        # we record "auto" rather than claiming the user picked a budget.
+        assert sel.get("approval_mode") == "auto"
+        assert sel.get("budget", {}).get("rule") == "priority_cutoff"
+        assert sel.get("budget", {}).get("priority_cutoff") == stage._min_priority
+
+    @pytest.mark.asyncio()
+    async def test_review_records_auto_mode_even_when_interactive_flag_set(self) -> None:
+        """Until an in-loop selection prompt exists, even ``--interactive``
+        runs are auto-selections; the audit trail must reflect that.
+        """
+        g = Graph()
+        g.create_node(
+            "illustration_brief::a",
+            {"type": "illustration_brief", "priority": 1, "subject": "a"},
+        )
+        stage = DressStage()
+        stage._interactive = True
+        await stage._phase_3_review(g, MagicMock())
+        sel = g.get_node("dress_meta::selection")
+        assert sel is not None
+        assert sel.get("approval_mode") == "auto"
 
 
 # ---------------------------------------------------------------------------
@@ -572,6 +790,154 @@ class TestPhase4Generate:
             result = await stage._phase_4_generate(g, MagicMock())
 
         assert "0 images generated, 1 failed" in result.detail
+
+
+class TestBuildDressErrorFeedback:
+    """Tests for `_build_dress_error_feedback`.
+
+    Cluster D-2 plumbing: extra_repair_hints must reach the retry message
+    so DRESS templates that depend on the initial system prompt's IDs and
+    constraints can self-correct after the first attempt drifts.
+    """
+
+    def test_no_hints_legacy_output_byte_identical(self) -> None:
+        """Callers that omit `extra_repair_hints` (the parameter default) get
+        the same generic feedback DRESS produced before this PR. Pinning the
+        EXACT string is the entire safety claim of the refactor — substring
+        checks would let a stray `\\n` or reorder slip through silently."""
+        from questfoundry.artifacts.validator import get_all_field_paths
+        from questfoundry.models.dress import DressPhase0Output
+        from questfoundry.pipeline.stages.dress import _build_dress_error_feedback
+
+        error = ValueError("bad output")
+        expected = ", ".join(get_all_field_paths(DressPhase0Output))
+        # This is what the prior inline f-string produced verbatim:
+        # f"Your response failed validation:\n{e}\n\n"
+        # f"Expected fields: {', '.join(expected)}\n"
+        # f"Please fix the errors and try again."
+        legacy = (
+            f"Your response failed validation:\n{error}\n\n"
+            f"Expected fields: {expected}\n"
+            f"Please fix the errors and try again."
+        )
+        feedback = _build_dress_error_feedback(error, DressPhase0Output, extra_repair_hints=None)
+        assert feedback == legacy
+
+    def test_hints_appear_verbatim_in_feedback(self) -> None:
+        """A caller-supplied hint block appears literally in the retry
+        feedback so the LLM sees the constraint or ID list re-stated in the
+        same human-message it's correcting against. Closes the murder1 failure
+        shape generalised to DRESS — see audit DRESS §dress_serialize."""
+        from questfoundry.models.dress import DressPhase0Output
+        from questfoundry.pipeline.stages.dress import _build_dress_error_feedback
+
+        hints = [
+            "REMINDER — Valid entity IDs (use ONLY these): kay, marcus, archive",
+            "REMINDER — `priority` MUST be 1, 2, or 3.",
+        ]
+        feedback = _build_dress_error_feedback(
+            ValueError("bad output"), DressPhase0Output, extra_repair_hints=hints
+        )
+        for hint in hints:
+            assert hint in feedback
+
+    def test_hints_block_separated_from_generic_message(self) -> None:
+        """The hint block is positioned AFTER the generic Pydantic-error and
+        field-list lines so the model reads the failure first and the
+        corrective constraint last (closest to its retry context)."""
+        from questfoundry.models.dress import DressPhase0Output
+        from questfoundry.pipeline.stages.dress import _build_dress_error_feedback
+
+        feedback = _build_dress_error_feedback(
+            ValueError("bad output"),
+            DressPhase0Output,
+            extra_repair_hints=["REMINDER — Use only valid IDs."],
+        )
+        assert feedback.index("Please fix the errors") < feedback.index("REMINDER")
+
+    def test_empty_hints_list_omits_reminder_block(self) -> None:
+        """An empty (but non-None) list must not append a stray separator —
+        same falsy-guard semantics as `if extra_repair_hints:`."""
+        from questfoundry.models.dress import DressPhase0Output
+        from questfoundry.pipeline.stages.dress import _build_dress_error_feedback
+
+        feedback = _build_dress_error_feedback(
+            ValueError("bad output"), DressPhase0Output, extra_repair_hints=[]
+        )
+        assert "REMINDER" not in feedback
+
+    @pytest.mark.asyncio
+    async def test_dress_llm_call_forwards_hints_into_retry_message(self) -> None:
+        """End-to-end: `_dress_llm_call` must actually plumb `extra_repair_hints`
+        through to the appended `HumanMessage` on retry. The unit tests above
+        cover the helper in isolation; this test guards against a regression
+        where someone drops the parameter forwarding inside `_dress_llm_call`
+        — the integration seam Cluster D-2 actually fixes."""
+        from langchain_core.messages import HumanMessage
+        from pydantic import BaseModel, Field, ValidationError
+
+        from questfoundry.pipeline.stages.dress import DressStage
+
+        class _Toy(BaseModel):
+            name: str = Field(min_length=1)
+
+        # First attempt: raise ValidationError. Second: return a valid result.
+        valid = _Toy(name="ok")
+        call_count = {"n": 0}
+        captured_messages: list[Any] = []
+
+        async def _ainvoke(messages: list[Any], config: Any = None) -> _Toy:  # noqa: ARG001
+            captured_messages.append(list(messages))  # snapshot the conversation
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                raise ValidationError.from_exception_data(
+                    "Toy",
+                    [
+                        {
+                            "type": "missing",
+                            "loc": ("name",),
+                            "msg": "Field required",
+                            "input": {},
+                        }
+                    ],
+                )
+            return valid
+
+        structured_model = MagicMock()
+        structured_model.ainvoke = _ainvoke
+
+        # Patch with_structured_output (used by _dress_llm_call line ~640) so
+        # we don't need a real LangChain provider.
+        stage = DressStage()
+        with (
+            patch(
+                "questfoundry.pipeline.stages.dress.with_structured_output",
+                return_value=structured_model,
+            ),
+            patch("questfoundry.prompts.loader.PromptLoader") as mock_loader,
+        ):
+            mock_template = MagicMock()
+            mock_template.system = "system text"
+            mock_template.user = None
+            mock_loader.return_value.load.return_value = mock_template
+
+            hints = ["REMINDER — must-be-present-in-retry"]
+            result, _calls, _tokens = await stage._dress_llm_call(
+                model=MagicMock(),
+                template_name="dummy",
+                context={},
+                output_schema=_Toy,
+                extra_repair_hints=hints,
+            )
+
+        assert result == valid
+        assert call_count["n"] == 2
+        # The retry conversation (second snapshot) must include the hint.
+        retry_messages = captured_messages[1]
+        retry_human_messages = [m for m in retry_messages if isinstance(m, HumanMessage)]
+        assert retry_human_messages, "expected an appended HumanMessage on retry"
+        retry_text = retry_human_messages[-1].content
+        assert "REMINDER — must-be-present-in-retry" in retry_text
 
 
 class TestParseAspectRatio:
@@ -983,8 +1349,10 @@ class TestPhase1Briefs:
         assert result.detail == "no passages"
 
     @pytest.mark.asyncio()
-    async def test_low_priority_skipped(self) -> None:
-        """Brief with very low combined score is skipped."""
+    async def test_low_priority_brief_still_created(self) -> None:
+        """R-2.1: every passage with prose gets a brief, even if the computed
+        priority is 0. The brief is stored with a high sentinel priority so
+        Gate 2 can surface it, but it won't be auto-rendered."""
         g = Graph()
         g.create_node(
             "passage::boring",
@@ -1000,9 +1368,13 @@ class TestPhase1Briefs:
         ):
             result = await stage._phase_1_briefs(g, MagicMock())
 
-        # base_score=0, llm_adj=-2 → total=-2 → priority=0 → skipped
-        assert g.get_node("illustration_brief::boring") is None
-        assert "skipped" in result.detail
+        # base_score=0, llm_adj=-2 → total=-2 → priority would be 0;
+        # spec-compliant behaviour: brief is created with sentinel priority=99
+        # so it appears at Gate 2 but lies below any reasonable budget cutoff.
+        assert result.status == "completed"
+        brief = g.get_node("illustration_brief::boring")
+        assert brief is not None
+        assert brief.get("priority") == 99
 
     @pytest.mark.asyncio()
     async def test_batching_groups_passages(self) -> None:
@@ -1261,12 +1633,13 @@ class TestPhase2Codex:
             stage,
             "_dress_llm_call",
             new_callable=AsyncMock,
-            return_value=(mock_output, 1, 150),
+            side_effect=_make_dispatch_mock(codex_batch_output=mock_output),
         ):
             result = await stage._phase_2_codex(g, MagicMock())
 
         assert result.status == "completed"
-        assert result.llm_calls == 1
+        # 1 batch call + 1 spoiler-check call per entity (R-3.6)
+        assert result.llm_calls == 2
         assert g.get_node("codex::protagonist_rank1") is not None
         assert g.get_node("codex::protagonist_rank2") is not None
 
@@ -1317,6 +1690,8 @@ class TestPhase2Codex:
 
         calls: list[dict[str, Any]] = []
 
+        batch_calls: list[dict[str, Any]] = []
+
         async def _mock_llm_call(
             _model: Any,
             _template: str,
@@ -1325,19 +1700,23 @@ class TestPhase2Codex:
             **_kwargs: Any,
         ) -> tuple:
             calls.append(_context)
-            # Parse entity IDs from batch context (each starts with "## Entity: <raw_id>")
-            import re
-
-            raw_ids = re.findall(r"## Entity: (\S+)", _context["entities_batch"])
-            eids = [f"entity::{raw_id}" for raw_id in raw_ids]
+            if _template == "dress_codex_spoiler_check":
+                return (SpoilerCheckResult(has_leak=False, leaks=[], reason=""), 1, 25)
+            # dress_codex_batch
+            batch_calls.append(_context)
+            # Parse entity IDs from batch context. The header now emits the
+            # full prefixed form (`## Entity: entity::e0`) per #1473 — the LLM
+            # mirrors what it sees, and so does this mock.
+            eids = re.findall(r"## Entity: (\S+)", _context["entities_batch"])
             return (_make_batch_output(eids), 1, 100)
 
         stage = DressStage()
         with patch.object(stage, "_dress_llm_call", side_effect=_mock_llm_call):
             result = await stage._phase_2_codex(g, MagicMock())
 
-        assert len(calls) == 2  # 4 + 1
-        assert result.llm_calls == 2
+        assert len(batch_calls) == 2  # 4 + 1 batches
+        # 2 batch calls + 5 spoiler-check calls (one per entity)
+        assert result.llm_calls == 7
         # All 5 entities should have codex entries
         for i in range(5):
             assert g.get_node(f"codex::e{i}_rank1") is not None
@@ -1369,7 +1748,7 @@ class TestPhase2Codex:
             stage,
             "_dress_llm_call",
             new_callable=AsyncMock,
-            return_value=(wrong_output, 1, 100),
+            side_effect=_make_dispatch_mock(codex_batch_output=wrong_output),
         ):
             result = await stage._phase_2_codex(g, MagicMock())
 
@@ -1379,6 +1758,66 @@ class TestPhase2Codex:
         codex_nodes = g.get_nodes_by_type("codex_entry")
         # Only 1 entry (for "real"), not 2
         assert len(codex_nodes) == 1
+
+    @pytest.mark.asyncio()
+    async def test_state_flag_list_uses_prefixed_form(self) -> None:
+        """The ``state_flags`` context key injected into the codex prompt MUST
+        list IDs with the ``state_flag::`` prefix so the LLM mirrors that
+        form back in ``visible_when`` (#1473). The validator strip-prefixes
+        for comparison so the unprefixed form was tolerated, but emitting the
+        prefixed form prevents small-model drift between this list and the
+        per-entity ``Related State Flags`` block."""
+        g = Graph()
+        g.create_node(
+            "entity::e0",
+            {"type": "entity", "raw_id": "e0", "entity_type": "character"},
+        )
+        g.create_node(
+            "state_flag::met_aldric",
+            {
+                "type": "state_flag",
+                "raw_id": "met_aldric",
+                "trigger": "Player has met Aldric",
+            },
+        )
+
+        captured_contexts: list[dict[str, Any]] = []
+
+        async def _mock_llm_call(
+            _model: Any,
+            _template: str,
+            _context: dict[str, Any],
+            _schema: type,
+            **_kwargs: Any,
+        ) -> tuple:
+            captured_contexts.append(_context)
+            if _template == "dress_codex_spoiler_check":
+                return (SpoilerCheckResult(has_leak=False, leaks=[], reason=""), 1, 25)
+            return (
+                BatchedCodexOutput(
+                    entities=[
+                        BatchedCodexItem(
+                            entity_id="entity::e0",
+                            entries=[
+                                CodexEntry(title="E0", rank=1, visible_when=[], content="Info.")
+                            ],
+                        )
+                    ]
+                ),
+                1,
+                100,
+            )
+
+        stage = DressStage()
+        with patch.object(stage, "_dress_llm_call", side_effect=_mock_llm_call):
+            await stage._phase_2_codex(g, MagicMock())
+
+        batch_contexts = [c for c in captured_contexts if "entities_batch" in c]
+        assert batch_contexts, "expected at least one codex_batch call"
+        sf_block = batch_contexts[0]["state_flags"]
+        assert "state_flag::met_aldric" in sf_block
+        # And the unprefixed form is NOT what we emit as the leading ID:
+        assert "- `met_aldric`" not in sf_block
 
     @pytest.mark.asyncio()
     async def test_logs_validation_warnings(self) -> None:
@@ -1396,12 +1835,585 @@ class TestPhase2Codex:
             stage,
             "_dress_llm_call",
             new_callable=AsyncMock,
-            return_value=(mock_output, 1, 150),
+            side_effect=_make_dispatch_mock(codex_batch_output=mock_output),
         ):
             result = await stage._phase_2_codex(g, MagicMock())
 
         assert result.status == "completed"
         assert g.get_node("codex::protagonist_rank1") is not None
+
+
+class TestDressBatchFailureEscalations:
+    """R-1480: ``batch_llm_calls`` retry exhaustion records per-item escalations.
+
+    The previous behaviour (``_errors`` underscore-discard at three sites)
+    silently dropped failed items; symptoms only surfaced at end-of-stage
+    via missing-artifact contract violations. After #1480 each phase
+    populates ``self._escalations`` with per-item ``DressEscalation``
+    entries, and the stage-exit ``DressStageError`` folds them into the
+    contract-failure message.
+    """
+
+    def test_three_new_escalation_kinds_accepted(self) -> None:
+        """Schema sanity: the three new ``DressEscalation.kind`` Literals are accepted."""
+        from questfoundry.models.dress import DressEscalation
+
+        for kind in (
+            "briefs_batch_failed",
+            "codex_batch_failed",
+            "distill_batch_failed",
+        ):
+            esc = DressEscalation(
+                kind=kind,  # type: ignore[arg-type]
+                item_id="passage::p1",
+                detail="some detail",
+                upstream_stage="DRESS",
+            )
+            assert esc.kind == kind
+
+    @pytest.mark.asyncio()
+    async def test_codex_batch_failure_escalates_each_entity_in_chunk(self) -> None:
+        """When _codex_batch retries exhaust, every entity_id in the failed
+        chunk gets a ``codex_batch_failed`` escalation on ``self._escalations``."""
+        from unittest.mock import patch
+
+        g = Graph()
+        for raw in ("clara_yu", "simon_blackwood", "alistair_vance"):
+            g.create_node(
+                f"character::{raw}",
+                {"type": "entity", "raw_id": raw, "entity_type": "character"},
+            )
+
+        captured_chunks: list[list[list[str]]] = []
+
+        async def mock_batch_llm_calls(
+            chunks: list[list[str]],
+            _call_fn,
+            _max_concurrency: int,
+            **_kwargs: object,
+        ):
+            captured_chunks.append(chunks)
+            errors = [(idx, RuntimeError("codex retry exhaustion")) for idx in range(len(chunks))]
+            results = [None] * len(chunks)
+            return results, 0, 0, errors
+
+        stage = DressStage()
+        with patch(
+            "questfoundry.pipeline.stages.dress.batch_llm_calls",
+            new=mock_batch_llm_calls,
+        ):
+            await stage._phase_2_codex(g, MagicMock())
+
+        assert captured_chunks, "expected _phase_2_codex to call batch_llm_calls"
+        expected_eids: set[str] = set()
+        for chunk in captured_chunks[0]:
+            expected_eids.update(chunk)
+
+        codex_escs = [e for e in stage._escalations if e.kind == "codex_batch_failed"]
+        assert len(codex_escs) == len(expected_eids)
+        assert {e.item_id for e in codex_escs} == expected_eids
+        for esc in codex_escs:
+            assert "RuntimeError" in esc.detail
+            assert "codex retry exhaustion" in esc.detail
+            assert esc.upstream_stage == "DRESS"
+
+    @pytest.mark.asyncio()
+    async def test_briefs_batch_failure_escalates_each_passage_in_chunk(self) -> None:
+        """Phase 1 briefs: when ``_brief_batch`` retries exhaust, every
+        passage_id in the failed chunk gets a ``briefs_batch_failed``
+        escalation. Uses the same chunk shape as codex but populated
+        from passages-with-prose."""
+        from unittest.mock import patch
+
+        g = Graph()
+        for raw in ("intro", "rising", "climax"):
+            g.create_node(
+                f"passage::{raw}",
+                {
+                    "type": "passage",
+                    "raw_id": raw,
+                    "prose": f"prose for {raw}",
+                },
+            )
+
+        captured_chunks: list[list[list[str]]] = []
+
+        async def mock_batch_llm_calls(
+            chunks: list[list[str]],
+            _call_fn,
+            _max_concurrency: int,
+            **_kwargs: object,
+        ):
+            captured_chunks.append(chunks)
+            errors = [(idx, RuntimeError("briefs retry exhaustion")) for idx in range(len(chunks))]
+            results = [None] * len(chunks)
+            return results, 0, 0, errors
+
+        stage = DressStage()
+        with patch(
+            "questfoundry.pipeline.stages.dress.batch_llm_calls",
+            new=mock_batch_llm_calls,
+        ):
+            await stage._phase_1_briefs(g, MagicMock())
+
+        assert captured_chunks, "expected _phase_1_briefs to call batch_llm_calls"
+        expected_pids: set[str] = set()
+        for chunk in captured_chunks[0]:
+            expected_pids.update(chunk)
+
+        briefs_escs = [e for e in stage._escalations if e.kind == "briefs_batch_failed"]
+        assert len(briefs_escs) == len(expected_pids)
+        assert {e.item_id for e in briefs_escs} == expected_pids
+        for esc in briefs_escs:
+            assert "RuntimeError" in esc.detail
+            assert "briefs retry exhaustion" in esc.detail
+            assert esc.upstream_stage == "DRESS"
+            # Items already prefixed by graph.get_nodes_by_type → key form:
+            assert esc.item_id.startswith("passage::")
+
+    def test_format_exit_error_without_escalations(self) -> None:
+        """Contract failure with no escalations renders just the error list —
+        no ``Plus N escalation(s)`` trailer."""
+        stage = DressStage()
+        msg = stage._format_exit_error(["entity X missing brief", "entity Y missing codex"])
+        assert "DRESS output contract violated (2 error(s)):" in msg
+        assert "  - entity X missing brief" in msg
+        assert "  - entity Y missing codex" in msg
+        assert "Plus" not in msg
+        assert "escalation" not in msg
+
+    def test_format_exit_error_folds_escalations(self) -> None:
+        """When escalations exist alongside contract errors, the folded message
+        names every escalation by ``[kind] item_id: detail``."""
+        from questfoundry.models.dress import DressEscalation
+
+        stage = DressStage()
+        stage._escalations = [
+            DressEscalation(
+                kind="codex_batch_failed",
+                item_id="character::clara_yu",
+                detail="dress_codex_batch failed after retries (RuntimeError: blocked).",
+                upstream_stage="DRESS",
+            ),
+            DressEscalation(
+                kind="briefs_batch_failed",
+                item_id="passage::intro",
+                detail="dress_brief_batch failed after retries (TimeoutError: 30s).",
+                upstream_stage="DRESS",
+            ),
+        ]
+
+        msg = stage._format_exit_error(["entity X missing codex"])
+        # Contract errors come first
+        assert "DRESS output contract violated (1 error(s)):" in msg
+        assert "  - entity X missing codex" in msg
+        # Then the escalation trailer with both items named
+        assert "Plus 2 batch_llm_calls retry-exhaustion escalation(s):" in msg
+        assert "[codex_batch_failed] character::clara_yu: dress_codex_batch failed" in msg
+        assert "[briefs_batch_failed] passage::intro: dress_brief_batch failed" in msg
+
+    @pytest.mark.asyncio()
+    async def test_briefs_chunk_passage_ids_are_already_prefixed(self) -> None:
+        """``eligible_ids`` is built from ``graph.get_nodes_by_type("passage").keys()``,
+        whose values are always fully-prefixed (e.g. ``passage::intro``). Pin
+        the invariant with a sentinel test so a future refactor that strips
+        the prefix anywhere upstream trips here instead of silently producing
+        bare IDs in escalations."""
+        g = Graph()
+        g.create_node(
+            "passage::intro",
+            {"type": "passage", "raw_id": "intro", "prose": "x"},
+        )
+        passage_keys = list(g.get_nodes_by_type("passage").keys())
+        assert passage_keys == ["passage::intro"]
+        assert all(k.startswith("passage::") for k in passage_keys)
+
+
+# ---------------------------------------------------------------------------
+# Phase 2: spoiler-direction enforcement (R-3.6)
+# ---------------------------------------------------------------------------
+
+
+class TestPhase2CodexSpoilerEnforcement:
+    """R-3.6: lower-tier entries must not leak higher-tier reveals.
+
+    Detection is an LLM call after each batch; on leak, the entity is
+    regenerated alone (max 2 retries); on retry exhaustion, fall back
+    to a minimal rank-1-only codex with a WARNING.
+    """
+
+    @pytest.mark.asyncio()
+    async def test_clean_first_attempt_no_retry(self) -> None:
+        """No leak detected → no retry, original entries persist."""
+        g = Graph()
+        g.create_node(
+            "entity::protagonist",
+            {"type": "entity", "raw_id": "protagonist", "entity_type": "character"},
+        )
+        stage = DressStage()
+        original = _make_codex_output("entity::protagonist")
+        with patch.object(
+            stage,
+            "_dress_llm_call",
+            new_callable=AsyncMock,
+            side_effect=_make_dispatch_mock(codex_batch_output=original),
+        ):
+            result = await stage._phase_2_codex(g, MagicMock())
+
+        assert result.status == "completed"
+        # Original rank-1 content (from _make_codex_output) survived
+        rank1 = g.get_node("codex::protagonist_rank1")
+        assert rank1 is not None
+        assert rank1["content"] == "A young scholar of the old academy."
+        assert g.get_node("codex::protagonist_rank2") is not None
+
+    @pytest.mark.asyncio()
+    async def test_leak_triggers_single_retry_then_clean(self) -> None:
+        """Leak → 1 retry → clean. Replaced content lands on graph."""
+        g = Graph()
+        g.create_node(
+            "entity::protagonist",
+            {"type": "entity", "raw_id": "protagonist", "entity_type": "character"},
+        )
+        stage = DressStage()
+        original = _make_codex_output("entity::protagonist")
+        clean_retry = DressPhase2Output(
+            entries=[
+                CodexEntry(
+                    title="Protagonist",
+                    rank=1,
+                    visible_when=[],
+                    content="A figure encountered early on. Vague.",
+                ),
+                CodexEntry(
+                    title="Protagonist's Secret",
+                    rank=2,
+                    visible_when=["met_aldric"],
+                    content="Now revealed: the deeper truth.",
+                ),
+            ]
+        )
+        # First spoiler check leaks; after retry, second spoiler check is clean.
+        leaks_then_clean = [
+            SpoilerCheckResult(
+                has_leak=True,
+                leaks=[
+                    SpoilerLeak(
+                        lower_rank=1,
+                        higher_rank=2,
+                        leaked_content="rank-1 already reveals rank-2 content",
+                    )
+                ],
+                reason="rank 1 leaked the secret",
+            ),
+            SpoilerCheckResult(has_leak=False, leaks=[], reason=""),
+        ]
+
+        async def _dispatch(
+            _model: Any,
+            template_name: str,
+            _context: dict[str, Any],
+            _schema: type,
+            **_kwargs: Any,
+        ) -> tuple:
+            if template_name == "dress_codex_batch":
+                return (original, 1, 50)
+            if template_name == "dress_codex":
+                return (clean_retry, 1, 50)
+            if template_name == "dress_codex_spoiler_check":
+                return (leaks_then_clean.pop(0), 1, 25)
+            msg = f"Unexpected template: {template_name}"
+            raise AssertionError(msg)
+
+        with patch.object(stage, "_dress_llm_call", side_effect=_dispatch):
+            result = await stage._phase_2_codex(g, MagicMock())
+
+        assert result.status == "completed"
+        # Retry content landed (replaced original)
+        rank1 = g.get_node("codex::protagonist_rank1")
+        assert rank1 is not None
+        assert "Vague" in rank1["content"]
+
+    @pytest.mark.asyncio()
+    async def test_retry_exhausted_falls_back_to_rank1_only(self) -> None:
+        """3 leaks (initial + 2 retries) → minimal rank-1-only fallback."""
+        g = Graph()
+        g.create_node(
+            "entity::protagonist",
+            {
+                "type": "entity",
+                "raw_id": "protagonist",
+                "entity_type": "character",
+                "name": "The Wandering Scholar",
+            },
+        )
+        stage = DressStage()
+        original = _make_codex_output("entity::protagonist")
+        leaky_retry = DressPhase2Output(
+            entries=[
+                CodexEntry(
+                    title="Still Leaky",
+                    rank=1,
+                    visible_when=[],
+                    content="Still leaks the rank-2 secret.",
+                ),
+                CodexEntry(
+                    title="Secret",
+                    rank=2,
+                    visible_when=["met_aldric"],
+                    content="The secret.",
+                ),
+            ]
+        )
+        always_leak = SpoilerCheckResult(
+            has_leak=True,
+            leaks=[SpoilerLeak(lower_rank=1, higher_rank=2, leaked_content="leak")],
+            reason="persistent leak",
+        )
+
+        async def _dispatch(
+            _model: Any,
+            template_name: str,
+            _context: dict[str, Any],
+            _schema: type,
+            **_kwargs: Any,
+        ) -> tuple:
+            if template_name == "dress_codex_batch":
+                return (original, 1, 50)
+            if template_name == "dress_codex":
+                return (leaky_retry, 1, 50)
+            if template_name == "dress_codex_spoiler_check":
+                return (always_leak, 1, 25)
+            msg = f"Unexpected template: {template_name}"
+            raise AssertionError(msg)
+
+        with patch.object(stage, "_dress_llm_call", side_effect=_dispatch):
+            result = await stage._phase_2_codex(g, MagicMock())
+
+        assert result.status == "completed"
+        # Fallback wrote ONLY a rank-1 entry; rank-2 absent
+        assert g.get_node("codex::protagonist_rank1") is not None
+        assert g.get_node("codex::protagonist_rank2") is None
+        rank1 = g.get_node("codex::protagonist_rank1")
+        # Fallback uses entity name when present
+        assert "The Wandering Scholar" in rank1["title"]
+        assert rank1["visible_when"] == []
+
+    @pytest.mark.asyncio()
+    async def test_mixed_outcomes_within_one_batch(self) -> None:
+        """One batch with three entities: clean, retry-then-clean, exhausted.
+
+        Exercises the per-entity sequencing inside a single batch and
+        confirms the three outcomes coexist without cross-contamination.
+        """
+        g = Graph()
+        for raw_id in ("alpha", "beta", "gamma"):
+            g.create_node(
+                f"entity::{raw_id}",
+                {
+                    "type": "entity",
+                    "raw_id": raw_id,
+                    "entity_type": "character",
+                    "name": raw_id.capitalize(),
+                },
+            )
+        stage = DressStage()
+
+        batch = BatchedCodexOutput(
+            entities=[
+                BatchedCodexItem(
+                    entity_id=f"entity::{raw_id}",
+                    entries=[
+                        CodexEntry(
+                            title=raw_id, rank=1, visible_when=[], content="Original rank 1."
+                        ),
+                        CodexEntry(
+                            title=f"{raw_id} Secret",
+                            rank=2,
+                            visible_when=["state_flag::known"],
+                            content="Original rank 2.",
+                        ),
+                    ],
+                )
+                for raw_id in ("alpha", "beta", "gamma")
+            ]
+        )
+        clean_retry = DressPhase2Output(
+            entries=[
+                CodexEntry(
+                    title="Beta",
+                    rank=1,
+                    visible_when=[],
+                    content="Replaced rank 1 — vague.",
+                ),
+                CodexEntry(
+                    title="Beta Secret",
+                    rank=2,
+                    visible_when=["state_flag::known"],
+                    content="Replaced rank 2.",
+                ),
+            ]
+        )
+        leaky_retry = DressPhase2Output(
+            entries=[
+                CodexEntry(
+                    title="Gamma",
+                    rank=1,
+                    visible_when=[],
+                    content="Still leaks.",
+                ),
+                CodexEntry(
+                    title="Gamma Secret",
+                    rank=2,
+                    visible_when=["state_flag::known"],
+                    content="Persistent leak.",
+                ),
+            ]
+        )
+        clean = SpoilerCheckResult(has_leak=False, leaks=[], reason="")
+        leak = SpoilerCheckResult(
+            has_leak=True,
+            leaks=[SpoilerLeak(lower_rank=1, higher_rank=2, leaked_content="leak")],
+            reason="leak",
+        )
+        # alpha: clean
+        # beta: leak → retry → clean (3 spoiler checks total: alpha clean, beta leak, beta clean,
+        #   then gamma block follows)
+        # gamma: leak → retry → leak → retry → leak (3 spoiler checks for gamma)
+        # Sequence: alpha-check(clean), beta-check(leak), beta-recheck(clean),
+        #           gamma-check(leak), gamma-recheck(leak), gamma-recheck(leak)
+        spoiler_sequence = [clean, leak, clean, leak, leak, leak]
+
+        async def _dispatch(
+            _model: Any,
+            template_name: str,
+            context: dict[str, Any],
+            _schema: type,
+            **_kwargs: Any,
+        ) -> tuple:
+            if template_name == "dress_codex_batch":
+                return (batch, 1, 50)
+            if template_name == "dress_codex":
+                # Pick the right per-entity retry output by inspecting the
+                # injected entity_details (which contains the raw id).
+                if "beta" in context.get("entity_details", ""):
+                    return (clean_retry, 1, 50)
+                return (leaky_retry, 1, 50)
+            if template_name == "dress_codex_spoiler_check":
+                return (spoiler_sequence.pop(0), 1, 25)
+            msg = f"Unexpected template: {template_name}"
+            raise AssertionError(msg)
+
+        with patch.object(stage, "_dress_llm_call", side_effect=_dispatch):
+            result = await stage._phase_2_codex(g, MagicMock())
+
+        assert result.status == "completed"
+
+        # alpha: original entries kept (rank 1 + rank 2)
+        alpha_r1 = g.get_node("codex::alpha_rank1")
+        assert alpha_r1 is not None
+        assert alpha_r1["content"] == "Original rank 1."
+        assert g.get_node("codex::alpha_rank2") is not None
+
+        # beta: retry replaced both ranks
+        beta_r1 = g.get_node("codex::beta_rank1")
+        assert beta_r1 is not None
+        assert "Replaced rank 1" in beta_r1["content"]
+        assert g.get_node("codex::beta_rank2") is not None
+
+        # gamma: rank-1-only fallback (rank 2 dropped)
+        gamma_r1 = g.get_node("codex::gamma_rank1")
+        assert gamma_r1 is not None
+        assert "Further details are not yet known" in gamma_r1["content"]
+        assert g.get_node("codex::gamma_rank2") is None
+        # Sequence fully consumed: 6 spoiler checks issued
+        assert spoiler_sequence == []
+
+
+def test_format_entries_for_spoiler_check_orders_by_rank() -> None:
+    from questfoundry.pipeline.stages.dress import _format_entries_for_spoiler_check
+
+    entries = [
+        {"rank": 2, "title": "Hidden", "visible_when": ["state_flag::met"], "content": "Deep."},
+        {"rank": 1, "title": "Surface", "visible_when": [], "content": "Shallow."},
+    ]
+    rendered = _format_entries_for_spoiler_check(entries)
+    # Rank 1 must appear before Rank 2 in the rendered block
+    assert rendered.index("Rank 1") < rendered.index("Rank 2")
+    assert "always visible" in rendered
+    # state_flag:: prefix preserved per R-3.7 (matches few-shot examples in
+    # dress_codex_spoiler_check.yaml — caught by gemini on PR #1516).
+    assert "gated by `state_flag::met`" in rendered
+
+
+def test_minimal_rank_one_codex_uses_entity_name() -> None:
+    from questfoundry.pipeline.stages.dress import _minimal_rank_one_codex
+
+    g = Graph()
+    g.create_node(
+        "entity::aldric",
+        {"type": "entity", "raw_id": "aldric", "name": "Aldric the Scribe"},
+    )
+    fallback = _minimal_rank_one_codex(g, "entity::aldric")
+    assert len(fallback) == 1
+    assert fallback[0]["rank"] == 1
+    assert fallback[0]["visible_when"] == []
+    assert "Aldric the Scribe" in fallback[0]["title"]
+
+
+def test_minimal_rank_one_codex_falls_back_to_raw_id() -> None:
+    from questfoundry.pipeline.stages.dress import _minimal_rank_one_codex
+
+    g = Graph()
+    fallback = _minimal_rank_one_codex(g, "entity::missing")
+    # No node, no name → use raw id as title
+    assert fallback[0]["title"] == "missing"
+
+
+def test_minimal_rank_one_codex_uses_entity_type_descriptor() -> None:
+    """Fallback content is diegetic for non-character entities (R-3.4)."""
+    from questfoundry.pipeline.stages.dress import _minimal_rank_one_codex
+
+    g = Graph()
+    g.create_node(
+        "entity::cliff_pass",
+        {"type": "entity", "raw_id": "cliff_pass", "name": "Cliff Pass", "entity_type": "location"},
+    )
+    g.create_node(
+        "entity::sword",
+        {"type": "entity", "raw_id": "sword", "name": "Old Sword", "entity_type": "object"},
+    )
+    g.create_node(
+        "entity::guild",
+        {"type": "entity", "raw_id": "guild", "name": "The Guild", "entity_type": "faction"},
+    )
+    g.create_node(
+        "entity::weird",
+        {"type": "entity", "raw_id": "weird", "name": "Weirdness", "entity_type": "concept"},
+    )
+
+    assert "a place encountered" in _minimal_rank_one_codex(g, "entity::cliff_pass")[0]["content"]
+    assert "an object encountered" in _minimal_rank_one_codex(g, "entity::sword")[0]["content"]
+    assert "a group encountered" in _minimal_rank_one_codex(g, "entity::guild")[0]["content"]
+    # Unknown entity_type falls back to the generic descriptor
+    assert "an element of the story" in _minimal_rank_one_codex(g, "entity::weird")[0]["content"]
+
+
+def test_spoiler_leak_rejects_inverted_rank_ordering() -> None:
+    """Pydantic must reject lower_rank ≥ higher_rank — direction matters in R-3.6."""
+    from pydantic import ValidationError
+
+    # lower == higher
+    with pytest.raises(ValidationError, match=r"lower_rank.*must be strictly less than"):
+        SpoilerLeak(lower_rank=2, higher_rank=2, leaked_content="x")
+
+    # lower > higher
+    with pytest.raises(ValidationError, match=r"lower_rank.*must be strictly less than"):
+        SpoilerLeak(lower_rank=3, higher_rank=2, leaked_content="x")
+
+    # Valid case still works
+    leak = SpoilerLeak(lower_rank=1, higher_rank=2, leaked_content="x")
+    assert leak.lower_rank == 1
 
 
 # ---------------------------------------------------------------------------

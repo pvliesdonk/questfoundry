@@ -207,15 +207,23 @@ class TestIntersectionProposal:
 
     def test_single_beat_rejected(self) -> None:
         with pytest.raises(ValidationError, match="beat_ids"):
-            IntersectionProposal(beat_ids=["beat_1"], rationale="test")
+            IntersectionProposal(beat_ids=["beat_1"], resolved_location="x", rationale="test")
 
     def test_empty_beat_ids_rejected(self) -> None:
         with pytest.raises(ValidationError, match="beat_ids"):
-            IntersectionProposal(beat_ids=[], rationale="test")
+            IntersectionProposal(beat_ids=[], resolved_location="x", rationale="test")
 
-    def test_no_resolved_location_allowed(self) -> None:
-        intersection = IntersectionProposal(beat_ids=["b1", "b2"], rationale="Entity overlap")
-        assert intersection.resolved_location is None
+    def test_missing_resolved_location_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="resolved_location"):
+            IntersectionProposal(beat_ids=["b1", "b2"], rationale="Entity overlap")  # type: ignore[call-arg]
+
+    def test_empty_resolved_location_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="resolved_location"):
+            IntersectionProposal(
+                beat_ids=["b1", "b2"],
+                resolved_location="",
+                rationale="Entity overlap",
+            )
 
 
 class TestSceneTypeTag:
@@ -289,17 +297,48 @@ class TestGapProposal:
         assert gap.scene_type == "sequel"
 
     def test_default_scene_type_is_sequel(self) -> None:
-        gap = GapProposal(path_id="t1", summary="A transition.")
+        gap = GapProposal(path_id="t1", after_beat="beat_a", summary="A transition.")
         assert gap.scene_type == "sequel"
 
-    def test_no_before_after_allowed(self) -> None:
-        gap = GapProposal(path_id="t1", summary="Opening scene.")
-        assert gap.after_beat is None
+    def test_after_beat_only_allowed(self) -> None:
+        # Anchoring the gap to only the earlier beat (open-ended forward) is valid.
+        gap = GapProposal(path_id="t1", after_beat="beat_a", summary="Open transition.")
+        assert gap.after_beat == "beat_a"
         assert gap.before_beat is None
+
+    def test_before_beat_only_allowed(self) -> None:
+        # Anchoring the gap to only the later beat (open-ended backward) is valid.
+        gap = GapProposal(path_id="t1", before_beat="beat_b", summary="Closing transition.")
+        assert gap.after_beat is None
+        assert gap.before_beat == "beat_b"
+
+    def test_both_placement_nulls_rejected(self) -> None:
+        # R-1a.3: gap with neither anchor is unplaceable; POLISH has no
+        # semantic_validator (#1498), so this must fire at Pydantic time.
+        with pytest.raises(ValidationError, match=r"R-1a\.3"):
+            GapProposal(path_id="t1", summary="Unplaceable gap.")
 
     def test_empty_summary_rejected(self) -> None:
         with pytest.raises(ValidationError, match="summary"):
-            GapProposal(path_id="t1", summary="")
+            GapProposal(path_id="t1", after_beat="beat_a", summary="")
+
+    def test_dilemma_impacts_rejected_per_r_1a_2(self) -> None:
+        # Per polish.md R-1a.2, gap beats are structural and must carry zero
+        # dilemma_impacts. The validator rejects any non-empty value so an
+        # LLM that ignores the prompt fails fast.
+        with pytest.raises(ValidationError, match=r"R-1a\.2"):
+            GapProposal(
+                path_id="t1",
+                after_beat="beat_a",
+                summary="A transition beat.",
+                dilemma_impacts=[
+                    {  # type: ignore[list-item]
+                        "dilemma_id": "dilemma::trust",
+                        "effect": "advances",
+                        "note": "test",
+                    }
+                ],
+            )
 
 
 class TestOverlayProposal:
@@ -377,7 +416,6 @@ class TestGrowResult:
     def test_default_values(self) -> None:
         result = GrowResult()
         assert result.arc_count == 0
-        assert result.passage_count == 0
         assert result.state_flag_count == 0
         assert result.phases_completed == []
         assert result.spine_arc_id is None
@@ -385,7 +423,6 @@ class TestGrowResult:
     def test_with_phases(self) -> None:
         result = GrowResult(
             arc_count=4,
-            passage_count=8,
             state_flag_count=2,
             phases_completed=[
                 GrowPhaseResult(phase="validate", status="completed"),
@@ -412,7 +449,6 @@ class TestGrowResult:
     def test_model_validate_from_dict(self) -> None:
         data = {
             "arc_count": 3,
-            "passage_count": 6,
             "state_flag_count": 1,
             "phases_completed": [
                 {"phase": "validate", "status": "completed", "detail": ""},
@@ -447,9 +483,10 @@ class TestAtmosphericDetail:
 
 
 class TestPhase4dOutput:
-    def test_default_empty(self) -> None:
-        out = Phase4dOutput()
-        assert out.details == []
+    def test_empty_details_rejected(self) -> None:
+        # Zero atmospheric details = LLM failure (R-4b.4 zero-coverage halt).
+        with pytest.raises(ValidationError, match=r"at least 1 item"):
+            Phase4dOutput(details=[])
 
     def test_with_details(self) -> None:
         out = Phase4dOutput(
@@ -476,6 +513,16 @@ class TestPhase4dOutput:
             )
 
 
+class TestPhase4aOutputZeroCoverageRejected:
+    """R-4b.4: zero scene-type coverage is LLM failure, not partial."""
+
+    def test_empty_tags_rejected(self) -> None:
+        from questfoundry.models.grow import Phase4aOutput
+
+        with pytest.raises(ValidationError, match=r"at least 1 item"):
+            Phase4aOutput(tags=[])
+
+
 class TestPathMiniArc:
     def test_valid_mini_arc(self) -> None:
         arc = PathMiniArc(
@@ -500,9 +547,9 @@ class TestPathMiniArc:
 
 
 class TestPhase4eOutput:
-    def test_default_empty(self) -> None:
-        out = Phase4eOutput()
-        assert out.arcs == []
+    def test_empty_arcs_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="arcs"):
+            Phase4eOutput(arcs=[])
 
     def test_with_arcs(self) -> None:
         out = Phase4eOutput(
@@ -573,9 +620,9 @@ class TestEntityArcDescriptor:
 
 
 class TestPhase4fOutput:
-    def test_default_empty(self) -> None:
-        out = Phase4fOutput()
-        assert out.arcs == []
+    def test_empty_arcs_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="arcs"):
+            Phase4fOutput(arcs=[])
 
     def test_with_arcs(self) -> None:
         out = Phase4fOutput(

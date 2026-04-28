@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import FrozenInstanceError
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -323,6 +324,132 @@ def test_create_chat_model_google_top_p() -> None:
     assert call_kwargs["top_p"] == 0.9
 
 
+def test_create_chat_model_google_default_safety_settings_off() -> None:
+    """Google default safety_settings sets all 5 harm categories to OFF (#1464 / #1466).
+
+    Gemini's defaults (BLOCK_MEDIUM_AND_ABOVE) reject genre-typical content
+    for QuestFoundry's mystery / noir / horror / thriller use cases. We use
+    ``OFF`` rather than ``BLOCK_NONE`` because BLOCK_NONE only disables the
+    response-side filter — the input-side prefilter still rejects prompts
+    with ``block_reason=PROHIBITED_CONTENT`` for plain mystery content.
+    ``OFF`` is the documented threshold that disables filtering at both
+    layers (#1466 reproduced against the murder3 cozy-mystery project after
+    BLOCK_NONE landed in #1465 and didn't unblock the prompt prefilter).
+    """
+    from langchain_google_genai import HarmBlockThreshold, HarmCategory
+
+    mock_chat = MagicMock()
+    with (
+        patch.dict("os.environ", {"GOOGLE_API_KEY": "test-key"}),
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            return_value=mock_chat,
+        ) as mock_init,
+    ):
+        create_chat_model("google", "gemini-2.5-flash")
+
+    safety_settings = mock_init.call_args[1]["safety_settings"]
+    expected_categories = {
+        HarmCategory.HARM_CATEGORY_HARASSMENT,
+        HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+        HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+        HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY,
+    }
+    assert set(safety_settings.keys()) == expected_categories
+    assert all(threshold == HarmBlockThreshold.OFF for threshold in safety_settings.values())
+
+
+def test_create_chat_model_google_safety_settings_override_preserved() -> None:
+    """Caller-supplied safety_settings is not overwritten by the default."""
+    from langchain_google_genai import HarmBlockThreshold, HarmCategory
+
+    custom = {HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_LOW_AND_ABOVE}
+    mock_chat = MagicMock()
+    with (
+        patch.dict("os.environ", {"GOOGLE_API_KEY": "test-key"}),
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            return_value=mock_chat,
+        ) as mock_init,
+    ):
+        create_chat_model("google", "gemini-2.5-flash", safety_settings=custom)
+
+    assert mock_init.call_args[1]["safety_settings"] is custom
+
+
+@pytest.mark.parametrize("falsy_override", [None, {}])
+def test_create_chat_model_google_safety_settings_falsy_falls_back_to_default(
+    falsy_override: Any,
+) -> None:
+    """``safety_settings=None`` and ``safety_settings={}`` both use our defaults.
+
+    Letting either pass through to ``ChatGoogleGenerativeAI`` would silently
+    re-enable Gemini's consumer-level thresholds — exactly the failure mode
+    this guard exists to prevent. ``not kwargs.get(...)`` treats both falsy
+    sentinels the same as absence.
+    """
+    from langchain_google_genai import HarmBlockThreshold, HarmCategory
+
+    mock_chat = MagicMock()
+    with (
+        patch.dict("os.environ", {"GOOGLE_API_KEY": "test-key"}),
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            return_value=mock_chat,
+        ) as mock_init,
+    ):
+        create_chat_model("google", "gemini-2.5-flash", safety_settings=falsy_override)
+
+    safety_settings = mock_init.call_args[1]["safety_settings"]
+    assert safety_settings is not None
+    assert HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT in safety_settings
+    assert all(threshold == HarmBlockThreshold.OFF for threshold in safety_settings.values())
+
+
+def test_create_chat_model_google_missing_package_still_raises_provider_error() -> None:
+    """If langchain-google-genai isn't installed, the centralised handler still wins.
+
+    The lazy import inside ``_default_google_safety_settings`` happens during
+    ``_preprocess_provider_kwargs`` — outside the ``try/except ImportError``
+    in ``create_chat_model``. A bare ``ImportError`` from the helper would
+    bypass the ``ProviderError`` handler and hide the user-friendly
+    "Run: uv add langchain-google-genai" message. The call site swallows the
+    ``ImportError`` so the existing handler around ``_init_chat_model_safe``
+    can report the missing package cleanly.
+    """
+    with (
+        patch.dict("os.environ", {"GOOGLE_API_KEY": "test-key"}),
+        patch(
+            "questfoundry.providers.factory._default_google_safety_settings",
+            side_effect=ImportError("No module named 'langchain_google_genai'"),
+        ),
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            side_effect=ImportError("No module named 'langchain_google_genai'"),
+        ),
+        pytest.raises(ProviderError) as exc_info,
+    ):
+        create_chat_model("google", "gemini-2.5-flash")
+
+    assert "langchain-google-genai not installed" in str(exc_info.value)
+
+
+def test_create_chat_model_google_safety_settings_skipped_for_other_providers() -> None:
+    """safety_settings default applies only to Google; other providers untouched."""
+    mock_chat = MagicMock()
+    with (
+        patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"}),
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            return_value=mock_chat,
+        ) as mock_init,
+    ):
+        create_chat_model("openai", "gpt-5-mini")
+
+    assert "safety_settings" not in mock_init.call_args[1]
+
+
 def test_create_chat_model_case_insensitive() -> None:
     """Factory handles uppercase provider names."""
     mock_chat = MagicMock()
@@ -368,6 +495,231 @@ def test_create_chat_model_ollama_custom_num_ctx() -> None:
 
     call_kwargs = mock_init.call_args[1]
     assert call_kwargs["num_ctx"] == 131072
+
+
+def _llama8b_show_response() -> dict[str, Any]:
+    """Realistic /api/show shape for a Llama-3-8B Q4_K_M model."""
+    return {
+        "details": {
+            "family": "llama",
+            "parameter_size": "8.0B",
+            "quantization_level": "Q4_K_M",
+        },
+        "model_info": {
+            "general.architecture": "llama",
+            "llama.block_count": 32,
+            "llama.embedding_length": 4096,
+            "llama.attention.head_count": 32,
+            "llama.attention.head_count_kv": 8,
+            "llama.context_length": 131072,
+        },
+        "parameters": "num_ctx 32768\ntemperature 0.7",
+    }
+
+
+def test_create_chat_model_ollama_max_vram_kwarg_drives_num_ctx() -> None:
+    """max_vram kwarg triggers VRAM-aware num_ctx calculation for Ollama."""
+    mock_chat = MagicMock()
+
+    with (
+        patch.dict("os.environ", {"OLLAMA_HOST": "http://test:11434"}, clear=False),
+        patch(
+            "questfoundry.providers.factory._query_ollama_show",
+            return_value=_llama8b_show_response(),
+        ),
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            return_value=mock_chat,
+        ) as mock_init,
+    ):
+        create_chat_model("ollama", "model", max_vram=12.0)
+
+    call_kwargs = mock_init.call_args[1]
+    # 8B Q4_K_M at 12 GB → tens of thousands of tokens, definitely > the
+    # Modelfile-configured 32768 from `parameters`. Calculation wins.
+    assert call_kwargs["num_ctx"] > 32_768
+    assert call_kwargs["num_ctx"] % 1024 == 0
+    # max_vram itself never reaches the provider client.
+    assert "max_vram" not in call_kwargs
+
+
+def test_create_chat_model_ollama_qf_max_vram_env_var() -> None:
+    """QF_MAX_VRAM env var is the fallback when no kwarg is passed."""
+    mock_chat = MagicMock()
+
+    with (
+        patch.dict(
+            "os.environ",
+            {"OLLAMA_HOST": "http://test:11434", "QF_MAX_VRAM": "12"},
+            clear=False,
+        ),
+        patch(
+            "questfoundry.providers.factory._query_ollama_show",
+            return_value=_llama8b_show_response(),
+        ),
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            return_value=mock_chat,
+        ) as mock_init,
+    ):
+        create_chat_model("ollama", "model")
+
+    call_kwargs = mock_init.call_args[1]
+    assert call_kwargs["num_ctx"] > 32_768
+    assert call_kwargs["num_ctx"] % 1024 == 0
+
+
+def test_create_chat_model_ollama_max_vram_does_not_override_explicit_num_ctx() -> None:
+    """An explicit num_ctx kwarg still wins over max_vram (caller's choice)."""
+    mock_chat = MagicMock()
+
+    with (
+        patch.dict("os.environ", {"OLLAMA_HOST": "http://test:11434"}, clear=False),
+        patch(
+            "questfoundry.providers.factory._query_ollama_show",
+            return_value=_llama8b_show_response(),
+        ),
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            return_value=mock_chat,
+        ) as mock_init,
+    ):
+        create_chat_model("ollama", "model", num_ctx=8192, max_vram=24.0)
+
+    call_kwargs = mock_init.call_args[1]
+    assert call_kwargs["num_ctx"] == 8192
+    assert "max_vram" not in call_kwargs
+
+
+def test_create_chat_model_max_vram_ignored_for_non_ollama() -> None:
+    """max_vram is silently ignored for cloud providers; never reaches client."""
+    mock_chat = MagicMock()
+
+    with (
+        patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}, clear=False),
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            return_value=mock_chat,
+        ) as mock_init,
+    ):
+        create_chat_model("openai", "gpt-5-mini", max_vram=12.0)
+
+    call_kwargs = mock_init.call_args[1]
+    assert "max_vram" not in call_kwargs
+    assert "num_ctx" not in call_kwargs
+
+
+def test_create_chat_model_ollama_invalid_qf_max_vram_env_falls_back() -> None:
+    """A non-numeric QF_MAX_VRAM env var is logged and ignored."""
+    mock_chat = MagicMock()
+
+    with (
+        patch.dict(
+            "os.environ",
+            {"OLLAMA_HOST": "http://test:11434", "QF_MAX_VRAM": "not-a-number"},
+            clear=False,
+        ),
+        patch(
+            "questfoundry.providers.factory._query_ollama_show",
+            return_value=_llama8b_show_response(),
+        ),
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            return_value=mock_chat,
+        ) as mock_init,
+    ):
+        create_chat_model("ollama", "model")
+
+    call_kwargs = mock_init.call_args[1]
+    # Falls back to Modelfile-configured value from `parameters`.
+    assert call_kwargs["num_ctx"] == 32_768
+
+
+def test_max_vram_does_not_short_circuit_cloud_provider_setup() -> None:
+    """Regression: max_vram with cloud provider must still inject api_key.
+
+    Caught by claude-review on PR #1518: an earlier draft put
+    ``elif max_vram is not None`` in the provider chain, which silently
+    skipped the OPENAI_API_KEY / ANTHROPIC_API_KEY / GOOGLE_API_KEY branches
+    when max_vram was set alongside a cloud provider.
+    """
+    mock_chat = MagicMock()
+
+    # OpenAI: api_key must reach the provider client even when max_vram is set.
+    with (
+        patch.dict("os.environ", {"OPENAI_API_KEY": "sk-openai"}, clear=False),
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            return_value=mock_chat,
+        ) as mock_init,
+    ):
+        create_chat_model("openai", "gpt-5-mini", max_vram=12.0)
+    assert mock_init.call_args[1]["api_key"] == "sk-openai"
+
+    # Anthropic: same.
+    with (
+        patch.dict("os.environ", {"ANTHROPIC_API_KEY": "sk-ant"}, clear=False),
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            return_value=mock_chat,
+        ) as mock_init,
+    ):
+        create_chat_model("anthropic", "claude-sonnet-4-20250514", max_vram=12.0)
+    assert mock_init.call_args[1]["api_key"] == "sk-ant"
+
+    # Google: same.
+    with (
+        patch.dict("os.environ", {"GOOGLE_API_KEY": "g-key"}, clear=False),
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            return_value=mock_chat,
+        ) as mock_init,
+    ):
+        create_chat_model("google", "gemini-2.5-flash", max_vram=12.0)
+    assert mock_init.call_args[1]["api_key"] == "g-key"
+
+
+def test_max_vram_with_cloud_provider_missing_key_still_raises() -> None:
+    """Regression: missing API key still raises ProviderError when max_vram set.
+
+    The bug fixed for the previous regression test left the api_key check
+    unreachable; verify the error path is still wired correctly.
+    """
+    with patch.dict("os.environ", {}, clear=True), pytest.raises(ProviderError) as exc_info:
+        create_chat_model("openai", "gpt-5-mini", max_vram=12.0)
+
+    assert "API key required" in str(exc_info.value)
+    assert exc_info.value.provider == "openai"
+
+
+def test_create_chat_model_ollama_max_vram_too_small_raises() -> None:
+    """VramTooSmallError surfaces to the caller when max_vram < weights+overhead.
+
+    The factory's `except VramTooSmallError: raise` is a deliberate re-raise —
+    this test confirms it actually propagates (rather than being swallowed by
+    the broader `ValueError` handler immediately below, which would silently
+    fall back to /api/show num_ctx detection and hide the misconfiguration).
+    """
+    from questfoundry.providers.vram import VramTooSmallError
+
+    mock_chat = MagicMock()
+
+    with (
+        patch.dict("os.environ", {"OLLAMA_HOST": "http://test:11434"}, clear=False),
+        patch(
+            "questfoundry.providers.factory._query_ollama_show",
+            return_value=_llama8b_show_response(),
+        ),
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            return_value=mock_chat,
+        ),
+        pytest.raises(VramTooSmallError) as exc_info,
+    ):
+        # 8B Q4_K_M weights ~4.56 GB + overhead ~1.19 GB; 4 GB budget can't fit.
+        create_chat_model("ollama", "model", max_vram=4.0)
+
+    assert exc_info.value.vram_gb == 4.0
 
 
 def test_create_chat_model_ollama_no_temperature_when_not_provided() -> None:
@@ -731,7 +1083,7 @@ def test_get_model_info_anthropic() -> None:
     """get_model_info works for Anthropic models."""
     info = get_model_info("anthropic", "claude-sonnet-4-20250514")
 
-    assert info.context_window == 200_000
+    assert info.context_window == 1_000_000
     assert info.supports_vision is True
 
 

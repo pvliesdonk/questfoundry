@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import html
 import json
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from questfoundry.export.i18n import get_ui_strings
+from questfoundry.export.metadata import ExportMetadata, build_export_metadata
 from questfoundry.observability.logging import get_logger
 
 if TYPE_CHECKING:
@@ -27,18 +28,75 @@ if TYPE_CHECKING:
 
 log = get_logger(__name__)
 
+# Backward-compatible additive changes only; bump on shape changes
+# (new <head> meta block, breaking layout reshuffle, etc.).
+HTML_FORMAT_VERSION = "1.0.0"
+
+# R-3.3 voice-document-driven CSS. Each register/rhythm value maps to a
+# body class plus a scoped rule block. Falls back to baseline styling
+# (no class added) when FILL hasn't produced a voice document.
+#
+# The CSS dicts below are the SINGLE SOURCE OF TRUTH for the valid
+# register/rhythm values: _voice_body_class and _voice_css_block both
+# validate against dict membership so a class can never be emitted
+# without a matching scoped rule (or vice versa).
+_VOICE_REGISTER_CSS = {
+    "formal": """body.register-formal .prose {
+  font-family: 'EB Garamond', Garamond, Georgia, serif;
+  text-align: justify;
+}""",
+    "conversational": """body.register-conversational .prose {
+  font-family: 'Georgia', 'Times New Roman', serif;
+  text-align: left;
+}""",
+    "literary": """body.register-literary .prose {
+  font-family: 'Iowan Old Style', 'Palatino Linotype', Palatino, serif;
+  text-align: justify;
+  font-feature-settings: "liga", "dlig";
+}""",
+    "sparse": """body.register-sparse .prose {
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  text-align: left;
+  letter-spacing: 0.01em;
+}""",
+}
+
+_VOICE_RHYTHM_CSS = {
+    "varied": """body.rhythm-varied .prose {
+  line-height: 1.7;
+  margin-bottom: 1.5em;
+}""",
+    "punchy": """body.rhythm-punchy .prose {
+  line-height: 1.45;
+  margin-bottom: 1em;
+}""",
+    "flowing": """body.rhythm-flowing .prose {
+  line-height: 1.85;
+  margin-bottom: 1.8em;
+}""",
+}
+
 
 class HtmlExporter:
     """Export story as a standalone HTML file."""
 
     format_name = "html"
+    format_version = HTML_FORMAT_VERSION
 
-    def export(self, context: ExportContext, output_dir: Path) -> Path:
+    def export(
+        self,
+        context: ExportContext,
+        output_dir: Path,
+        *,
+        timestamp: str | None = None,
+    ) -> Path:
         """Write story as a single playable HTML file.
 
         Args:
             context: Extracted story data.
             output_dir: Directory to write output files.
+            timestamp: Optional override for the metadata generation
+                timestamp (test seam for deterministic assertions).
 
         Returns:
             Path to the generated HTML file.
@@ -88,6 +146,10 @@ class HtmlExporter:
             alt_attr = "" if cap else html.escape(ui["cover_alt"])
             cover_html = f'<figure class="cover">\n  <img src="{html.escape(context.cover.asset_path)}" alt="{alt_attr}">{caption_tag}\n</figure>'
 
+        # R-3.6 metadata block — emitted as <meta name="qf-..."> tags
+        # in <head> for in-band provenance without affecting the page body.
+        metadata = build_export_metadata(context, HTML_FORMAT_VERSION, timestamp=timestamp)
+
         # Build the complete HTML document
         content = _build_html_document(
             title=context.title,
@@ -95,6 +157,8 @@ class HtmlExporter:
             start_id=_safe_id(start_id),
             codex_html=codex_html,
             art_direction_meta=art_direction_meta,
+            metadata=metadata,
+            voice=context.voice,
             cover_html=cover_html,
             language=context.language,
             ui=ui,
@@ -117,6 +181,61 @@ class HtmlExporter:
 def _safe_id(passage_id: str) -> str:
     """Convert a passage ID to a safe HTML id attribute."""
     return passage_id.replace("::", "--").replace(" ", "_")
+
+
+def _render_metadata_meta_tags(metadata: ExportMetadata) -> str:
+    """Render the R-3.6 metadata block as HTML <meta> tags.
+
+    One tag per field, prefixed with ``qf-`` so they don't collide
+    with any spec-defined name attributes.
+    """
+    return "\n".join(
+        f'<meta name="qf-{key.replace("_", "-")}" content="{html.escape(value)}">'
+        for key, value in sorted(metadata.to_dict().items())
+    )
+
+
+def _voice_body_class(voice: dict[str, Any] | None) -> str:
+    """Return the ``class="..."`` attribute fragment for ``<body>`` (R-3.3).
+
+    Empty string when no voice document is present, so the page falls
+    back to baseline styling. Otherwise returns one or both of
+    ``register-<name>`` and ``rhythm-<name>``, validated against the
+    VoiceDocument literal sets so unknown values silently degrade
+    rather than emit unscoped classes.
+    """
+    if not voice:
+        return ""
+    classes: list[str] = []
+    register = voice.get("voice_register")
+    if register in _VOICE_REGISTER_CSS:
+        classes.append(f"register-{register}")
+    rhythm = voice.get("sentence_rhythm")
+    if rhythm in _VOICE_RHYTHM_CSS:
+        classes.append(f"rhythm-{rhythm}")
+    if not classes:
+        return ""
+    return f' class="{" ".join(classes)}"'
+
+
+def _voice_css_block(voice: dict[str, Any] | None) -> str:
+    """Return the voice-scoped CSS rule block to append to ``<style>``.
+
+    The rules are body-scoped (``body.register-formal .prose {...}``),
+    so they only activate when the matching class is present on
+    ``<body>`` — cheap to ship, zero impact when voice is absent or
+    its values fall outside the known set.
+    """
+    if not voice:
+        return ""
+    blocks: list[str] = []
+    register = voice.get("voice_register")
+    if register in _VOICE_REGISTER_CSS:
+        blocks.append(_VOICE_REGISTER_CSS[register])
+    rhythm = voice.get("sentence_rhythm")
+    if rhythm in _VOICE_RHYTHM_CSS:
+        blocks.append(_VOICE_RHYTHM_CSS[rhythm])
+    return "\n".join(blocks)
 
 
 def _render_passage_div(
@@ -200,14 +319,32 @@ def _build_html_document(
     title: str,
     passages_html: str,
     start_id: str,
+    metadata: ExportMetadata,
     codex_html: str = "",
     art_direction_meta: str = "",
+    voice: dict[str, Any] | None = None,
     cover_html: str = "",
     language: str = "en",
     ui: dict[str, str] | None = None,
 ) -> str:
-    """Build the complete HTML document."""
-    extra_meta = f"\n{art_direction_meta}" if art_direction_meta else ""
+    """Build the complete HTML document.
+
+    ``metadata`` is required: R-3.6 mandates a metadata header on every
+    export, so an HTML build without it would silently violate the spec.
+    Make the parameter mandatory rather than defaulting to ``None`` so a
+    forgotten argument fails at call time, not at audit time.
+
+    ``voice`` is optional (R-3.3): when present, voice-driven CSS
+    classes are added to ``<body>`` and matching scoped rule blocks
+    are appended to the embedded stylesheet. When absent, the page
+    falls back to baseline styling — no class added, no extra rules.
+    """
+    extra_meta_parts = [_render_metadata_meta_tags(metadata)]
+    if art_direction_meta:
+        extra_meta_parts.append(art_direction_meta)
+    extra_meta = "\n" + "\n".join(extra_meta_parts)
+    body_class = _voice_body_class(voice)
+    voice_css = _voice_css_block(voice)
     codex_label = html.escape((ui or {}).get("codex", "Codex"))
     codex_button = (
         f'<button class="codex-toggle" id="codex-toggle">{codex_label}</button>'
@@ -335,9 +472,10 @@ h1 {{
   color: #a8d8ea;
   margin-bottom: 0.3em;
 }}
+{voice_css}
 </style>
 </head>
-<body>
+<body{body_class}>
 <h1>{html.escape(title)}</h1>
 {cover_html}
 {codex_button}

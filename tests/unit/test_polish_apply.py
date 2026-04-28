@@ -28,6 +28,7 @@ from questfoundry.pipeline.stages.polish.deterministic import (
     _create_passage_node,
     _create_residue_beat_and_passage,
     _create_variant_passage,
+    _inherited_passage_entities,
     _store_plan,
     phase_plan_application,
 )
@@ -130,6 +131,41 @@ class TestCreateVariantPassage:
         assert edges[0]["from"] == "passage::variant_0"
         assert edges[0]["to"] == "passage::base"
 
+    def test_variant_inherits_entities_from_base_passage(self) -> None:
+        """Regression: #1459 — variant passages must copy entities from base.
+
+        Same shape and rationale as #1457 for residues: a variant plays out
+        at the same dramatic moment as its base, so FILL's `### Valid Entity
+        IDs` prompt slot needs the entity list populated. R-6.5 covers both
+        residue and variant inheritance.
+        """
+        graph = Graph.empty()
+        _make_beat(graph, "beat::a")
+
+        base_spec = PassageSpec(
+            passage_id="passage::base",
+            beat_ids=["beat::a"],
+            summary="Base passage",
+            entities=["character::clara_yu", "character::alistair_vance"],
+        )
+        _create_passage_node(graph, base_spec)
+
+        vspec = VariantSpec(
+            base_passage_id="passage::base",
+            variant_id="passage::variant_0",
+            requires=["flag1"],
+            summary="Variant version",
+        )
+        _create_variant_passage(graph, vspec)
+
+        passages = graph.get_nodes_by_type("passage")
+        variant = passages.get("passage::variant_0")
+        assert variant is not None
+        assert variant["entities"] == [
+            "character::clara_yu",
+            "character::alistair_vance",
+        ]
+
 
 class TestCreateResidueBeatAndPassage:
     """Tests for _create_residue_beat_and_passage."""
@@ -185,6 +221,7 @@ class TestCreateResidueBeatAndPassage:
     def test_residue_without_content_hint_uses_default(self) -> None:
         graph = Graph.empty()
         _make_beat(graph, "beat::target")
+        graph.create_node("path::brave", {"type": "path", "raw_id": "brave"})
 
         target_spec = PassageSpec(
             passage_id="passage::target",
@@ -197,12 +234,237 @@ class TestCreateResidueBeatAndPassage:
             target_passage_id="passage::target",
             residue_id="residue::r2",
             flag="flag1",
+            path_id="path::brave",
         )
         _create_residue_beat_and_passage(graph, rspec)
 
         beat_nodes = graph.get_nodes_by_type("beat")
         assert "beat::residue_r2" in beat_nodes
         assert "Residue moment for" in beat_nodes["beat::residue_r2"]["summary"]
+
+    def test_residue_passage_records_mapping_strategy(self) -> None:
+        """R-5.7/R-5.8: residue passage node carries mapping_strategy so
+        Phase 7 validator (``_check_residue_mapping_strategy``) can verify it."""
+        graph = Graph.empty()
+        _make_beat(graph, "beat::target")
+        graph.create_node("path::brave", {"type": "path", "raw_id": "brave"})
+
+        target_spec = PassageSpec(
+            passage_id="passage::target",
+            beat_ids=["beat::target"],
+            summary="Target",
+        )
+        _create_passage_node(graph, target_spec)
+
+        rspec = ResidueSpec(
+            target_passage_id="passage::target",
+            residue_id="residue::r3",
+            flag="dilemma::d1:path::brave",
+            path_id="path::brave",
+            content_hint="You feel confident",
+            mapping_strategy="residue_passage_with_variants",
+        )
+        _create_residue_beat_and_passage(graph, rspec)
+
+        residue_passage = graph.get_nodes_by_type("passage").get("passage::residue_r3")
+        assert residue_passage is not None
+        assert residue_passage.get("residue_for") == "passage::target"
+        assert residue_passage.get("mapping_strategy") == "residue_passage_with_variants"
+
+    def test_residue_parallel_passages_applies_correctly(self) -> None:
+        """R-5.7/R-5.8: 'parallel_passages' mapping creates a flag-gated residue
+        passage branching from the predecessor and rejoining at the target."""
+        graph = Graph.empty()
+        _make_beat(graph, "beat::pred")
+        _make_beat(graph, "beat::target")
+        graph.add_edge("predecessor", "beat::target", "beat::pred")
+        graph.create_node("path::brave", {"type": "path", "raw_id": "brave"})
+
+        target_spec = PassageSpec(
+            passage_id="passage::target",
+            beat_ids=["beat::target"],
+            summary="Target",
+        )
+        pred_spec = PassageSpec(
+            passage_id="passage::pred",
+            beat_ids=["beat::pred"],
+            summary="Pred",
+        )
+        _create_passage_node(graph, target_spec)
+        _create_passage_node(graph, pred_spec)
+        graph.add_edge("precedes", "passage::pred", "passage::target")
+
+        rspec = ResidueSpec(
+            target_passage_id="passage::target",
+            residue_id="residue::r_par",
+            flag="dilemma::d1:path::brave",
+            path_id="path::brave",
+            content_hint="You feel confident",
+            mapping_strategy="parallel_passages",
+        )
+        _create_residue_beat_and_passage(graph, rspec)
+
+        # Parallel residue passage is created, gated by the flag, with
+        # residue_for + mapping_strategy recorded.
+        residue_passage = graph.get_nodes_by_type("passage").get("passage::residue_r_par")
+        assert residue_passage is not None
+        assert residue_passage["residue_for"] == "passage::target"
+        assert residue_passage["mapping_strategy"] == "parallel_passages"
+        assert residue_passage["requires"] == ["dilemma::d1:path::brave"]
+
+        # Both branches exist: the original pred→target precedes edge
+        # and the new pred→residue→target parallel path.
+        precedes = graph.get_edges(edge_type="precedes")
+        edges = {(e["from"], e["to"]) for e in precedes}
+        assert ("passage::pred", "passage::target") in edges  # main path
+        assert ("passage::residue_r_par", "passage::target") in edges  # parallel rejoin
+
+        # The residue beat inherits the target's predecessors and precedes
+        # the target in the beat DAG.
+        beat_pred = graph.get_edges(edge_type="predecessor")
+        beat_edges = {(e["from"], e["to"]) for e in beat_pred}
+        assert ("beat::residue_r_par", "beat::pred") in beat_edges
+        assert ("beat::target", "beat::residue_r_par") in beat_edges
+
+        # R-5.8 parallel_passages invariant: the predecessor's original direct
+        # edge to the target is PRESERVED.  Flag-absent players take this
+        # path; flag-present players take the parallel-passage detour above.
+        assert ("beat::target", "beat::pred") in beat_edges
+
+    def test_residue_with_variants_inherits_target_entities(self) -> None:
+        """Regression: #1457 — residue_passage_with_variants must copy entities
+        from the target passage onto both the residue beat and residue
+        passage. FILL builds its Valid Entity IDs prompt context from
+        ``passage["entities"]`` — an empty list there forces phantom-ID
+        emissions like ``clara`` instead of ``character::clara_yu``.
+        """
+        graph = Graph.empty()
+        _make_beat(graph, "beat::target")
+        graph.create_node("path::brave", {"type": "path", "raw_id": "brave"})
+
+        target_spec = PassageSpec(
+            passage_id="passage::target",
+            beat_ids=["beat::target"],
+            summary="Target",
+            entities=["character::clara_yu", "character::alistair_vance"],
+        )
+        _create_passage_node(graph, target_spec)
+
+        rspec = ResidueSpec(
+            target_passage_id="passage::target",
+            residue_id="residue::r1",
+            flag="dilemma::d1:path::brave",
+            path_id="path::brave",
+            content_hint="You feel confident",
+        )
+        _create_residue_beat_and_passage(graph, rspec)
+
+        passages = graph.get_nodes_by_type("passage")
+        residue_passage = passages.get("passage::residue_r1")
+        assert residue_passage is not None
+        assert residue_passage["entities"] == [
+            "character::clara_yu",
+            "character::alistair_vance",
+        ]
+
+        beats = graph.get_nodes_by_type("beat")
+        residue_beat = beats.get("beat::residue_r1")
+        assert residue_beat is not None
+        assert residue_beat["entities"] == [
+            "character::clara_yu",
+            "character::alistair_vance",
+        ]
+
+    def test_residue_parallel_passages_inherits_target_entities(self) -> None:
+        """Same inheritance contract for the ``parallel_passages`` strategy."""
+        graph = Graph.empty()
+        _make_beat(graph, "beat::pred")
+        _make_beat(graph, "beat::target")
+        graph.add_edge("predecessor", "beat::target", "beat::pred")
+        graph.create_node("path::brave", {"type": "path", "raw_id": "brave"})
+
+        pred_spec = PassageSpec(
+            passage_id="passage::pred",
+            beat_ids=["beat::pred"],
+            summary="Pred",
+        )
+        target_spec = PassageSpec(
+            passage_id="passage::target",
+            beat_ids=["beat::target"],
+            summary="Target",
+            entities=["character::clara_yu"],
+        )
+        _create_passage_node(graph, pred_spec)
+        _create_passage_node(graph, target_spec)
+        graph.add_edge("precedes", "passage::pred", "passage::target")
+
+        rspec = ResidueSpec(
+            target_passage_id="passage::target",
+            residue_id="residue::r_par",
+            flag="dilemma::d1:path::brave",
+            path_id="path::brave",
+            content_hint="You feel confident",
+            mapping_strategy="parallel_passages",
+        )
+        _create_residue_beat_and_passage(graph, rspec)
+
+        passages = graph.get_nodes_by_type("passage")
+        residue_passage = passages.get("passage::residue_r_par")
+        assert residue_passage is not None
+        assert residue_passage["entities"] == ["character::clara_yu"]
+
+        beats = graph.get_nodes_by_type("beat")
+        residue_beat = beats.get("beat::residue_r_par")
+        assert residue_beat is not None
+        assert residue_beat["entities"] == ["character::clara_yu"]
+
+    def test_inherited_passage_entities_raises_for_absent_source(self) -> None:
+        """Helper raises ``ValueError`` when the source passage is missing.
+
+        Per `.gemini/styleguide.md` anti-pattern (silent fallbacks that hide
+        bugs prefer explicit errors): a residue or variant synthesized against
+        a missing source is a structural failure — Phase 6's application order
+        (R-6.2) creates base passages before residues and variants. Returning
+        ``[]`` instead would silently propagate the exact symptom #1457 fixed
+        (synthesized passage with empty entities → FILL phantom-ID
+        escalations); same failure mode for variants per #1459.
+        """
+        graph = Graph.empty()
+        with pytest.raises(ValueError, match=r"R-6\.5: source passage"):
+            _inherited_passage_entities(graph, "passage::does_not_exist")
+
+    def test_residue_inheritance_defensive_when_target_has_no_entities(self) -> None:
+        """If the target has no entities (early-stage passage), residue gets []
+        rather than raising. The structural invariant — target passage exists —
+        is enforced by spec validators elsewhere; the helper just degrades
+        gracefully on missing/empty entity data.
+        """
+        graph = Graph.empty()
+        _make_beat(graph, "beat::target")
+        graph.create_node("path::brave", {"type": "path", "raw_id": "brave"})
+
+        target_spec = PassageSpec(
+            passage_id="passage::target",
+            beat_ids=["beat::target"],
+            summary="Target",
+            # No entities passed — PassageSpec defaults to empty list.
+        )
+        _create_passage_node(graph, target_spec)
+
+        rspec = ResidueSpec(
+            target_passage_id="passage::target",
+            residue_id="residue::r_empty",
+            flag="flag1",
+            path_id="path::brave",
+        )
+        _create_residue_beat_and_passage(graph, rspec)
+
+        residue_passage = graph.get_nodes_by_type("passage").get("passage::residue_r_empty")
+        assert residue_passage is not None
+        assert residue_passage["entities"] == []
+        residue_beat = graph.get_nodes_by_type("beat").get("beat::residue_r_empty")
+        assert residue_beat is not None
+        assert residue_beat["entities"] == []
 
 
 class TestCreateChoiceEdge:
@@ -333,7 +595,9 @@ class TestApplySidetrack:
 
         # Check sidetrack beat exists
         beat_nodes = graph.get_nodes_by_type("beat")
-        sidetrack_beats = {k: v for k, v in beat_nodes.items() if v.get("role") == "sidetrack_beat"}
+        sidetrack_beats = {
+            k: v for k, v in beat_nodes.items() if v.get("role") == "false_branch_beat"
+        }
         assert len(sidetrack_beats) == 1
         sb = next(iter(sidetrack_beats.values()))
         assert sb["summary"] == "Meet a stranger"
