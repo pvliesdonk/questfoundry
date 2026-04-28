@@ -297,6 +297,41 @@ class DressPhaseResult(PhaseResult):
     """
 
 
+class DressEscalation(BaseModel):
+    """A DRESS escalation event collected during the run.
+
+    Mirrors ``FillEscalation``: when a ``batch_llm_calls`` invocation
+    exhausts retries on an item, the stage records a per-item
+    escalation rather than silently dropping the item via the
+    ``_errors`` underscore-discard convention. ``DressStage.execute``
+    folds these into the ``DressStageError`` raised at exit so the
+    failure surface points at the batch responses that misbehaved
+    (not just the missing artifacts caught by the output contract).
+    """
+
+    kind: Literal[
+        "briefs_batch_failed",
+        "codex_batch_failed",
+        "distill_batch_failed",
+    ] = Field(description="Which DRESS phase produced this escalation.")
+    item_id: str = Field(
+        description=(
+            "Affected item ID. ``passage::*`` for briefs, prefixed entity ID "
+            "(e.g. ``character::clara_yu``) for codex, ``brief::*`` for distill. "
+            "Empty string only when the failure is not item-scoped."
+        ),
+    )
+    detail: str = Field(
+        description="Human-readable description of the specific failure (exception type + message).",
+    )
+    upstream_stage: Literal["DRESS", "DREAM", "BRAINSTORM", "GROW"] = Field(
+        description=(
+            "Which stage owns the fix. ``DRESS`` for self-owned LLM-call "
+            "failures (rerun DRESS or adjust provider settings)."
+        ),
+    )
+
+
 class DressResult(BaseModel):
     """Overall DRESS stage result."""
 

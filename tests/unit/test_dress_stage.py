@@ -1843,6 +1843,192 @@ class TestPhase2Codex:
         assert g.get_node("codex::protagonist_rank1") is not None
 
 
+class TestDressBatchFailureEscalations:
+    """R-1480: ``batch_llm_calls`` retry exhaustion records per-item escalations.
+
+    The previous behaviour (``_errors`` underscore-discard at three sites)
+    silently dropped failed items; symptoms only surfaced at end-of-stage
+    via missing-artifact contract violations. After #1480 each phase
+    populates ``self._escalations`` with per-item ``DressEscalation``
+    entries, and the stage-exit ``DressStageError`` folds them into the
+    contract-failure message.
+    """
+
+    def test_three_new_escalation_kinds_accepted(self) -> None:
+        """Schema sanity: the three new ``DressEscalation.kind`` Literals are accepted."""
+        from questfoundry.models.dress import DressEscalation
+
+        for kind in (
+            "briefs_batch_failed",
+            "codex_batch_failed",
+            "distill_batch_failed",
+        ):
+            esc = DressEscalation(
+                kind=kind,  # type: ignore[arg-type]
+                item_id="passage::p1",
+                detail="some detail",
+                upstream_stage="DRESS",
+            )
+            assert esc.kind == kind
+
+    @pytest.mark.asyncio()
+    async def test_codex_batch_failure_escalates_each_entity_in_chunk(self) -> None:
+        """When _codex_batch retries exhaust, every entity_id in the failed
+        chunk gets a ``codex_batch_failed`` escalation on ``self._escalations``."""
+        from unittest.mock import patch
+
+        g = Graph()
+        for raw in ("clara_yu", "simon_blackwood", "alistair_vance"):
+            g.create_node(
+                f"character::{raw}",
+                {"type": "entity", "raw_id": raw, "entity_type": "character"},
+            )
+
+        captured_chunks: list[list[list[str]]] = []
+
+        async def mock_batch_llm_calls(
+            chunks: list[list[str]],
+            _call_fn,
+            _max_concurrency: int,
+            **_kwargs: object,
+        ):
+            captured_chunks.append(chunks)
+            errors = [(idx, RuntimeError("codex retry exhaustion")) for idx in range(len(chunks))]
+            results = [None] * len(chunks)
+            return results, 0, 0, errors
+
+        stage = DressStage()
+        with patch(
+            "questfoundry.pipeline.stages.dress.batch_llm_calls",
+            new=mock_batch_llm_calls,
+        ):
+            await stage._phase_2_codex(g, MagicMock())
+
+        assert captured_chunks, "expected _phase_2_codex to call batch_llm_calls"
+        expected_eids: set[str] = set()
+        for chunk in captured_chunks[0]:
+            expected_eids.update(chunk)
+
+        codex_escs = [e for e in stage._escalations if e.kind == "codex_batch_failed"]
+        assert len(codex_escs) == len(expected_eids)
+        assert {e.item_id for e in codex_escs} == expected_eids
+        for esc in codex_escs:
+            assert "RuntimeError" in esc.detail
+            assert "codex retry exhaustion" in esc.detail
+            assert esc.upstream_stage == "DRESS"
+
+    @pytest.mark.asyncio()
+    async def test_briefs_batch_failure_escalates_each_passage_in_chunk(self) -> None:
+        """Phase 1 briefs: when ``_brief_batch`` retries exhaust, every
+        passage_id in the failed chunk gets a ``briefs_batch_failed``
+        escalation. Uses the same chunk shape as codex but populated
+        from passages-with-prose."""
+        from unittest.mock import patch
+
+        g = Graph()
+        for raw in ("intro", "rising", "climax"):
+            g.create_node(
+                f"passage::{raw}",
+                {
+                    "type": "passage",
+                    "raw_id": raw,
+                    "prose": f"prose for {raw}",
+                },
+            )
+
+        captured_chunks: list[list[list[str]]] = []
+
+        async def mock_batch_llm_calls(
+            chunks: list[list[str]],
+            _call_fn,
+            _max_concurrency: int,
+            **_kwargs: object,
+        ):
+            captured_chunks.append(chunks)
+            errors = [(idx, RuntimeError("briefs retry exhaustion")) for idx in range(len(chunks))]
+            results = [None] * len(chunks)
+            return results, 0, 0, errors
+
+        stage = DressStage()
+        with patch(
+            "questfoundry.pipeline.stages.dress.batch_llm_calls",
+            new=mock_batch_llm_calls,
+        ):
+            await stage._phase_1_briefs(g, MagicMock())
+
+        assert captured_chunks, "expected _phase_1_briefs to call batch_llm_calls"
+        expected_pids: set[str] = set()
+        for chunk in captured_chunks[0]:
+            expected_pids.update(chunk)
+
+        briefs_escs = [e for e in stage._escalations if e.kind == "briefs_batch_failed"]
+        assert len(briefs_escs) == len(expected_pids)
+        assert {e.item_id for e in briefs_escs} == expected_pids
+        for esc in briefs_escs:
+            assert "RuntimeError" in esc.detail
+            assert "briefs retry exhaustion" in esc.detail
+            assert esc.upstream_stage == "DRESS"
+            # Items already prefixed by graph.get_nodes_by_type → key form:
+            assert esc.item_id.startswith("passage::")
+
+    def test_format_exit_error_without_escalations(self) -> None:
+        """Contract failure with no escalations renders just the error list —
+        no ``Plus N escalation(s)`` trailer."""
+        stage = DressStage()
+        msg = stage._format_exit_error(["entity X missing brief", "entity Y missing codex"])
+        assert "DRESS output contract violated (2 error(s)):" in msg
+        assert "  - entity X missing brief" in msg
+        assert "  - entity Y missing codex" in msg
+        assert "Plus" not in msg
+        assert "escalation" not in msg
+
+    def test_format_exit_error_folds_escalations(self) -> None:
+        """When escalations exist alongside contract errors, the folded message
+        names every escalation by ``[kind] item_id: detail``."""
+        from questfoundry.models.dress import DressEscalation
+
+        stage = DressStage()
+        stage._escalations = [
+            DressEscalation(
+                kind="codex_batch_failed",
+                item_id="character::clara_yu",
+                detail="dress_codex_batch failed after retries (RuntimeError: blocked).",
+                upstream_stage="DRESS",
+            ),
+            DressEscalation(
+                kind="briefs_batch_failed",
+                item_id="passage::intro",
+                detail="dress_brief_batch failed after retries (TimeoutError: 30s).",
+                upstream_stage="DRESS",
+            ),
+        ]
+
+        msg = stage._format_exit_error(["entity X missing codex"])
+        # Contract errors come first
+        assert "DRESS output contract violated (1 error(s)):" in msg
+        assert "  - entity X missing codex" in msg
+        # Then the escalation trailer with both items named
+        assert "Plus 2 batch_llm_calls retry-exhaustion escalation(s):" in msg
+        assert "[codex_batch_failed] character::clara_yu: dress_codex_batch failed" in msg
+        assert "[briefs_batch_failed] passage::intro: dress_brief_batch failed" in msg
+
+    @pytest.mark.asyncio()
+    async def test_briefs_chunk_passage_ids_are_already_prefixed(self) -> None:
+        """``eligible_ids`` is built from ``graph.get_nodes_by_type("passage").keys()``,
+        whose values are always fully-prefixed (e.g. ``passage::intro``). Pin
+        the invariant with a sentinel test so a future refactor that strips
+        the prefix anywhere upstream trips here instead of silently producing
+        bare IDs in escalations."""
+        g = Graph()
+        g.create_node(
+            "passage::intro",
+            {"type": "passage", "raw_id": "intro", "prose": "x"},
+        )
+        passage_keys = list(g.get_nodes_by_type("passage").keys())
+        assert passage_keys == ["passage::intro"]
+        assert all(k.startswith("passage::") for k in passage_keys)
+
+
 # ---------------------------------------------------------------------------
 # Phase 2: spoiler-direction enforcement (R-3.6)
 # ---------------------------------------------------------------------------
