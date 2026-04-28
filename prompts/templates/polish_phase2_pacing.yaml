@@ -34,13 +34,16 @@ system: |
 
   ## Pacing Issues Detected
   Each issue follows this shape:
-  - `### Pacing Issue: <type>` with `type` ∈ {{`consecutive_scene`,
-    `consecutive_sequel`, `no_sequel_after_commit`}}
-  - `Path: \`<path_id>\`` line naming the path the run lives on
-  - one indented bullet per beat in the run:
-    `  - \`<beat_id>\`: [<scene_type>] <summary>` —
-    optionally followed by ` entities: \`<eid1>\`, \`<eid2>\`` if the
-    beat carries entities
+
+    ### Pacing Issue: <type>
+      where <type> ∈ {{consecutive_scene, consecutive_sequel, no_sequel_after_commit}}
+    Path: `<path_id>`
+      - `<beat_id>`: [<scene_type>] <summary>
+      - `<beat_id>`: [<scene_type>] <summary> entities: `<eid1>`, `<eid2>`
+
+  Each beat bullet is two-space-indented under the `Path:` line.
+  The `entities:` suffix is optional — present when the beat carries
+  entities, absent otherwise.
 
   {pacing_issues}
 
