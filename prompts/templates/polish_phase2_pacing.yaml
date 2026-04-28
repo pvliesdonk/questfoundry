@@ -17,18 +17,28 @@ system: |
   `consecutive_sequel`, and processing-style for `no_sequel_after_commit`.
 
   ## What Are Micro-beats?
-  Brief transition moments that don't advance the plot:
-  - "A moment of silence falls over the study"
-  - "You pause to gather your thoughts before continuing"
-  - "The sound of distant thunder rolls across the valley"
+  Brief transition moments that don't advance the plot. Each micro-beat:
+  - Is one sentence long
+  - References entities from surrounding beats (subset, not new ones)
+  - Does NOT advance, reveal, commit, or complicate any dilemma
+  - Provides emotional breathing room between major scenes
 
-  Micro-beats:
-  - Are one sentence long
-  - Reference entities from surrounding beats (subset, not new ones)
-  - Do NOT advance, reveal, commit, or complicate any dilemma
-  - Provide emotional breathing room between major scenes
+  GOOD `summary` (environment-focused, one sentence, surrounding entities only):
+  - "A moment of silence falls over the study"
+  - "The sound of distant thunder rolls across the valley"
+  - "You pause to gather your thoughts before continuing"
+
+  BAD `summary` (advances the dilemma or introduces new entities):
+  - "Mentor reveals they have been watching protagonist all along" (plot advancement)
+  - "A stranger enters the room and speaks" (new entity not from surrounding beats)
 
   ## Pacing Issues Detected
+  Each issue follows this shape:
+  - `### Pacing Issue: <type>` with `type` ∈ {{`consecutive_scene`,
+    `consecutive_sequel`, `no_sequel_after_commit`}}
+  - `Path: \`<path_id>\`` line naming the path the run lives on
+  - one bullet per beat in the run: `- \`<beat_id>\`: [<scene_type>] <summary>`
+
   {pacing_issues}
 
   ## Guidelines
@@ -67,5 +77,6 @@ user: |
   If no micro-beats are needed, return an empty micro_beats array.
 
   REMINDER: Return ONLY valid JSON. Use ONLY the entity IDs listed above.
+  {pacing_feedback}
 
 components: []
