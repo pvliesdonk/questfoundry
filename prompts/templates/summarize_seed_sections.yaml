@@ -50,20 +50,22 @@ dilemmas_system: |
 
   ## MINIMUM BRANCHING REQUIREMENT (HARD CONSTRAINT — READ FIRST)
 
-  At least 2 dilemmas MUST have ALL their answers in `explored` (with `unexplored=[]`).
-  This is required for the story to have meaningful branching. A story with fewer than
-  2 fully-explored dilemmas produces a near-linear story and WILL BE REJECTED downstream.
+  At least {size_fully_explored} dilemmas MUST have ALL their answers in `explored`
+  (with `unexplored=[]`). This is required for the story to have meaningful branching.
+  A story with fewer than {size_fully_explored} fully-explored dilemmas produces a
+  near-linear story and WILL BE REJECTED downstream.
 
   BAD (rejected): only one answer per dilemma in `explored` → no real branching → pipeline fails
   ```
   - dilemma::host_benevolent_or_selfish: explored=[protector], unexplored=[manipulator]
   - dilemma::artifact_safe_or_dangerous: explored=[safe], unexplored=[dangerous]
   ```
-  GOOD (valid): 2 dilemmas fully explored → 4 arcs → passes
+  GOOD (structure example — both answers in `explored`, none in `unexplored`):
   ```
   - dilemma::host_benevolent_or_selfish: explored=[protector, manipulator], unexplored=[]
   - dilemma::artifact_safe_or_dangerous: explored=[safe, dangerous], unexplored=[]
   ```
+  Repeat this shape until you have enough fully-explored dilemmas for the story size.
 
   ## EXTRACTION FIDELITY (CRITICAL)
   If the discussion says "EXPLORE BOTH" / "explore both answers" / similar for a dilemma,
@@ -94,14 +96,14 @@ dilemmas_system: |
   to drive branching. Leaving the alternative unexplored is a deliberate scope reduction,
   not a default behavior.
 
-  GOOD branching distribution for 8 dilemmas:
-  - 4 fully explored (both answers in `explored`): creates 8 branching arcs
-  - 4 default-only (only default in `explored`): adds 4 flavor arcs
-  - TOTAL: 12 arcs, 8 branching — passes validation, rich story
+  GOOD branching distribution: at least {size_fully_explored} fully explored
+  (both answers in `explored`) — these drive branching arcs. Remaining dilemmas
+  may be default-only (only default in `explored`) for flavor without
+  multiplying arcs. The fully-explored count is what determines whether the
+  story passes validation.
 
-  BAD distribution for 8 dilemmas:
-  - 0 fully explored: 8 arcs total, all default-only, no branching
-  - 0 arcs with real choices → FAILS validation downstream
+  BAD distribution: 0 fully explored — all dilemmas default-only, no real
+  branching, FAILS validation downstream regardless of total dilemma count.
 
   ## Required Dilemma IDs ({dilemma_count} total)
   {dilemma_manifest}
@@ -120,8 +122,9 @@ dilemmas_system: |
   dilemma names.
 
   ## Output Format
-  List EVERY dilemma with its decision. The example below shows a healthy 4-fully + 4-default-only
-  distribution for an 8-dilemma story (50% soft cap):
+  List EVERY dilemma with its decision. The example below shows the output format
+  (4 fully explored + 4 default-only, for illustration — your story's minimum is
+  {size_fully_explored}):
   ```
   - dilemma::host_benevolent_or_selfish: explored=[protector, manipulator], unexplored=[]
   - dilemma::artifact_safe_or_dangerous: explored=[safe, dangerous], unexplored=[]
@@ -141,13 +144,14 @@ dilemmas_system: |
 
   ## FINAL CHECK before returning
   Count how many of your dilemmas have ALL answers in `explored` (`unexplored=[]`).
-  If that count is less than 2, **OVERRIDE the discussion's exploration choices**:
-  for any dilemma whose discussion did NOT explicitly say "explore both", you
-  MAY move its non-default answer from `unexplored` into `explored` (and clear
-  it from `unexplored`) until the fully-explored count reaches 2. Pick whichever
-  remaining dilemmas best serve the story.
-  A story with fewer than 2 fully-explored dilemmas is REJECTED downstream;
-  the override is required, not optional.
+  If that count is less than {size_fully_explored}, **OVERRIDE the discussion's
+  exploration choices**: for any dilemma whose discussion did NOT explicitly say
+  "explore both", you MAY move its non-default answer from `unexplored` into
+  `explored` (and clear it from `unexplored`) until the fully-explored count
+  reaches {size_fully_explored}. Pick whichever remaining dilemmas best serve
+  the story.
+  A story with fewer than {size_fully_explored} fully-explored dilemmas is
+  REJECTED downstream; the override is required, not optional.
 
   VERIFY: Your list MUST have exactly {dilemma_count} items.
   VERIFY: For each dilemma, EVERY answer ID MUST appear in EITHER explored OR unexplored (not both, not missing).
