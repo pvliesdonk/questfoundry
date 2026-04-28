@@ -51,11 +51,11 @@ system: |
   ## Output Format
   Return a JSON object with an "intersections" array. Each element has:
   - beat_ids: list of 2-3 beat IDs that form the intersection (from DIFFERENT dilemmas)
-  - resolved_location: the specific location where this scene occurs — MUST be a
-    non-empty string. If the candidate group lists multiple possible locations, pick
-    the one that fits most beats. If location is genuinely unknown, use the most
-    specific location mentioned in any of the beat descriptions (e.g., "the village
-    square" rather than "unknown"). NEVER output null. NEVER output the word "null".
+  - resolved_location: the specific location where this scene occurs. If the
+    candidate group lists multiple possible locations, pick the one that fits
+    most beats. If location is genuinely unknown, use the most specific
+    location mentioned in any of the beat descriptions (e.g., "the village
+    square" rather than "unknown").
   - shared_entities: list of entity IDs shared between the intersecting beats — use the
     full "entity::<name>" format (e.g., "entity::merchant", "entity::artifact"). If no
     entities are shared, use an empty list []. Do NOT invent entity IDs — use only IDs
@@ -92,8 +92,8 @@ user: |
   - Return ONLY a valid JSON object — no prose before or after.
   - Use ONLY beat IDs from the Valid IDs section. Do NOT invent IDs.
   - Each beat may appear in at most ONE intersection.
-  - resolved_location MUST be a non-empty string. If uncertain, pick the best-fit
-    location from the beat descriptions. NEVER output null or the word "null".
+  - resolved_location: pick the best-fit location from the beat descriptions
+    when uncertain (the schema requires a non-empty string).
   - shared_entities MUST use "entity::<name>" format or be an empty list [].
   - rationale MUST explain WHY the beats belong in one scene, not just that they share a location.
   {structural_feedback}
