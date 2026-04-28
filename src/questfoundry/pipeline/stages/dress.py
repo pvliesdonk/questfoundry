@@ -925,8 +925,10 @@ class DressStage:
 
         vision_ctx = format_dream_vision(graph)
         state_flags = graph.get_nodes_by_type("state_flag")
+        # Prefixed `state_flag::` so the LLM mirrors the same form in `visible_when` (#1473).
         state_flag_list = "\n".join(
-            f"- `{sf_data.get('raw_id', sf_id)}`: {sf_data.get('trigger', '')}"
+            f"- `state_flag::{sf_data.get('raw_id', strip_scope_prefix(sf_id))}`:"
+            f" {sf_data.get('trigger', '')}"
             for sf_id, sf_data in state_flags.items()
         )
 
