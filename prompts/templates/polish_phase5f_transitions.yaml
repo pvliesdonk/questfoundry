@@ -28,11 +28,29 @@ system: |
   ## What NOT to Do
   - Do NOT write full prose — only brief transition directives
   - Do NOT provide more or fewer transitions than beat boundaries
+
+  GOOD (2-beat passage = 1 boundary = 1 transition):
+    {{"transitions": ["The silence stretches until the protagonist turns away."]}}
+  BAD (2-beat passage with 2 transitions — too many):
+    {{"transitions": ["The silence stretches until they turn away.", "Then they leave."]}}
+  BAD (3-beat passage with 3 transitions — should be 2):
+    {{"transitions": ["...", "...", "..."]}}
+
   - Do NOT restate what happened in the beat — bridge to the next beat
   - Do NOT skip any collapsed passage
   - Do NOT add prose before or after the JSON output
 
   ## Collapsed Passages to Process
+  Each entry follows this shape (the `boundary/ies` count is exactly
+  the number of `transitions` you must return for that `passage_id`):
+
+    passage_id: `<id>`
+    entities: `<entity_id>`, `<entity_id>`
+    beats (<N> total, <N-1> boundary/ies):
+      Beat 1: `<beat_id>` [<scene_type>] — <summary>
+      Beat 2: `<beat_id>` [<scene_type>] — <summary>
+      ...
+
   {collapsed_passage_details}
 
   ## Output Format
