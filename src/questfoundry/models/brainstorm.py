@@ -144,8 +144,14 @@ class Dilemma(BaseModel):
         description="Exactly two possible answers",
     )
     central_entity_ids: list[str] = Field(
-        default_factory=list,
-        description="Entity IDs central to this dilemma — stored as anchored_to edges, not node properties",
+        min_length=1,
+        description=(
+            "Entity IDs central to this dilemma — stored as anchored_to edges, "
+            "not node properties. MUST contain ≥1 entry per R-3.6 ('every dilemma "
+            "has at least one anchored_to edge to an entity'). An empty list is "
+            "rejected at Pydantic validation so the retry loop sees a concrete "
+            "error message and can repair (#1524)."
+        ),
     )
     why_it_matters: str = Field(
         min_length=1,

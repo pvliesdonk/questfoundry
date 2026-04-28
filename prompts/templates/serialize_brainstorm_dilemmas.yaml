@@ -21,7 +21,12 @@ system: |
     - `answer_id`: Unique short identifier for THIS answer (e.g., "guilty", "framed", "dagger", "poison")
     - `description`: Full description
     - `is_canonical`: true for ONE answer (the default path), false for the other
-  - `central_entity_ids`: List of **namespaced** `entity_id` values FROM the `### Valid Entity IDs` section above (e.g., `character::mentor`, `location::archive`). Bare IDs without the category prefix, or IDs not in the section above, will fail R-2.3 / R-3.6 semantic validation.
+  - `central_entity_ids`: **REQUIRED — MUST be non-empty.** List ≥1 **namespaced** `entity_id` values FROM the `### Valid Entity IDs` section above (e.g., `character::mentor`, `location::archive`). An empty list `[]` or omitted field is rejected at validation per R-3.6 ("every dilemma has at least one anchored_to edge"). Bare IDs without the category prefix, or IDs not in the section above, also fail R-2.3 / R-3.6.
+
+    GOOD: `"central_entity_ids": ["character::elara_thorne", "object::silver_locket"]` (≥1 namespaced entity ID)
+    BAD:  `"central_entity_ids": []` — empty list, R-3.6 violation, pipeline rejects
+    BAD:  field omitted entirely — same as empty, same failure
+    BAD:  `"central_entity_ids": ["elara_thorne"]` — bare ID without category prefix, R-2.3 violation
   - `why_it_matters`: Thematic stakes
 
   ## Dilemma ID Naming (CRITICAL)
@@ -55,7 +60,12 @@ system: |
   - Each dilemma MUST have exactly ONE answer with `is_canonical=true`.
   - `answer_id` values MUST be unique per dilemma and MUST be short outcome labels (e.g., `guilty`, `framed`), NOT entity references.
   - ONLY use `entity_id` values listed in `### Valid Entity IDs` above. Do NOT invent new entity IDs.
+  - Every dilemma MUST have ≥1 entry in `central_entity_ids`. The dilemma's question or `why_it_matters` mentioning an entity by name is NOT enough — the entity ID must appear in the `central_entity_ids` list itself.
   {output_language_instruction}
+
+  ## REMINDER — central_entity_ids is REQUIRED (R-3.6)
+
+  Before generating JSON: for EACH dilemma, identify which entities from `### Valid Entity IDs` above are directly involved. Write those IDs into `central_entity_ids`. Do NOT output `"central_entity_ids": []` — empty lists are the most common failure for this field.
 
   ## Output
 
@@ -69,7 +79,7 @@ system: |
           {{"answer_id": "...", "description": "...", "is_canonical": true}},
           {{"answer_id": "...", "description": "...", "is_canonical": false}}
         ],
-        "central_entity_ids": ["character::..."],
+        "central_entity_ids": ["character::elara_thorne", "object::silver_locket"],
         "why_it_matters": "..."
       }}
     ]

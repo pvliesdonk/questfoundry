@@ -1066,7 +1066,7 @@ class TestValidateBrainstormMutations:
                 {
                     "dilemma_id": "trust",
                     "question": "Can the mentor be trusted?",
-                    "central_entity_ids": [],
+                    "central_entity_ids": ["location::archive"],
                     "answers": [
                         {"answer_id": "option_a", "description": "A", "is_canonical": True},
                         {
@@ -1085,6 +1085,68 @@ class TestValidateBrainstormMutations:
         duplicate_errors = [e for e in errors if "Duplicate" in e.issue]
         assert len(duplicate_errors) == 1
 
+    def test_empty_central_entity_ids_detected(self) -> None:
+        """R-3.6: empty central_entity_ids fires the in-retry validator (#1524).
+
+        Defense-in-depth alongside the Pydantic min_length=1 — the semantic
+        validator catches None/coercion edge cases that bypass Pydantic and
+        delivers the error with the concrete entity ID list (via
+        BrainstormMutationError.to_feedback) rather than a generic message.
+        """
+        output = {
+            "entities": [
+                {"entity_id": "archive", "entity_category": "location", "concept": "Archive"},
+                {"entity_id": "tower", "entity_category": "location", "concept": "Tower"},
+            ],
+            "dilemmas": [
+                {
+                    "dilemma_id": "trust",
+                    "question": "Can the mentor be trusted?",
+                    "central_entity_ids": [],  # R-3.6 violation — empty
+                    "answers": [
+                        {"answer_id": "yes", "description": "Yes", "is_canonical": True},
+                        {"answer_id": "no", "description": "No", "is_canonical": False},
+                    ],
+                }
+            ],
+        }
+
+        errors = validate_brainstorm_mutations(output)
+
+        # The empty central_entity_ids check fires BEFORE the per-ID existence loop,
+        # so it produces exactly one error (not one per missing ID).
+        assert len(errors) == 1
+        assert "no central_entity_ids" in errors[0].issue
+        assert "R-3.6" in errors[0].issue
+        # Available entity IDs are echoed for the repair feedback path
+        assert "archive" in errors[0].available
+        assert "tower" in errors[0].available
+
+    def test_missing_central_entity_ids_key_detected(self) -> None:
+        """R-3.6: missing central_entity_ids key (None) is treated as empty (#1524)."""
+        output = {
+            "entities": [
+                {"entity_id": "archive", "entity_category": "location", "concept": "Archive"},
+                {"entity_id": "tower", "entity_category": "location", "concept": "Tower"},
+            ],
+            "dilemmas": [
+                {
+                    "dilemma_id": "trust",
+                    "question": "Can the mentor be trusted?",
+                    # central_entity_ids key intentionally absent
+                    "answers": [
+                        {"answer_id": "yes", "description": "Yes", "is_canonical": True},
+                        {"answer_id": "no", "description": "No", "is_canonical": False},
+                    ],
+                }
+            ],
+        }
+
+        errors = validate_brainstorm_mutations(output)
+
+        assert len(errors) == 1
+        assert "no central_entity_ids" in errors[0].issue
+
     def test_no_default_path_detected(self) -> None:
         """Detects when no answer has is_canonical=True."""
         output = {
@@ -1096,7 +1158,7 @@ class TestValidateBrainstormMutations:
                 {
                     "dilemma_id": "trust",
                     "question": "Can the mentor be trusted?",
-                    "central_entity_ids": [],
+                    "central_entity_ids": ["location::archive"],
                     "answers": [
                         {"answer_id": "yes", "description": "Yes", "is_canonical": False},
                         {"answer_id": "no", "description": "No", "is_canonical": False},
@@ -1121,7 +1183,7 @@ class TestValidateBrainstormMutations:
                 {
                     "dilemma_id": "trust",
                     "question": "Can the mentor be trusted?",
-                    "central_entity_ids": [],
+                    "central_entity_ids": ["location::archive"],
                     "answers": [
                         {"answer_id": "yes", "description": "Yes", "is_canonical": True},
                         {"answer_id": "no", "description": "No", "is_canonical": True},
@@ -1185,7 +1247,7 @@ class TestValidateBrainstormMutations:
                 {
                     "dilemma_id": "trust",
                     "question": "Can the mentor be trusted?",
-                    "central_entity_ids": [],
+                    "central_entity_ids": ["location::archive"],
                     "answers": [],  # No answers at all
                 }
             ],
@@ -1275,7 +1337,7 @@ class TestValidateBrainstormMutations:
                 {
                     "dilemma_id": "trust_or_betray",
                     "question": "Can the mentor be trusted?",
-                    "central_entity_ids": [],
+                    "central_entity_ids": ["location::archive"],
                     "answers": [
                         {"answer_id": "trust", "description": "Trust", "is_canonical": True},
                         {"answer_id": "betray", "description": "Betray", "is_canonical": False},
@@ -1284,7 +1346,7 @@ class TestValidateBrainstormMutations:
                 {
                     "dilemma_id": "trust_or_betray",
                     "question": "Duplicate dilemma",
-                    "central_entity_ids": [],
+                    "central_entity_ids": ["location::archive"],
                     "answers": [
                         {"answer_id": "a", "description": "A", "is_canonical": True},
                         {"answer_id": "b", "description": "B", "is_canonical": False},
