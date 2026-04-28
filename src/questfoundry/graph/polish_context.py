@@ -405,6 +405,8 @@ def format_residue_content_context(
         "residue_details": "\n".join(residue_lines) or "(none)",
         "story_context": story_context,
         "residue_count": str(len(residue_specs)),
+        # Repair-loop slot (mirrors Phase 3 structural_feedback, Phase 4g transition_feedback).
+        "residue_feedback": "",
     }
 
 
