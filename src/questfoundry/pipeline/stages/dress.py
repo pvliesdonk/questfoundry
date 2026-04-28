@@ -1767,10 +1767,10 @@ def _format_entries_for_spoiler_check(entries: list[dict[str, Any]]) -> str:
         rank = entry.get("rank", "?")
         title = entry.get("title", "(no title)")
         gates = entry.get("visible_when") or []
+        # Preserve the `state_flag::` prefix (R-3.7) so few-shot examples
+        # in dress_codex_spoiler_check.yaml match runtime input verbatim.
         gate_text = (
-            "always visible"
-            if not gates
-            else "gated by " + ", ".join(f"`{strip_scope_prefix(g)}`" for g in gates)
+            "always visible" if not gates else "gated by " + ", ".join(f"`{g}`" for g in gates)
         )
         content = (entry.get("content") or "").strip() or "(no content)"
         lines.append(f"### Rank {rank} — {title} ({gate_text})\n{content}")
