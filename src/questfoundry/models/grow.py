@@ -245,7 +245,7 @@ class PathMiniArc(BaseModel):
 class Phase4eOutput(BaseModel):
     """Wrapper for Phase 4e structured output (per-path mini-arcs)."""
 
-    arcs: list[PathMiniArc] = Field(default_factory=list)
+    arcs: list[PathMiniArc] = Field(min_length=1)
 
     @model_validator(mode="after")
     def _validate_unique_path_ids(self) -> Phase4eOutput:
@@ -277,7 +277,7 @@ class EntityArcDescriptor(BaseModel):
 class Phase4fOutput(BaseModel):
     """Wrapper for Phase 4f structured output (entity arcs per path)."""
 
-    arcs: list[EntityArcDescriptor] = Field(default_factory=list)
+    arcs: list[EntityArcDescriptor] = Field(min_length=1)
 
     @model_validator(mode="after")
     def _validate_unique_entity_ids(self) -> Phase4fOutput:

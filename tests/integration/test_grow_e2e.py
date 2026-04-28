@@ -71,7 +71,9 @@ def _make_e2e_mock_model(graph: Graph) -> MagicMock:
             for bid in sorted(beat_nodes.keys())
         ],
     )
-    phase4f_output = Phase4fOutput(arcs=[])
+    # Pydantic min_length=1 normally rejects empty arcs; bypass the
+    # constraint here since the test graph has no eligible entities.
+    phase4f_output = Phase4fOutput.model_construct(arcs=[])
 
     # Phase 4e: generic path arc (called per-path with PathMiniArc schema)
     phase4e_output = PathMiniArc(

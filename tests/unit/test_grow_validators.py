@@ -487,7 +487,10 @@ class TestValidatePhase4fOutput:
         assert "entity::e2" in errors[0].available
 
     def test_empty_arcs(self) -> None:
-        result = Phase4fOutput(arcs=[])
+        # Pydantic min_length=1 rejects empty arcs at construction. Bypass
+        # validation here to assert the semantic validator is not the layer
+        # that catches it (defense-in-depth check).
+        result = Phase4fOutput.model_construct(arcs=[])
         errors = validate_phase4f_output(
             result,
             valid_entity_ids={"entity::e1"},
