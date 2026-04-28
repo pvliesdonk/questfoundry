@@ -72,7 +72,7 @@ def _bypass_seam_validators(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 class TestResolveEntityId:
-    """Tests for _resolve_entity_id (#1259 subset-token fallback)."""
+    """Tests for _resolve_entity_id subset-token fallback."""
 
     def _build_graph_with(self, entities: list[tuple[str, str]]) -> Graph:
         """entities is a list of (category, raw_id) tuples."""
@@ -141,14 +141,20 @@ class TestResolveEntityId:
             assert _resolve_entity_id(graph, "compass") is None
         assert any("entity_id_ambiguous_subset_match" in str(r.message) for r in caplog.records)
 
-    def test_ambiguous_subset_across_categories_returns_none(self) -> None:
+    def test_ambiguous_subset_across_categories_returns_none(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
         """Two entities in DIFFERENT categories sharing a token → still ambiguous → None.
 
         Tightens the contract: the resolver collapses the cross-category
         candidate set before applying the unique-match rule, so an LLM
         token that matches one entity per category is correctly rejected
-        rather than silently picking the first walked.
+        rather than silently picking the first walked. Also asserts the
+        ambiguous-match warning fires (same `len(candidates) > 1` branch
+        as the same-category case).
         """
+        import logging
+
         from questfoundry.pipeline.stages.fill import _resolve_entity_id
 
         graph = self._build_graph_with(
@@ -157,7 +163,9 @@ class TestResolveEntityId:
                 ("object", "the_brass_compass"),
             ]
         )
-        assert _resolve_entity_id(graph, "compass") is None
+        with caplog.at_level(logging.WARNING, logger="questfoundry.pipeline.stages.fill"):
+            assert _resolve_entity_id(graph, "compass") is None
+        assert any("entity_id_ambiguous_subset_match" in str(r.message) for r in caplog.records)
 
     def test_unknown_id_returns_none(self) -> None:
         from questfoundry.pipeline.stages.fill import _resolve_entity_id
