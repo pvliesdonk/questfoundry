@@ -297,17 +297,34 @@ class TestGapProposal:
         assert gap.scene_type == "sequel"
 
     def test_default_scene_type_is_sequel(self) -> None:
-        gap = GapProposal(path_id="t1", summary="A transition.")
+        gap = GapProposal(path_id="t1", after_beat="beat_a", summary="A transition.")
         assert gap.scene_type == "sequel"
 
-    def test_no_before_after_allowed(self) -> None:
-        gap = GapProposal(path_id="t1", summary="Opening scene.")
-        assert gap.after_beat is None
+    def test_after_beat_only_allowed(self) -> None:
+        # Anchoring the gap to only the earlier beat (open-ended forward) is valid.
+        gap = GapProposal(path_id="t1", after_beat="beat_a", summary="Open transition.")
+        assert gap.after_beat == "beat_a"
         assert gap.before_beat is None
+
+    def test_before_beat_only_allowed(self) -> None:
+        # Anchoring the gap to only the later beat (open-ended backward) is valid.
+        gap = GapProposal(path_id="t1", before_beat="beat_b", summary="Closing transition.")
+        assert gap.after_beat is None
+        assert gap.before_beat == "beat_b"
+
+    def test_both_placement_nulls_rejected(self) -> None:
+        """R-1a.3: gap beats must record bridges_from/bridges_to.
+
+        A gap with neither anchor is unplaceable. Closes a retry-bypass
+        (#1526): POLISH has no semantic_validator hook (#1498), so this
+        must fire at Pydantic time to trigger the retry loop.
+        """
+        with pytest.raises(ValidationError, match=r"R-1a\.3"):
+            GapProposal(path_id="t1", summary="Unplaceable gap.")
 
     def test_empty_summary_rejected(self) -> None:
         with pytest.raises(ValidationError, match="summary"):
-            GapProposal(path_id="t1", summary="")
+            GapProposal(path_id="t1", after_beat="beat_a", summary="")
 
     def test_dilemma_impacts_rejected_per_r_1a_2(self) -> None:
         # Per polish.md R-1a.2, gap beats are structural and must carry zero
@@ -316,6 +333,7 @@ class TestGapProposal:
         with pytest.raises(ValidationError, match=r"R-1a\.2"):
             GapProposal(
                 path_id="t1",
+                after_beat="beat_a",
                 summary="A transition beat.",
                 dilemma_impacts=[
                     {  # type: ignore[list-item]
@@ -469,9 +487,14 @@ class TestAtmosphericDetail:
 
 
 class TestPhase4dOutput:
-    def test_default_empty(self) -> None:
-        out = Phase4dOutput()
-        assert out.details == []
+    def test_empty_details_rejected(self) -> None:
+        """Zero atmospheric details is treated as LLM failure (#1526 retry-bypass).
+
+        Phase 4d is a single LLM call; zero coverage is full failure that
+        should fire the retry loop, not silent partial-coverage WARNING.
+        """
+        with pytest.raises(ValidationError, match=r"at least 1 item"):
+            Phase4dOutput(details=[])
 
     def test_with_details(self) -> None:
         out = Phase4dOutput(
@@ -496,6 +519,20 @@ class TestPhase4dOutput:
                     ),
                 ],
             )
+
+
+class TestPhase4aOutputZeroCoverageRejected:
+    """R-4b.1 vs R-4b.4: zero coverage = LLM failure (#1526 retry-bypass).
+
+    Partial coverage (1 ≤ tagged < total) is allowed with WARNING; zero
+    coverage is full failure that fires the retry loop.
+    """
+
+    def test_empty_tags_rejected(self) -> None:
+        from questfoundry.models.grow import Phase4aOutput
+
+        with pytest.raises(ValidationError, match=r"at least 1 item"):
+            Phase4aOutput(tags=[])
 
 
 class TestPathMiniArc:
