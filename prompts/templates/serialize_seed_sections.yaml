@@ -135,14 +135,14 @@ dilemmas_prompt: |
   to drive branching. Leaving the alternative unexplored is a deliberate scope reduction,
   not a default behavior.
 
-  GOOD branching distribution for 8 dilemmas:
-  - 4 fully explored (both answers in `explored`): creates 8 branching arcs
-  - 4 default-only (only default in `explored`): adds 4 flavor arcs
-  - TOTAL: 12 arcs, 8 branching — passes validation, rich story
+  GOOD branching distribution: at least {size_fully_explored} fully explored
+  (both answers in `explored`) — these drive branching arcs. Remaining dilemmas
+  may be default-only (only default in `explored`) for flavor without
+  multiplying arcs. The fully-explored count is what determines whether the
+  story passes validation.
 
-  BAD distribution for 8 dilemmas:
-  - 0 fully explored: 8 arcs total, all default-only, no branching
-  - 0 arcs with real choices → FAILS validation
+  BAD distribution: 0 fully explored — all dilemmas default-only, no real
+  branching, FAILS validation regardless of total dilemma count.
 
   ## Rules
   - dilemma_id must include the `dilemma::` prefix and match EXACTLY an ID from the manifest

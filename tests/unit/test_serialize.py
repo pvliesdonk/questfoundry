@@ -2083,6 +2083,29 @@ class TestSizeProfileInjectedIntoBeatPrompts:
         # and gives small models a fallback anchor (caught in PR #1554 review).
         assert "2 dilemmas fully explored" not in prompts["dilemmas"]
 
+    def test_summarize_dilemmas_prompt_size_fully_explored_resolved(self) -> None:
+        # #1554 review: the SUMMARIZE phase's dilemmas section must also be
+        # wired with {size_fully_explored}. After rendering with a `long`
+        # profile, the rendered prompt should contain the resolved value (5)
+        # and no hardcoded "2 dilemmas" / "fewer than 2" survivors.
+        from questfoundry.agents.prompts import get_seed_section_summarize_prompts
+        from questfoundry.pipeline.size import get_size_profile
+
+        rendered = get_seed_section_summarize_prompts(
+            entity_count=3,
+            dilemma_count=8,
+            entity_manifest="entity::a, entity::b",
+            dilemma_manifest="dilemma::a, dilemma::b",
+            dilemma_answers="(answers)",
+            size_profile=get_size_profile("long"),
+        )["dilemmas"]
+        assert "{size_fully_explored}" not in rendered  # placeholder resolved
+        assert "5" in rendered  # long preset's fully_explored value
+        assert "at least 2 dilemmas" not in rendered
+        assert "less than 2" not in rendered
+        assert "fewer than 2" not in rendered
+        assert "2 dilemmas fully explored" not in rendered
+
 
 class TestDilemmasPromptStructure:
     """Structural tests for the dilemmas_prompt section (#1234).
