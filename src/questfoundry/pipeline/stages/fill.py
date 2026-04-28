@@ -241,18 +241,29 @@ def _get_prompts_path() -> Path:
 log = get_logger(__name__)
 
 
+# Tokens stripped from short-name candidates before subset matching against
+# graph entity IDs. These articles carry no entity identity and would
+# otherwise produce trivially-true subset matches (e.g. "the" matches every
+# `the_*` entity in the graph).
+_ENTITY_NAME_STOPWORDS: frozenset[str] = frozenset({"the", "a", "an", "of"})
+
+
 def _resolve_entity_id(graph: Graph, raw_id: str) -> str | None:
     """Resolve a raw entity ID to its prefixed graph ID.
 
     Tries all entity category prefixes (character::, location::, etc.)
     and legacy entity:: prefix to find a matching node in the graph.
+    Falls back to a subset-token match when exact lookup misses: a short
+    LLM-supplied name like ``the_compass`` resolves to graph ID
+    ``object::the_weathered_compass`` when the LLM tokens are a subset
+    of the graph entity's tokens AND exactly one graph entity matches.
 
     Args:
         graph: Graph to search.
         raw_id: Raw entity ID (may or may not have prefix).
 
     Returns:
-        Entity ID as found in graph, None if not found.
+        Entity ID as found in graph, None if not found or ambiguous.
     """
     # If already prefixed, check if it exists
     if "::" in raw_id:
@@ -272,6 +283,40 @@ def _resolve_entity_id(graph: Graph, raw_id: str) -> str | None:
     if graph.has_node(legacy):
         return legacy
 
+    # Subset-token fallback. Build a token set from raw_id with stopwords
+    # removed; require at least one non-stopword token so a name of `the`
+    # alone never matches anything.
+    raw_tokens = {tok for tok in raw_id.split("_") if tok and tok not in _ENTITY_NAME_STOPWORDS}
+    if not raw_tokens:
+        return None
+
+    candidates: list[str] = []
+    for category in ENTITY_CATEGORIES:
+        for node_id in graph.get_nodes_by_type(category):
+            graph_raw = strip_scope_prefix(node_id)
+            graph_tokens = {
+                tok for tok in graph_raw.split("_") if tok and tok not in _ENTITY_NAME_STOPWORDS
+            }
+            if raw_tokens.issubset(graph_tokens):
+                candidates.append(node_id)
+
+    if len(candidates) == 1:
+        log.info(
+            "entity_id_resolved_via_subset_match",
+            raw_id=raw_id,
+            resolved=candidates[0],
+        )
+        return candidates[0]
+    if len(candidates) > 1:
+        log.warning(
+            "entity_id_ambiguous_subset_match",
+            raw_id=raw_id,
+            candidates=sorted(candidates),
+            detail=(
+                "Subset-token fallback found multiple graph entities "
+                "containing the LLM-supplied short name; refusing to guess."
+            ),
+        )
     return None
 
 
