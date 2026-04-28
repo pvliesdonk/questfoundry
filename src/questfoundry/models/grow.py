@@ -184,13 +184,7 @@ class SceneTypeTag(BaseModel):
 
 
 class Phase4aOutput(BaseModel):
-    """Wrapper for Phase 4a structured output (scene-type tags).
-
-    Spec R-4b.1 distinguishes partial coverage (1 ≤ tagged < total → WARNING +
-    fallback) from zero coverage (= LLM failure under R-4b.4 → halt + retry).
-    `min_length=1` enforces the zero-coverage halt at Pydantic time so the
-    retry loop fires; partial coverage is handled downstream as a WARNING.
-    """
+    """Wrapper for Phase 4a structured output (scene-type tags)."""
 
     tags: list[SceneTypeTag] = Field(
         min_length=1,
@@ -214,12 +208,7 @@ class AtmosphericDetail(BaseModel):
 
 
 class Phase4dOutput(BaseModel):
-    """Wrapper for Phase 4d structured output (atmospheric details).
-
-    Like Phase 4a, zero details = full coverage gap = LLM failure that should
-    trigger a retry. Partial coverage emits a WARNING per POLISH R-5e.1 and
-    FILL falls back without explicit guidance.
-    """
+    """Wrapper for Phase 4d structured output (atmospheric details)."""
 
     details: list[AtmosphericDetail] = Field(
         min_length=1,

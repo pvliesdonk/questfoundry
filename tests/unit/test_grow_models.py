@@ -313,12 +313,8 @@ class TestGapProposal:
         assert gap.before_beat == "beat_b"
 
     def test_both_placement_nulls_rejected(self) -> None:
-        """R-1a.3: gap beats must record bridges_from/bridges_to.
-
-        A gap with neither anchor is unplaceable. Closes a retry-bypass
-        (#1526): POLISH has no semantic_validator hook (#1498), so this
-        must fire at Pydantic time to trigger the retry loop.
-        """
+        # R-1a.3: gap with neither anchor is unplaceable; POLISH has no
+        # semantic_validator (#1498), so this must fire at Pydantic time.
         with pytest.raises(ValidationError, match=r"R-1a\.3"):
             GapProposal(path_id="t1", summary="Unplaceable gap.")
 
@@ -488,11 +484,7 @@ class TestAtmosphericDetail:
 
 class TestPhase4dOutput:
     def test_empty_details_rejected(self) -> None:
-        """Zero atmospheric details is treated as LLM failure (#1526 retry-bypass).
-
-        Phase 4d is a single LLM call; zero coverage is full failure that
-        should fire the retry loop, not silent partial-coverage WARNING.
-        """
+        # Zero atmospheric details = LLM failure (R-4b.4 zero-coverage halt).
         with pytest.raises(ValidationError, match=r"at least 1 item"):
             Phase4dOutput(details=[])
 
@@ -522,11 +514,7 @@ class TestPhase4dOutput:
 
 
 class TestPhase4aOutputZeroCoverageRejected:
-    """R-4b.1 vs R-4b.4: zero coverage = LLM failure (#1526 retry-bypass).
-
-    Partial coverage (1 ≤ tagged < total) is allowed with WARNING; zero
-    coverage is full failure that fires the retry loop.
-    """
+    """R-4b.4: zero scene-type coverage is LLM failure, not partial."""
 
     def test_empty_tags_rejected(self) -> None:
         from questfoundry.models.grow import Phase4aOutput
