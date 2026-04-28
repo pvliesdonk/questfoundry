@@ -134,21 +134,28 @@ class TestFalseBranchDecisionItem:
                 sidetrack_summary="",  # empty — must be rejected
             )
 
-    def test_diamond_requires_both_summaries(self) -> None:
-        """R-5.10: diamond decision requires both diamond_summary_a AND _b (#1527)."""
+    @pytest.mark.parametrize(
+        ("summary_a", "summary_b"),
+        [
+            pytest.param("Path A", "", id="missing_b"),
+            pytest.param("", "Path B", id="missing_a"),
+            pytest.param("", "", id="missing_both"),
+        ],
+    )
+    def test_diamond_requires_both_summaries(self, summary_a: str, summary_b: str) -> None:
+        """R-5.10: diamond decision requires both diamond_summary_a AND _b (#1527).
+
+        Each parametrize case runs independently — if `missing_b` were to
+        regress, `missing_a` and `missing_both` still get their own
+        assertion (vs nested `pytest.raises` blocks where the first
+        unexpectedly-not-raising case short-circuits the rest).
+        """
         with pytest.raises(ValidationError, match=r"R-5\.10"):
             FalseBranchDecisionItem(
                 candidate_index=0,
                 decision="diamond",
-                diamond_summary_a="Path A",
-                diamond_summary_b="",  # missing — must be rejected
-            )
-        with pytest.raises(ValidationError, match=r"R-5\.10"):
-            FalseBranchDecisionItem(
-                candidate_index=0,
-                decision="diamond",
-                diamond_summary_a="",  # missing
-                diamond_summary_b="Path B",
+                diamond_summary_a=summary_a,
+                diamond_summary_b=summary_b,
             )
 
 
