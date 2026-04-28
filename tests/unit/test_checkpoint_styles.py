@@ -1,0 +1,70 @@
+# tests/unit/test_checkpoint_styles.py
+"""Tests for checkpoint style metadata lookup (#1557)."""
+
+from __future__ import annotations
+
+import pytest
+
+from questfoundry.providers.checkpoint_styles import resolve_checkpoint_style
+
+
+class TestResolveCheckpointStyle:
+    """`resolve_checkpoint_style()` returns label/style_hints/incompatible_styles
+    for a checkpoint name. Always returns a populated dict (default fallback
+    if no specific pattern matches)."""
+
+    @pytest.mark.parametrize(
+        ("model", "label_substring"),
+        [
+            # User's loaded checkpoints at A1111 (2026-04-28)
+            ("flux1-dev-bnb-nf4-v2.safetensors", "Flux"),
+            ("flux1-dev-bnb-nf4.safetensors", "Flux"),
+            ("coloring_book.ckpt", "Coloring Book"),
+            ("v1-5-pruned-emaonly.safetensors", "SD 1.5"),
+            ("animagine-xl.safetensors", "Animagine"),
+            ("Dreamshaper.safetensors", "DreamShaper"),
+            ("sd_xl_base_1.0.safetensors", "SDXL Base"),
+            ("dreamshaperXL_lightningDPMSDE.safetensors", "DreamShaperXL Lightning"),
+            ("juggernautXL_ragnarokBy.safetensors", "Juggernaut"),
+            ("dreamshaperXL_alpha2Xl10.safetensors", "DreamShaperXL Lightning"),
+        ],
+    )
+    def test_known_checkpoint_resolves_to_specific_label(
+        self, model: str, label_substring: str
+    ) -> None:
+        info = resolve_checkpoint_style(model)
+        assert label_substring in info["label"]
+        assert info["style_hints"]
+        assert info["incompatible_styles"]
+
+    def test_unknown_checkpoint_falls_back_to_default(self) -> None:
+        info = resolve_checkpoint_style("totally-made-up-model.safetensors")
+        assert "Unknown" in info["label"] or "general-purpose" in info["label"].lower()
+        assert info["style_hints"]
+        assert info["incompatible_styles"]
+
+    def test_pattern_ordering_dreamshaperxl_lightning_wins_over_generic(self) -> None:
+        # The dreamshaper family has three patterns; the most specific must win.
+        # dreamshaperxl_lightning|alpha → "DreamShaperXL Lightning / Alpha"
+        # dreamshaperxl|dreamshaper.*xl → "DreamShaperXL"
+        # dreamshaper                    → "DreamShaper" (SD1.5)
+        lightning = resolve_checkpoint_style("dreamshaperXL_lightningDPMSDE.safetensors")
+        assert "Lightning" in lightning["label"] or "Alpha" in lightning["label"]
+
+        alpha = resolve_checkpoint_style("dreamshaperXL_alpha2Xl10.safetensors")
+        assert "Lightning" in alpha["label"] or "Alpha" in alpha["label"]
+
+        sd15 = resolve_checkpoint_style("Dreamshaper.safetensors")
+        assert "Lightning" not in sd15["label"]
+        assert "Alpha" not in sd15["label"]
+        assert "XL" not in sd15["label"]
+
+    def test_returns_required_keys(self) -> None:
+        info = resolve_checkpoint_style("anything.safetensors")
+        assert set(info.keys()) >= {"label", "style_hints", "incompatible_styles"}
+
+    def test_case_insensitive_matching(self) -> None:
+        # Patterns match against lowercased filename.
+        upper = resolve_checkpoint_style("FLUX1-DEV.safetensors")
+        lower = resolve_checkpoint_style("flux1-dev.safetensors")
+        assert upper == lower
