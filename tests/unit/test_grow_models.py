@@ -8,7 +8,6 @@ from pydantic import ValidationError
 from questfoundry.models.grow import (
     Arc,
     AtmosphericDetail,
-    Choice,
     EntityArcDescriptor,
     EntityOverlay,
     GapProposal,
@@ -144,28 +143,6 @@ class TestStateFlag:
     def test_invalid_flag_type_rejected(self) -> None:
         with pytest.raises(ValidationError, match="flag_type"):
             StateFlag(flag_id="sf1", derived_from="c1", flag_type="revoked")  # type: ignore[arg-type]
-
-
-class TestChoice:
-    def test_valid_choice(self) -> None:
-        choice = Choice(
-            from_passage="p1",
-            to_passage="p2",
-            label="Go left",
-            requires_state_flags=["sf1"],
-            grants=["sf2"],
-        )
-        assert choice.from_passage == "p1"
-        assert choice.requires_state_flags == ["sf1"]
-
-    def test_empty_requires_grants_allowed(self) -> None:
-        choice = Choice(from_passage="p1", to_passage="p2", label="Continue")
-        assert choice.requires_state_flags == []
-        assert choice.grants == []
-
-    def test_empty_label_rejected(self) -> None:
-        with pytest.raises(ValidationError, match="label"):
-            Choice(from_passage="p1", to_passage="p2", label="")
 
 
 class TestEntityOverlay:

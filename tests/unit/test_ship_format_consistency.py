@@ -69,7 +69,7 @@ def _multi_format_context() -> ExportContext:
                 from_passage="passage::trial",
                 to_passage="passage::defeat",
                 label="Refuse the mentor",
-                requires_codewords=["codeword::wary"],
+                requires=["codeword::wary"],
             ),
         ],
         entities=[

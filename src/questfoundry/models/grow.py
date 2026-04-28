@@ -73,17 +73,6 @@ class StateFlag(BaseModel):
     flag_type: Literal["granted"] = "granted"
 
 
-class Choice(BaseModel):
-    """A player choice linking two passages (future Phase 9)."""
-
-    from_passage: str = Field(min_length=1)
-    to_passage: str = Field(min_length=1)
-    label: str = Field(min_length=1)
-    requires_state_flags: list[str] = Field(default_factory=list)
-    grants: list[str] = Field(default_factory=list)
-    is_return: bool = Field(default=False, description="True for spoke→hub return links")
-
-
 class EntityOverlay(BaseModel):
     """Conditional entity details activated by state flags (future Phase 8c)."""
 

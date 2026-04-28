@@ -57,7 +57,7 @@ def _minimal_graph() -> Graph:
         "passage::intro",
         "passage::choice_a",
         label="Enter the castle",
-        requires_codewords=[],
+        requires=[],
         grants=["codeword::entered_castle"],
     )
     g.add_edge(
@@ -65,7 +65,7 @@ def _minimal_graph() -> Graph:
         "passage::intro",
         "passage::choice_b",
         label="Flee to the forest",
-        requires_codewords=[],
+        requires=[],
         grants=[],
     )
     return g
@@ -164,9 +164,9 @@ class TestBuildExportContext:
     def test_choice_requires_round_trips_polish_edge_key(self) -> None:
         # Regression for #1532 follow-up: POLISH writes the gate-condition
         # key as `"requires"` (see _create_choice_edge in
-        # pipeline/stages/polish/deterministic.py:1430). The export must read
-        # the same key — the prior fallback chain (requires_state_flags →
-        # requires_codewords → []) silently dropped POLISH's gate values.
+        # pipeline/stages/polish/deterministic.py:1430). The export must
+        # read the same key — earlier code looked under legacy names and
+        # silently dropped POLISH's gate values.
         g = Graph()
         g.create_node("passage::a", {"type": "passage", "raw_id": "a", "prose": "."})
         g.create_node("passage::b", {"type": "passage", "raw_id": "b", "prose": "."})
@@ -180,7 +180,7 @@ class TestBuildExportContext:
         )
         ctx = build_export_context(g, "test")
         assert len(ctx.choices) == 1
-        assert ctx.choices[0].requires_codewords == ["state_flag::has_key"]
+        assert ctx.choices[0].requires == ["state_flag::has_key"]
 
     def test_start_passage_detected(self) -> None:
         g = _minimal_graph()
@@ -206,7 +206,7 @@ class TestBuildExportContext:
             "passage::intro",
             "passage::spoke_0",
             label="Look around",
-            requires_codewords=[],
+            requires=[],
             grants=[],
         )
         g.add_edge(
@@ -215,7 +215,7 @@ class TestBuildExportContext:
             "passage::intro",
             label="Return",
             is_return=True,
-            requires_codewords=[],
+            requires=[],
             grants=[],
         )
 

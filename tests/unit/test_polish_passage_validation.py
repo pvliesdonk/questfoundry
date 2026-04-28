@@ -1312,7 +1312,7 @@ class TestCheckRoutingCoverage:
                 "to_passage": "passage::end1",
                 "label": "r1",
                 "is_routing": True,
-                "requires_state_flags": ["state_flag::cw1"],
+                "requires": ["state_flag::cw1"],
                 "grants": [],
             },
         )

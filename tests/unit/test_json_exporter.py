@@ -25,7 +25,7 @@ def _simple_context() -> ExportContext:
                 from_passage="p1",
                 to_passage="p2",
                 label="Continue",
-                requires_codewords=[],
+                requires=[],
                 grants=["codeword::done"],
             ),
         ],
