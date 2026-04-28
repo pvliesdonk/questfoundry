@@ -497,6 +497,144 @@ def test_create_chat_model_ollama_custom_num_ctx() -> None:
     assert call_kwargs["num_ctx"] == 131072
 
 
+def _llama8b_show_response() -> dict[str, Any]:
+    """Realistic /api/show shape for a Llama-3-8B Q4_K_M model."""
+    return {
+        "details": {
+            "family": "llama",
+            "parameter_size": "8.0B",
+            "quantization_level": "Q4_K_M",
+        },
+        "model_info": {
+            "general.architecture": "llama",
+            "llama.block_count": 32,
+            "llama.embedding_length": 4096,
+            "llama.attention.head_count": 32,
+            "llama.attention.head_count_kv": 8,
+            "llama.context_length": 131072,
+        },
+        "parameters": "num_ctx 32768\ntemperature 0.7",
+    }
+
+
+def test_create_chat_model_ollama_max_vram_kwarg_drives_num_ctx() -> None:
+    """max_vram kwarg triggers VRAM-aware num_ctx calculation for Ollama."""
+    mock_chat = MagicMock()
+
+    with (
+        patch.dict("os.environ", {"OLLAMA_HOST": "http://test:11434"}, clear=False),
+        patch(
+            "questfoundry.providers.factory._query_ollama_show",
+            return_value=_llama8b_show_response(),
+        ),
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            return_value=mock_chat,
+        ) as mock_init,
+    ):
+        create_chat_model("ollama", "model", max_vram=12.0)
+
+    call_kwargs = mock_init.call_args[1]
+    # 8B Q4_K_M at 12 GB → tens of thousands of tokens, definitely > the
+    # Modelfile-configured 32768 from `parameters`. Calculation wins.
+    assert call_kwargs["num_ctx"] > 32_768
+    assert call_kwargs["num_ctx"] % 1024 == 0
+    # max_vram itself never reaches the provider client.
+    assert "max_vram" not in call_kwargs
+
+
+def test_create_chat_model_ollama_qf_max_vram_env_var() -> None:
+    """QF_MAX_VRAM env var is the fallback when no kwarg is passed."""
+    mock_chat = MagicMock()
+
+    with (
+        patch.dict(
+            "os.environ",
+            {"OLLAMA_HOST": "http://test:11434", "QF_MAX_VRAM": "12"},
+            clear=False,
+        ),
+        patch(
+            "questfoundry.providers.factory._query_ollama_show",
+            return_value=_llama8b_show_response(),
+        ),
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            return_value=mock_chat,
+        ) as mock_init,
+    ):
+        create_chat_model("ollama", "model")
+
+    call_kwargs = mock_init.call_args[1]
+    assert call_kwargs["num_ctx"] > 32_768
+    assert call_kwargs["num_ctx"] % 1024 == 0
+
+
+def test_create_chat_model_ollama_max_vram_does_not_override_explicit_num_ctx() -> None:
+    """An explicit num_ctx kwarg still wins over max_vram (caller's choice)."""
+    mock_chat = MagicMock()
+
+    with (
+        patch.dict("os.environ", {"OLLAMA_HOST": "http://test:11434"}, clear=False),
+        patch(
+            "questfoundry.providers.factory._query_ollama_show",
+            return_value=_llama8b_show_response(),
+        ),
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            return_value=mock_chat,
+        ) as mock_init,
+    ):
+        create_chat_model("ollama", "model", num_ctx=8192, max_vram=24.0)
+
+    call_kwargs = mock_init.call_args[1]
+    assert call_kwargs["num_ctx"] == 8192
+    assert "max_vram" not in call_kwargs
+
+
+def test_create_chat_model_max_vram_ignored_for_non_ollama() -> None:
+    """max_vram is silently ignored for cloud providers; never reaches client."""
+    mock_chat = MagicMock()
+
+    with (
+        patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}, clear=False),
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            return_value=mock_chat,
+        ) as mock_init,
+    ):
+        create_chat_model("openai", "gpt-5-mini", max_vram=12.0)
+
+    call_kwargs = mock_init.call_args[1]
+    assert "max_vram" not in call_kwargs
+    assert "num_ctx" not in call_kwargs
+
+
+def test_create_chat_model_ollama_invalid_qf_max_vram_env_falls_back() -> None:
+    """A non-numeric QF_MAX_VRAM env var is logged and ignored."""
+    mock_chat = MagicMock()
+
+    with (
+        patch.dict(
+            "os.environ",
+            {"OLLAMA_HOST": "http://test:11434", "QF_MAX_VRAM": "not-a-number"},
+            clear=False,
+        ),
+        patch(
+            "questfoundry.providers.factory._query_ollama_show",
+            return_value=_llama8b_show_response(),
+        ),
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            return_value=mock_chat,
+        ) as mock_init,
+    ):
+        create_chat_model("ollama", "model")
+
+    call_kwargs = mock_init.call_args[1]
+    # Falls back to Modelfile-configured value from `parameters`.
+    assert call_kwargs["num_ctx"] == 32_768
+
+
 def test_create_chat_model_ollama_no_temperature_when_not_provided() -> None:
     """Factory does not include temperature when not provided."""
     mock_chat = MagicMock()

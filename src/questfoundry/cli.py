@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import atexit
+import os
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any
@@ -1829,6 +1830,18 @@ def run(
         str | None,
         typer.Option("--language", "-l", help="Output language (ISO 639-1 code, e.g., nl, ja, de)"),
     ] = None,
+    max_vram: Annotated[
+        float | None,
+        typer.Option(
+            "--max-vram",
+            help=(
+                "VRAM budget in GB for Ollama models. Computes the largest num_ctx "
+                "that fits weights + KV cache in this budget, preventing silent "
+                "spillover to CPU. Ignored for cloud providers. Equivalent to "
+                "setting QF_MAX_VRAM=<value> in the environment."
+            ),
+        ),
+    ] = None,
 ) -> None:
     """Run multiple pipeline stages sequentially.
 
@@ -1836,14 +1849,25 @@ def run(
     target stage. By default, skips already-completed stages and uses
     non-interactive mode for batch execution.
 
+    For individual stage commands (qf dream, qf brainstorm, ...), set
+    ``QF_MAX_VRAM=<gb>`` in the environment to apply VRAM-aware
+    num_ctx sizing across the whole session.
+
     Examples:
         qf run --to seed --prompt "A mystery story"
         qf run --to brainstorm --from dream --force
         qf run --to seed --prompt "A mystery" --init --project my-story
+        qf run --to fill --max-vram 12     # sized for a 12 GB consumer GPU
     """
     project_path = _resolve_project_path(project)
     project_path = _ensure_project(project_path, auto_init=init, provider=provider)
     _configure_project_logging(project_path)
+
+    if max_vram is not None:
+        if max_vram <= 0:
+            console.print("[red]Error:[/red] --max-vram must be positive.")
+            raise typer.Exit(1)
+        os.environ["QF_MAX_VRAM"] = str(max_vram)
 
     log = get_logger(__name__)
 

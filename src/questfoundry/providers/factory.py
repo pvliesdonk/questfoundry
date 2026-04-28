@@ -156,6 +156,22 @@ def _preprocess_provider_kwargs(
     """
     kwargs = dict(kwargs)  # Don't mutate input
 
+    # max_vram is a QuestFoundry-only kwarg — never pass it through to the
+    # provider client. Resolve here and translate to num_ctx for ollama.
+    max_vram = kwargs.pop("max_vram", None)
+    if max_vram is None:
+        env_max_vram = os.getenv("QF_MAX_VRAM")
+        if env_max_vram is not None:
+            try:
+                max_vram = float(env_max_vram)
+            except ValueError:
+                log.warning(
+                    "qf_max_vram_invalid",
+                    value=env_max_vram,
+                    msg="QF_MAX_VRAM must be a positive number; ignoring",
+                )
+                max_vram = None
+
     if provider == "ollama":
         # Resolve host from kwargs or env var
         host = kwargs.pop("host", None) or os.getenv("OLLAMA_HOST")
@@ -167,10 +183,45 @@ def _preprocess_provider_kwargs(
             )
         kwargs["base_url"] = host
 
-        # Query Ollama for num_ctx if not explicitly provided
+        # Resolve num_ctx. Precedence:
+        #   1. explicit num_ctx kwarg (caller's choice — never override)
+        #   2. max_vram-driven calculation (one /api/show round-trip)
+        #   3. /api/show num_ctx field (Modelfile or architectural max)
+        #   4. hard fallback 32_768
         if "num_ctx" not in kwargs:
-            num_ctx = _query_ollama_num_ctx(host, model)
+            show_data = _query_ollama_show(host, model)
+            num_ctx: int | None = None
+
+            if max_vram is not None and max_vram > 0 and show_data is not None:
+                from questfoundry.providers.vram import (
+                    VramTooSmallError,
+                    calculate_max_context,
+                )
+
+                try:
+                    architectural_max = _extract_architectural_max_from_show(show_data, model)
+                    num_ctx = calculate_max_context(
+                        max_vram, show_data, architectural_max=architectural_max
+                    )
+                except VramTooSmallError:
+                    raise
+                except ValueError as exc:
+                    log.warning(
+                        "vram_calc_skipped",
+                        model=model,
+                        reason=str(exc),
+                    )
+
+            if num_ctx is None and show_data is not None:
+                num_ctx = _extract_num_ctx_from_show(show_data, model)
+
             kwargs["num_ctx"] = num_ctx if num_ctx else 32_768
+    elif max_vram is not None:
+        log.debug(
+            "max_vram_ignored_non_ollama",
+            provider=provider,
+            msg="--max-vram only affects Ollama; cloud providers manage their own context",
+        )
 
     elif provider == "openai":
         # Resolve API key from kwargs or env var (handles api_key=None case)
@@ -406,19 +457,12 @@ def _normalize_provider(provider_name: str) -> str:
     return name
 
 
-def _query_ollama_num_ctx(host: str, model: str) -> int | None:
-    """Query Ollama /api/show to get the model's configured num_ctx.
+def _query_ollama_show(host: str, model: str) -> dict[str, Any] | None:
+    """Query Ollama /api/show and return the parsed response dict.
 
-    Parses the ``parameters`` field from the response which contains the
-    Modelfile-configured values (e.g., ``num_ctx  32768``).
-
-    Args:
-        host: Ollama server base URL.
-        model: Model name.
-
-    Returns:
-        The num_ctx value from the model's configuration, or None if the
-        query fails or the value is not found.
+    Centralised so callers needing different fields (num_ctx, architecture
+    metadata for VRAM calculation) share one HTTP round-trip per model.
+    Returns None on any error — callers fall back to their own defaults.
     """
     import httpx
 
@@ -426,12 +470,19 @@ def _query_ollama_num_ctx(host: str, model: str) -> int | None:
         with httpx.Client(timeout=10.0) as client:
             resp = client.post(f"{host}/api/show", json={"model": model})
             resp.raise_for_status()
-            data = resp.json()
+            return resp.json()  # type: ignore[no-any-return]
     except Exception as exc:
         log.warning("ollama_show_failed", model=model, error=str(exc))
         return None
 
-    # Parse the 'parameters' field: newline-separated "key  value" pairs
+
+def _extract_num_ctx_from_show(data: dict[str, Any], model: str) -> int | None:
+    """Pull num_ctx from a parsed /api/show response.
+
+    Prefers the Modelfile-configured value (``parameters: "num_ctx 32768"``);
+    falls back to the architectural ``*.context_length`` if no Modelfile
+    override is present.
+    """
     parameters = data.get("parameters", "")
     for line in parameters.splitlines():
         parts = line.split()
@@ -440,7 +491,7 @@ def _query_ollama_num_ctx(host: str, model: str) -> int | None:
                 num_ctx = int(parts[-1])
                 log.info("ollama_num_ctx_from_model", model=model, num_ctx=num_ctx)
                 return num_ctx
-            except ValueError as e:  # pragma: no cover - malformed ollama API response, defensive
+            except ValueError as e:  # pragma: no cover - defensive against malformed Ollama API
                 log.debug(
                     "ollama_num_ctx_parse_failed",
                     error=str(e),
@@ -448,14 +499,33 @@ def _query_ollama_num_ctx(host: str, model: str) -> int | None:
                     value=parts[-1] if parts else None,
                 )
 
-    # Fallback: check model_info for architecture context_length
+    return _extract_architectural_max_from_show(data, model)
+
+
+def _extract_architectural_max_from_show(data: dict[str, Any], model: str) -> int | None:
+    """Return the architectural max context length, ignoring Modelfile overrides.
+
+    Used as the cap for VRAM-aware num_ctx — the Modelfile's `num_ctx`
+    is one default value, but max_vram should be able to compute *up to*
+    the architectural maximum if VRAM allows.
+    """
     model_info = data.get("model_info", {})
     for key, value in model_info.items():
         if key.endswith(".context_length") and isinstance(value, int):
             log.info("ollama_num_ctx_from_arch", model=model, num_ctx=value)
             return value
-
     return None
+
+
+def _query_ollama_num_ctx(host: str, model: str) -> int | None:
+    """Query Ollama /api/show to get the model's configured num_ctx.
+
+    Convenience wrapper preserved for callers that only need num_ctx.
+    """
+    data = _query_ollama_show(host, model)
+    if data is None:
+        return None
+    return _extract_num_ctx_from_show(data, model)
 
 
 async def unload_ollama_model(chat_model: BaseChatModel) -> None:
