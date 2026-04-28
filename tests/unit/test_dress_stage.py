@@ -483,6 +483,49 @@ class TestPhase0ArtDirection:
         assert tokens == 1000
 
     @pytest.mark.asyncio()
+    async def test_phase0_counts_serialize_retries(
+        self,
+        tmp_path: Path,
+        dress_graph: Graph,  # noqa: ARG002
+        mock_phase0_output: DressPhase0Output,
+    ) -> None:
+        """Regression for #1452: serialize retries increment total_llm_calls.
+
+        Pre-fix: serialize counted as 1 even when the repair loop retried.
+        Post-fix the third tuple element from `serialize_to_artifact` is the
+        actual attempt count.
+        """
+        stage = DressStage(project_path=tmp_path)
+        reject_gate = AsyncMock()
+        reject_gate.on_phase_complete = AsyncMock(return_value="reject")
+
+        with (
+            patch(
+                "questfoundry.pipeline.stages.dress.run_discuss_phase",
+                new_callable=AsyncMock,
+                return_value=([AIMessage(content="ok")], 3, 600),
+            ),
+            patch(
+                "questfoundry.pipeline.stages.dress.summarize_discussion",
+                new_callable=AsyncMock,
+                return_value=("brief", 150),
+            ),
+            patch(
+                "questfoundry.pipeline.stages.dress.serialize_to_artifact",
+                new_callable=AsyncMock,
+                return_value=(mock_phase0_output, 250, 3),
+            ),
+        ):
+            stage.gate = reject_gate
+            _artifact, llm_calls, _tokens = await stage.execute(MagicMock(), "test")
+
+        # discuss(3) + summarize(1) + serialize(3) = 7
+        assert llm_calls == 7, (
+            f"Expected total_llm_calls to reflect serialize retries: "
+            f"discuss(3) + summarize(1) + serialize(3) = 7; got {llm_calls}"
+        )
+
+    @pytest.mark.asyncio()
     async def test_phase0_passes_custom_prompt(
         self,
         tmp_path: Path,

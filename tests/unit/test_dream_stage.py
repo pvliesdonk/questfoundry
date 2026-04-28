@@ -80,6 +80,52 @@ async def test_execute_calls_all_three_phases() -> None:
 
 
 @pytest.mark.asyncio
+async def test_execute_counts_serialize_retries() -> None:
+    """Regression for #1452: serialize retries must increment total_llm_calls.
+
+    Pre-fix: serialize_to_artifact's hardcoded `+= 1` undercounted retries —
+    a 3-attempt repair loop was reported as 1 call. Post-fix the third
+    element of the returned tuple is the actual attempt count.
+    """
+    stage = DreamStage()
+    mock_model = MagicMock()
+
+    with (
+        patch("questfoundry.pipeline.stages.dream.run_discuss_phase") as mock_discuss,
+        patch("questfoundry.pipeline.stages.dream.summarize_discussion") as mock_summarize,
+        patch("questfoundry.pipeline.stages.dream.serialize_to_artifact") as mock_serialize,
+        patch("questfoundry.pipeline.stages.dream.get_all_research_tools") as mock_tools,
+    ):
+        mock_tools.return_value = []
+        mock_discuss.return_value = (
+            [HumanMessage(content="hi"), AIMessage(content="hello")],
+            2,
+            500,
+        )
+        mock_summarize.return_value = ("Brief summary", 100)
+        mock_artifact = DreamArtifact(
+            genre="fantasy",
+            tone=["epic"],
+            audience="adult",
+            themes=["heroism"],
+            scope=Scope(story_size="medium"),
+        )
+        # Serialize took 3 attempts (1 success + 2 retries' worth of LLM calls).
+        mock_serialize.return_value = (mock_artifact, 200, 3)
+
+        _artifact, llm_calls, _tokens = await stage.execute(
+            model=mock_model,
+            user_prompt="An epic quest",
+        )
+
+        # 2 discuss + 1 summarize + 3 serialize = 6
+        assert llm_calls == 6, (
+            f"Expected total_llm_calls to reflect serialize retries: "
+            f"discuss(2) + summarize(1) + serialize(3) = 6; got {llm_calls}"
+        )
+
+
+@pytest.mark.asyncio
 async def test_execute_emits_phase_progress() -> None:
     """Execute emits phase-level progress callbacks when provided."""
     stage = DreamStage()
