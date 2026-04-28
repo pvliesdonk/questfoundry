@@ -279,13 +279,23 @@ def format_entity_arc_context(
 
     # Render each ID list with a `(none)` fallback when empty so the prompt
     # never receives a bare empty injection. Matches `anchored_text` above.
-    # `valid_path_ids` is scoped to the entity's paths (paths_seen) — the
-    # Phase 3 prompt constrains `pivots` / `arcs_per_path` to this set, and
-    # showing the broader story-wide list previously confused models into
-    # inventing arcs for paths the entity never appears in (closes #1410).
+    # `path_ids` is scoped to the entity's paths (paths_seen) — the Phase 3
+    # prompt constrains `pivots` / `arcs_per_path` to this set, and showing
+    # the broader story-wide list previously confused models into inventing
+    # arcs for paths the entity never appears in (closes #1410).
     path_ids_text = ", ".join(f"`{p}`" for p in sorted(paths_seen)) or "(none)"
-    valid_path_ids_text = path_ids_text
-    valid_beat_ids_text = ", ".join(f"`{b}`" for b in sorted(beat_appearances)) or "(none)"
+
+    # Grouped Valid IDs block: one bullet per path listing the entity's
+    # beats on that path. Y-shape pre-commit beats (multi-belongs_to) appear
+    # under each of their paths. Replaces the two flat ``valid_path_ids`` +
+    # ``valid_beat_ids`` lists that small models had to cross-correlate.
+    valid_path_beats_lines: list[str] = []
+    for pid in sorted(paths_seen):
+        path_beats = [bid for bid in beat_appearances if pid in beat_to_paths.get(bid, frozenset())]
+        if path_beats:
+            beats_str = ", ".join(f"`{b}`" for b in path_beats)
+            valid_path_beats_lines.append(f"  - `{pid}` → {beats_str}")
+    valid_path_beats_block = "\n".join(valid_path_beats_lines) or "  (none)"
 
     return {
         "entity_id": entity_id,
@@ -295,8 +305,7 @@ def format_entity_arc_context(
         "overlay_data": overlay_text,
         "anchored_dilemmas": anchored_text,
         "path_ids": path_ids_text,
-        "valid_path_ids": valid_path_ids_text,
-        "valid_beat_ids": valid_beat_ids_text,
+        "valid_path_beats": valid_path_beats_block,
     }
 
 
