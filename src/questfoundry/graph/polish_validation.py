@@ -387,7 +387,6 @@ def _check_divergences_have_choices(
     errors: list[str],
 ) -> None:
     """Beats with 2+ children on different paths must live in a passage with 2+ outgoing choices."""
-    # Find beats that have 2+ outgoing next/branch edges leading to beats on different paths
     beat_nodes = graph.get_nodes_by_type("beat")
     belongs_to_edges = graph.get_edges(edge_type="belongs_to")
     _accum: dict[str, set[str]] = {}
@@ -396,11 +395,17 @@ def _check_divergences_have_choices(
             _accum.setdefault(edge["from"], set()).add(edge["to"])
     beat_to_paths: dict[str, frozenset[str]] = {bid: frozenset(ps) for bid, ps in _accum.items()}
 
-    next_edges = graph.get_edges(edge_type="next")
-    branch_edges = graph.get_edges(edge_type="branch")
+    # Build children index from predecessor edges. ``predecessor(B, A)`` means
+    # B requires A — A is the parent, B is the child. Earlier versions of this
+    # function read ``next``/``branch`` edges that no code in the codebase ever
+    # produced, leaving this validator inert (#1199).
+    predecessor_edges = graph.get_edges(edge_type="predecessor")
     children_by_beat: dict[str, list[str]] = {}
-    for edge in next_edges + branch_edges:
-        children_by_beat.setdefault(edge["from"], []).append(edge["to"])
+    for edge in predecessor_edges:
+        parent = edge["to"]
+        child = edge["from"]
+        if parent in beat_nodes and child in beat_nodes:
+            children_by_beat.setdefault(parent, []).append(child)
 
     # Build passage -> outgoing choice count
     choice_edges = graph.get_edges(edge_type="choice")

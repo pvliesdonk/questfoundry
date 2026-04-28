@@ -524,9 +524,8 @@ class TestDivergencesHaveChoices:
         graph.add_edge("belongs_to", "beat::a", "path::pa")
         graph.add_edge("belongs_to", "beat::b", "path::pb")
 
-        # next/branch edges making beat::div a divergence point
-        graph.add_edge("branch", "beat::div", "beat::a")
-        graph.add_edge("branch", "beat::div", "beat::b")
+        graph.add_edge("predecessor", "beat::a", "beat::div")
+        graph.add_edge("predecessor", "beat::b", "beat::div")
 
         # Group all beats into passages
         _create_passage_node(
@@ -568,8 +567,8 @@ class TestDivergencesHaveChoices:
         graph.add_edge("belongs_to", "beat::a", "path::pa")
         graph.add_edge("belongs_to", "beat::b", "path::pb")
 
-        graph.add_edge("branch", "beat::div", "beat::a")
-        graph.add_edge("branch", "beat::div", "beat::b")
+        graph.add_edge("predecessor", "beat::a", "beat::div")
+        graph.add_edge("predecessor", "beat::b", "beat::div")
 
         _create_passage_node(
             graph,
