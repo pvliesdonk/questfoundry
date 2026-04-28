@@ -814,7 +814,7 @@ def test_dilemma_requires_two_answers() -> None:
             dilemma_id="dilemma::test",
             question="Test?",
             answers=[{"answer_id": "one", "description": "Only one", "is_canonical": True}],
-            central_entity_ids=[],
+            central_entity_ids=["character::test"],
             why_it_matters="Test",
         )
 
@@ -832,6 +832,31 @@ def test_dilemma_requires_one_default_path_answer() -> None:
             answers=[
                 {"answer_id": "one", "description": "First", "is_canonical": True},
                 {"answer_id": "two", "description": "Second", "is_canonical": True},
+            ],
+            central_entity_ids=["character::test"],
+            why_it_matters="Test",
+        )
+
+
+def test_dilemma_rejects_empty_central_entity_ids() -> None:
+    """R-3.6: Dilemma model rejects empty central_entity_ids list (#1524 retry-bypass).
+
+    Was a retry-bypass: Pydantic accepted empty `[]`, in-retry semantic validator
+    didn't catch it, graph-mutation post-check rejected with no repair opportunity.
+    Now Pydantic refuses at attempt 1 so the existing repair loop fires with the
+    valid entity IDs echoed via BrainstormMutationError.to_feedback.
+    """
+    from pydantic import ValidationError
+
+    from questfoundry.models.brainstorm import Dilemma
+
+    with pytest.raises(ValidationError, match="at least 1 item"):
+        Dilemma(
+            dilemma_id="dilemma::test",
+            question="Test?",
+            answers=[
+                {"answer_id": "one", "description": "First", "is_canonical": True},
+                {"answer_id": "two", "description": "Second", "is_canonical": False},
             ],
             central_entity_ids=[],
             why_it_matters="Test",
@@ -855,6 +880,7 @@ def test_dilemma_rejects_trailing_or_in_id() -> None:
             dilemma_id="dilemma::host_benevolent_or_selfish_or_",
             question="Is the host benevolent?",
             answers=_TWO_ANSWERS,
+            central_entity_ids=["character::host"],
             why_it_matters="Trust",
         )
 
@@ -864,6 +890,7 @@ def test_dilemma_rejects_trailing_or_in_id() -> None:
             dilemma_id="dilemma::host_benevolent_or_selfish_or",
             question="Is the host benevolent?",
             answers=_TWO_ANSWERS,
+            central_entity_ids=["character::host"],
             why_it_matters="Trust",
         )
 
@@ -872,6 +899,7 @@ def test_dilemma_rejects_trailing_or_in_id() -> None:
         dilemma_id="dilemma::host_benevolent_or_selfish",
         question="Is the host benevolent?",
         answers=_TWO_ANSWERS,
+        central_entity_ids=["character::host"],
         why_it_matters="Trust",
     )
     assert d.dilemma_id == "dilemma::host_benevolent_or_selfish"
@@ -903,6 +931,7 @@ def test_dilemma_question_must_end_with_qmark() -> None:
             dilemma_id="dilemma::x",
             question="not a question",
             why_it_matters="stakes",
+            central_entity_ids=["character::x"],
             answers=[
                 {"answer_id": "a", "description": "d", "is_canonical": True},
                 {"answer_id": "b", "description": "d", "is_canonical": False},
@@ -940,6 +969,7 @@ def test_dilemma_id_must_have_prefix() -> None:
             dilemma_id="mentor_trust",  # missing prefix
             question="Q?",
             why_it_matters="stakes",
+            central_entity_ids=["character::mentor"],
             answers=[
                 {"answer_id": "a", "description": "d", "is_canonical": True},
                 {"answer_id": "b", "description": "d", "is_canonical": False},

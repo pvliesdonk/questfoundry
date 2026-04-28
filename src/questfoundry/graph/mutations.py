@@ -714,8 +714,30 @@ def validate_brainstorm_mutations(output: dict[str, Any]) -> list[BrainstormVali
         else:
             seen_dilemma_ids[dilemma_id] = i
 
+        # 0a. R-3.6: central_entity_ids MUST be non-empty.
+        # The Pydantic schema (Dilemma.central_entity_ids min_length=1) catches
+        # this on attempt 1; this in-retry semantic check is defense-in-depth
+        # for None / coercion edge cases that bypass Pydantic, and ensures the
+        # error is delivered with the concrete entity ID list (via
+        # BrainstormMutationError.to_feedback) rather than a generic Pydantic
+        # message. Mirrors the prompt-engineer retry-bypass canon.
+        raw_central_entities = dilemma.get("central_entity_ids") or []
+        if not raw_central_entities:
+            errors.append(
+                BrainstormValidationError(
+                    field_path=f"dilemmas.{i}.central_entity_ids",
+                    issue=(
+                        f"Dilemma '{dilemma_id}' has no central_entity_ids (R-3.6). "
+                        "Every dilemma MUST anchor to ≥1 entity. Add entity IDs "
+                        "from the entities list."
+                    ),
+                    available=sorted_entity_ids,
+                    provided="[]",
+                )
+            )
+
         # 1. Check central_entity_ids reference valid entities
-        for eid in dilemma.get("central_entity_ids", []):
+        for eid in raw_central_entities:
             normalized_eid = strip_scope_prefix(eid)
             if normalized_eid not in entity_ids:
                 errors.append(

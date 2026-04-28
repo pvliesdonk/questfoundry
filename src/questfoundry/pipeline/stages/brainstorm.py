@@ -416,6 +416,26 @@ class BrainstormStage:
             output_language_instruction=lang_instruction,
         )
         dilemmas_validator = _make_brainstorm_dilemmas_validator(entities_dump)
+        # Per-attempt repair hint — R-3.6 requires every dilemma to anchor to
+        # ≥1 entity via `central_entity_ids`. Pydantic now enforces this with
+        # min_length=1 (#1524), but a hint is still cheap to ship: it leads
+        # the repair message with the value to populate, mirroring the SEED
+        # also_belongs_to fix from #1522. See @prompt-engineer Rule 5
+        # (small-model repair-loop blindness).
+        central_entity_hint = (
+            "ACTION REQUIRED — your previous output was rejected.\n\n"
+            "EVERY dilemma MUST have `central_entity_ids` populated with ≥1 "
+            "entity ID from the `### Valid Entity IDs` section in the system "
+            "prompt. An empty list `[]` or a missing field is rejected per "
+            "R-3.6 ('every dilemma has at least one anchored_to edge to an "
+            "entity').\n\n"
+            "Self-check before submitting:\n"
+            "  [ ] Every dilemma has `central_entity_ids` with ≥1 entry.\n"
+            "  [ ] Every entry uses the namespaced form (e.g., "
+            "`character::mentor`, NOT bare `mentor`).\n"
+            "  [ ] Every ID is from the `### Valid Entity IDs` section "
+            "(no invented IDs)."
+        )
         dilemmas_artifact, dilemmas_tokens = await serialize_to_artifact(
             model=chosen_serialize_model,
             brief=brief,
@@ -426,6 +446,7 @@ class BrainstormStage:
             semantic_validator=dilemmas_validator,
             semantic_error_class=BrainstormMutationError,
             stage="brainstorm",
+            extra_repair_hints=[central_entity_hint],
         )
         total_llm_calls += 1
         total_tokens += dilemmas_tokens

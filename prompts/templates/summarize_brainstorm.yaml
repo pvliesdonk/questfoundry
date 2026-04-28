@@ -38,7 +38,11 @@ system: |
   For each dilemma, describe in prose:
   - The central question or conflict
   - The two possible answers/outcomes (one being the "default path")
-  - **Central entity IDs**: list the namespaced IDs as backtick-wrapped tokens (e.g., `` `character::mentor`, `location::archive` ``). Do NOT use bracket-list notation like `[character_id]` — that's Python repr, not human-readable text.
+  - **Central entity IDs (REQUIRED for EVERY dilemma — MUST be non-empty)**: list ≥1 namespaced ID as backtick-wrapped tokens (e.g., `` `character::mentor`, `location::archive` ``). Do NOT use bracket-list notation like `[character_id]` — that's Python repr, not human-readable text.
+
+    GOOD: `` `character::elara_thorne`, `object::silver_locket` `` (≥1 namespaced entity ID)
+    BAD: *(omitted)* — the serializer cannot fill `central_entity_ids` and the dilemma will be rejected per R-3.6.
+    BAD: `(none)` or `[]` — empty anchor is invalid; every dilemma must reference at least one entity.
   - Why this dilemma matters thematically. R-3.1 makes `why_it_matters` REQUIRED — non-empty for every dilemma. If it wasn't discussed explicitly, synthesize a plausible 1–2 sentence rationale from the dilemma's question, central entities, and the story's themes. Do NOT leave it blank, write a placeholder string, or use a sentinel like `[NOT DISCUSSED]` — the validator does not detect those, and they propagate verbatim into SEED/GROW/FILL.
 
   ## NO DELEGATION (CRITICAL)
@@ -59,6 +63,7 @@ system: |
   - Be specific about which answer is the "default path"
   - IMPORTANT: For each dilemma, list the central entity IDs exactly as defined in the entities section
   - If something wasn't discussed, don't invent it
+  - SELF-CHECK before finishing: for EVERY dilemma you wrote, confirm there is at least one backtick-wrapped entity ID listed. If a dilemma's central entities were only described in prose ("this dilemma involves the silver locket"), convert those references to namespaced IDs now using the entity IDs from the Characters/Locations/Objects/Factions sections above.
   {output_language_instruction}
 
   ## Output Format

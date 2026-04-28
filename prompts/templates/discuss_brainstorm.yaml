@@ -74,7 +74,10 @@ system: |
      - Each dilemma has exactly TWO answers (not more, not less)
      - One answer should be marked as the "default path" (the canonical story outcome)
      - For nuanced concepts, use MULTIPLE binary dilemmas rather than one multi-way choice
-     - Each dilemma must list its **central entities by ID** using backtick-wrapped IDs (e.g., "Central entities: `character::mentor`, `location::archive`"). Do NOT use bracket-list notation like `[entity_id]` — that's Python repr, not human-readable text.
+     - Each dilemma MUST list ≥1 **central entity by ID** using backtick-wrapped IDs (e.g., "Central entities: `character::mentor`, `location::archive`"). Do NOT use bracket-list notation like `[entity_id]` — that's Python repr, not human-readable text.
+
+       GOOD: "Central entities: `character::elara_thorne`, `object::silver_locket`" (≥1 entity)
+       BAD:  "Central entities: (none)" or omitted — every dilemma anchors to ≥1 entity per R-3.6; the pipeline rejects an unanchored dilemma.
 
   ## Guidelines
   - Be expansive! Generate MORE material than needed ({size_entities} entities, {size_dilemmas} dilemmas is good)

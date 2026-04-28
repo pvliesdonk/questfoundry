@@ -57,6 +57,7 @@ that triggered it:
 |---|---|---|
 | Spec accuracy | `drift` | Field renamed in spec but old name in prompt; deprecated phase name; wrong rule citation |
 | Repair-loop quality | `repair-gap` | Validation feedback that names a missing field but does NOT echo the expected value. Example: "Beats missing `also_belongs_to`" without saying what value to use. Small models lose the constraint-to-value mapping across long context. |
+| Late enforcement | `retry-bypass` | A required-by-contract constraint is enforced ONLY at graph-mutation time (or stage-output-contract time), AFTER the serialize retry loop is exhausted. Pydantic accepts the violating payload (`default_factory=list` with no `min_length`, `Optional` fields that are actually required, etc.) and the in-retry semantic validator doesn't catch it either, so the model never sees the error and the pipeline aborts with no repair opportunity. The fix lives in TWO places: (a) Pydantic schema tightening (`min_length=1`, `@model_validator(mode="after")`) so the retry loop fires; (b) the in-retry semantic validator gets the same check so coerced edge cases are caught. The graph/contract validator stays as defense-in-depth. |
 | Small-model resilience | `sm-fragile` | Implicit instructions, no concrete examples, ambiguous constraint phrasing, no sandwich repetition (critical instructions only at the start) |
 | Schema alignment | `schema-skew` | Prompt describes fields the Pydantic model doesn't have, or omits required ones, or names them differently |
 | Drift markers | `terminology` | "codeword" where spec says "state_flag", "passage_from" where spec says "grouped_in", "Codeword" class name, deprecated POLISH/GROW field references |
@@ -71,6 +72,12 @@ A `repair-gap` that names but doesn't echo the expected value is
 **always at least soft**, and **hard** if the validator that emits
 the message is on the contract path (FillContractError,
 DressStageError, GrowStageError, etc.).
+
+A `retry-bypass` is **always hard** — it means a contract rule is
+enforced at a point where the retry loop cannot recover, so any
+non-compliant model output aborts the pipeline. Hard regardless of
+whether the failure has been observed in the wild yet (the gap
+exists; the next probabilistic miss will hit it).
 
 ## Required reading: small-model failure modes
 
@@ -93,6 +100,22 @@ modes you care about most:
 5. **Repair-loop blindness** — the model doesn't re-read the
    system prompt on retry; only the new user-message is fresh
    context. Repair feedback must be self-contained.
+6. **Retry-bypass enforcement** — a contract rule (R-X.Y) is
+   enforced only at graph-commit / stage-output-contract time,
+   AFTER all serialize retries have completed. Pydantic accepts
+   the violating output (typically `list` field with no
+   `min_length`, or `Optional` field that's actually mandatory),
+   the in-retry semantic validator doesn't catch it, and the
+   model never gets a repair chance. The pipeline aborts with no
+   opportunity to recover. Found via murder4 SEED `also_belongs_to`
+   (#1521) and murder5 BRAINSTORM `central_entity_ids` (#TBD) —
+   both same shape: small model fills schema-permissive default
+   instead of the required value, contract validator rejects
+   post-retry. Fix is structural: tighten the Pydantic schema
+   (`min_length=1`, `@model_validator`) AND mirror the check into
+   the in-retry semantic validator. Audit every stage's
+   discuss→summarize→serialize loop for required fields whose
+   Pydantic type is permissive.
 
 ## Project prompt rules
 
