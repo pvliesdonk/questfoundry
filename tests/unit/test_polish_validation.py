@@ -524,7 +524,6 @@ class TestDivergencesHaveChoices:
         graph.add_edge("belongs_to", "beat::a", "path::pa")
         graph.add_edge("belongs_to", "beat::b", "path::pb")
 
-        # next/branch edges making beat::div a divergence point
         graph.add_edge("predecessor", "beat::a", "beat::div")
         graph.add_edge("predecessor", "beat::b", "beat::div")
 
