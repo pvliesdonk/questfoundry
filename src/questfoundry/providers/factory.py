@@ -181,6 +181,9 @@ def _preprocess_provider_kwargs(
                 "ollama",
                 "OLLAMA_HOST not configured. Set OLLAMA_HOST environment variable.",
             )
+        # Strip trailing slash once at the source — httpx silently normalises
+        # the resulting "//api/show" but we'd rather not rely on that.
+        host = host.rstrip("/")
         kwargs["base_url"] = host
 
         # Resolve num_ctx. Precedence:
