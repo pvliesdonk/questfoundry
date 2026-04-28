@@ -343,6 +343,7 @@ def get_seed_section_summarize_prompts(
             dilemma_manifest=dilemma_manifest or "(No dilemmas)",
             dilemma_answers=dilemma_answers or "(No answer IDs available)",
             output_language_instruction=lang,
+            size_fully_explored=svars["size_fully_explored"],
         ),
         "paths": _render(
             "paths_system",
