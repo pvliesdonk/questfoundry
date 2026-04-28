@@ -71,6 +71,90 @@ def _bypass_seam_validators(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(_fov, "validate_fill_output", lambda _g: [])
 
 
+class TestResolveEntityId:
+    """Tests for _resolve_entity_id (#1259 subset-token fallback)."""
+
+    def _build_graph_with(self, entities: list[tuple[str, str]]) -> Graph:
+        """entities is a list of (category, raw_id) tuples."""
+        from questfoundry.graph.graph import Graph
+
+        graph = Graph.empty()
+        for category, raw_id in entities:
+            graph.create_node(
+                f"{category}::{raw_id}",
+                {"type": category, "raw_id": raw_id, "name": raw_id.replace("_", " ").title()},
+            )
+        return graph
+
+    def test_exact_match_with_prefix(self) -> None:
+        from questfoundry.pipeline.stages.fill import _resolve_entity_id
+
+        graph = self._build_graph_with([("object", "the_weathered_compass")])
+        assert _resolve_entity_id(graph, "object::the_weathered_compass") == (
+            "object::the_weathered_compass"
+        )
+
+    def test_exact_match_via_category_prefix(self) -> None:
+        from questfoundry.pipeline.stages.fill import _resolve_entity_id
+
+        graph = self._build_graph_with([("character", "mentor")])
+        assert _resolve_entity_id(graph, "mentor") == "character::mentor"
+
+    def test_subset_token_resolves_short_name(self) -> None:
+        """`the_compass` resolves to `object::the_weathered_compass` when unique."""
+        from questfoundry.pipeline.stages.fill import _resolve_entity_id
+
+        graph = self._build_graph_with([("object", "the_weathered_compass")])
+        assert _resolve_entity_id(graph, "the_compass") == "object::the_weathered_compass"
+
+    def test_subset_token_drops_stopwords(self) -> None:
+        """A bare `compass` resolves to the unique graph entity."""
+        from questfoundry.pipeline.stages.fill import _resolve_entity_id
+
+        graph = self._build_graph_with([("object", "the_weathered_compass")])
+        assert _resolve_entity_id(graph, "compass") == "object::the_weathered_compass"
+
+    def test_only_stopwords_returns_none(self) -> None:
+        """A name made entirely of stopwords must NOT match anything."""
+        from questfoundry.pipeline.stages.fill import _resolve_entity_id
+
+        graph = self._build_graph_with(
+            [("object", "the_weathered_compass"), ("location", "the_archive")]
+        )
+        assert _resolve_entity_id(graph, "the") is None
+
+    def test_ambiguous_subset_returns_none(self) -> None:
+        """Multiple subset matches → return None and log a warning."""
+        from questfoundry.pipeline.stages.fill import _resolve_entity_id
+
+        graph = self._build_graph_with(
+            [
+                ("object", "the_weathered_compass"),
+                ("object", "the_brass_compass"),
+            ]
+        )
+        assert _resolve_entity_id(graph, "compass") is None
+
+    def test_unknown_id_returns_none(self) -> None:
+        from questfoundry.pipeline.stages.fill import _resolve_entity_id
+
+        graph = self._build_graph_with([("character", "mentor")])
+        assert _resolve_entity_id(graph, "phantom_entity") is None
+
+    def test_subset_does_not_cross_categories(self) -> None:
+        """The subset fallback returns the actual node ID with its category prefix."""
+        from questfoundry.pipeline.stages.fill import _resolve_entity_id
+
+        graph = self._build_graph_with(
+            [
+                ("character", "old_mentor"),
+                ("object", "the_weathered_compass"),
+            ]
+        )
+        assert _resolve_entity_id(graph, "mentor") == "character::old_mentor"
+        assert _resolve_entity_id(graph, "compass") == "object::the_weathered_compass"
+
+
 class TestFillStageInit:
     def test_default_gate(self) -> None:
         stage = FillStage()
