@@ -1598,8 +1598,8 @@ class TestFormatInteractionCandidatesContext:
                 graph.add_edge("anchored_to", f"dilemma::{did}", eid)
         return graph
 
-    def test_shared_entity_pair_found(self) -> None:
-        """Two dilemmas sharing an entity produce a pair with shared-entity note."""
+    def test_shared_entity_pair_listed_as_relevant(self) -> None:
+        """Pairs sharing an entity appear under 'Relevant Pairs' with the shared entity."""
         graph = self._graph_with_dilemmas(
             {
                 "alpha": ["entity::hero", "entity::castle"],
@@ -1608,13 +1608,17 @@ class TestFormatInteractionCandidatesContext:
         )
         seed = _seed_output(dilemmas=[_dilemma("alpha"), _dilemma("beta")])
         result = format_interaction_candidates_context(seed, graph)
-        assert "## All Dilemma Pairs" in result
-        assert "dilemma::alpha" in result
-        assert "dilemma::beta" in result
-        assert "hero" in result  # shared entity flagged in pair line
+        assert "## Relevant Pairs (classify these)" in result
+        relevant_section, _, other_section = result.partition("## Other Pairs")
+        assert "dilemma::alpha" in relevant_section
+        assert "dilemma::beta" in relevant_section
+        assert "hero" in relevant_section  # shared entity flagged
+        # Disjoint pair section should be empty for this fixture
+        assert "every pair shares at least one entity" in other_section
 
-    def test_no_shared_entities_still_shows_all_pairs(self) -> None:
-        """Disjoint entities still produce a pair listing — all pairs are always shown."""
+    def test_disjoint_pair_listed_as_other(self) -> None:
+        """Pairs with no shared entities appear under 'Other Pairs (optional)'
+        and the Relevant section explicitly says the LLM may return ``[]``."""
         graph = self._graph_with_dilemmas(
             {
                 "alpha": ["entity::hero"],
@@ -1623,9 +1627,70 @@ class TestFormatInteractionCandidatesContext:
         )
         seed = _seed_output(dilemmas=[_dilemma("alpha"), _dilemma("beta")])
         result = format_interaction_candidates_context(seed, graph)
-        assert "## All Dilemma Pairs" in result
-        assert "dilemma::alpha" in result
-        assert "dilemma::beta" in result
+        assert "## Relevant Pairs (classify these)" in result
+        assert "## Other Pairs (optional)" in result
+        relevant_section, _, other_section = result.partition("## Other Pairs")
+        # Disjoint pair must appear under Other, not Relevant
+        assert "dilemma::alpha" in other_section
+        assert "dilemma::beta" in other_section
+        assert "alpha` + `dilemma::beta" not in relevant_section
+        # Relevant section must guide the LLM to an empty result when no pair shares entities
+        assert "No pairs share anchored entities" in relevant_section
+        assert "return an empty list" in relevant_section
+
+    def test_dilemma_without_anchored_entities_pairs_as_other(self) -> None:
+        """A dilemma with zero ``anchored_to`` edges paired with one that has
+        entities lands under 'Other Pairs' — set intersection is empty, so the
+        pair cannot be relevant."""
+        graph = Graph.empty()
+        # Build the entity for the entity-having dilemma
+        graph.create_node("entity::hero", {"type": "entity", "raw_id": "hero"})
+        # alpha has the entity; beta has none
+        graph.create_node("dilemma::alpha", {"type": "dilemma", "raw_id": "alpha"})
+        graph.add_edge("anchored_to", "dilemma::alpha", "entity::hero")
+        graph.create_node("dilemma::beta", {"type": "dilemma", "raw_id": "beta"})
+
+        seed = _seed_output(dilemmas=[_dilemma("alpha"), _dilemma("beta")])
+        result = format_interaction_candidates_context(seed, graph)
+        relevant_section, _, other_section = result.partition("## Other Pairs")
+        assert "alpha` + `dilemma::beta" in other_section
+        assert "alpha` + `dilemma::beta" not in relevant_section
+
+    def test_mixed_pairs_split_by_relevance(self) -> None:
+        """Three dilemmas with one shared-entity pair: the pair is Relevant; the
+        other two are Other."""
+        graph = self._graph_with_dilemmas(
+            {
+                "alpha": ["entity::hero"],
+                "beta": ["entity::hero"],
+                "gamma": ["entity::villain"],
+            }
+        )
+        seed = _seed_output(dilemmas=[_dilemma("alpha"), _dilemma("beta"), _dilemma("gamma")])
+        result = format_interaction_candidates_context(seed, graph)
+        relevant_section, _, other_section = result.partition("## Other Pairs")
+        # alpha+beta share hero
+        assert "alpha` + `dilemma::beta" in relevant_section
+        # alpha+gamma and beta+gamma have no shared entity
+        assert "alpha` + `dilemma::gamma" in other_section
+        assert "beta` + `dilemma::gamma" in other_section
+        # No "classify EVERY pair" mandate
+        assert "classify EVERY pair" not in result
+
+    def test_relevant_pairs_empty_when_all_disjoint(self) -> None:
+        """When no pairs share entities, Relevant section explains the LLM may
+        return an empty list."""
+        graph = self._graph_with_dilemmas(
+            {
+                "alpha": ["entity::hero"],
+                "beta": ["entity::villain"],
+            }
+        )
+        seed = _seed_output(dilemmas=[_dilemma("alpha"), _dilemma("beta")])
+        result = format_interaction_candidates_context(seed, graph)
+        relevant_section, _, _ = result.partition("## Other Pairs")
+        assert "No pairs share anchored entities" in relevant_section
+        assert "return an empty list" in relevant_section
 
     def test_single_dilemma_returns_no_candidates(self) -> None:
         """Fewer than 2 dilemmas cannot have pairs."""
