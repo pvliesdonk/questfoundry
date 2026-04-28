@@ -302,13 +302,17 @@ def compute_prose_feasibility(
     """Determine feasibility category for each passage.
 
     Returns:
-        Dict with keys: annotations, variant_specs, residue_specs, warnings, ambiguous_specs.
+        Dict with keys: annotations, variant_specs, residue_specs, warnings,
+        ambiguous_specs, split_passages. ``split_passages`` is the set of
+        passage IDs flagged as ``structural_split`` and is the contract
+        ``_audit_overlay_composition`` consumes for deduplication (#1170).
     """
     annotations: dict[str, list[str]] = {}
     variant_specs: list[VariantSpec] = []
     residue_specs: list[ResidueSpec] = []
     ambiguous_specs: list[AmbiguousFeasibilityCase] = []
     warnings: list[str] = []
+    split_passages: set[str] = set()
 
     # Build state_flag → path_id lookup via derived_from → consequence → path_id.
     flag_to_path: dict[str, str] = {}
@@ -407,6 +411,7 @@ def compute_prose_feasibility(
                 f"Passage {spec.passage_id} has {len(conflicting_dilemmas)} "
                 f"conflicting dilemmas — structural split recommended"
             )
+            split_passages.add(spec.passage_id)
             continue
 
         # Categorize flags by residue weight
@@ -486,6 +491,7 @@ def compute_prose_feasibility(
         "residue_specs": residue_specs,
         "ambiguous_specs": ambiguous_specs,
         "warnings": warnings,
+        "split_passages": split_passages,
     }
 
 
@@ -528,16 +534,11 @@ def _audit_overlay_composition(
     # Pre-fetch entity overlay data once
     entity_nodes = graph.get_nodes_by_type("entity")
 
-    # Build passage_id → set of already-flagged passages (structural_split in warnings)
-    # Phase 4b emits structural_split warnings with this format:
-    #   "Passage {passage_id} has N narratively relevant flags — structural split recommended"
-    already_split: set[str] = set()
-    for warning in feasibility.get("warnings", []):
-        # Extract passage_id from the warning string
-        if "structural split recommended" in warning and warning.startswith("Passage "):
-            parts = warning.split(" ", 2)
-            if len(parts) >= 2:
-                already_split.add(parts[1])
+    # Phase 4b populates feasibility["split_passages"] with the IDs of any
+    # passage flagged as structural_split (#1170). The previous version of
+    # this audit re-derived that set by parsing the warning string format,
+    # which silently broke the moment the message changed.
+    already_split: set[str] = feasibility.get("split_passages", set())
 
     for spec in specs:
         if spec.passage_id in already_split:
@@ -583,6 +584,7 @@ def _audit_overlay_composition(
                         f"overlays on entity {entity_id} — structural split recommended "
                         f"(overlay composition limit exceeded)"
                     )
+                    feasibility.setdefault("split_passages", set()).add(spec.passage_id)
                     flagged = True
                     break
 
