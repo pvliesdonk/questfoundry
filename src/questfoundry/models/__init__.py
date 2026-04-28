@@ -66,7 +66,6 @@ from questfoundry.models.fill import (
 from questfoundry.models.grow import (
     Arc,
     AtmosphericDetail,
-    Choice,
     EntityArcDescriptor,
     EntityOverlay,
     GapProposal,
@@ -167,7 +166,6 @@ __all__ = [
     "BrainstormEntitiesOutput",
     "BrainstormOutput",
     "CharacterArcMetadata",
-    "Choice",
     "ChoiceLabelItem",
     "ChoiceSpec",
     "CodexEntry",

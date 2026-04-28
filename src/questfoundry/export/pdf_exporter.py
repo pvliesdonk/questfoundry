@@ -545,10 +545,10 @@ def _render_choices(
         parts.append('<p class="choice">')
 
         # Handle conditional choices (requires codewords)
-        if choice.requires_codewords:
+        if choice.requires:
             codeword_names = ", ".join(
                 f'<span class="codeword-name">{html.escape(_format_codeword_name(cw))}</span>'
-                for cw in choice.requires_codewords
+                for cw in choice.requires
             )
             parts.append(f'<span class="choice-requires">{if_you_have} {codeword_names}: </span>')
 
