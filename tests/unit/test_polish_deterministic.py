@@ -1076,19 +1076,34 @@ class TestChoiceEdgesYShapeAdvancesChild:
         # Passages: shared_02 in its own, each path beat in its own
         specs = [
             PassageSpec(
-                passage_id="passage::shared", beat_ids=["beat::shared_02"], grouping_type="single"
+                passage_id="passage::shared",
+                beat_ids=["beat::shared_02"],
+                grouping_type="single",
+                summary="auto-summary",
             ),
             PassageSpec(
-                passage_id="passage::a_setup", beat_ids=["beat::d1_a_01"], grouping_type="single"
+                passage_id="passage::a_setup",
+                beat_ids=["beat::d1_a_01"],
+                grouping_type="single",
+                summary="auto-summary",
             ),
             PassageSpec(
-                passage_id="passage::b_setup", beat_ids=["beat::d1_b_01"], grouping_type="single"
+                passage_id="passage::b_setup",
+                beat_ids=["beat::d1_b_01"],
+                grouping_type="single",
+                summary="auto-summary",
             ),
             PassageSpec(
-                passage_id="passage::a_commit", beat_ids=["beat::d1_a_02"], grouping_type="single"
+                passage_id="passage::a_commit",
+                beat_ids=["beat::d1_a_02"],
+                grouping_type="single",
+                summary="auto-summary",
             ),
             PassageSpec(
-                passage_id="passage::b_commit", beat_ids=["beat::d1_b_02"], grouping_type="single"
+                passage_id="passage::b_commit",
+                beat_ids=["beat::d1_b_02"],
+                grouping_type="single",
+                summary="auto-summary",
             ),
         ]
 
@@ -1184,15 +1199,34 @@ class TestChoiceEdgesYShapeAdvancesChild:
 
         specs = [
             PassageSpec(
-                passage_id="passage::shared", beat_ids=["beat::shared"], grouping_type="single"
-            ),
-            PassageSpec(passage_id="passage::a", beat_ids=["beat::a_01"], grouping_type="single"),
-            PassageSpec(passage_id="passage::b", beat_ids=["beat::b_01"], grouping_type="single"),
-            PassageSpec(
-                passage_id="passage::a_commit", beat_ids=["beat::a_02"], grouping_type="single"
+                passage_id="passage::shared",
+                beat_ids=["beat::shared"],
+                grouping_type="single",
+                summary="auto-summary",
             ),
             PassageSpec(
-                passage_id="passage::b_commit", beat_ids=["beat::b_02"], grouping_type="single"
+                passage_id="passage::a",
+                beat_ids=["beat::a_01"],
+                grouping_type="single",
+                summary="auto-summary",
+            ),
+            PassageSpec(
+                passage_id="passage::b",
+                beat_ids=["beat::b_01"],
+                grouping_type="single",
+                summary="auto-summary",
+            ),
+            PassageSpec(
+                passage_id="passage::a_commit",
+                beat_ids=["beat::a_02"],
+                grouping_type="single",
+                summary="auto-summary",
+            ),
+            PassageSpec(
+                passage_id="passage::b_commit",
+                beat_ids=["beat::b_02"],
+                grouping_type="single",
+                summary="auto-summary",
             ),
         ]
 
