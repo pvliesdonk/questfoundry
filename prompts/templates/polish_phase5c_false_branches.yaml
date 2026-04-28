@@ -56,9 +56,9 @@ system: |
   - Do NOT add more than one false branch per candidate
   - Do NOT skip any candidate — provide a decision for every candidate listed
   - Do NOT overuse diamond/sidetrack — "skip" is a valid and often best choice
-  - Do NOT propose `diamond` or `sidetrack` at a passage that ends with a real
-    dilemma choice (R-5.12 — false branches are cosmetic and never affect
-    dilemma-driven branching)
+  - Do NOT propose `diamond` or `sidetrack` for a candidate stretch whose last
+    passage ends with a real dilemma choice (R-5.12 — false branches are
+    cosmetic and never affect dilemma-driven branching)
   - Do NOT add prose before or after the JSON output
 
 user: |
