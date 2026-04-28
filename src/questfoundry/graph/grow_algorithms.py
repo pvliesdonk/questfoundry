@@ -2976,20 +2976,15 @@ def detect_temporal_hint_conflicts(graph: Graph) -> list[TemporalHintConflict]:
                 for prereq in sorted(prereq_commits):
                     for dependent in sorted(dependent_commits):
                         _sim_add(dependent, prereq)
-
-            # Entry beats follow the same relative ordering as commit beats —
-            # MUST match interleave_cross_path_beats (#1186).
-            first_beats_a = {seq[0] for seq in ordered_a if seq}
-            first_beats_b = {seq[0] for seq in ordered_b if seq}
-            if first_beats_a and first_beats_b:
-                if dilemma_a < dilemma_b:
-                    for fa in sorted(first_beats_a):
-                        for fb in sorted(first_beats_b):
-                            _sim_add(fb, fa)
-                else:
-                    for fb in sorted(first_beats_b):
-                        for fa in sorted(first_beats_a):
-                            _sim_add(fa, fb)
+            # Entry-beat ordering across dilemmas is intentionally omitted from
+            # the simulated DAG. Entry-beat edges in interleave_cross_path_beats
+            # are added as soft heuristics via `_add_predecessor(...,
+            # from_hint=False)`, which soft-skip cycle conflicts with previously-
+            # applied hints. Including them in the simulated base DAG would
+            # promote the heuristic to a hard constraint, causing valid
+            # hints that override the heuristic to be classified as mandatory
+            # solo drops. The peer function `_build_hint_base_dag` makes the
+            # same omission for the same reason.
 
     # Order entry beats within the alphabetically first dilemma —
     # MUST match interleave_cross_path_beats (#1192).
@@ -3208,9 +3203,10 @@ def _build_hint_base_dag(
 
     Concurrent entry-beat ordering is intentionally absent from this base DAG.
     Entry-beat ordering is a soft heuristic that must yield to hints rather than
-    block them.  Cycle-safety for accepted hints against entry-beat edges is
-    guaranteed by ``detect_temporal_hint_conflicts``, which simulates entry-beat
-    edges when testing each hint individually.
+    block them.  Cycle-safety is preserved at apply time: in
+    ``interleave_cross_path_beats`` the entry-beat heuristic is added with
+    ``from_hint=False``, so cycle conflicts with previously-applied hints are
+    soft-skipped rather than rejecting the hint.
 
     Args:
         graph: The story graph.
@@ -3825,8 +3821,9 @@ def interleave_cross_path_beats(graph: Graph) -> int:
     # so that a hint accepted by build_hint_conflict_graph cannot create a cycle here
     # due to a narrower incremental DAG (#1147).  Entry-beat ordering is intentionally
     # absent from _build_hint_base_dag — it is a soft heuristic that must yield to hints
-    # rather than block them.  detect_temporal_hint_conflicts simulates entry-beat edges
-    # when testing each hint, so accepted hints are already safe against that ordering.
+    # rather than block them.  Below, the entry-beat heuristic is applied with
+    # ``from_hint=False``, so cycle conflicts with previously-applied hints soft-skip
+    # the heuristic edge instead of rejecting the hint.
     #
     # ``_base_edges`` contains real graph edges + simulated heuristic edges.
     # ``successors`` is derived from the full base and is used for cycle detection.
