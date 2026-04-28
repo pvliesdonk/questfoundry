@@ -222,21 +222,7 @@ def _polish_passage_baseline(graph: Graph) -> None:
             graph.add_edge("grouped_in", bid, passage_id)
 
     for idx, to_id in enumerate(("passage::prot", "passage::mani")):
-        choice_id = f"choice::pre_to_{to_id.rsplit('::', 1)[-1]}"
-        graph.create_node(
-            choice_id,
-            {
-                "type": "choice",
-                "raw_id": choice_id.split("::", 1)[-1],
-                "from_passage": "passage::pre",
-                "to_passage": to_id,
-                "label": f"Choice {idx + 1}",
-                "requires": [],
-            },
-        )
-        graph.add_edge("choice_from", choice_id, "passage::pre")
-        graph.add_edge("choice_to", choice_id, to_id)
-        # Add the proper choice edge from passage to passage (R-4c.2 requirement)
+        # Choice is now an edge directly between passages (R-4c.2).
         graph.add_edge("choice", "passage::pre", to_id, label=f"Choice {idx + 1}")
 
     # Character arc on the recurring entity.
@@ -472,10 +458,9 @@ def test_phase_4c_linear_only_still_raises_contract_error() -> None:
 
 
 def test_R_4c_2_zero_choice_edges_fails(compliant_polish_graph: Graph) -> None:
-    # Delete choice nodes (which cascade-delete choice_from/choice_to edges)
-    for cid in list(compliant_polish_graph.get_nodes_by_type("choice")):
-        compliant_polish_graph.delete_node(cid, cascade=True)
-    # Also delete any remaining choice edges (passage→passage edges, not connected to nodes)
+    # Delete every `choice` edge (passage→passage). The legacy `choice` node
+    # type is no longer produced by the pipeline so there's nothing to
+    # cascade-delete.
     for edge in list(compliant_polish_graph.get_edges(edge_type="choice")):
         compliant_polish_graph.remove_edge("choice", edge["from"], edge["to"])
     errors = validate_polish_output(compliant_polish_graph)

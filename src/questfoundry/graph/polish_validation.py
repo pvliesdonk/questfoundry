@@ -108,8 +108,14 @@ def validate_polish_output(graph: Graph) -> list[str]:
     _check_false_branch_role_name(graph, errors)
     _check_choice_label_distinctness(graph, errors)
 
-    # TODO: check_all_endings_reachable and check_gate_satisfiability use the old
-    # choice_from/choice_to edge model and are DEAD — see issue #1165 for migration.
+    # Reachability + gate satisfiability now that they read the `choice` edge
+    # model (was: gated behind a TODO awaiting #1165 migration).
+    endings_check = check_all_endings_reachable(graph)
+    if endings_check.severity == "fail":
+        errors.append(endings_check.message)
+    gate_check = check_gate_satisfiability(graph)
+    if gate_check.severity == "fail":
+        errors.append(gate_check.message)
 
     return errors
 
@@ -758,16 +764,15 @@ def _find_start_passage_for_check(graph: Graph) -> str | None:
 
 
 def _build_passage_successors(graph: Graph) -> dict[str, list[str]]:
-    """Build passage->passage successor map from choice nodes.
+    """Build passage→passage successor map from `choice` edges.
 
-    Each choice node has from_passage and to_passage fields defining
-    the directed edge in the passage graph.
+    Each `choice` edge goes directly between passages: e["from"] is the
+    source passage, e["to"] is the target passage.
     """
-    choice_nodes = graph.get_nodes_by_type("choice")
     successors: dict[str, list[str]] = {}
-    for choice_data in choice_nodes.values():
-        from_p = choice_data.get("from_passage")
-        to_p = choice_data.get("to_passage")
+    for edge in graph.get_edges(edge_type="choice"):
+        from_p = edge.get("from")
+        to_p = edge.get("to")
         if from_p and to_p:
             successors.setdefault(from_p, []).append(to_p)
     return successors
@@ -789,7 +794,7 @@ def _bfs_reachable(start: str, successors: dict[str, list[str]]) -> set[str]:
 def check_all_passages_reachable(graph: Graph) -> ValidationCheck:
     """Verify all passages are reachable from the start passage via choice edges.
 
-    BFS from the start passage (no incoming choice_to edges) via choice_to edges.
+    BFS from the start passage (no incoming `choice` edges) via `choice` edges.
     Reports any unreachable passages.
     """
     passage_nodes = graph.get_nodes_by_type("passage")
@@ -828,12 +833,11 @@ def check_all_passages_reachable(graph: Graph) -> ValidationCheck:
 def check_all_endings_reachable(graph: Graph) -> ValidationCheck:
     """Verify at least one ending is reachable from the start passage.
 
-    Endings are passages with no outgoing choice_from edges. At least one
+    Endings are passages with no outgoing `choice` edges. At least one
     ending must be reachable for the story to be completable.
 
-    Edge semantics:
-    - choice_from: choice -> originating_passage (passage the choice leads FROM)
-    - choice_to: choice -> destination_passage (passage the choice leads TO)
+    `choice` edges go directly between passages (e["from"] = source
+    passage, e["to"] = target passage).
     """
     passage_nodes = graph.get_nodes_by_type("passage")
     if not passage_nodes:
@@ -851,9 +855,9 @@ def check_all_endings_reachable(graph: Graph) -> ValidationCheck:
             message="Cannot check endings: no unique start passage",
         )
 
-    # Find endings: passages with no outgoing choices (choice_from -> passage)
-    choice_from_edges = graph.get_edges(from_id=None, to_id=None, edge_type="choice_from")
-    passages_with_outgoing: set[str] = {edge["to"] for edge in choice_from_edges}
+    # Find endings: passages with no outgoing choice edges.
+    choice_edges = graph.get_edges(edge_type="choice")
+    passages_with_outgoing: set[str] = {edge["from"] for edge in choice_edges}
     endings = [pid for pid in passage_nodes if pid not in passages_with_outgoing]
 
     if not endings:
@@ -881,14 +885,15 @@ def check_all_endings_reachable(graph: Graph) -> ValidationCheck:
 
 
 def check_gate_satisfiability(graph: Graph) -> ValidationCheck:
-    """Verify all choice requires are satisfiable (required state flags exist globally).
+    """Verify all choice `requires` are satisfiable (required state flags exist globally).
 
-    Collects all grantable state flags (union of all grants lists). For each
-    choice with non-empty requires, verifies every required state flag is in
-    the global grantable set.
+    Collects all grantable state flags (union of all `grants` lists across
+    `choice` edges). For each edge with non-empty `requires`, verifies every
+    required state flag is in the global grantable set. Edge semantics:
+    `choice` edges go passage→passage and carry `grants` / `requires` lists.
     """
-    choice_nodes = graph.get_nodes_by_type("choice")
-    if not choice_nodes:
+    choice_edges = graph.get_edges(edge_type="choice")
+    if not choice_edges:
         return ValidationCheck(
             name="gate_satisfiability",
             severity="pass",
@@ -897,17 +902,23 @@ def check_gate_satisfiability(graph: Graph) -> ValidationCheck:
 
     # Collect all globally grantable state flags
     grantable: set[str] = set()
-    for choice_data in choice_nodes.values():
-        grants = choice_data.get("grants", [])
+    for edge in choice_edges:
+        grants = edge.get("grants", []) or []
         grantable.update(grants)
 
-    # Check each choice's requires_state_flags
+    # Check each choice edge's requires list. POLISH writes `requires`; older
+    # code paths used `requires_state_flags`. Read both for back-compat.
     unsatisfiable: list[str] = []
-    for choice_id, choice_data in sorted(choice_nodes.items()):
-        requires = choice_data.get("requires_state_flags", [])
+
+    def _edge_label(edge: dict[str, Any]) -> str:
+        return f"{edge.get('from', '?')} → {edge.get('to', '?')}"
+
+    sorted_edges = sorted(choice_edges, key=_edge_label)
+    for edge in sorted_edges:
+        requires = edge.get("requires") or edge.get("requires_state_flags") or []
         for req in requires:
             if req not in grantable:
-                unsatisfiable.append(f"{choice_id} requires_state_flags '{req}'")
+                unsatisfiable.append(f"{_edge_label(edge)} requires '{req}'")
 
     if not unsatisfiable:
         return ValidationCheck(
@@ -929,8 +940,8 @@ def check_gate_co_satisfiability(graph: Graph) -> ValidationCheck:
     provides ALL required state flags.  A gate that requires state flags from
     mutually exclusive paths is paradoxical — the player can never satisfy it.
     """
-    choice_nodes = graph.get_nodes_by_type("choice")
-    if not choice_nodes:
+    choice_edges = graph.get_edges(edge_type="choice")
+    if not choice_edges:
         return ValidationCheck(
             name="gate_co_satisfiability",
             severity="pass",
@@ -968,17 +979,23 @@ def check_gate_co_satisfiability(graph: Graph) -> ValidationCheck:
                     sfs.add(sf)
         arc_state_flags[arc_id] = sfs
 
-    # Check each gated choice
+    # Check each gated choice edge. POLISH writes `requires`; older code paths
+    # used `requires_state_flags`. Read both for back-compat.
     paradoxical: list[str] = []
-    for choice_id, choice_data in sorted(choice_nodes.items()):
-        requires = set(choice_data.get("requires_state_flags", []))
+
+    def _edge_label(edge: dict[str, Any]) -> str:
+        return f"{edge.get('from', '?')} → {edge.get('to', '?')}"
+
+    sorted_edges = sorted(choice_edges, key=_edge_label)
+    for edge in sorted_edges:
+        requires = set(edge.get("requires") or edge.get("requires_state_flags") or [])
         if not requires:
             continue
 
         # A gate is satisfiable if ANY arc provides all required state flags
         satisfiable = any(requires <= sfs for sfs in arc_state_flags.values())
         if not satisfiable:
-            paradoxical.append(f"{choice_id} requires {sorted(requires)}")
+            paradoxical.append(f"{_edge_label(edge)} requires {sorted(requires)}")
 
     if not paradoxical:
         return ValidationCheck(
@@ -1274,7 +1291,7 @@ def check_state_flag_gate_coverage(graph: Graph) -> ValidationCheck:
     """Check that every state flag is consumed by a gate or overlay condition.
 
     Implements the "Residue Must Be Read" invariant: checks that each
-    state flag appears in at least one ``choice.requires_state_flags`` gate or
+    state flag appears in at least one ``choice.requires`` gate or
     ``overlay.when`` condition.
     """
     state_flag_nodes = graph.get_nodes_by_type("state_flag")
@@ -1285,10 +1302,10 @@ def check_state_flag_gate_coverage(graph: Graph) -> ValidationCheck:
             message="No state flags in graph",
         )
 
-    choice_nodes = graph.get_nodes_by_type("choice")
     consumed: set[str] = set()
-    for choice_data in choice_nodes.values():
-        consumed.update(choice_data.get("requires_state_flags") or [])
+    for edge in graph.get_edges(edge_type="choice"):
+        # POLISH writes `requires`; older code paths used `requires_state_flags`.
+        consumed.update(edge.get("requires") or edge.get("requires_state_flags") or [])
 
     # Overlays are embedded arrays on entity nodes (type="entity"),
     # not separate typed nodes.
@@ -1311,7 +1328,7 @@ def check_state_flag_gate_coverage(graph: Graph) -> ValidationCheck:
         severity="warn",
         message=(
             f"{len(unconsumed)} of {len(state_flag_nodes)} state flag(s) not consumed "
-            f"by any choice.requires_state_flags or overlay.when: {', '.join(unconsumed[:5])}"
+            f"by any choice.requires or overlay.when: {', '.join(unconsumed[:5])}"
             f"{'...' if len(unconsumed) > 5 else ''}"
         ),
     )
@@ -1327,31 +1344,31 @@ def check_forward_path_reachability(graph: Graph) -> ValidationCheck:
     v1 simplification: does not check whether requires are already
     satisfiable (would require path simulation).
     """
-    choice_nodes = graph.get_nodes_by_type("choice")
-    if not choice_nodes:
+    choice_edges = graph.get_edges(edge_type="choice")
+    if not choice_edges:
         return ValidationCheck(
             name="forward_path_reachability",
             severity="pass",
             message="No choices in graph",
         )
 
-    # Build from_passage → list of choice data
+    # Build from_passage → list of outgoing choice edges
     from_passage_choices: dict[str, list[dict[str, object]]] = {}
-    for choice_data in choice_nodes.values():
-        fp = choice_data.get("from_passage")
+    for edge in choice_edges:
+        fp = edge.get("from")
         if fp:
-            from_passage_choices.setdefault(fp, []).append(choice_data)
+            from_passage_choices.setdefault(fp, []).append(edge)
 
     # Identify endings (no outgoing choices at all, or only return links)
     passages = graph.get_nodes_by_type("passage")
     soft_locked: list[str] = []
 
     for pid in sorted(passages):
-        choices = from_passage_choices.get(pid, [])
-        forward = [c for c in choices if not c.get("is_return") and not c.get("is_routing")]
+        outgoing = from_passage_choices.get(pid, [])
+        forward = [c for c in outgoing if not c.get("is_return") and not c.get("is_routing")]
         if not forward:
             continue  # ending passage or routing-only — no forward choices
-        ungated = [c for c in forward if not c.get("requires_state_flags")]
+        ungated = [c for c in forward if not (c.get("requires") or c.get("requires_state_flags"))]
         if not ungated:
             soft_locked.append(pid)
 
@@ -1390,7 +1407,7 @@ def check_routing_coverage(graph: Graph) -> list[ValidationCheck]:
     """
     from questfoundry.graph.grow_algorithms import build_arc_state_flags
 
-    choices = graph.get_nodes_by_type("choice")
+    choice_edges = graph.get_edges(edge_type="choice")
     arc_nodes = graph.get_nodes_by_type("arc")
 
     if not arc_nodes:
@@ -1411,17 +1428,17 @@ def check_routing_coverage(graph: Graph) -> list[ValidationCheck]:
     arc_state_flags_ending = build_arc_state_flags(graph, arc_nodes, scope="ending")
     arc_state_flags_routing = build_arc_state_flags(graph, arc_nodes, scope="routing")
 
-    # Group routing choices by source passage; also detect fallback choices
+    # Group routing choices by source passage; also detect fallback choices.
+    # `choice` edges go passage→passage; e["from"] is the source.
     routing_sets: dict[str, list[dict[str, object]]] = {}
-    # Source passages that also have a non-routing fallback choice
     has_fallback: set[str] = set()
-    for _cid, cdata in choices.items():
-        source = str(cdata.get("from_passage", ""))
-        if cdata.get("is_routing"):
-            routing_sets.setdefault(source, []).append(cdata)
+    for edge in choice_edges:
+        source = str(edge.get("from", ""))
+        if edge.get("is_routing"):
+            routing_sets.setdefault(source, []).append(edge)
         else:
             # A non-routing choice from a source that has routing choices
-            # is a fallback — it covers arcs that don't match any variant
+            # is a fallback — it covers arcs that don't match any variant.
             if source:
                 has_fallback.add(source)
 
@@ -1449,10 +1466,11 @@ def check_routing_coverage(graph: Graph) -> list[ValidationCheck]:
         if not covering_arcs:
             continue
 
-        # Extract requires sets from routing choices
+        # Extract requires sets from routing choice edges. POLISH writes
+        # `requires`; older code paths used `requires_state_flags`.
         route_requires: list[set[str]] = []
         for rc in routing_choices:
-            reqs = rc.get("requires_state_flags", [])
+            reqs = rc.get("requires") or rc.get("requires_state_flags") or []
             route_requires.append(set(reqs) if isinstance(reqs, list) else set())
 
         # Select state flag scope: ending splits use "ending" scope (exhaustive),

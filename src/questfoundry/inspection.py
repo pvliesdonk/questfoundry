@@ -223,22 +223,22 @@ def _branching_stats(graph: Graph) -> BranchingStats | None:
     if not passages:
         return None
 
-    choices = graph.get_nodes_by_type("choice")
+    # `choice` is now an edge type (passage→passage), not a node type.
+    choice_edges = graph.get_edges(edge_type="choice")
 
     # Classify by graph structure: count outgoing choices per source passage.
-    # choice_from edges point choice→source_passage, so e["to"] = source passage.
-    choice_from_edges_all = graph.get_edges(edge_type="choice_from")
-    outgoing_per_passage: dict[str, int] = Counter(e["to"] for e in choice_from_edges_all)
+    # In the edge model the source passage is `e["from"]`.
+    outgoing_per_passage: dict[str, int] = Counter(e["from"] for e in choice_edges)
 
     meaningful = 0
     contextual = 0
     continue_count = 0
-    for _cid, cdata in choices.items():
-        from_passage = cdata.get("from_passage", "")
+    for edge in choice_edges:
+        from_passage = edge["from"]
         outgoing = outgoing_per_passage.get(from_passage, 1)
         if outgoing >= 2:
             meaningful += 1
-        elif cdata.get("label", "continue") == "continue":
+        elif edge.get("label", "continue") == "continue":
             continue_count += 1
         else:
             contextual += 1
@@ -274,25 +274,20 @@ def _branching_stats(graph: Graph) -> BranchingStats | None:
     # Compute max consecutive linear using shared BFS (with confront/resolve exemptions)
     max_linear = find_max_consecutive_linear(graph)
 
-    # Start and ending passages
+    # Start and ending passages.
     # A passage is a "start" when it has no *forward* incoming choices.
-    # Exclude hub-spoke return links (spoke→hub with is_return=True), otherwise
-    # hubs can incorrectly appear to have incoming edges and start_count becomes 0.
-    choice_nodes = graph.get_nodes_by_type("choice")
+    # Exclude hub-spoke return links (`is_return=True`); otherwise hubs would
+    # appear to have incoming edges and `start_count` would be 0.
     has_incoming: set[str] = {
-        data["to_passage"]
-        for data in choice_nodes.values()
-        if data.get("to_passage") and not data.get("is_return")
+        e["to"] for e in choice_edges if e.get("to") and not e.get("is_return")
     }
-    # For outgoing, it's more direct to use the `choice_from` edges.
-    choice_from_edges = graph.get_edges(edge_type="choice_from")
-    has_outgoing = {e["to"] for e in choice_from_edges}
+    has_outgoing = {e["from"] for e in choice_edges}
 
     start_count = sum(1 for pid in passages if pid not in has_incoming)
     ending_count = sum(1 for pid in passages if pid not in has_outgoing)
 
     return BranchingStats(
-        total_choices=len(choices),
+        total_choices=len(choice_edges),
         meaningful_choices=meaningful,
         contextual_choices=contextual,
         continue_choices=continue_count,
@@ -342,8 +337,8 @@ def _branching_quality_score(
     )
 
     # Terminal count + ending variants
-    choice_from_edges = graph.get_edges(edge_type="choice_from")
-    has_outgoing = {e["to"] for e in choice_from_edges}
+    choice_edges = graph.get_edges(edge_type="choice")
+    has_outgoing = {e["from"] for e in choice_edges}
     passages = graph.get_nodes_by_type("passage")
     ending_ids = [pid for pid in passages if pid not in has_outgoing]
 
@@ -435,7 +430,7 @@ def _prose_neutrality_stats(graph: Graph) -> ProseNeutralityStats | None:
     """Analyze prose-layer neutrality for shared passages."""
     arc_nodes = graph.get_nodes_by_type("arc")
     passage_nodes = graph.get_nodes_by_type("passage")
-    choice_nodes = graph.get_nodes_by_type("choice")
+    choice_edges = graph.get_edges(edge_type="choice")
     dilemma_nodes = graph.get_nodes_by_type("dilemma")
 
     if not arc_nodes or not passage_nodes:
@@ -454,13 +449,11 @@ def _prose_neutrality_stats(graph: Graph) -> ProseNeutralityStats | None:
         if from_beat and len(beat_arcs.get(from_beat, set())) >= 2:
             shared.append(pid)
 
-    # Find routed passages
-    routed: set[str] = set()
-    for _cid, cdata in choice_nodes.items():
-        if cdata.get("is_routing"):
-            source = str(cdata.get("from_passage", ""))
-            if source:
-                routed.add(source)
+    # Find routed passages — choice edges with `is_routing=True` originate
+    # from passages that route on state-flag combinations.
+    routed: set[str] = {
+        edge["from"] for edge in choice_edges if edge.get("is_routing") and edge.get("from")
+    }
 
     routed_shared = [p for p in shared if p in routed]
 

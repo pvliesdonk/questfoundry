@@ -43,33 +43,9 @@ def _make_linear_passage_graph() -> Graph:
         )
         graph.add_edge("grouped_in", f"beat::{pid}", f"passage::{pid}")
 
-    # Choices: p1->p2, p2->p3
-    graph.create_node(
-        "choice::p1__p2",
-        {
-            "type": "choice",
-            "from_passage": "passage::p1",
-            "to_passage": "passage::p2",
-            "label": "continue",
-            "requires_state_flags": [],
-            "grants": [],
-        },
-    )
-    graph.create_node(
-        "choice::p2__p3",
-        {
-            "type": "choice",
-            "from_passage": "passage::p2",
-            "to_passage": "passage::p3",
-            "label": "continue",
-            "requires_state_flags": [],
-            "grants": [],
-        },
-    )
-    graph.add_edge("choice_from", "choice::p1__p2", "passage::p1")
-    graph.add_edge("choice_to", "choice::p1__p2", "passage::p2")
-    graph.add_edge("choice_from", "choice::p2__p3", "passage::p2")
-    graph.add_edge("choice_to", "choice::p2__p3", "passage::p3")
+    # Choices (edge model): p1->p2, p2->p3
+    graph.add_edge("choice", "passage::p1", "passage::p2", label="continue", requires=[], grants=[])
+    graph.add_edge("choice", "passage::p2", "passage::p3", label="continue", requires=[], grants=[])
 
     # Add a spine arc so validation passes the spine check
     graph.create_node(
@@ -150,20 +126,14 @@ def _make_chain_graph(passage_ids: list[str], beat_data: dict[str, dict] | None 
     for i in range(len(passage_ids) - 1):
         from_p = passage_ids[i]
         to_p = passage_ids[i + 1]
-        cid = f"choice::{from_p}__{to_p}"
-        graph.create_node(
-            cid,
-            {
-                "type": "choice",
-                "from_passage": f"passage::{from_p}",
-                "to_passage": f"passage::{to_p}",
-                "label": "continue",
-                "requires_state_flags": [],
-                "grants": [],
-            },
+        graph.add_edge(
+            "choice",
+            f"passage::{from_p}",
+            f"passage::{to_p}",
+            label="continue",
+            requires=[],
+            grants=[],
         )
-        graph.add_edge("choice_from", cid, f"passage::{from_p}")
-        graph.add_edge("choice_to", cid, f"passage::{to_p}")
 
     return graph
 
@@ -231,23 +201,19 @@ def _make_routing_graph(
             },
         )
 
-    # Routing choices
+    # Routing choice edges
     for i, (choice_raw, reqs) in enumerate(route_requires.items()):
         target = f"passage::end{i}"
         graph.create_node(target, {"type": "passage", "raw_id": f"end{i}", "summary": f"end{i}"})
-        graph.create_node(
-            f"choice::{choice_raw}",
-            {
-                "type": "choice",
-                "from_passage": "passage::hub",
-                "to_passage": target,
-                "label": choice_raw,
-                "is_routing": True,
-                "requires_state_flags": [f"state_flag::{cw}" for cw in reqs],
-                "grants": [],
-            },
+        graph.add_edge(
+            "choice",
+            "passage::hub",
+            target,
+            label=choice_raw,
+            is_routing=True,
+            requires=[f"state_flag::{cw}" for cw in reqs],
+            grants=[],
         )
-        graph.add_edge("choice_from", f"choice::{choice_raw}", "passage::hub")
 
     return graph
 
@@ -327,19 +293,15 @@ def _make_shared_passage_graph(
                 "is_residue": True,
             },
         )
-        graph.create_node(
-            "choice::r1",
-            {
-                "type": "choice",
-                "from_passage": "passage::shared",
-                "to_passage": "passage::v1",
-                "label": "r1",
-                "is_routing": True,
-                "requires_state_flags": ["state_flag::cw1"],
-                "grants": [],
-            },
+        graph.add_edge(
+            "choice",
+            "passage::shared",
+            "passage::v1",
+            label="r1",
+            is_routing=True,
+            requires=["state_flag::cw1"],
+            grants=[],
         )
-        graph.add_edge("choice_from", "choice::r1", "passage::shared")
 
     return graph
 
@@ -363,19 +325,17 @@ class TestReachability:
             "passage::isolated",
             {"type": "passage", "raw_id": "isolated", "from_beat": "beat::x", "summary": "x"},
         )
-        # Give it an incoming edge so it's not a second start (from a non-reachable source)
-        graph.create_node(
-            "choice::phantom_to_isolated",
-            {
-                "type": "choice",
-                "from_passage": "passage::isolated",
-                "to_passage": "passage::isolated",
-                "label": "self",
-                "requires_state_flags": [],
-                "grants": [],
-            },
+        # Give it an incoming edge so it's not a second start (from a non-reachable source).
+        # A self-loop choice puts `passage::isolated` in `has_incoming` without
+        # making it reachable from p1.
+        graph.add_edge(
+            "choice",
+            "passage::isolated",
+            "passage::isolated",
+            label="self",
+            requires=[],
+            grants=[],
         )
-        graph.add_edge("choice_to", "choice::phantom_to_isolated", "passage::isolated")
         result = check_all_passages_reachable(graph)
         assert result.severity == "fail"
         assert "unreachable" in result.message
@@ -411,35 +371,14 @@ class TestEndingsReachable:
             "passage::middle",
             {"type": "passage", "raw_id": "middle", "from_beat": "beat::m", "summary": "m"},
         )
-        # start -> middle
-        graph.create_node(
-            "choice::s_m",
-            {
-                "type": "choice",
-                "from_passage": "passage::start",
-                "to_passage": "passage::middle",
-                "label": "go",
-                "requires_state_flags": [],
-                "grants": [],
-            },
+        # start <-> middle (cycle, no endings)
+        graph.add_edge(
+            "choice", "passage::start", "passage::middle", label="go", requires=[], grants=[]
         )
-        graph.add_edge("choice_from", "choice::s_m", "passage::start")
-        graph.add_edge("choice_to", "choice::s_m", "passage::middle")
-        # middle -> start (cycle)
-        graph.create_node(
-            "choice::m_s",
-            {
-                "type": "choice",
-                "from_passage": "passage::middle",
-                "to_passage": "passage::start",
-                "label": "back",
-                "requires_state_flags": [],
-                "grants": [],
-            },
+        graph.add_edge(
+            "choice", "passage::middle", "passage::start", label="back", requires=[], grants=[]
         )
-        graph.add_edge("choice_from", "choice::m_s", "passage::middle")
-        graph.add_edge("choice_to", "choice::m_s", "passage::start")
-        # Both passages have choice_from -> no endings; both have choice_to -> no start
+        # Both passages are sources AND targets → no endings, no unique start.
         result = check_all_endings_reachable(graph)
         assert result.severity == "fail"
 
@@ -465,29 +404,23 @@ class TestGateSatisfiability:
             "passage::p2",
             {"type": "passage", "raw_id": "p2", "from_beat": "beat::b2", "summary": "s"},
         )
-        # Choice that grants "cw1"
-        graph.create_node(
-            "choice::c1",
-            {
-                "type": "choice",
-                "from_passage": "passage::p1",
-                "to_passage": "passage::p2",
-                "label": "go",
-                "requires_state_flags": [],
-                "grants": ["state_flag::cw1"],
-            },
+        # Choice edge that grants "cw1"
+        graph.add_edge(
+            "choice",
+            "passage::p1",
+            "passage::p2",
+            label="go",
+            requires=[],
+            grants=["state_flag::cw1"],
         )
-        # Choice that requires "cw1" (satisfiable because c1 grants it)
-        graph.create_node(
-            "choice::c2",
-            {
-                "type": "choice",
-                "from_passage": "passage::p2",
-                "to_passage": "passage::p1",
-                "label": "back",
-                "requires_state_flags": ["state_flag::cw1"],
-                "grants": [],
-            },
+        # Choice edge that requires "cw1" (satisfiable because the first edge grants it)
+        graph.add_edge(
+            "choice",
+            "passage::p2",
+            "passage::p1",
+            label="back",
+            requires=["state_flag::cw1"],
+            grants=[],
         )
         result = check_gate_satisfiability(graph)
         assert result.severity == "pass"
@@ -502,17 +435,14 @@ class TestGateSatisfiability:
             "passage::p2",
             {"type": "passage", "raw_id": "p2", "from_beat": "beat::b2", "summary": "s"},
         )
-        # Choice that requires ungrantable state flag
-        graph.create_node(
-            "choice::c1",
-            {
-                "type": "choice",
-                "from_passage": "passage::p1",
-                "to_passage": "passage::p2",
-                "label": "go",
-                "requires_state_flags": ["state_flag::never_granted"],
-                "grants": [],
-            },
+        # Choice edge that requires an ungrantable state flag.
+        graph.add_edge(
+            "choice",
+            "passage::p1",
+            "passage::p2",
+            label="go",
+            requires=["state_flag::never_granted"],
+            grants=[],
         )
         result = check_gate_satisfiability(graph)
         assert result.severity == "fail"
@@ -544,18 +474,15 @@ class TestGateCoSatisfiability:
             "arc::a1",
             {"type": "arc", "arc_type": "branch", "paths": ["p1"], "sequence": []},
         )
-        # Choice requiring cw1 -- arc a1 provides it
+        # Choice edge requiring cw1 — arc a1 provides it.
         graph.create_node("passage::p", {"type": "passage", "raw_id": "p", "from_beat": "b"})
-        graph.create_node(
-            "choice::g1",
-            {
-                "type": "choice",
-                "from_passage": "passage::p",
-                "to_passage": "passage::p",
-                "label": "go",
-                "requires_state_flags": ["state_flag::cw1"],
-                "grants": [],
-            },
+        graph.add_edge(
+            "choice",
+            "passage::p",
+            "passage::p",
+            label="go",
+            requires=["state_flag::cw1"],
+            grants=[],
         )
         result = check_gate_co_satisfiability(graph)
         assert result.severity == "pass"
@@ -581,18 +508,15 @@ class TestGateCoSatisfiability:
             "arc::a2",
             {"type": "arc", "arc_type": "branch", "paths": ["p2"], "sequence": []},
         )
-        # Choice requiring BOTH state flags -- no single arc provides both
+        # Choice edge requiring BOTH state flags — no single arc provides both.
         graph.create_node("passage::p", {"type": "passage", "raw_id": "p", "from_beat": "b"})
-        graph.create_node(
-            "choice::g1",
-            {
-                "type": "choice",
-                "from_passage": "passage::p",
-                "to_passage": "passage::p",
-                "label": "go",
-                "requires_state_flags": ["state_flag::p1_cw", "state_flag::p2_cw"],
-                "grants": [],
-            },
+        graph.add_edge(
+            "choice",
+            "passage::p",
+            "passage::p",
+            label="go",
+            requires=["state_flag::p1_cw", "state_flag::p2_cw"],
+            grants=[],
         )
         result = check_gate_co_satisfiability(graph)
         assert result.severity == "fail"
@@ -895,19 +819,14 @@ class TestMaxConsecutiveLinear:
             "passage::alt",
             {"type": "passage", "raw_id": "alt", "from_beat": "beat::alt", "summary": "Alt"},
         )
-        graph.create_node(
-            "choice::b__alt",
-            {
-                "type": "choice",
-                "from_passage": "passage::b",
-                "to_passage": "passage::alt",
-                "label": "Take alternative",
-                "requires_state_flags": [],
-                "grants": [],
-            },
+        graph.add_edge(
+            "choice",
+            "passage::b",
+            "passage::alt",
+            label="Take alternative",
+            requires=[],
+            grants=[],
         )
-        graph.add_edge("choice_from", "choice::b__alt", "passage::b")
-        graph.add_edge("choice_to", "choice::b__alt", "passage::alt")
 
         # Now: a(1)->b(2)->c(1)->d(1)->e(0)
         # b has 2 outgoing so it's not linear -- resets counter
@@ -962,19 +881,7 @@ class TestMaxConsecutiveLinear:
             {"type": "passage", "raw_id": "x", "from_beat": "beat::x", "summary": "X"},
         )
         graph.create_node("beat::x", {"type": "beat"})
-        graph.create_node(
-            "choice::x__c",
-            {
-                "type": "choice",
-                "from_passage": "passage::x",
-                "to_passage": "passage::c",
-                "label": "go",
-                "requires_state_flags": [],
-                "grants": [],
-            },
-        )
-        graph.add_edge("choice_from", "choice::x__c", "passage::x")
-        graph.add_edge("choice_to", "choice::x__c", "passage::c")
+        graph.add_edge("choice", "passage::x", "passage::c", label="go", requires=[], grants=[])
 
         result = check_max_consecutive_linear(graph, max_run=2)
         assert result.severity == "warn"
@@ -1075,16 +982,15 @@ class TestStateFlagGateCoverage:
     def test_all_consumed_passes(self) -> None:
         graph = Graph.empty()
         graph.create_node("state_flag::cw1", {"type": "state_flag", "raw_id": "cw1"})
-        graph.create_node(
-            "choice::a_b",
-            {
-                "type": "choice",
-                "from_passage": "passage::a",
-                "to_passage": "passage::b",
-                "label": "go",
-                "requires_state_flags": ["state_flag::cw1"],
-                "grants": [],
-            },
+        graph.create_node("passage::a", {"type": "passage", "raw_id": "a"})
+        graph.create_node("passage::b", {"type": "passage", "raw_id": "b"})
+        graph.add_edge(
+            "choice",
+            "passage::a",
+            "passage::b",
+            label="go",
+            requires=["state_flag::cw1"],
+            grants=[],
         )
         result = check_state_flag_gate_coverage(graph)
         assert result.severity == "pass"
@@ -1093,16 +999,15 @@ class TestStateFlagGateCoverage:
         graph = Graph.empty()
         graph.create_node("state_flag::cw1", {"type": "state_flag", "raw_id": "cw1"})
         graph.create_node("state_flag::cw2", {"type": "state_flag", "raw_id": "cw2"})
-        graph.create_node(
-            "choice::a_b",
-            {
-                "type": "choice",
-                "from_passage": "passage::a",
-                "to_passage": "passage::b",
-                "label": "go",
-                "requires_state_flags": ["state_flag::cw1"],
-                "grants": [],
-            },
+        graph.create_node("passage::a", {"type": "passage", "raw_id": "a"})
+        graph.create_node("passage::b", {"type": "passage", "raw_id": "b"})
+        graph.add_edge(
+            "choice",
+            "passage::a",
+            "passage::b",
+            label="go",
+            requires=["state_flag::cw1"],
+            grants=[],
         )
         result = check_state_flag_gate_coverage(graph)
         assert result.severity == "warn"
@@ -1186,35 +1091,20 @@ class TestForwardPathReachability:
 
     def test_ungated_path_passes(self) -> None:
         graph = self._make_passage_graph()
-        graph.create_node(
-            "choice::a_b",
-            {
-                "type": "choice",
-                "from_passage": "passage::a",
-                "to_passage": "passage::b",
-                "label": "go",
-                "requires_state_flags": [],
-                "grants": [],
-            },
-        )
-        graph.add_edge("choice_from", "choice::a_b", "passage::a")
+        graph.add_edge("choice", "passage::a", "passage::b", label="go", requires=[], grants=[])
         result = check_forward_path_reachability(graph)
         assert result.severity == "pass"
 
     def test_all_gated_warns(self) -> None:
         graph = self._make_passage_graph()
-        graph.create_node(
-            "choice::a_b",
-            {
-                "type": "choice",
-                "from_passage": "passage::a",
-                "to_passage": "passage::b",
-                "label": "go",
-                "requires_state_flags": ["state_flag::x"],
-                "grants": [],
-            },
+        graph.add_edge(
+            "choice",
+            "passage::a",
+            "passage::b",
+            label="go",
+            requires=["state_flag::x"],
+            grants=[],
         )
-        graph.add_edge("choice_from", "choice::a_b", "passage::a")
         result = check_forward_path_reachability(graph)
         assert result.severity == "warn"
         assert "passage::a" in result.message
@@ -1229,31 +1119,23 @@ class TestForwardPathReachability:
     def test_return_links_excluded(self) -> None:
         """is_return choices should not count as forward paths."""
         graph = self._make_passage_graph()
-        graph.create_node(
-            "choice::a_b",
-            {
-                "type": "choice",
-                "from_passage": "passage::a",
-                "to_passage": "passage::b",
-                "label": "return",
-                "requires_state_flags": [],
-                "grants": [],
-                "is_return": True,
-            },
+        graph.add_edge(
+            "choice",
+            "passage::a",
+            "passage::b",
+            label="return",
+            requires=[],
+            grants=[],
+            is_return=True,
         )
-        graph.add_edge("choice_from", "choice::a_b", "passage::a")
-        graph.create_node(
-            "choice::a_c",
-            {
-                "type": "choice",
-                "from_passage": "passage::a",
-                "to_passage": "passage::c",
-                "label": "go",
-                "requires_state_flags": ["state_flag::x"],
-                "grants": [],
-            },
+        graph.add_edge(
+            "choice",
+            "passage::a",
+            "passage::c",
+            label="go",
+            requires=["state_flag::x"],
+            grants=[],
         )
-        graph.add_edge("choice_from", "choice::a_c", "passage::a")
         # Only non-return choice is gated, but the return link doesn't count
         result = check_forward_path_reachability(graph)
         assert result.severity == "warn"
@@ -1271,45 +1153,32 @@ class TestForwardPathReachability:
             "passage::next",
             {"type": "passage", "raw_id": "next", "from_beat": "beat::next", "summary": "next"},
         )
-        graph.create_node(
-            "choice::normal",
-            {
-                "type": "choice",
-                "from_passage": "passage::hub",
-                "to_passage": "passage::next",
-                "label": "continue",
-                "requires_state_flags": [],
-                "grants": [],
-            },
+        graph.add_edge(
+            "choice",
+            "passage::hub",
+            "passage::next",
+            label="continue",
+            requires=[],
+            grants=[],
         )
-        graph.add_edge("choice_from", "choice::normal", "passage::hub")
-        # Add routing choices (all gated) -- these should NOT trigger a warning
-        graph.create_node(
-            "choice::r1",
-            {
-                "type": "choice",
-                "from_passage": "passage::hub",
-                "to_passage": "passage::end1",
-                "label": "route1",
-                "is_routing": True,
-                "requires_state_flags": ["state_flag::cw1"],
-                "grants": [],
-            },
-        )
-        graph.add_edge("choice_from", "choice::r1", "passage::hub")
-        graph.create_node(
-            "choice::r2",
-            {
-                "type": "choice",
-                "from_passage": "passage::hub",
-                "to_passage": "passage::end2",
-                "label": "route2",
-                "is_routing": True,
-                "requires_state_flags": ["state_flag::cw2"],
-                "grants": [],
-            },
-        )
-        graph.add_edge("choice_from", "choice::r2", "passage::hub")
+        # Add routing choices (all gated) — these should NOT trigger a warning.
+        for raw, target_raw, flag in [
+            ("r1", "end1", "cw1"),
+            ("r2", "end2", "cw2"),
+        ]:
+            target = f"passage::{target_raw}"
+            graph.create_node(
+                target, {"type": "passage", "raw_id": target_raw, "summary": target_raw}
+            )
+            graph.add_edge(
+                "choice",
+                "passage::hub",
+                target,
+                label=raw,
+                is_routing=True,
+                requires=[f"state_flag::{flag}"],
+                grants=[],
+            )
         result = check_forward_path_reachability(graph)
         # The only forward (non-routing) choice is ungated, so pass
         assert result.severity == "pass"
@@ -1398,24 +1267,20 @@ class TestCheckRoutingCoverage:
             arc_paths={"a1": ["p1"], "a2": ["p2"]},
             route_requires={"r1": ["p1"], "r2": ["p2"]},
         )
-        # Add a fallback routing choice with empty requires
+        # Add a fallback routing choice edge with empty requires.
         graph.create_node(
             "passage::fallback",
             {"type": "passage", "raw_id": "fallback", "summary": "fallback"},
         )
-        graph.create_node(
-            "choice::fallback",
-            {
-                "type": "choice",
-                "from_passage": "passage::hub",
-                "to_passage": "passage::fallback",
-                "label": "fallback",
-                "is_routing": True,
-                "requires_state_flags": [],
-                "grants": [],
-            },
+        graph.add_edge(
+            "choice",
+            "passage::hub",
+            "passage::fallback",
+            label="fallback",
+            is_routing=True,
+            requires=[],
+            grants=[],
         )
-        graph.add_edge("choice_from", "choice::fallback", "passage::hub")
         result = check_routing_coverage(graph)
         # Fallback with empty requires is ignored; CE+ME still valid
         assert len(result) == 1

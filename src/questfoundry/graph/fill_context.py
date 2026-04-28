@@ -449,33 +449,19 @@ def get_pending_spoke_labels(graph: Graph, hub_passage_id: str) -> list[dict[str
     Returns:
         List of dicts with choice_id, spoke_summary, and label_style.
     """
-    # Find all choice_from edges where to=hub_passage_id
-    # (choice_from edges go FROM choice TO source-passage)
-    from_edges = graph.get_edges(to_id=hub_passage_id, edge_type="choice_from")
-    if not from_edges:
+    # `choice` edges go directly between passages: e["from"] = source passage,
+    # e["to"] = target passage. Find outgoing edges from the hub.
+    out_edges = graph.get_edges(from_id=hub_passage_id, edge_type="choice")
+    if not out_edges:
         return []
 
     pending = []
-    for from_edge in from_edges:
-        choice_id = from_edge.get("from")
-        if not choice_id:
+    for edge in out_edges:
+        # Skip edges that already carry a label.
+        if edge.get("label"):
             continue
 
-        choice_data = graph.get_node(choice_id)
-        if not choice_data:
-            continue
-
-        # Check if label is missing or empty (both None and "" are falsy)
-        current_label = choice_data.get("label")
-        if current_label:
-            continue  # Already has a label
-
-        # Find the target passage via choice_to edge
-        to_edges = graph.get_edges(from_id=choice_id, edge_type="choice_to")
-        if not to_edges:
-            continue
-
-        to_passage_id = to_edges[0].get("to")
+        to_passage_id = edge.get("to")
         if not to_passage_id:
             continue
 
@@ -483,16 +469,24 @@ def get_pending_spoke_labels(graph: Graph, hub_passage_id: str) -> list[dict[str
         if not to_passage:
             continue
 
-        # Check if the target is a spoke passage (raw_id starts with "spoke_")
+        # Target must be a spoke passage (raw_id starts with "spoke_").
         raw_id = to_passage.get("raw_id", "")
         if not raw_id.startswith("spoke_"):
             continue
 
+        # No discrete `choice` node exists in the edge model. Synthesize a
+        # stable identifier from the (source, target) passage pair so the LLM
+        # can refer back to a specific spoke when returning labels. The FILL
+        # consumer side of this contract still updates a `choice` node and is
+        # therefore inert today (see followup tracker for spoke-label
+        # architectural rework).
+        synthesized_choice_id = f"choice::{strip_scope_prefix(hub_passage_id)}__{raw_id}"
+
         pending.append(
             {
-                "choice_id": choice_id,
+                "choice_id": synthesized_choice_id,
                 "spoke_summary": to_passage.get("summary", ""),
-                "label_style": choice_data.get("label_style", "functional"),
+                "label_style": str(edge.get("label_style", "functional")),
             }
         )
 
@@ -1726,22 +1720,18 @@ def format_path_arc_context(graph: Graph, passage_id: str, arc_id: str) -> str:
 def compute_is_ending(graph: Graph, passage_id: str) -> bool:
     """Determine if a passage is a story ending (no outgoing choices).
 
-    A passage is an ending if no ``choice_from`` edge has this passage
-    as its target (``to_id``). The ``choice_from`` edge convention is
-    FROM choice TO originating passage, so ``to_id=passage_id`` finds
-    choices that originate from this passage.
-
-    See ``grow_validation.py:212`` for the edge direction reference.
+    A passage is an ending if no `choice` edge originates from it. In the
+    edge model `choice` edges go directly between passages, so
+    ``from_id=passage_id`` finds choices that originate from this passage.
 
     Args:
-        graph: Graph containing passage and choice nodes.
+        graph: Graph containing passage and choice edges.
         passage_id: Full node ID of the passage (e.g. ``passage::intro``).
 
     Returns:
         True if the passage has no outgoing choices.
     """
-    choice_from_edges = graph.get_edges(to_id=passage_id, edge_type="choice_from")
-    return len(choice_from_edges) == 0
+    return not graph.get_edges(from_id=passage_id, edge_type="choice")
 
 
 def format_ending_guidance(

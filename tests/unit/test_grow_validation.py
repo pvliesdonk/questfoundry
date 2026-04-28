@@ -39,33 +39,9 @@ def _make_linear_passage_graph() -> Graph:
             {"type": "passage", "raw_id": pid, "from_beat": f"beat::{pid}", "summary": pid},
         )
 
-    # Choices: p1->p2, p2->p3
-    graph.create_node(
-        "choice::p1__p2",
-        {
-            "type": "choice",
-            "from_passage": "passage::p1",
-            "to_passage": "passage::p2",
-            "label": "continue",
-            "requires_state_flags": [],
-            "grants": [],
-        },
-    )
-    graph.create_node(
-        "choice::p2__p3",
-        {
-            "type": "choice",
-            "from_passage": "passage::p2",
-            "to_passage": "passage::p3",
-            "label": "continue",
-            "requires_state_flags": [],
-            "grants": [],
-        },
-    )
-    graph.add_edge("choice_from", "choice::p1__p2", "passage::p1")
-    graph.add_edge("choice_to", "choice::p1__p2", "passage::p2")
-    graph.add_edge("choice_from", "choice::p2__p3", "passage::p2")
-    graph.add_edge("choice_to", "choice::p2__p3", "passage::p3")
+    # Choice edges: p1->p2, p2->p3
+    graph.add_edge("choice", "passage::p1", "passage::p2", label="continue", requires=[], grants=[])
+    graph.add_edge("choice", "passage::p2", "passage::p3", label="continue", requires=[], grants=[])
 
     # Dilemma + path so enumerate_arcs() produces a spine arc
     graph.create_node("dilemma::d1", {"type": "dilemma", "raw_id": "d1"})
@@ -107,7 +83,7 @@ class TestSingleStart:
 
     def test_single_start_multiple_starts(self) -> None:
         graph = _make_linear_passage_graph()
-        # Add an orphan passage with no incoming choice_to
+        # Add an orphan passage with no incoming `choice` edge
         graph.create_node(
             "passage::orphan",
             {"type": "passage", "raw_id": "orphan", "from_beat": "beat::x", "summary": "x"},
@@ -130,31 +106,9 @@ class TestSingleStart:
                 f"passage::{pid}",
                 {"type": "passage", "raw_id": pid, "from_beat": f"beat::{pid}", "summary": pid},
             )
-        # Create a cycle: p1->p2 and p2->p1
-        graph.create_node(
-            "choice::p1_p2",
-            {
-                "type": "choice",
-                "from_passage": "passage::p1",
-                "to_passage": "passage::p2",
-                "label": "go",
-                "requires_state_flags": [],
-                "grants": [],
-            },
-        )
-        graph.create_node(
-            "choice::p2_p1",
-            {
-                "type": "choice",
-                "from_passage": "passage::p2",
-                "to_passage": "passage::p1",
-                "label": "back",
-                "requires_state_flags": [],
-                "grants": [],
-            },
-        )
-        graph.add_edge("choice_to", "choice::p1_p2", "passage::p2")
-        graph.add_edge("choice_to", "choice::p2_p1", "passage::p1")
+        # Create a cycle: p1->p2 and p2->p1.
+        graph.add_edge("choice", "passage::p1", "passage::p2", label="go", requires=[], grants=[])
+        graph.add_edge("choice", "passage::p2", "passage::p1", label="back", requires=[], grants=[])
         result = check_single_start(graph)
         assert result.severity == "fail"
         assert "No start passage" in result.message
@@ -173,34 +127,24 @@ class TestSingleStart:
                 "is_synthetic": True,
             },
         )
-        graph.create_node(
-            "choice::p1_spoke_0",
-            {
-                "type": "choice",
-                "from_passage": "passage::p1",
-                "to_passage": "passage::spoke_0",
-                "label": "Look around",
-                "requires_state_flags": [],
-                "grants": [],
-            },
+        graph.add_edge(
+            "choice",
+            "passage::p1",
+            "passage::spoke_0",
+            label="Look around",
+            requires=[],
+            grants=[],
         )
-        graph.add_edge("choice_from", "choice::p1_spoke_0", "passage::p1")
-        graph.add_edge("choice_to", "choice::p1_spoke_0", "passage::spoke_0")
-        # Return link: spoke->p1 with is_return=True
-        graph.create_node(
-            "choice::spoke_0_return",
-            {
-                "type": "choice",
-                "from_passage": "passage::spoke_0",
-                "to_passage": "passage::p1",
-                "label": "Return",
-                "is_return": True,
-                "requires_state_flags": [],
-                "grants": [],
-            },
+        # Return link: spoke->p1 with is_return=True.
+        graph.add_edge(
+            "choice",
+            "passage::spoke_0",
+            "passage::p1",
+            label="Return",
+            is_return=True,
+            requires=[],
+            grants=[],
         )
-        graph.add_edge("choice_from", "choice::spoke_0_return", "passage::spoke_0")
-        graph.add_edge("choice_to", "choice::spoke_0_return", "passage::p1")
 
         result = check_single_start(graph)
         assert result.severity == "pass"
@@ -268,28 +212,8 @@ class TestPassageDagCycles:
                 {"type": "passage", "raw_id": pid, "from_beat": f"beat::{pid}", "summary": pid},
             )
         # Cycle: p1->p2 and p2->p1
-        graph.create_node(
-            "choice::c1",
-            {
-                "type": "choice",
-                "from_passage": "passage::p1",
-                "to_passage": "passage::p2",
-                "label": "go",
-                "requires_state_flags": [],
-                "grants": [],
-            },
-        )
-        graph.create_node(
-            "choice::c2",
-            {
-                "type": "choice",
-                "from_passage": "passage::p2",
-                "to_passage": "passage::p1",
-                "label": "back",
-                "requires_state_flags": [],
-                "grants": [],
-            },
-        )
+        graph.add_edge("choice", "passage::p1", "passage::p2", label="go", requires=[], grants=[])
+        graph.add_edge("choice", "passage::p2", "passage::p1", label="back", requires=[], grants=[])
         result = check_passage_dag_cycles(graph)
         assert result.severity == "fail"
         assert "Cycle" in result.message

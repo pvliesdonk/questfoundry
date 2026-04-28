@@ -1375,16 +1375,14 @@ class TestIsEnding:
     """Tests for compute_is_ending."""
 
     def test_passage_with_outgoing_choice_is_not_ending(self, fill_graph: Graph) -> None:
-        # Add a choice_from edge: passage::p_opening has an outgoing choice
-        fill_graph.create_node(
-            "choice::opening_to_explanation",
-            {"type": "choice", "raw_id": "opening_to_explanation"},
+        # Add a `choice` edge: passage::p_opening has an outgoing choice.
+        fill_graph.add_edge(
+            "choice", "passage::p_opening", "passage::p_explanation", label="Continue"
         )
-        fill_graph.add_edge("choice_from", "choice::opening_to_explanation", "passage::p_opening")
         assert compute_is_ending(fill_graph, "passage::p_opening") is False
 
     def test_passage_without_outgoing_choice_is_ending(self, fill_graph: Graph) -> None:
-        # p_aftermath has no choice_from edges pointing to it
+        # p_aftermath has no outgoing `choice` edges.
         assert compute_is_ending(fill_graph, "passage::p_aftermath") is True
 
 
@@ -2422,21 +2420,18 @@ class TestGetPendingSpokeLabels:
                 "summary": "Examine the mysterious artifact",
             },
         )
-        # Choice without label (pending)
-        g.create_node(
-            "choice::hub__spoke_0",
-            {
-                "type": "choice",
-                # no label field
-                "label_style": "evocative",
-            },
+        # Choice edge without label (pending)
+        g.add_edge(
+            "choice",
+            "passage::hub",
+            "passage::spoke_hub_0",
+            label_style="evocative",
         )
-        g.add_edge("choice_from", "choice::hub__spoke_0", "passage::hub")
-        g.add_edge("choice_to", "choice::hub__spoke_0", "passage::spoke_hub_0")
 
         result = get_pending_spoke_labels(g, "passage::hub")
         assert len(result) == 1
-        assert result[0]["choice_id"] == "choice::hub__spoke_0"
+        # The synthesized choice_id mirrors the (hub, spoke) pair.
+        assert result[0]["choice_id"] == "choice::hub__spoke_hub_0"
         assert result[0]["spoke_summary"] == "Examine the mysterious artifact"
         assert result[0]["label_style"] == "evocative"
 
@@ -2450,13 +2445,13 @@ class TestGetPendingSpokeLabels:
             "passage::spoke_hub_0",
             {"type": "passage", "raw_id": "spoke_hub_0", "summary": "Some spoke"},
         )
-        # Choice WITH label (not pending)
-        g.create_node(
-            "choice::hub__spoke_0",
-            {"type": "choice", "label": "Examine the clock"},
+        # Choice edge WITH label (not pending)
+        g.add_edge(
+            "choice",
+            "passage::hub",
+            "passage::spoke_hub_0",
+            label="Examine the clock",
         )
-        g.add_edge("choice_from", "choice::hub__spoke_0", "passage::hub")
-        g.add_edge("choice_to", "choice::hub__spoke_0", "passage::spoke_hub_0")
 
         result = get_pending_spoke_labels(g, "passage::hub")
         assert result == []
@@ -2472,12 +2467,8 @@ class TestGetPendingSpokeLabels:
             "passage::next_scene",
             {"type": "passage", "raw_id": "next_scene", "summary": "Continue story"},
         )
-        g.create_node(
-            "choice::hub__next",
-            {"type": "choice"},  # No label
-        )
-        g.add_edge("choice_from", "choice::hub__next", "passage::hub")
-        g.add_edge("choice_to", "choice::hub__next", "passage::next_scene")
+        # Choice edge without label, target is NOT a spoke (raw_id mismatch).
+        g.add_edge("choice", "passage::hub", "passage::next_scene")
 
         result = get_pending_spoke_labels(g, "passage::hub")
         assert result == []
@@ -2505,12 +2496,12 @@ class TestFormatSpokeContext:
             "passage::spoke_hub_0",
             {"type": "passage", "raw_id": "spoke_hub_0", "summary": "Examine the map"},
         )
-        g.create_node(
-            "choice::hub__spoke_0",
-            {"type": "choice", "label_style": "functional"},
+        g.add_edge(
+            "choice",
+            "passage::hub",
+            "passage::spoke_hub_0",
+            label_style="functional",
         )
-        g.add_edge("choice_from", "choice::hub__spoke_0", "passage::hub")
-        g.add_edge("choice_to", "choice::hub__spoke_0", "passage::spoke_hub_0")
 
         result = format_spoke_context(g, "passage::hub")
         assert "Exploration Options" in result
