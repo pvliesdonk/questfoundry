@@ -13,6 +13,51 @@ if TYPE_CHECKING:
     from questfoundry.graph.graph import Graph
 
 
+def format_valid_beat_ids_by_dilemma(graph: Graph, beat_ids: set[str]) -> str:
+    """Format ``beat_ids`` grouped by dilemma; cross-dilemma anomalies and unmapped beats surface in dedicated buckets."""
+    if not beat_ids:
+        return ""
+
+    from questfoundry.graph.context import normalize_scoped_id
+
+    path_nodes = graph.get_nodes_by_type("path")
+    beat_dilemmas: dict[str, set[str]] = defaultdict(set)
+    for edge in graph.get_edges(from_id=None, to_id=None, edge_type="belongs_to"):
+        beat_id = edge["from"]
+        if beat_id not in beat_ids:
+            continue
+        path_data = path_nodes.get(edge["to"])
+        if not path_data:
+            continue
+        dilemma_id = path_data.get("dilemma_id")
+        if dilemma_id:
+            beat_dilemmas[beat_id].add(normalize_scoped_id(dilemma_id, "dilemma"))
+
+    by_dilemma: dict[str, list[str]] = defaultdict(list)
+    multi: list[str] = []
+    unmapped: list[str] = []
+    for bid in sorted(beat_ids):
+        dilemmas = beat_dilemmas.get(bid, set())
+        if len(dilemmas) == 0:
+            unmapped.append(bid)
+        elif len(dilemmas) == 1:
+            by_dilemma[next(iter(dilemmas))].append(bid)
+        else:
+            multi.append(bid)
+
+    lines: list[str] = []
+    for did in sorted(by_dilemma):
+        beat_list = ", ".join(f"`{b}`" for b in by_dilemma[did])
+        lines.append(f"- `{did}`: {beat_list}")
+    if multi:
+        beat_list = ", ".join(f"`{b}`" for b in multi)
+        lines.append(f"- (spans multiple dilemmas): {beat_list}")
+    if unmapped:
+        beat_list = ", ".join(f"`{b}`" for b in unmapped)
+        lines.append(f"- (unmapped): {beat_list}")
+    return "\n".join(lines)
+
+
 def format_valid_entity_ids_by_category(
     graph: Graph,
     entity_ids: list[str],

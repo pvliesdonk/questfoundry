@@ -152,9 +152,11 @@ class _LLMPhaseMixin:
             candidates, beat_nodes, beat_dilemmas, graph=graph
         )
 
+        from questfoundry.graph.grow_context import format_valid_beat_ids_by_dilemma
+
         context: dict[str, str] = {
             "candidate_groups": candidate_groups_text,
-            "valid_beat_ids": ", ".join(sorted(valid_beat_ids)),
+            "valid_beat_ids": format_valid_beat_ids_by_dilemma(graph, valid_beat_ids),
             "structural_feedback": "",
         }
 
@@ -225,22 +227,21 @@ class _LLMPhaseMixin:
                     skipped_count += 1
                     continue
 
-                # Resolve location (prefer LLM proposal, fallback to algorithm)
-                # Guard against qwen3:4b returning the literal string "null".
+                # Resolve location (prefer LLM proposal, fallback to algorithm).
+                # Pydantic enforces non-empty via min_length=1; the only path
+                # the algorithm-fallback now exercises is the qwen3:4b footgun
+                # of returning the literal word "null" as a string.
                 raw_loc = proposal.resolved_location
-                llm_location: str | None = (
-                    None if raw_loc in (None, "null", "NULL", "") else raw_loc
-                )
                 location: str | None
-                if llm_location:
-                    location = llm_location
-                else:
+                if raw_loc.lower() == "null":
                     location = resolve_intersection_location(pre_intersection_graph, valid_ids)
                     log.debug(
                         "phase3_location_resolved",
                         beat_ids=valid_ids,
                         resolved=location,
                     )
+                else:
+                    location = raw_loc
 
                 accepted.append((valid_ids, location, proposal.shared_entities, proposal.rationale))
                 log.debug(
@@ -606,9 +607,11 @@ class _LLMPhaseMixin:
             line = f'- {bid}: "{summary}" [impacts={n_impacts}]'
             beat_items.append(ContextItem(id=bid, text=line))
 
+        from questfoundry.graph.grow_context import format_valid_beat_ids_by_dilemma
+
         context = {
             "beat_summaries": compact_items(beat_items, self._compact_config()),  # type: ignore[attr-defined]
-            "valid_beat_ids": ", ".join(sorted(beat_nodes.keys())),
+            "valid_beat_ids": format_valid_beat_ids_by_dilemma(graph, set(beat_nodes.keys())),
             "beat_count": str(len(beat_nodes)),
         }
 
@@ -762,11 +765,17 @@ class _LLMPhaseMixin:
             elif isinstance(tone_val, str):
                 tone = tone_val
 
+        # Sorted for deterministic prompt output (phantom-ID guard).
+        transition_ids_block = "\n".join(f"- `{tid}`" for tid in sorted(transition_map))
+
         context = {
             "transition_count": str(len(transitions)),
             "transitions_context": "\n\n".join(transition_lines),
+            "transition_ids": transition_ids_block,
             "genre": genre or "(not specified)",
             "tone": tone or "(not specified)",
+            # Empty on first call; reserved for future repair-loop wiring (mirrors Phase 3).
+            "transition_feedback": "",
         }
 
         try:
@@ -864,7 +873,13 @@ class _LLMPhaseMixin:
         - Consequence nodes linked to paths and dilemmas.
 
         Postconditions:
-        - Entity nodes gain overlays list with {when: [state_flag_ids], details: {...}}.
+        - Entity nodes gain overlays list. Each overlay is stored with
+          ``when: [state_flag_ids]`` and ``details: dict[str, str]`` —
+          this is the *graph-stored* shape (``EntityOverlay.details``).
+          The LLM produces ``OverlayProposal.details: list[OverlayDetailItem]``
+          (key/value list, OpenAI strict-mode-compatible) which is
+          converted via ``OverlayProposal.details_as_dict()`` at
+          graph-write time.
         - Overlays modify entity presentation when state flags are granted.
         - Invalid entity/state flag IDs from LLM output silently skipped.
 

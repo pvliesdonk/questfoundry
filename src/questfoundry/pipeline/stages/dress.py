@@ -61,6 +61,7 @@ from questfoundry.graph.snapshots import save_snapshot
 from questfoundry.models.dress import (
     BatchedBriefOutput,
     BatchedCodexOutput,
+    DressEscalation,
     DressPhase0Output,
     DressPhase2Output,
     DressPhaseResult,
@@ -202,6 +203,10 @@ class DressStage:
         self._lang_instruction: str = ""
         self._on_connectivity_error: ConnectivityRetryFn | None = None
         self._skip_codex: bool = False
+        # Per-item escalations from `batch_llm_calls` retry exhaustion (#1480).
+        # Folded into DressStageError at exit so failures point at the
+        # batch responses, not just at the missing-artifact symptom.
+        self._escalations: list[DressEscalation] = []
 
     PhaseFunc = Callable[["Graph", "BaseChatModel"], Awaitable[DressPhaseResult]]
 
@@ -297,6 +302,8 @@ class DressStage:
         self._lang_instruction = get_output_language_instruction(kwargs.get("language", "en"))
 
         log.info("stage_start", stage="dress")
+        # Reset escalations for this run; previous runs' escalations don't carry over.
+        self._escalations = []
 
         phases = self._phase_order()
         phase_map = {name: i for i, (_, name) in enumerate(phases)}
@@ -394,10 +401,7 @@ class DressStage:
 
             exit_errors = validate_dress_output(graph)
             if exit_errors:
-                raise DressStageError(
-                    f"DRESS output contract violated ({len(exit_errors)} "
-                    f"error(s)):\n" + "\n".join(f"  - {e}" for e in exit_errors)
-                )
+                raise DressStageError(self._format_exit_error(exit_errors))
 
             graph.set_last_stage("dress")
             graph.save(resolved_path / "graph.db")
@@ -427,6 +431,25 @@ class DressStage:
             "codex_entries": dict(codex_entries),
             "illustrations": dict(illustrations),
         }
+
+    def _format_exit_error(self, exit_errors: list[str]) -> str:
+        """Build the message body for the stage-exit ``DressStageError``.
+
+        Folds per-item escalations into the contract-failure message so the
+        failure surface points at the batch responses that misbehaved
+        (#1480). Escalations only ENRICH an existing contract failure; the
+        caller decides whether to raise based on ``exit_errors`` alone.
+        """
+        lines = [
+            f"DRESS output contract violated ({len(exit_errors)} error(s)):",
+            *[f"  - {e}" for e in exit_errors],
+        ]
+        if self._escalations:
+            lines.append(
+                f"Plus {len(self._escalations)} batch_llm_calls retry-exhaustion escalation(s):"
+            )
+            lines += [f"  - [{esc.kind}] {esc.item_id}: {esc.detail}" for esc in self._escalations]
+        return "\n".join(lines)
 
     # -------------------------------------------------------------------------
     # Phase 0: Art Direction (discuss/summarize/serialize)
@@ -836,12 +859,37 @@ class DressStage:
 
             return items, llm_calls, tokens
 
-        results, total_llm_calls, total_tokens, _errors = await batch_llm_calls(
+        results, total_llm_calls, total_tokens, errors = await batch_llm_calls(
             chunks,
             _brief_batch,
             self._max_concurrency,
             on_connectivity_error=self._on_connectivity_error,
         )
+
+        # Per-item escalation when a brief batch's retries exhausted (#1480).
+        # eligible_ids comes from graph.get_nodes_by_type("passage").keys() —
+        # always fully-prefixed `passage::*`, no normalization needed.
+        for idx, exc in errors:
+            for affected_pid in chunks[idx]:
+                log.warning(
+                    "briefs_batch_failed_escalated",
+                    passage_id=affected_pid,
+                    exc_type=type(exc).__name__,
+                    exc_msg=str(exc),
+                )
+                self._escalations.append(
+                    DressEscalation(
+                        kind="briefs_batch_failed",
+                        item_id=affected_pid,
+                        detail=(
+                            f"dress_brief_batch failed after retries "
+                            f"({type(exc).__name__}: {exc}). Passage has no "
+                            "illustration brief; the output contract will "
+                            "fail at stage exit if briefs are required."
+                        ),
+                        upstream_stage="DRESS",
+                    )
+                )
 
         # Post-process results: apply priority mapping, store on graph
         # Composition log is best-effort: concurrent batches read a snapshot
@@ -925,8 +973,10 @@ class DressStage:
 
         vision_ctx = format_dream_vision(graph)
         state_flags = graph.get_nodes_by_type("state_flag")
+        # Prefixed `state_flag::` so the LLM mirrors the same form in `visible_when` (#1473).
         state_flag_list = "\n".join(
-            f"- `{sf_data.get('raw_id', sf_id)}`: {sf_data.get('trigger', '')}"
+            f"- `state_flag::{sf_data.get('raw_id', strip_scope_prefix(sf_id))}`:"
+            f" {sf_data.get('trigger', '')}"
             for sf_id, sf_data in state_flags.items()
         )
 
@@ -982,12 +1032,35 @@ class DressStage:
 
             return items, llm_calls, tokens
 
-        results, total_llm_calls, total_tokens, _errors = await batch_llm_calls(
+        results, total_llm_calls, total_tokens, errors = await batch_llm_calls(
             chunks,
             _codex_batch,
             self._max_concurrency,
             on_connectivity_error=self._on_connectivity_error,
         )
+
+        # Per-item escalation when a codex batch's retries exhausted (#1480).
+        for idx, exc in errors:
+            for affected_eid in chunks[idx]:
+                log.warning(
+                    "codex_batch_failed_escalated",
+                    entity_id=affected_eid,
+                    exc_type=type(exc).__name__,
+                    exc_msg=str(exc),
+                )
+                self._escalations.append(
+                    DressEscalation(
+                        kind="codex_batch_failed",
+                        item_id=affected_eid,
+                        detail=(
+                            f"dress_codex_batch failed after retries "
+                            f"({type(exc).__name__}: {exc}). Entity has no "
+                            "codex entries; the Output-5 contract will fail "
+                            "at stage exit."
+                        ),
+                        upstream_stage="DRESS",
+                    )
+                )
 
         spoiler_retries = 0
         spoiler_fallbacks = 0
@@ -1491,7 +1564,7 @@ class DressStage:
                 # formatting. Token count not available from distiller API.
                 return (bid, pos, neg, bdata), 1, 0
 
-            results, _, _, _errs = await batch_llm_calls(
+            results, _, _, distill_errors = await batch_llm_calls(
                 distill_items,
                 _distill_one,
                 self._max_concurrency,
@@ -1500,7 +1573,28 @@ class DressStage:
             for item in results:
                 if item is not None:
                     prepared.append(item)
-            failed += len(_errs)
+            # Per-item escalation when a distill call's retries exhausted (#1480).
+            for idx, exc in distill_errors:
+                affected_brief_id = distill_items[idx][0]
+                log.warning(
+                    "distill_batch_failed_escalated",
+                    brief_id=affected_brief_id,
+                    exc_type=type(exc).__name__,
+                    exc_msg=str(exc),
+                )
+                self._escalations.append(
+                    DressEscalation(
+                        kind="distill_batch_failed",
+                        item_id=affected_brief_id,
+                        detail=(
+                            f"dress_distill failed after retries "
+                            f"({type(exc).__name__}: {exc}). Brief was not "
+                            "rendered; illustration will be missing."
+                        ),
+                        upstream_stage="DRESS",
+                    )
+                )
+            failed += len(distill_errors)
         else:
             # Non-LLM distillation — no concurrency needed
             for brief_id in selected_ids:

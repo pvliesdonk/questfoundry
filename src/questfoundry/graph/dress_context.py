@@ -203,7 +203,8 @@ def format_entity_for_codex(graph: Graph, entity_id: str) -> str:
     raw_id = entity.get("raw_id", strip_scope_prefix(entity_id))
     lines: list[str] = []
 
-    lines.append(f"## Entity: {raw_id}")
+    # Prompt mirrors this header back as entity_id; must match the prefixed form (#1473).
+    lines.append(f"## Entity: {entity_id}")
     lines.append("")
 
     # Basic info
@@ -266,11 +267,12 @@ def format_entity_for_codex(graph: Graph, entity_id: str) -> str:
     if related:
         lines.append("")
         lines.append("### Related State Flags (potential codex gates)")
+        # Prefixed `state_flag::` so the LLM mirrors the same form in `visible_when` (#1473).
         for sf_raw, trigger in sorted(related):
             if trigger:
-                lines.append(f"- `{sf_raw}`: {trigger}")
+                lines.append(f"- `state_flag::{sf_raw}`: {trigger}")
             else:
-                lines.append(f"- `{sf_raw}`")
+                lines.append(f"- `state_flag::{sf_raw}`")
 
     return "\n".join(lines).strip()
 
