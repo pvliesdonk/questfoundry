@@ -217,13 +217,17 @@ def _preprocess_provider_kwargs(
 
             kwargs["num_ctx"] = num_ctx if num_ctx else 32_768
     elif max_vram is not None:
+        # max_vram only affects Ollama. Log and fall through to the
+        # cloud-provider config below — claude-review caught a bug where
+        # this branch was the second `elif` in the chain and short-circuited
+        # api_key injection for cloud providers when max_vram was passed.
         log.debug(
             "max_vram_ignored_non_ollama",
             provider=provider,
             msg="--max-vram only affects Ollama; cloud providers manage their own context",
         )
 
-    elif provider == "openai":
+    if provider == "openai":
         # Resolve API key from kwargs or env var (handles api_key=None case)
         api_key = kwargs.get("api_key") or os.getenv("OPENAI_API_KEY")
         if not api_key:

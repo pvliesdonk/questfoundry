@@ -635,6 +635,63 @@ def test_create_chat_model_ollama_invalid_qf_max_vram_env_falls_back() -> None:
     assert call_kwargs["num_ctx"] == 32_768
 
 
+def test_max_vram_does_not_short_circuit_cloud_provider_setup() -> None:
+    """Regression: max_vram with cloud provider must still inject api_key.
+
+    Caught by claude-review on PR #1518: an earlier draft put
+    ``elif max_vram is not None`` in the provider chain, which silently
+    skipped the OPENAI_API_KEY / ANTHROPIC_API_KEY / GOOGLE_API_KEY branches
+    when max_vram was set alongside a cloud provider.
+    """
+    mock_chat = MagicMock()
+
+    # OpenAI: api_key must reach the provider client even when max_vram is set.
+    with (
+        patch.dict("os.environ", {"OPENAI_API_KEY": "sk-openai"}, clear=False),
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            return_value=mock_chat,
+        ) as mock_init,
+    ):
+        create_chat_model("openai", "gpt-5-mini", max_vram=12.0)
+    assert mock_init.call_args[1]["api_key"] == "sk-openai"
+
+    # Anthropic: same.
+    with (
+        patch.dict("os.environ", {"ANTHROPIC_API_KEY": "sk-ant"}, clear=False),
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            return_value=mock_chat,
+        ) as mock_init,
+    ):
+        create_chat_model("anthropic", "claude-sonnet-4-20250514", max_vram=12.0)
+    assert mock_init.call_args[1]["api_key"] == "sk-ant"
+
+    # Google: same.
+    with (
+        patch.dict("os.environ", {"GOOGLE_API_KEY": "g-key"}, clear=False),
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            return_value=mock_chat,
+        ) as mock_init,
+    ):
+        create_chat_model("google", "gemini-2.5-flash", max_vram=12.0)
+    assert mock_init.call_args[1]["api_key"] == "g-key"
+
+
+def test_max_vram_with_cloud_provider_missing_key_still_raises() -> None:
+    """Regression: missing API key still raises ProviderError when max_vram set.
+
+    The bug fixed for the previous regression test left the api_key check
+    unreachable; verify the error path is still wired correctly.
+    """
+    with patch.dict("os.environ", {}, clear=True), pytest.raises(ProviderError) as exc_info:
+        create_chat_model("openai", "gpt-5-mini", max_vram=12.0)
+
+    assert "API key required" in str(exc_info.value)
+    assert exc_info.value.provider == "openai"
+
+
 def test_create_chat_model_ollama_no_temperature_when_not_provided() -> None:
     """Factory does not include temperature when not provided."""
     mock_chat = MagicMock()
