@@ -81,7 +81,8 @@ system: |
   downstream pipeline assumes real branching that scales with story size:
   small stories need at least one fork; longer stories need more.
 
-  GOOD (3 dilemmas, 2 fully explored):
+  GOOD (structure example — showing what "fully explored" vs "canonical only"
+  looks like; your story needs at least {size_fully_explored} fully explored):
   - `dilemma::keeper_honest_or_hiding`: explored = `[honest, hiding]` — both answers
   - `dilemma::artifact_blessed_or_cursed`: explored = `[blessed, cursed]` — both answers
   - `dilemma::weather_storm_or_clear`: explored = `[clear]` — canonical only (atmospheric)
