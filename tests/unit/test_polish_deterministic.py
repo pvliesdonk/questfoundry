@@ -2539,7 +2539,7 @@ class TestAuditOverlayComposition:
         assert feasibility["warnings"] == []
 
     def test_already_structural_split_not_double_added(self) -> None:
-        """If a passage is already flagged as structural_split in warnings, it is not added again."""
+        """If a passage is already in feasibility["split_passages"], it is not flagged again (#1170)."""
         from questfoundry.pipeline.stages.polish.deterministic import _audit_overlay_composition
 
         commit_flags = [
@@ -2548,7 +2548,6 @@ class TestAuditOverlayComposition:
             ("path::pc", "dilemma::dc", "beat::cc"),
             ("path::pd", "dilemma::dd", "beat::cd"),
         ]
-        # Overlay when-flags use state_flag node IDs (state_flag::{path_raw}_committed)
         overlay_when_lists = [
             ["state_flag::pa_committed"],
             ["state_flag::pb_committed"],
@@ -2557,16 +2556,103 @@ class TestAuditOverlayComposition:
         ]
         graph, spec = self._build_graph_with_overlays(overlay_when_lists, commit_flags)
 
-        # Pre-seed a structural_split warning for this passage (as Phase 4b would emit)
+        # Pre-seed split_passages with this passage's ID (as Phase 4b would).
         existing_warning = (
             "Passage passage::test has 5 narratively relevant flags — structural split recommended"
         )
-        feasibility: dict = {"warnings": [existing_warning]}
+        feasibility: dict = {
+            "warnings": [existing_warning],
+            "split_passages": {"passage::test"},
+        }
         _audit_overlay_composition(graph, [spec], feasibility)
 
         # Should still have exactly 1 warning (not double-added)
         assert len(feasibility["warnings"]) == 1
         assert feasibility["warnings"][0] == existing_warning
+
+    def test_dedup_uses_split_passages_set_not_warning_string(self) -> None:
+        """Regression: contract is feasibility["split_passages"], not warning-string parsing.
+
+        If the dedup were still string-based, a warning that does NOT mention
+        the passage ID would fail to deduplicate, and the audit would re-flag.
+        With the new contract, an explicit `split_passages` set short-circuits
+        the audit regardless of what the warning string looks like (#1170).
+        """
+        from questfoundry.pipeline.stages.polish.deterministic import _audit_overlay_composition
+
+        commit_flags = [
+            ("path::pa", "dilemma::da", "beat::ca"),
+            ("path::pb", "dilemma::db", "beat::cb"),
+            ("path::pc", "dilemma::dc", "beat::cc"),
+            ("path::pd", "dilemma::dd", "beat::cd"),
+        ]
+        overlay_when_lists = [
+            ["state_flag::pa_committed"],
+            ["state_flag::pb_committed"],
+            ["state_flag::pc_committed"],
+            ["state_flag::pd_committed"],
+        ]
+        graph, spec = self._build_graph_with_overlays(overlay_when_lists, commit_flags)
+
+        # Warning that does NOT contain the passage ID — old string-parsing
+        # dedup would have missed this. Set membership is the source of truth.
+        feasibility: dict = {
+            "warnings": ["some unrelated warning"],
+            "split_passages": {"passage::test"},
+        }
+        _audit_overlay_composition(graph, [spec], feasibility)
+
+        # Should still have exactly 1 warning — no double-add despite mismatched string.
+        assert feasibility["warnings"] == ["some unrelated warning"]
+
+    def test_overlay_audit_writes_to_split_passages(self) -> None:
+        """When _audit_overlay_composition flags a NEW passage via the overlay
+        threshold, it must add the passage ID to feasibility["split_passages"]
+        (#1170 symmetry invariant: the set always contains every passage ever
+        flagged as structural_split, regardless of which check raised it).
+        """
+        from questfoundry.pipeline.stages.polish.deterministic import _audit_overlay_composition
+
+        graph = Graph.empty()
+        graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
+        graph.create_node(
+            "entity::hero",
+            {
+                "type": "entity",
+                "raw_id": "hero",
+                "overlays": [
+                    {"when": [], "details": {"key": "a"}},
+                    {"when": [], "details": {"key": "b"}},
+                    {"when": [], "details": {"key": "c"}},
+                    {"when": [], "details": {"key": "d"}},
+                ],
+            },
+        )
+        graph.create_node(
+            "beat::target",
+            {
+                "type": "beat",
+                "raw_id": "target",
+                "summary": "Target beat",
+                "dilemma_impacts": [],
+                "entities": ["entity::hero"],
+                "scene_type": "scene",
+            },
+        )
+        graph.add_edge("belongs_to", "beat::target", "path::p1")
+
+        spec = PassageSpec(
+            passage_id="passage::needs_split",
+            beat_ids=["beat::target"],
+            summary="overlay-flagged passage",
+            entities=["entity::hero"],
+        )
+
+        feasibility: dict = {"warnings": [], "split_passages": set()}
+        _audit_overlay_composition(graph, [spec], feasibility)
+
+        assert "passage::needs_split" in feasibility["split_passages"]
+        assert any("passage::needs_split" in w for w in feasibility["warnings"])
 
     def test_unconditional_overlays_always_active(self) -> None:
         """Overlays with empty ``when`` lists are always active regardless of flag combo.
