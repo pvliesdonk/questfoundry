@@ -544,7 +544,7 @@ def _render_choices(
 
         parts.append('<p class="choice">')
 
-        # Handle conditional choices (requires codewords)
+        # Handle conditional (gated) choices
         if choice.requires:
             codeword_names = ", ".join(
                 f'<span class="codeword-name">{html.escape(_format_codeword_name(cw))}</span>'
