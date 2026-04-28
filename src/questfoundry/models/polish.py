@@ -380,10 +380,10 @@ class FalseBranchDecisionItem(BaseModel):
 
     @model_validator(mode="after")
     def _require_decision_specific_fields(self) -> FalseBranchDecisionItem:
-        """R-5.9 / R-5.10: decision-specific fields MUST be populated.
+        """R-5.9: decision-specific fields MUST be populated.
 
         - sidetrack: sidetrack_summary MUST be non-empty (R-5.9)
-        - diamond: diamond_summary_a AND diamond_summary_b MUST be non-empty (R-5.10)
+        - diamond: diamond_summary_a AND diamond_summary_b MUST be non-empty (R-5.9)
         - skip: no additional content required
 
         POLISH has no semantic_validator hook (#1498); this Pydantic check is
@@ -403,7 +403,7 @@ class FalseBranchDecisionItem(BaseModel):
             raise ValueError(
                 "FalseBranchDecisionItem with decision='diamond' MUST have "
                 "non-empty `diamond_summary_a` AND `diamond_summary_b` "
-                "(R-5.10). Both alternative passages need prose hints."
+                "(R-5.9). Both alternative passages need prose hints."
             )
         return self
 

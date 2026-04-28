@@ -143,14 +143,14 @@ class TestFalseBranchDecisionItem:
         ],
     )
     def test_diamond_requires_both_summaries(self, summary_a: str, summary_b: str) -> None:
-        """R-5.10: diamond decision requires both diamond_summary_a AND _b (#1527).
+        """R-5.9: diamond decision requires both diamond_summary_a AND _b (#1527).
 
         Each parametrize case runs independently — if `missing_b` were to
         regress, `missing_a` and `missing_both` still get their own
         assertion (vs nested `pytest.raises` blocks where the first
         unexpectedly-not-raising case short-circuits the rest).
         """
-        with pytest.raises(ValidationError, match=r"R-5\.10"):
+        with pytest.raises(ValidationError, match=r"R-5\.9"):
             FalseBranchDecisionItem(
                 candidate_index=0,
                 decision="diamond",
