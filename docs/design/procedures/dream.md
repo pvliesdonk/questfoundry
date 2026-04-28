@@ -237,7 +237,9 @@ R-1.13: Rejection loops back to the operation that contains the misalignment.
 vision:
   genre: "dark fantasy"
   subgenre: "mystery"
-  tone: "atmospheric, morally ambiguous"
+  tone:
+    - "atmospheric"
+    - "morally ambiguous"
   themes:
     - "forbidden knowledge"
     - "trust"
