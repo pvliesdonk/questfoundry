@@ -208,12 +208,7 @@ class LLMLoggingCallback(BaseCallbackHandler):
             gen = response.generations[0][0]  # First generation, first batch
             content = gen.text if hasattr(gen, "text") else str(gen)
 
-            # Check for tool calls in the message. The langchain stubs don't
-            # expose `Generation.message` or `BaseMessage.tool_calls` even
-            # though both are runtime-accessible on chat-model generations
-            # (langchain has its own type-narrowing protocol). The hasattr
-            # guards keep this safe; the per-line ignores narrow what would
-            # otherwise need a file-level pyright suppression.
+            # langchain stubs omit Generation.message and BaseMessage.tool_calls; hasattr guards keep this safe.
             if hasattr(gen, "message"):
                 msg = gen.message  # pyright: ignore[reportAttributeAccessIssue]
                 if hasattr(msg, "tool_calls") and msg.tool_calls:  # pyright: ignore[reportAttributeAccessIssue]

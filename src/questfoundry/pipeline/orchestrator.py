@@ -305,11 +305,7 @@ class PipelineOrchestrator:
 
         chat_model = create_chat_model(provider_name, model, **kwargs)
 
-        # `with_config` returns a `Runnable[..., AIMessage]`. The function's
-        # callers consume it as a chat model (via shared abstractions that
-        # accept either the bare model or a `Runnable` wrapping it). Cast
-        # back to `BaseChatModel` to keep the public return shape stable;
-        # the runtime object is still callable as a chat model.
+        # `with_config` widens the return to `Runnable[..., AIMessage]`; callers consume it as a chat model.
         if self._callbacks:
             chat_model = chat_model.with_config(callbacks=self._callbacks)  # type: ignore[assignment]
 
@@ -854,11 +850,7 @@ class PipelineOrchestrator:
             await unload_ollama_model(self._structured_model)
 
         if self._creative_model is not None:
-            # Some chat models (Ollama wrappers, etc.) expose an async `close`
-            # method that langchain's BaseChatModel stub doesn't declare.
-            # The hasattr guard makes this safe at runtime; the per-line
-            # ignores narrow what would otherwise be a file-level
-            # pyright suppression.
+            # Some chat models (Ollama, etc.) expose an async `close` that BaseChatModel stubs don't declare.
             if hasattr(self._creative_model, "close"):
                 close_method = self._creative_model.close  # pyright: ignore[reportAttributeAccessIssue]
                 if callable(close_method):
