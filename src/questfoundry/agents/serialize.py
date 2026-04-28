@@ -1865,10 +1865,15 @@ async def serialize_seed_as_function(
 
     prompts = dict(_load_seed_section_prompts())  # Copy — cached original is immutable
 
-    # Inject size-aware beat count ranges into the Y-shape beat prompts
+    # Inject size-aware ranges into the Y-shape beat prompts and the
+    # dilemma-branching minimum into the dilemmas prompt. The dilemmas
+    # prompt's "fully explore at least N" hard constraint must scale with
+    # the size preset; long stories require ≥3 fully-explored to satisfy
+    # the arc-count check (#1236).
     size_vars = size_template_vars(size_profile)
     shared_range = size_vars["size_shared_beats_per_dilemma"]
     post_range = size_vars["size_post_commit_beats_per_path"]
+    fully_explored = size_vars["size_fully_explored"]
     if "shared_beats" in prompts:
         prompts["shared_beats"] = prompts["shared_beats"].replace(
             "{size_shared_beats_per_dilemma}", shared_range
@@ -1877,6 +1882,8 @@ async def serialize_seed_as_function(
         prompts["per_path_beats"] = prompts["per_path_beats"].replace(
             "{size_post_commit_beats_per_path}", post_range
         )
+    if "dilemmas" in prompts:
+        prompts["dilemmas"] = prompts["dilemmas"].replace("{size_fully_explored}", fully_explored)
 
     total_tokens = 0
 

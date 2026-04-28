@@ -266,5 +266,6 @@ def size_template_vars(profile: SizeProfile | None = None) -> dict[str, str]:
         "size_est_passages": p.range_str("est_passages"),
         "size_est_words": p.range_str("est_words"),
         "size_tone_words": p.range_str("tone_words"),
+        "size_fully_explored": str(p.fully_explored),
         "size_preset": p.preset,
     }

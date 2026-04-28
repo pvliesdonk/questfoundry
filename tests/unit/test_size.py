@@ -269,6 +269,7 @@ class TestSizeTemplateVars:
             "size_est_passages",
             "size_est_words",
             "size_tone_words",
+            "size_fully_explored",
             "size_preset",
         }
         assert set(vars_.keys()) == expected
@@ -278,3 +279,12 @@ class TestSizeTemplateVars:
         vars_ = size_template_vars(profile)
         assert vars_["size_shared_beats_per_dilemma"] == "1-2"
         assert vars_["size_post_commit_beats_per_path"] == "2-3"
+
+    def test_size_fully_explored_scales_with_preset(self) -> None:
+        # The dilemmas prompt's branching minimum scales with the size
+        # preset (#1236) — long stories need >=3 fully-explored to hit
+        # the arc-count check, so the prompt's "at least N" must scale.
+        assert size_template_vars(get_size_profile("micro"))["size_fully_explored"] == "1"
+        assert size_template_vars(get_size_profile("short"))["size_fully_explored"] == "3"
+        assert size_template_vars(get_size_profile("medium"))["size_fully_explored"] == "4"
+        assert size_template_vars(get_size_profile("long"))["size_fully_explored"] == "5"

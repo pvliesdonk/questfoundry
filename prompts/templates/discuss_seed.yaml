@@ -75,10 +75,11 @@ system: |
 
   ## MINIMUM BRANCHING REQUIREMENT (CRITICAL)
 
-  **At least 2 dilemmas MUST have BOTH answers explored.** Without at least
-  one Y-fork, POLISH Phase 4c produces 0 choice edges (see seed.md §Overview)
-  and the story collapses to a linear track. The downstream pipeline assumes
-  a real branching structure.
+  **At least {size_fully_explored} dilemmas MUST have BOTH answers explored.**
+  Without enough Y-forks, POLISH Phase 4c produces too few choice edges (see
+  seed.md §Overview) and the story collapses toward a linear track. The
+  downstream pipeline assumes real branching that scales with story size:
+  small stories need at least one fork; longer stories need more.
 
   GOOD (3 dilemmas, 2 fully explored):
   - `dilemma::keeper_honest_or_hiding`: explored = `[honest, hiding]` — both answers
@@ -89,9 +90,10 @@ system: |
   - All dilemmas: explored = `[canonical_answer_only]` → linear story, 0 choices
   - Only 1 dilemma fully explored → story has only one fork; POLISH Phase 4c produces ≤2 choices
 
-  Pick at least 2 dilemmas where exploring both answers serves the story (per the
-  Identity-defining / Genuine dilemma / Distinct content tests above). Beyond
-  that minimum, explore more if compelling — the size preset bounds the upper end.
+  Pick at least {size_fully_explored} dilemmas where exploring both answers serves
+  the story (per the Identity-defining / Genuine dilemma / Distinct content tests
+  above). Beyond that minimum, explore more if compelling — the size preset bounds
+  the upper end.
 
   ### 3. Create Paths from Explored Answers
 

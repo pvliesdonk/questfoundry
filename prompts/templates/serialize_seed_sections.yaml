@@ -99,9 +99,10 @@ dilemmas_prompt: |
 
   ## MINIMUM BRANCHING REQUIREMENT (HARD CONSTRAINT — READ FIRST)
 
-  At least 2 dilemmas MUST have ALL their answers in `explored` (nothing in `unexplored`).
-  This is required for the story to have meaningful branching. A story with fewer than
-  2 fully-explored dilemmas produces a near-linear story and WILL BE REJECTED by validation.
+  At least {size_fully_explored} dilemmas MUST have ALL their answers in `explored`
+  (nothing in `unexplored`). This is required for the story to have meaningful branching.
+  A story with fewer than {size_fully_explored} fully-explored dilemmas produces a
+  near-linear story and WILL BE REJECTED by validation.
 
   BAD (rejected): only default answers explored → no real branching → pipeline fails
   ```json
@@ -169,9 +170,9 @@ dilemmas_prompt: |
 
   ## FINAL CHECK before returning
   Count how many of your dilemmas have ALL answers in `explored` (nothing in `unexplored`).
-  If that count is less than 2, GO BACK and fully explore at least 2 dilemmas
-  by moving ALL their answers from `unexplored` into `explored`.
-  A story with fewer than 2 fully-explored dilemmas is REJECTED by validation.
+  If that count is less than {size_fully_explored}, GO BACK and fully explore at least
+  {size_fully_explored} dilemmas by moving ALL their answers from `unexplored` into `explored`.
+  A story with fewer than {size_fully_explored} fully-explored dilemmas is REJECTED by validation.
 
   ## Output
   Return ONLY valid JSON with the "dilemmas" array.

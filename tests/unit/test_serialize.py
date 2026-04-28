@@ -2065,6 +2065,20 @@ class TestSizeProfileInjectedIntoBeatPrompts:
         size_vars = size_template_vars(None)
         assert size_vars["size_post_commit_beats_per_path"] == "2-3"
 
+    def test_dilemmas_prompt_size_fully_explored_placeholder_present(self) -> None:
+        # #1236: the dilemmas prompt's HARD constraint and FINAL CHECK must use
+        # {size_fully_explored} so the "at least N" branching minimum scales
+        # with the size preset (long stories need >=3 fully-explored).
+        from questfoundry.agents.serialize import _load_seed_section_prompts
+
+        _load_seed_section_prompts.cache_clear()
+        prompts = _load_seed_section_prompts()
+        assert "{size_fully_explored}" in prompts["dilemmas"]
+        # Hardcoded "at least 2" must be gone in both the constraint and FINAL CHECK
+        assert "at least 2 dilemmas" not in prompts["dilemmas"]
+        assert "less than 2" not in prompts["dilemmas"]
+        assert "fewer than 2" not in prompts["dilemmas"]
+
 
 class TestDilemmasPromptStructure:
     """Structural tests for the dilemmas_prompt section (#1234).
