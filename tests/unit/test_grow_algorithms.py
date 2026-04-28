@@ -4282,6 +4282,59 @@ def _make_two_dilemma_graph_with_relationship(ordering: str) -> Graph:
     return graph
 
 
+def _make_three_dilemma_serial_concurrent_graph() -> Graph:
+    """Build a 3-dilemma graph with one serial pair and one concurrent pair.
+
+    Used by the serial+concurrent mix regression tests (#1146).
+
+    Dilemmas: alpha, beta, gamma. Each has one canonical path with two
+    beats (intro + commit). Relationships:
+        serial:    alpha → beta (alpha_commit ≺ beta_intro)
+        concurrent: alpha ↔ gamma (alpha_commit ≺ gamma_commit by the
+                    alphabetical heuristic)
+
+    No temporal hints attached — callers add their specific hint with
+    ``graph.update_node(beat_id, temporal_hint=...)`` after construction.
+    """
+    graph = Graph.empty()
+    for dil in ("alpha", "beta", "gamma"):
+        graph.create_node(f"dilemma::{dil}", {"type": "dilemma", "raw_id": dil})
+        graph.create_node(
+            f"path::{dil}_path",
+            {
+                "type": "path",
+                "raw_id": f"{dil}_path",
+                "dilemma_id": f"dilemma::{dil}",
+                "is_canonical": True,
+            },
+        )
+        graph.create_node(
+            f"beat::{dil}_intro",
+            {
+                "type": "beat",
+                "raw_id": f"{dil}_intro",
+                "summary": f"{dil} intro.",
+                "dilemma_impacts": [{"dilemma_id": f"dilemma::{dil}", "effect": "advances"}],
+            },
+        )
+        graph.create_node(
+            f"beat::{dil}_commit",
+            {
+                "type": "beat",
+                "raw_id": f"{dil}_commit",
+                "summary": f"{dil} commit.",
+                "dilemma_impacts": [{"dilemma_id": f"dilemma::{dil}", "effect": "commits"}],
+            },
+        )
+        graph.add_edge("belongs_to", f"beat::{dil}_intro", f"path::{dil}_path")
+        graph.add_edge("belongs_to", f"beat::{dil}_commit", f"path::{dil}_path")
+        graph.add_edge("predecessor", f"beat::{dil}_commit", f"beat::{dil}_intro")
+
+    graph.add_edge("serial", "dilemma::alpha", "dilemma::beta")
+    graph.add_edge("concurrent", "dilemma::alpha", "dilemma::gamma")
+    return graph
+
+
 class TestInterleavecrossPathBeats:
     """Tests for interleave_cross_path_beats."""
 
@@ -5962,6 +6015,110 @@ class TestBuildHintConflictGraph:
         # With wraps ordering and no hints, there should be no conflicts
         assert result.conflicts == []
         assert result.mandatory_drops == set()
+
+    def test_serial_plus_concurrent_mix_detection_postcondition_agree(self) -> None:
+        """Regression for #1144/#1145: serial + concurrent dilemma mix.
+
+        Detection (`build_hint_conflict_graph`) and postcondition
+        (`verify_hints_acyclic` with the same surviving beat IDs) must
+        agree when the graph has BOTH a non-concurrent (serial) relationship
+        pair AND a concurrent pair carrying a temporal hint. Previously
+        these could silently diverge — fixed in #1145, but no regression
+        test locked in the agreement.
+
+        Setup (built by `_make_three_dilemma_serial_concurrent_graph`):
+          - 3 dilemmas: alpha, beta, gamma
+          - alpha → beta serial: alpha_commit ≺ beta_intro
+          - alpha ↔ gamma concurrent: alpha_commit ≺ gamma_commit
+            (heuristic; alpha < gamma alphabetically)
+
+        Hint on gamma_intro: before_commit alpha
+          → predecessor(alpha_commit, gamma_intro), i.e. gamma_intro
+          ≺ alpha_commit. The base has gamma_intro ≺ gamma_commit and
+          alpha_commit ≺ gamma_commit, but no path from alpha_commit
+          back to gamma_intro, so no cycle.
+
+        Detection should produce no conflicts; verify_hints_acyclic with
+        the hint kept should report no cycles. The presence of the serial
+        pair must not cause spurious detection.
+        """
+        from questfoundry.graph.grow_algorithms import (
+            build_hint_conflict_graph,
+            verify_hints_acyclic,
+        )
+
+        graph = _make_three_dilemma_serial_concurrent_graph()
+        graph.update_node(
+            "beat::gamma_intro",
+            temporal_hint={"relative_to": "dilemma::alpha", "position": "before_commit"},
+        )
+
+        result = build_hint_conflict_graph(graph)
+        assert result.conflicts == [], (
+            f"Expected no conflicts in serial+concurrent mix with safe hint; got {result.conflicts}"
+        )
+        assert result.mandatory_drops == set(), (
+            f"Expected no mandatory drops; got {result.mandatory_drops}"
+        )
+        assert result.swap_pairs == [], f"Expected no swap pairs; got {result.swap_pairs}"
+
+        cyclic_beats = verify_hints_acyclic(graph, surviving_beat_ids={"beat::gamma_intro"})
+        assert cyclic_beats == [], (
+            "Detection said no conflicts; verify_hints_acyclic must agree. "
+            f"Got cyclic beats: {cyclic_beats}"
+        )
+
+    def test_serial_plus_concurrent_mix_cyclic_hint_detected(self) -> None:
+        """Companion to the agreement test: a hint that DOES cycle in a
+        serial+concurrent mix is detected as a mandatory drop, and
+        `verify_hints_acyclic` confirms the cycle when re-applied.
+
+        Same setup as the agreement test (alpha → beta serial, alpha ↔
+        gamma concurrent). Hint on alpha_intro: after_commit gamma
+          → predecessor(alpha_intro, gamma_commit), i.e. gamma_commit
+          ≺ alpha_intro.
+          Cycle: alpha_intro ≺ alpha_commit (within-path) ≺ gamma_commit
+          (concurrent heuristic) ≺ alpha_intro (the new hint edge).
+          `_would_create_cycle` catches this because gamma_commit is
+          reachable from alpha_intro in the base successors.
+        """
+        from questfoundry.graph.grow_algorithms import (
+            build_hint_conflict_graph,
+            verify_hints_acyclic,
+        )
+
+        graph = _make_three_dilemma_serial_concurrent_graph()
+        graph.update_node(
+            "beat::alpha_intro",
+            temporal_hint={"relative_to": "dilemma::gamma", "position": "after_commit"},
+        )
+
+        result = build_hint_conflict_graph(graph)
+        assert "beat::alpha_intro" in result.mandatory_drops, (
+            f"alpha_intro's hint must be a mandatory solo drop "
+            f"(cycles against concurrent heuristic in serial+concurrent mix); "
+            f"got mandatory_drops={result.mandatory_drops}"
+        )
+        # Mirror the assertion shape used by other mandatory-drop tests in
+        # this class for completeness (see test_mandatory_solo_drop_detected).
+        assert result.swap_pairs == [], f"Expected no swap pairs; got {result.swap_pairs}"
+        assert result.minimum_drop_set == {"beat::alpha_intro"}, (
+            f"Expected minimum_drop_set == {{'beat::alpha_intro'}}; got {result.minimum_drop_set}"
+        )
+
+        cyclic_beats = verify_hints_acyclic(graph, surviving_beat_ids=set())
+        assert cyclic_beats == [], (
+            f"Detection identified alpha_intro as the drop. "
+            f"verify_hints_acyclic with no surviving hints must report no "
+            f"cycles; got {cyclic_beats}"
+        )
+
+        cyclic_with_hint = verify_hints_acyclic(graph, surviving_beat_ids={"beat::alpha_intro"})
+        assert cyclic_with_hint, (
+            "Re-applying the dropped hint must produce a cycle "
+            "verify_hints_acyclic detects — otherwise detection found a "
+            "false-positive mandatory drop."
+        )
 
     def test_cycles_alone_with_self_loop_beat(self) -> None:
         """Test _cycles_alone edge case: from_beat == to_beat returns False."""
