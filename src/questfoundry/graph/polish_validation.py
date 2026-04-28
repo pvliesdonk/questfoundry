@@ -884,6 +884,11 @@ def check_all_endings_reachable(graph: Graph) -> ValidationCheck:
     )
 
 
+def _choice_edge_label(edge: dict[str, Any]) -> str:
+    """Format a `choice` edge as ``"from → to"`` for diagnostic messages."""
+    return f"{edge.get('from', '?')} → {edge.get('to', '?')}"
+
+
 def check_gate_satisfiability(graph: Graph) -> ValidationCheck:
     """Verify all choice `requires` are satisfiable (required state flags exist globally).
 
@@ -910,15 +915,12 @@ def check_gate_satisfiability(graph: Graph) -> ValidationCheck:
     # code paths used `requires_state_flags`. Read both for back-compat.
     unsatisfiable: list[str] = []
 
-    def _edge_label(edge: dict[str, Any]) -> str:
-        return f"{edge.get('from', '?')} → {edge.get('to', '?')}"
-
-    sorted_edges = sorted(choice_edges, key=_edge_label)
+    sorted_edges = sorted(choice_edges, key=_choice_edge_label)
     for edge in sorted_edges:
         requires = edge.get("requires") or edge.get("requires_state_flags") or []
         for req in requires:
             if req not in grantable:
-                unsatisfiable.append(f"{_edge_label(edge)} requires '{req}'")
+                unsatisfiable.append(f"{_choice_edge_label(edge)} requires '{req}'")
 
     if not unsatisfiable:
         return ValidationCheck(
@@ -983,10 +985,7 @@ def check_gate_co_satisfiability(graph: Graph) -> ValidationCheck:
     # used `requires_state_flags`. Read both for back-compat.
     paradoxical: list[str] = []
 
-    def _edge_label(edge: dict[str, Any]) -> str:
-        return f"{edge.get('from', '?')} → {edge.get('to', '?')}"
-
-    sorted_edges = sorted(choice_edges, key=_edge_label)
+    sorted_edges = sorted(choice_edges, key=_choice_edge_label)
     for edge in sorted_edges:
         requires = set(edge.get("requires") or edge.get("requires_state_flags") or [])
         if not requires:
@@ -995,7 +994,7 @@ def check_gate_co_satisfiability(graph: Graph) -> ValidationCheck:
         # A gate is satisfiable if ANY arc provides all required state flags
         satisfiable = any(requires <= sfs for sfs in arc_state_flags.values())
         if not satisfiable:
-            paradoxical.append(f"{_edge_label(edge)} requires {sorted(requires)}")
+            paradoxical.append(f"{_choice_edge_label(edge)} requires {sorted(requires)}")
 
     if not paradoxical:
         return ValidationCheck(
