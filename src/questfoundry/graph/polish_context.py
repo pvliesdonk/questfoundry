@@ -189,7 +189,8 @@ def format_entity_arc_context(
 
     Returns:
         Dict with keys: entity_id, entity_name, entity_description,
-        beat_appearances, path_ids, valid_path_ids, valid_beat_ids.
+        beat_appearances, overlay_data, anchored_dilemmas, path_ids,
+        valid_path_beats.
     """
     beat_nodes = graph.get_nodes_by_type("beat")
     entity_nodes = graph.get_nodes_by_type("entity")
@@ -225,7 +226,7 @@ def format_entity_arc_context(
 
         # Backtick-wrap IDs per @prompt-engineer Rule 4 — consistent with the
         # other ID lists this context dict produces, so a model matching beat
-        # IDs against `valid_beat_ids` doesn't have to mentally strip backticks.
+        # IDs against `valid_path_beats` doesn't have to mentally strip backticks.
         if not path_set:
             path_label = "unknown"
         elif len(path_set) == 1:
