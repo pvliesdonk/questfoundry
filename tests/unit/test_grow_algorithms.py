@@ -7696,7 +7696,7 @@ class TestBuildHintConflictGraph:
             "cycle slipped through. Got "
             f"minimum_drop_set={result.minimum_drop_set}, "
             f"swap_pairs={result.swap_pairs}, "
-            f"conflicts={result.conflicts}"
+            f"mandatory_drops={result.mandatory_drops}"
         )
 
         # Postcondition: with the minimum drop set removed, the surviving
