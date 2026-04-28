@@ -130,47 +130,55 @@ class TestFill:
 
 class TestDress:
     def test_dress_full(self) -> None:
+        # Mirrors the actual graph-derived shape from DressStage._extract_artifact:
+        # dict-of-dicts keyed by node id, plus an art_direction dict.
         data = {
-            "art_direction_created": True,
-            "entity_visuals_created": 5,
-            "codex_entries_created": 8,
-            "briefs_created": 3,
-            "illustrations_generated": 3,
-            "illustrations_failed": 0,
+            "art_direction": {"art_direction_id": "main", "style": "noir"},
+            "entity_visuals": {"ev1": {}, "ev2": {}, "ev3": {}, "ev4": {}, "ev5": {}},
+            "briefs": {"b1": {}, "b2": {}, "b3": {}},
+            "codex_entries": {f"c{i}": {} for i in range(8)},
+            "illustrations": {"i1": {}, "i2": {}, "i3": {}},
         }
         lines = build_stage_summary("dress", data)
         assert lines[0] == "Art direction: created"
         assert "Entity visuals: 5" in lines
         assert "Codex entries: 8" in lines
-        assert "Illustrations failed: 0" not in lines  # zero skipped
+        assert "Illustration briefs: 3" in lines
+        assert "Illustrations: 3" in lines
 
     def test_dress_no_art_direction(self) -> None:
-        data = {"art_direction_created": False, "codex_entries_created": 3}
+        # Graph extraction returns {} when the art_direction node is absent.
+        data = {"art_direction": {}, "codex_entries": {"c1": {}, "c2": {}, "c3": {}}}
         lines = build_stage_summary("dress", data)
         assert lines == ["Codex entries: 3"]
 
+    def test_dress_empty_collections_skipped(self) -> None:
+        data = {
+            "art_direction": {},
+            "entity_visuals": {},
+            "briefs": {"b1": {}},
+            "codex_entries": {},
+            "illustrations": {},
+        }
+        lines = build_stage_summary("dress", data)
+        assert lines == ["Illustration briefs: 1"]
+
 
 class TestPolish:
-    def test_polish_counts(self) -> None:
-        data = {
-            "passage_count": 24,
-            "choice_count": 18,
-            "variant_count": 4,
-            "residue_count": 2,
-            "sidetrack_count": 1,
-            "false_branch_count": 3,
-        }
+    # POLISH writes its outputs to the graph (passages, choices, state flags),
+    # not into the artifact dict. The artifact is just `{"phases_completed": [...]}`,
+    # so the summary surfaces phase tally only — for headline counts use `qf status`.
+    def test_polish_phases_completed(self) -> None:
+        data = {"phases_completed": [{"phase": "5a"}, {"phase": "5b"}, {"phase": "5c"}]}
         lines = build_stage_summary("polish", data)
-        assert lines == [
-            "Passages: 24",
-            "Choices: 18",
-            "Variants: 4",
-            "Residue beats: 2",
-            "Sidetrack beats: 1",
-            "False branches: 3",
-        ]
+        assert lines == ["Phases completed: 3"]
 
-    def test_polish_zero_skipped(self) -> None:
-        data = {"passage_count": 24, "choice_count": 0}
+    def test_polish_empty_phases(self) -> None:
+        data: dict[str, Any] = {"phases_completed": []}
         lines = build_stage_summary("polish", data)
-        assert lines == ["Passages: 24"]
+        assert lines == []
+
+    def test_polish_missing_phases_key(self) -> None:
+        data: dict[str, Any] = {"some_other_field": 42}
+        lines = build_stage_summary("polish", data)
+        assert lines == []

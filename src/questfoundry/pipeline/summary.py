@@ -5,6 +5,21 @@ After a stage completes successfully, the orchestrator passes its artifact
 :func:`build_stage_summary` to produce a short bulleted list shown in the
 CLI completion block. The intent is a 2-5 line ballpark check — "BRAINSTORM
 produced 3 dilemmas + 8 entities" — without opening the artifact files.
+
+Per-stage artifact shapes (as of 2026-04, post-#1057):
+
+- DREAM, BRAINSTORM, SEED, GROW: ``<Pydantic>.model_dump()`` — keys match
+  the model fields (genre/tone/themes; entities/dilemmas; arc_count etc.).
+- FILL: ``FillResult.model_dump()`` — passages_filled, passages_flagged,
+  entity_updates_applied, review_cycles, phases_completed.
+- DRESS: graph-derived dict with art_direction (dict), entity_visuals,
+  briefs, codex_entries, illustrations (each a dict-of-dicts keyed by id).
+- POLISH: ``{"phases_completed": [PolishPhaseResult, ...]}`` — only the
+  phase log; per-passage/choice counts live in the graph, not the artifact.
+
+Builders that look up a key not present in the artifact silently skip
+that line — adding a new stage or restructuring an artifact without
+updating the builder yields a missing summary, not an error.
 """
 
 from __future__ import annotations
@@ -12,10 +27,14 @@ from __future__ import annotations
 from collections import Counter
 from typing import TYPE_CHECKING, Any
 
+from questfoundry.observability.logging import get_logger
+
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
 
     StageSummaryBuilder = Callable[[dict[str, Any]], list[str]]
+
+log = get_logger(__name__)
 
 
 def build_stage_summary(stage_name: str, artifact_data: Any) -> list[str]:
@@ -26,6 +45,11 @@ def build_stage_summary(stage_name: str, artifact_data: Any) -> list[str]:
     Summary block when the list is empty.
     """
     if not isinstance(artifact_data, dict):
+        log.debug(
+            "stage_summary_skipped_non_dict_artifact",
+            stage=stage_name,
+            type=type(artifact_data).__name__,
+        )
         return []
 
     builder = _BUILDERS.get(stage_name)
@@ -116,36 +140,39 @@ def _summarize_fill(data: dict[str, Any]) -> list[str]:
 
 
 def _summarize_dress(data: dict[str, Any]) -> list[str]:
+    """Summary for DRESS — artifact is graph-derived (dict-of-dicts per type).
+
+    Reports counts of entity_visuals / illustration_briefs / codex_entries /
+    illustrations. The illustrations count includes successes only; failures
+    surface as warnings during the run, not in this summary.
+    """
     lines: list[str] = []
-    if data.get("art_direction_created"):
+    if isinstance(data.get("art_direction"), dict) and data["art_direction"]:
         lines.append("Art direction: created")
-    lines.extend(
-        _count_int_fields(
-            data,
-            (
-                ("entity_visuals_created", "Entity visuals"),
-                ("codex_entries_created", "Codex entries"),
-                ("briefs_created", "Illustration briefs"),
-                ("illustrations_generated", "Illustrations generated"),
-                ("illustrations_failed", "Illustrations failed"),
-            ),
-        )
-    )
+    for key, label in (
+        ("entity_visuals", "Entity visuals"),
+        ("briefs", "Illustration briefs"),
+        ("codex_entries", "Codex entries"),
+        ("illustrations", "Illustrations"),
+    ):
+        value = data.get(key)
+        if isinstance(value, dict) and value:
+            lines.append(f"{label}: {len(value)}")
     return lines
 
 
 def _summarize_polish(data: dict[str, Any]) -> list[str]:
-    return _count_int_fields(
-        data,
-        (
-            ("passage_count", "Passages"),
-            ("choice_count", "Choices"),
-            ("variant_count", "Variants"),
-            ("residue_count", "Residue beats"),
-            ("sidetrack_count", "Sidetrack beats"),
-            ("false_branch_count", "False branches"),
-        ),
-    )
+    """Summary for POLISH — artifact is `{"phases_completed": [...]}`.
+
+    POLISH writes its outputs to the graph (passages, choices, state flags)
+    rather than into the artifact dict, so the per-count fields on
+    `PolishResult` aren't available here. We surface the phase tally only;
+    for headline counts, run `qf status` after POLISH.
+    """
+    phases = data.get("phases_completed")
+    if isinstance(phases, list) and phases:
+        return [f"Phases completed: {len(phases)}"]
+    return []
 
 
 _BUILDERS: dict[str, StageSummaryBuilder] = {
@@ -174,15 +201,14 @@ def _format_str_list(value: Any, limit: int = 4) -> str | None:
     return _truncate_items(items, limit=limit)
 
 
-def _truncate_items(items: Iterable[str], limit: int) -> str:
-    seq = list(items)
-    if len(seq) <= limit:
-        return ", ".join(seq)
-    return ", ".join(seq[:limit]) + ", ..."
+def _truncate_items(items: list[str], limit: int) -> str:
+    if len(items) <= limit:
+        return ", ".join(items)
+    return ", ".join(items[:limit]) + ", ..."
 
 
 def _format_counts(counter: Counter[str]) -> str:
-    return ", ".join(f"{count} {label}" for label, count in counter.most_common())
+    return ", ".join(f"{count} {category}" for category, count in counter.most_common())
 
 
 def _list_of_dicts(value: Any) -> list[dict[str, Any]]:
