@@ -83,6 +83,5 @@ user: |
   If no micro-beats are needed, return an empty micro_beats array.
 
   REMINDER: Return ONLY valid JSON. Use ONLY the entity IDs listed above.
-  {pacing_feedback}
 
 components: []

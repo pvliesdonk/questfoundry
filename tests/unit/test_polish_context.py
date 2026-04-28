@@ -146,16 +146,6 @@ class TestFormatPacingContext:
         # No entities → valid_entity_ids falls back to `(none)`.
         assert ctx["valid_entity_ids"] == "(none)"
 
-    def test_pacing_feedback_slot_defaults_empty(self) -> None:
-        """The repair-loop slot for Phase 2 must always be present in the
-        context dict; first calls render with the empty default. Mirrors
-        Phase 3's ``structural_feedback`` and Phase 4g's
-        ``transition_feedback`` (#1492)."""
-        graph = Graph.empty()
-        ctx = format_pacing_context(graph, [])
-        assert "pacing_feedback" in ctx
-        assert ctx["pacing_feedback"] == ""
-
     def test_pacing_beat_with_entities_renders_backticks(self) -> None:
         """A pacing flag whose beats reference entities renders the entity
         list with backticks per @prompt-engineer Rule 4 — never as a Python

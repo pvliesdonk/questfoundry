@@ -170,8 +170,6 @@ def format_pacing_context(
         "pacing_issues": pacing_issues,
         "valid_entity_ids": valid_entity_ids,
         "entity_count": str(len(entity_nodes)),
-        # Repair-loop slot (mirrors Phase 3 structural_feedback, Phase 4g transition_feedback).
-        "pacing_feedback": "",
     }
 
 
