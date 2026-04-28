@@ -60,17 +60,14 @@ def _create_project_with_graph(project_path: Path, *, with_prose: bool = True) -
             "is_ending": True,
         },
     )
-    g.create_node(
-        "choice::enter",
-        {
-            "type": "choice",
-            "from_passage": "passage::intro",
-            "to_passage": "passage::castle",
-            "label": "Enter the castle",
-        },
+    # Per ontology Part 4, choices are edges (not nodes) — POLISH writes them
+    # via graph.add_edge("choice", from, to, ...). See #1532.
+    g.add_edge(
+        "choice",
+        "passage::intro",
+        "passage::castle",
+        label="Enter the castle",
     )
-    g.add_edge("choice_from", "choice::enter", "passage::intro")
-    g.add_edge("choice_to", "choice::enter", "passage::castle")
 
     g.save(project_path / "graph.db")
 

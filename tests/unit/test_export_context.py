@@ -49,33 +49,25 @@ def _minimal_graph() -> Graph:
             "prose": "You flee into the forest.",
         },
     )
-    g.create_node(
-        "choice::intro_to_a",
-        {
-            "type": "choice",
-            "from_passage": "passage::intro",
-            "to_passage": "passage::choice_a",
-            "label": "Enter the castle",
-            "requires_codewords": [],
-            "grants": ["codeword::entered_castle"],
-        },
+    # Choices are stored as graph edges (POLISH writes them via
+    # `graph.add_edge("choice", ...)`) — see #1532 for the regression
+    # where the export context read non-existent choice nodes instead.
+    g.add_edge(
+        "choice",
+        "passage::intro",
+        "passage::choice_a",
+        label="Enter the castle",
+        requires_codewords=[],
+        grants=["codeword::entered_castle"],
     )
-    g.create_node(
-        "choice::intro_to_b",
-        {
-            "type": "choice",
-            "from_passage": "passage::intro",
-            "to_passage": "passage::choice_b",
-            "label": "Flee to the forest",
-            "requires_codewords": [],
-            "grants": [],
-        },
+    g.add_edge(
+        "choice",
+        "passage::intro",
+        "passage::choice_b",
+        label="Flee to the forest",
+        requires_codewords=[],
+        grants=[],
     )
-    # Edges for choice connectivity
-    g.add_edge("choice_from", "choice::intro_to_a", "passage::intro")
-    g.add_edge("choice_to", "choice::intro_to_a", "passage::choice_a")
-    g.add_edge("choice_from", "choice::intro_to_b", "passage::intro")
-    g.add_edge("choice_to", "choice::intro_to_b", "passage::choice_b")
     return g
 
 
@@ -155,6 +147,41 @@ class TestBuildExportContext:
         assert len(ctx.passages) == 3
         assert len(ctx.choices) == 2
 
+    def test_choices_read_from_edges_not_nodes(self) -> None:
+        # Regression for #1532: POLISH stores choices as edges, not nodes.
+        # The earlier _extract_choices read non-existent choice nodes and
+        # silently produced 0 choices, leaving every export with no
+        # navigable links.
+        g = _minimal_graph()
+        # Sanity: graph really has zero choice nodes and non-zero choice edges.
+        assert g.get_nodes_by_type("choice") == {}
+        assert len(g.get_edges(edge_type="choice")) == 2
+        ctx = build_export_context(g, "regression-1532")
+        assert len(ctx.choices) == 2
+        labels = {c.label for c in ctx.choices}
+        assert labels == {"Enter the castle", "Flee to the forest"}
+
+    def test_choice_requires_round_trips_polish_edge_key(self) -> None:
+        # Regression for #1532 follow-up: POLISH writes the gate-condition
+        # key as `"requires"` (see _create_choice_edge in
+        # pipeline/stages/polish/deterministic.py:1430). The export must read
+        # the same key — the prior fallback chain (requires_state_flags →
+        # requires_codewords → []) silently dropped POLISH's gate values.
+        g = Graph()
+        g.create_node("passage::a", {"type": "passage", "raw_id": "a", "prose": "."})
+        g.create_node("passage::b", {"type": "passage", "raw_id": "b", "prose": "."})
+        g.add_edge(
+            "choice",
+            "passage::a",
+            "passage::b",
+            label="Open the gate",
+            requires=["state_flag::has_key"],  # POLISH's actual key name
+            grants=[],
+        )
+        ctx = build_export_context(g, "test")
+        assert len(ctx.choices) == 1
+        assert ctx.choices[0].requires_codewords == ["state_flag::has_key"]
+
     def test_start_passage_detected(self) -> None:
         g = _minimal_graph()
         ctx = build_export_context(g, "test")
@@ -174,33 +201,23 @@ class TestBuildExportContext:
                 "prose": "You look around.",
             },
         )
-        g.create_node(
-            "choice::intro_to_spoke_0",
-            {
-                "type": "choice",
-                "from_passage": "passage::intro",
-                "to_passage": "passage::spoke_0",
-                "label": "Look around",
-                "requires_codewords": [],
-                "grants": [],
-            },
+        g.add_edge(
+            "choice",
+            "passage::intro",
+            "passage::spoke_0",
+            label="Look around",
+            requires_codewords=[],
+            grants=[],
         )
-        g.add_edge("choice_from", "choice::intro_to_spoke_0", "passage::intro")
-        g.add_edge("choice_to", "choice::intro_to_spoke_0", "passage::spoke_0")
-        g.create_node(
-            "choice::spoke_0_return",
-            {
-                "type": "choice",
-                "from_passage": "passage::spoke_0",
-                "to_passage": "passage::intro",
-                "label": "Return",
-                "is_return": True,
-                "requires_codewords": [],
-                "grants": [],
-            },
+        g.add_edge(
+            "choice",
+            "passage::spoke_0",
+            "passage::intro",
+            label="Return",
+            is_return=True,
+            requires_codewords=[],
+            grants=[],
         )
-        g.add_edge("choice_from", "choice::spoke_0_return", "passage::spoke_0")
-        g.add_edge("choice_to", "choice::spoke_0_return", "passage::intro")
 
         ctx = build_export_context(g, "test")
         start_passages = [p for p in ctx.passages if p.is_start]

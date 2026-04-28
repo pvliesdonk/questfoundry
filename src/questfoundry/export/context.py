@@ -124,18 +124,31 @@ def _extract_passages(graph: Graph) -> list[ExportPassage]:
 
 
 def _extract_choices(graph: Graph) -> list[ExportChoice]:
-    """Extract choice nodes (navigation links between passages)."""
-    nodes = graph.get_nodes_by_type("choice")
+    """Extract choice edges (navigation links between passages).
+
+    POLISH stores choices as graph edges (`add_edge("choice", ...)` in
+    `pipeline/stages/polish/deterministic.py`) — never as nodes. The
+    earlier node-based read silently produced an empty list, leaving
+    every export with zero navigable links and tripping SHIP's
+    reachability check on every project (#1532).
+    """
+    edges = graph.get_edges(edge_type="choice")
     return [
         ExportChoice(
-            from_passage=data["from_passage"],
-            to_passage=data["to_passage"],
-            label=data.get("label", "continue"),
-            requires_codewords=data.get("requires_state_flags", data.get("requires_codewords", [])),
-            grants=data.get("grants", []),
-            is_return=data.get("is_return", False),
+            from_passage=edge["from"],
+            to_passage=edge["to"],
+            label=edge.get("label", "continue"),
+            # POLISH writes the gate-condition key as `"requires"` (see
+            # `_create_choice_edge` in pipeline/stages/polish/deterministic.py).
+            # Older fixtures used `requires_state_flags` / `requires_codewords`
+            # — those fallbacks are kept for migration safety.
+            requires_codewords=edge.get(
+                "requires", edge.get("requires_state_flags", edge.get("requires_codewords", []))
+            ),
+            grants=edge.get("grants", []),
+            is_return=edge.get("is_return", False),
         )
-        for _node_id, data in sorted(nodes.items())
+        for edge in sorted(edges, key=lambda e: (e["from"], e["to"], e.get("label", "")))
     ]
 
 
