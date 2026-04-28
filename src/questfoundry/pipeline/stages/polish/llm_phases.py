@@ -1003,7 +1003,30 @@ class _PolishLLMPhaseMixin:
                         ).model_dump()
                     )
                 elif d == "residue":
-                    path_id = flag.split(":")[-1] if ":" in flag else ""
+                    # Resolve flag → path_id via derived_from→consequence (same
+                    # lookup as Phase 4b in deterministic.py — see #1530).
+                    # The previous `flag.split(":")[-1]` was a string-mangling
+                    # heuristic that did NOT yield a real path_id and silently
+                    # mis-attributed the residue beat downstream.
+                    path_id = ""
+                    consequence_nodes = graph.get_nodes_by_type("consequence")
+                    for edge in graph.get_edges(edge_type="derived_from", from_id=flag):
+                        cdata = consequence_nodes.get(edge["to"], {})
+                        candidate = cdata.get("path_id", "")
+                        if candidate:
+                            path_id = candidate
+                            break
+                    if not path_id:
+                        log.warning(
+                            "phase5e_residue_skipped_unmapped_flag",
+                            flag=flag,
+                            passage=passage_id,
+                            detail=(
+                                "state_flag has no derived_from consequence "
+                                "with a path_id; residue beat skipped (#1530)."
+                            ),
+                        )
+                        continue
                     passage_raw = passage_id.split("::")[-1]
                     residue_specs.append(
                         ResidueSpec(

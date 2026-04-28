@@ -448,7 +448,29 @@ def compute_prose_feasibility(
         else:
             # All relevant flags are light → deterministically residue
             for flag in relevant_flags:
-                path_id = flag_to_path.get(flag, "")
+                path_id = flag_to_path.get(flag)
+                if not path_id:
+                    # Flag has no derived_from→consequence→path_id mapping.
+                    # Skip rather than emit a malformed ResidueSpec with empty
+                    # path_id (which would silently mis-attribute the residue
+                    # beat downstream — see #1530).
+                    log.warning(
+                        "residue_spec_skipped_unmapped_flag",
+                        flag=flag,
+                        passage=spec.passage_id,
+                        available_paths=sorted(flag_to_path.values()),
+                        detail=(
+                            "state_flag has no derived_from consequence with a "
+                            "path_id; cannot attribute residue to a path. The "
+                            "residue beat for this flag will be missing — fix "
+                            "the upstream consequence wiring."
+                        ),
+                    )
+                    warnings.append(
+                        f"Residue beat skipped for unmapped flag {flag} on "
+                        f"passage {spec.passage_id} (R-5.5 path attribution)."
+                    )
+                    continue
                 residue_specs.append(
                     ResidueSpec(
                         target_passage_id=spec.passage_id,

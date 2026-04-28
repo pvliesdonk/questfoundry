@@ -488,6 +488,19 @@ class TestPhase5eAmbiguousFeasibility:
             flags=["dilemma::heavy:path::ph"],
         )
 
+        # Wire flag → consequence → path_id so the residue-decision lookup
+        # in Phase 5e (#1530) can resolve the flag to a real path.
+        graph.create_node("path::ph", {"type": "path", "raw_id": "ph"})
+        graph.create_node(
+            "consequence::heavy",
+            {"type": "consequence", "raw_id": "heavy", "path_id": "path::ph"},
+        )
+        graph.create_node(
+            "dilemma::heavy:path::ph",
+            {"type": "state_flag", "raw_id": "heavy", "derived_from": "consequence::heavy"},
+        )
+        graph.add_edge("derived_from", "dilemma::heavy:path::ph", "consequence::heavy")
+
         graph.create_node(
             "polish_plan::current",
             {

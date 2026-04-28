@@ -181,7 +181,9 @@ class TestResidueSpecContentHint:
     """Test the content_hint field added to ResidueSpec."""
 
     def test_default_empty(self) -> None:
-        spec = ResidueSpec(target_passage_id="p1", residue_id="r1", flag="flag1")
+        spec = ResidueSpec(
+            target_passage_id="p1", residue_id="r1", flag="flag1", path_id="path::test"
+        )
         assert spec.content_hint == ""
 
     def test_with_content_hint(self) -> None:
@@ -190,6 +192,7 @@ class TestResidueSpecContentHint:
             residue_id="r1",
             flag="flag1",
             content_hint="You enter confidently",
+            path_id="path::test",
         )
         assert spec.content_hint == "You enter confidently"
 
