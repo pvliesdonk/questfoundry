@@ -186,7 +186,14 @@ class SceneTypeTag(BaseModel):
 class Phase4aOutput(BaseModel):
     """Wrapper for Phase 4a structured output (scene-type tags)."""
 
-    tags: list[SceneTypeTag] = Field(default_factory=list)
+    tags: list[SceneTypeTag] = Field(
+        min_length=1,
+        description=(
+            "Scene-type annotations for beats. Zero tags is treated as LLM "
+            "failure (R-4b.4) and triggers retry; partial coverage is allowed "
+            "with a downstream WARNING (R-4b.1)."
+        ),
+    )
 
 
 class AtmosphericDetail(BaseModel):
@@ -203,14 +210,19 @@ class AtmosphericDetail(BaseModel):
 class Phase4dOutput(BaseModel):
     """Wrapper for Phase 4d structured output (atmospheric details)."""
 
-    details: list[AtmosphericDetail] = Field(default_factory=list)
+    details: list[AtmosphericDetail] = Field(
+        min_length=1,
+        description=(
+            "Atmospheric details per beat. Zero details is treated as LLM "
+            "failure and triggers retry; partial coverage emits WARNING."
+        ),
+    )
 
     @model_validator(mode="after")
     def _validate_unique_beat_ids(self) -> Phase4dOutput:
-        if self.details:
-            detail_ids = [d.beat_id for d in self.details]
-            if len(detail_ids) != len(set(detail_ids)):
-                raise ValueError("beat_id in details list must be unique")
+        detail_ids = [d.beat_id for d in self.details]
+        if len(detail_ids) != len(set(detail_ids)):
+            raise ValueError("beat_id in details list must be unique")
         return self
 
 
@@ -314,6 +326,19 @@ class GapProposal(BaseModel):
                 "Gap beats are structural transition beats only — they cannot "
                 "advance, reveal, commit, or complicate any dilemma. Remove the "
                 "dilemma_impacts entries from this gap proposal."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _require_placement(self) -> GapProposal:
+        """POLISH R-1a.3: at least one of after_beat/before_beat must be set."""
+        if self.after_beat is None and self.before_beat is None:
+            raise ValueError(
+                "GapProposal must have at least one of `after_beat` or "
+                "`before_beat` set to be placeable in the beat sequence "
+                "(POLISH R-1a.3). A gap beat with neither anchor cannot be "
+                "inserted — provide the earlier beat (`after_beat`) or the "
+                "later beat (`before_beat`) or both."
             )
         return self
 

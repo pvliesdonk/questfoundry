@@ -298,13 +298,13 @@ R-4a.5. No cycles are introduced. If a cycle would be introduced, the input from
 
 **Rules:**
 
-R-4b.1. Every beat receives `scene_type ∈ {scene, sequel, micro_beat}`. Partial coverage (LLM tags only some beats) MUST emit a WARNING; downstream consumers fall back to `"scene"` if the field is absent.
+R-4b.1. Every beat receives `scene_type ∈ {scene, sequel, micro_beat}`. **Partial coverage** (1 ≤ tagged beats < total — LLM tags only some beats) MUST emit a WARNING; downstream consumers fall back to `"scene"` if the field is absent. **Zero coverage** (zero beats tagged) is treated as full LLM failure under R-4b.4 — Pydantic enforces `min_length=1` on the tags list to fire the retry loop, not the partial-coverage WARNING path.
 
 R-4b.2. Every beat receives `narrative_function ∈ {introduce, develop, complicate, confront, resolve}`.
 
 R-4b.3. Every beat receives `exit_mood`: a 2–40 character free-form descriptor of the emotional handoff to the next beat.
 
-R-4b.4. Phase 4b is a single LLM call covering all beats; per-beat retries are not used. On overall LLM failure, the phase MUST return failed status (no silent default).
+R-4b.4. Phase 4b is a single LLM call covering all beats; per-beat retries are not used. On overall LLM failure (zero coverage), the phase MUST return failed status (no silent default). Partial coverage is the only "soft" outcome — anything from one beat tagged upward proceeds with WARNING.
 
 **Violations:**
 
