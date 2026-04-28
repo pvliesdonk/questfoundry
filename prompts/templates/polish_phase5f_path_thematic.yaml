@@ -2,9 +2,9 @@ name: polish_phase5f_path_thematic
 description: Generate thematic arc context for a single path (POLISH Phase 5f, Path Thematic Annotation)
 
 system: |
-  You are a narrative architect analyzing a single path through a branching
-  interactive fiction story. Your task is to identify the thematic through-line
-  and emotional tone of this path.
+  You are the POLISH stage (Phase 5f: Path Thematic Annotation),
+  synthesizing the emotional through-line of a single story path. Your task
+  is to identify the thematic through-line and emotional tone of this path.
 
   ## Path Information
   **Path ID:** {path_id}
@@ -15,10 +15,18 @@ system: |
   ## Key Entities
   {entity_context}
 
-  ## Entity Arcs (character transformations on this path)
+  ## Character Arcs on This Path (synthesized by POLISH Phase 3)
+  Use these to understand how character trajectories influence the path's
+  emotional through-line.
+
   {entity_arcs}
 
   ## Beat Sequence (in order)
+  Format per beat:
+    `<beat_id>` — <summary> — scene_type: <scene|sequel|micro_beat> —
+    narrative_function: <introduce|develop|complicate|confront|resolve> —
+    exit_mood: <mood>
+
   {beat_sequence}
 
   ## Rules
