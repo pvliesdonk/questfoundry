@@ -7700,6 +7700,185 @@ class TestBuildHintConflictGraph:
             f"verify_hints_acyclic must return [] after MDS; got {still_cyclic}"
         )
 
+    def test_multi_path_dilemma_hint_dedup_regression(self) -> None:
+        """Regression for #1149: a hint targeting a multi-path dilemma must
+        produce one hint edge PER path, and detection must consider all of
+        them — not just the first.
+
+        Pre-#1149, ``build_hint_conflict_graph`` deduplicated by ``beat_id``
+        and kept only one ``_HintEdge`` per source beat. When a beat
+        targeted a dilemma with N paths, edges 2..N were silently dropped
+        from detection, but interleave_cross_path_beats applied all N. The
+        cycle then surfaced at apply time even though detection had said
+        the hint was safe.
+
+        This test was structurally invisible to the pre-#1149 test suite:
+        every existing fixture used single-path dilemmas, so the 1:N
+        mapping degenerated to 1:1 and dedup was a no-op. With a multi-
+        path dilemma, the cycle on edge #2 only surfaces when dedup is
+        absent.
+
+        Setup:
+          - Dilemma ``multipath`` with TWO paths (p1, p2), each with
+            intro + commit beats.
+          - Dilemma ``single`` with one path.
+          - ``multipath ↔ single`` concurrent.
+
+        Hints:
+          - Hint A on ``single_intro`` ``before_introduce multipath``
+            yields TWO hint edges (one per multipath path's intro):
+              edge1: single_intro ≺ multipath_p1_intro
+              edge2: single_intro ≺ multipath_p2_intro
+          - Hint B on ``multipath_p2_commit`` ``before_introduce single``
+            yields ONE edge:
+              multipath_p2_commit ≺ single_intro
+
+        Cycle on edge2 (only): multipath_p2_intro ≺ multipath_p2_commit
+        (within-path) ≺ single_intro (Hint B) ≺ multipath_p2_intro
+        (Hint A edge2). Pre-#1149 dedup hid edge2 from detection so this
+        cycle slipped through.
+
+        Post-#1149: detection must catch the cycle and either drop one of
+        the hints or flag a swap pair. ``verify_hints_acyclic`` with the
+        survivors confirms acyclicity.
+        """
+        from questfoundry.graph.grow_algorithms import (
+            build_hint_conflict_graph,
+            verify_hints_acyclic,
+        )
+
+        graph = Graph.empty()
+
+        # Multi-path dilemma: 2 paths, each with intro + commit
+        graph.create_node("dilemma::multipath", {"type": "dilemma", "raw_id": "multipath"})
+        for path_raw in ("p1", "p2"):
+            path_id = f"path::multipath_{path_raw}"
+            graph.create_node(
+                path_id,
+                {
+                    "type": "path",
+                    "raw_id": f"multipath_{path_raw}",
+                    "dilemma_id": "dilemma::multipath",
+                    "is_canonical": path_raw == "p1",
+                },
+            )
+            for kind in ("intro", "commit"):
+                beat_id = f"beat::multipath_{path_raw}_{kind}"
+                effect = "advances" if kind == "intro" else "commits"
+                graph.create_node(
+                    beat_id,
+                    {
+                        "type": "beat",
+                        "raw_id": f"multipath_{path_raw}_{kind}",
+                        "summary": f"multipath {path_raw} {kind}.",
+                        "dilemma_impacts": [{"dilemma_id": "dilemma::multipath", "effect": effect}],
+                    },
+                )
+                graph.add_edge("belongs_to", beat_id, path_id)
+            graph.add_edge(
+                "predecessor",
+                f"beat::multipath_{path_raw}_commit",
+                f"beat::multipath_{path_raw}_intro",
+            )
+
+        # Single-path dilemma
+        graph.create_node("dilemma::single", {"type": "dilemma", "raw_id": "single"})
+        graph.create_node(
+            "path::single_q1",
+            {
+                "type": "path",
+                "raw_id": "single_q1",
+                "dilemma_id": "dilemma::single",
+                "is_canonical": True,
+            },
+        )
+        for kind in ("intro", "commit"):
+            beat_id = f"beat::single_{kind}"
+            effect = "advances" if kind == "intro" else "commits"
+            graph.create_node(
+                beat_id,
+                {
+                    "type": "beat",
+                    "raw_id": f"single_{kind}",
+                    "summary": f"single {kind}.",
+                    "dilemma_impacts": [{"dilemma_id": "dilemma::single", "effect": effect}],
+                },
+            )
+            graph.add_edge("belongs_to", beat_id, "path::single_q1")
+        graph.add_edge("predecessor", "beat::single_commit", "beat::single_intro")
+
+        # Dilemma relationship: multipath ↔ single concurrent
+        # Alphabetical: multipath < single → multipath commits ≺ single commits.
+        graph.add_edge("concurrent", "dilemma::multipath", "dilemma::single")
+
+        # Hint A: single_intro before_introduce multipath
+        # → 2 edges, one per multipath path's intro:
+        #   single_intro ≺ multipath_p1_intro
+        #   single_intro ≺ multipath_p2_intro
+        graph.update_node(
+            "beat::single_intro",
+            temporal_hint={
+                "relative_to": "dilemma::multipath",
+                "position": "before_introduce",
+            },
+        )
+
+        # Hint B: multipath_p2_commit before_introduce single
+        # → 1 edge: multipath_p2_commit ≺ single_intro
+        graph.update_node(
+            "beat::multipath_p2_commit",
+            temporal_hint={
+                "relative_to": "dilemma::single",
+                "position": "before_introduce",
+            },
+        )
+
+        result = build_hint_conflict_graph(graph)
+
+        # The cycle is on multipath_p2 only:
+        #   multipath_p2_intro ≺ multipath_p2_commit (within-path)
+        #   multipath_p2_commit ≺ single_intro (Hint B)
+        #   single_intro ≺ multipath_p2_intro (Hint A edge 2)
+        # Pre-#1149: edge 2 was deduped away, so detection returned no
+        # conflicts. Post-#1149: detection must catch this — either via
+        # a swap pair, mandatory drop, or non-empty minimum_drop_set.
+        either_dropped = (
+            "beat::single_intro" in result.minimum_drop_set
+            or "beat::multipath_p2_commit" in result.minimum_drop_set
+        )
+        assert either_dropped, (
+            "Detection must catch the multi-path cycle (Hint A edge 2 "
+            "+ Hint B) and include at least one of the participating beats "
+            "in minimum_drop_set. Pre-#1149 the dedup hid edge 2, so the "
+            "cycle slipped through. Got "
+            f"minimum_drop_set={result.minimum_drop_set}, "
+            f"swap_pairs={result.swap_pairs}, "
+            f"mandatory_drops={result.mandatory_drops}"
+        )
+
+        # Postcondition: with the minimum drop set removed, the surviving
+        # hints must be acyclic. This is the strongest agreement check.
+        all_hint_beats = {"beat::single_intro", "beat::multipath_p2_commit"}
+        survivors = all_hint_beats - result.minimum_drop_set
+        still_cyclic = verify_hints_acyclic(graph, survivors)
+        assert still_cyclic == [], (
+            "verify_hints_acyclic with survivors (post-MDS) must report "
+            f"no cyclic beats; got {still_cyclic}. Detection chose "
+            f"{result.minimum_drop_set} but the surviving set "
+            f"{survivors} still cycles — detection and postcondition "
+            "disagree."
+        )
+
+        # Symmetric: re-applying both hints together must produce the
+        # cycle that detection identified.
+        cyclic_with_both = verify_hints_acyclic(graph, all_hint_beats)
+        assert cyclic_with_both, (
+            "Applying both hints together must yield a cycle "
+            "verify_hints_acyclic detects — otherwise detection's "
+            f"minimum_drop_set ({result.minimum_drop_set}) was a "
+            "false-positive."
+        )
+
 
 # ---------------------------------------------------------------------------
 # Task 2.6: guard rail 3 - intersection pre-commit exclusion
