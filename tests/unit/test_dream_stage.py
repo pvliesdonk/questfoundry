@@ -59,7 +59,7 @@ async def test_execute_calls_all_three_phases() -> None:
             themes=["heroism"],
             scope=Scope(story_size="medium"),
         )
-        mock_serialize.return_value = (mock_artifact, 200)
+        mock_serialize.return_value = (mock_artifact, 200, 1)
 
         # Execute
         artifact, llm_calls, tokens = await stage.execute(
@@ -77,6 +77,52 @@ async def test_execute_calls_all_three_phases() -> None:
         assert artifact["tone"] == ["epic"]
         assert llm_calls == 4  # 2 discuss + 1 summarize + 1 serialize
         assert tokens == 800  # 500 + 100 + 200
+
+
+@pytest.mark.asyncio
+async def test_execute_counts_serialize_retries() -> None:
+    """Regression for #1452: serialize retries must increment total_llm_calls.
+
+    Pre-fix: serialize_to_artifact's hardcoded `+= 1` undercounted retries —
+    a 3-attempt repair loop was reported as 1 call. Post-fix the third
+    element of the returned tuple is the actual attempt count.
+    """
+    stage = DreamStage()
+    mock_model = MagicMock()
+
+    with (
+        patch("questfoundry.pipeline.stages.dream.run_discuss_phase") as mock_discuss,
+        patch("questfoundry.pipeline.stages.dream.summarize_discussion") as mock_summarize,
+        patch("questfoundry.pipeline.stages.dream.serialize_to_artifact") as mock_serialize,
+        patch("questfoundry.pipeline.stages.dream.get_all_research_tools") as mock_tools,
+    ):
+        mock_tools.return_value = []
+        mock_discuss.return_value = (
+            [HumanMessage(content="hi"), AIMessage(content="hello")],
+            2,
+            500,
+        )
+        mock_summarize.return_value = ("Brief summary", 100)
+        mock_artifact = DreamArtifact(
+            genre="fantasy",
+            tone=["epic"],
+            audience="adult",
+            themes=["heroism"],
+            scope=Scope(story_size="medium"),
+        )
+        # Serialize took 3 attempts (1 success + 2 retries' worth of LLM calls).
+        mock_serialize.return_value = (mock_artifact, 200, 3)
+
+        _artifact, llm_calls, _tokens = await stage.execute(
+            model=mock_model,
+            user_prompt="An epic quest",
+        )
+
+        # 2 discuss + 1 summarize + 3 serialize = 6
+        assert llm_calls == 6, (
+            f"Expected total_llm_calls to reflect serialize retries: "
+            f"discuss(2) + summarize(1) + serialize(3) = 6; got {llm_calls}"
+        )
 
 
 @pytest.mark.asyncio
@@ -106,7 +152,7 @@ async def test_execute_emits_phase_progress() -> None:
             themes=["heroism"],
             scope=Scope(story_size="medium"),
         )
-        mock_serialize.return_value = (mock_artifact, 200)
+        mock_serialize.return_value = (mock_artifact, 200, 1)
 
         await stage.execute(
             model=mock_model,
@@ -144,7 +190,7 @@ async def test_execute_passes_model_to_all_phases() -> None:
             themes=["justice"],
             scope=Scope(story_size="medium"),
         )
-        mock_serialize.return_value = (mock_artifact, 100)
+        mock_serialize.return_value = (mock_artifact, 100, 1)
 
         await stage.execute(model=mock_model, user_prompt="A mystery")
 
@@ -175,7 +221,7 @@ async def test_execute_passes_user_prompt_to_discuss() -> None:
             themes=["exploration"],
             scope=Scope(story_size="medium"),
         )
-        mock_serialize.return_value = (mock_artifact, 100)
+        mock_serialize.return_value = (mock_artifact, 100, 1)
 
         await stage.execute(model=MagicMock(), user_prompt="A space adventure")
 
@@ -208,7 +254,7 @@ async def test_execute_passes_messages_to_summarize() -> None:
             themes=["magic"],
             scope=Scope(story_size="medium"),
         )
-        mock_serialize.return_value = (mock_artifact, 100)
+        mock_serialize.return_value = (mock_artifact, 100, 1)
 
         await stage.execute(model=MagicMock(), user_prompt="test")
 
@@ -236,7 +282,7 @@ async def test_execute_passes_brief_to_serialize() -> None:
             themes=["adventure"],
             scope=Scope(story_size="medium"),
         )
-        mock_serialize.return_value = (mock_artifact, 100)
+        mock_serialize.return_value = (mock_artifact, 100, 1)
 
         await stage.execute(model=MagicMock(), user_prompt="test")
 
@@ -264,7 +310,7 @@ async def test_execute_passes_provider_name_to_serialize() -> None:
             themes=["fear"],
             scope=Scope(story_size="medium"),
         )
-        mock_serialize.return_value = (mock_artifact, 100)
+        mock_serialize.return_value = (mock_artifact, 100, 1)
 
         await stage.execute(
             model=MagicMock(),
@@ -296,7 +342,7 @@ async def test_execute_passes_dream_artifact_schema() -> None:
             themes=["love"],
             scope=Scope(story_size="medium"),
         )
-        mock_serialize.return_value = (mock_artifact, 100)
+        mock_serialize.return_value = (mock_artifact, 100, 1)
 
         await stage.execute(model=MagicMock(), user_prompt="test")
 
@@ -325,7 +371,7 @@ async def test_execute_returns_artifact_as_dict() -> None:
             themes=["paranoia"],
             scope=Scope(story_size="medium"),
         )
-        mock_serialize.return_value = (mock_artifact, 100)
+        mock_serialize.return_value = (mock_artifact, 100, 1)
 
         artifact, _, _ = await stage.execute(model=MagicMock(), user_prompt="test")
 
@@ -358,7 +404,7 @@ async def test_execute_uses_research_tools() -> None:
             themes=["secrets"],
             scope=Scope(story_size="medium"),
         )
-        mock_serialize.return_value = (mock_artifact, 100)
+        mock_serialize.return_value = (mock_artifact, 100, 1)
 
         await stage.execute(model=MagicMock(), user_prompt="test")
 
@@ -389,7 +435,7 @@ def _mock_phases(
     mock_tools.return_value = []
     mock_discuss.return_value = ([], 1, 100)
     mock_summarize.return_value = ("Brief", 50)
-    mock_serialize.return_value = (artifact, 100)
+    mock_serialize.return_value = (artifact, 100, 1)
 
 
 @pytest.mark.asyncio

@@ -4,9 +4,6 @@ Provides callback handlers that integrate with QuestFoundry's logging system,
 including JSONL logging for LLM calls.
 """
 
-# pyright: reportAttributeAccessIssue=false
-# TODO(#1353): langchain API drift — BaseMessage.tool_calls and Generation.message attribute access; tracked in issue #1353
-
 # ruff: noqa: ARG002 - Callback interface methods require unused parameters
 
 from __future__ import annotations
@@ -211,17 +208,17 @@ class LLMLoggingCallback(BaseCallbackHandler):
             gen = response.generations[0][0]  # First generation, first batch
             content = gen.text if hasattr(gen, "text") else str(gen)
 
-            # Check for tool calls in the message
+            # langchain stubs omit Generation.message and BaseMessage.tool_calls; hasattr guards keep this safe.
             if hasattr(gen, "message"):
-                msg = gen.message
-                if hasattr(msg, "tool_calls") and msg.tool_calls:
+                msg = gen.message  # pyright: ignore[reportAttributeAccessIssue]
+                if hasattr(msg, "tool_calls") and msg.tool_calls:  # pyright: ignore[reportAttributeAccessIssue]
                     tool_calls = [
                         {
                             "id": tc.get("id", ""),
                             "name": tc.get("name", ""),
                             "arguments": tc.get("args", {}),
                         }
-                        for tc in msg.tool_calls
+                        for tc in msg.tool_calls  # pyright: ignore[reportAttributeAccessIssue]
                     ]
 
         # Extract token usage from multiple locations.

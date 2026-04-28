@@ -54,7 +54,7 @@ class TestSerializeToArtifact:
         expected = SimpleSchema(title="Test", count=5)
         mock_model.with_structured_output.return_value.ainvoke = AsyncMock(return_value=expected)
 
-        artifact, _tokens = await serialize_to_artifact(
+        artifact, _tokens, _calls = await serialize_to_artifact(
             mock_model,
             "A test brief",
             SimpleSchema,
@@ -70,7 +70,7 @@ class TestSerializeToArtifact:
             return_value={"title": "Test", "count": 5}
         )
 
-        artifact, _tokens = await serialize_to_artifact(
+        artifact, _tokens, _calls = await serialize_to_artifact(
             mock_model,
             "A test brief",
             SimpleSchema,
@@ -89,7 +89,7 @@ class TestSerializeToArtifact:
             return_value={"title": "Test", "count": 5, "optional_field": None}
         )
 
-        artifact, _tokens = await serialize_to_artifact(
+        artifact, _tokens, _calls = await serialize_to_artifact(
             mock_model,
             "A test brief",
             SimpleSchema,
@@ -110,7 +110,7 @@ class TestSerializeToArtifact:
         )
         mock_model.with_structured_output.return_value.ainvoke = mock_invoke
 
-        artifact, _tokens = await serialize_to_artifact(
+        artifact, _tokens, _calls = await serialize_to_artifact(
             mock_model,
             "A test brief",
             SimpleSchema,
@@ -150,7 +150,7 @@ class TestSerializeToArtifact:
         with patch(
             "questfoundry.agents.serialize.extract_tokens", return_value=150
         ) as mock_extract:
-            _artifact, tokens = await serialize_to_artifact(
+            _artifact, tokens, _calls = await serialize_to_artifact(
                 mock_model,
                 "A test brief",
                 SimpleSchema,
@@ -173,7 +173,7 @@ class TestSerializeToArtifact:
 
         # Return 100 tokens per call
         with patch("questfoundry.agents.serialize.extract_tokens", return_value=100):
-            _artifact, tokens = await serialize_to_artifact(
+            _artifact, tokens, _calls = await serialize_to_artifact(
                 mock_model,
                 "A test brief",
                 SimpleSchema,
@@ -193,7 +193,7 @@ class TestSerializeToArtifact:
         )
         mock_model.with_structured_output.return_value.ainvoke = mock_invoke
 
-        artifact, _tokens = await serialize_to_artifact(
+        artifact, _tokens, _calls = await serialize_to_artifact(
             mock_model,
             "A test brief",
             SimpleSchema,
@@ -267,7 +267,7 @@ class TestSerializeToArtifact:
         )
         mock_model.with_structured_output.return_value.ainvoke = mock_invoke
 
-        artifact, _tokens = await serialize_to_artifact(
+        artifact, _tokens, _calls = await serialize_to_artifact(
             mock_model,
             "A test brief",
             SimpleSchema,
@@ -538,9 +538,9 @@ class TestSerializeResult:
             ),
         ):
             mock_ser.side_effect = [
-                (MagicMock(model_dump=lambda: {"entities": []}), 10),
-                (MagicMock(model_dump=lambda: {"dilemmas": [_MOCK_DILEMMA]}), 10),
-                (MagicMock(model_dump=lambda: {"consequences": []}), 10),
+                (MagicMock(model_dump=lambda: {"entities": []}), 10, 1),
+                (MagicMock(model_dump=lambda: {"dilemmas": [_MOCK_DILEMMA]}), 10, 1),
+                (MagicMock(model_dump=lambda: {"consequences": []}), 10, 1),
             ]
 
             with patch(
@@ -603,10 +603,10 @@ class TestSerializeResult:
         ):
             # 3 initial sections + 1 retry for entities (semantic error triggers retry)
             mock_ser.side_effect = [
-                (MagicMock(model_dump=lambda: {"entities": []}), 10),
-                (MagicMock(model_dump=lambda: {"dilemmas": [_MOCK_DILEMMA]}), 10),
-                (MagicMock(model_dump=lambda: {"consequences": []}), 10),
-                (MagicMock(model_dump=lambda: {"entities": []}), 10),  # retry
+                (MagicMock(model_dump=lambda: {"entities": []}), 10, 1),
+                (MagicMock(model_dump=lambda: {"dilemmas": [_MOCK_DILEMMA]}), 10, 1),
+                (MagicMock(model_dump=lambda: {"consequences": []}), 10, 1),
+                (MagicMock(model_dump=lambda: {"entities": []}), 10, 1),  # retry
             ]
 
             # Return same errors on every validation call (errors persist after retry)
@@ -680,9 +680,9 @@ class TestSerializeSeedAsFunction:
             # Sections: entities, dilemmas, consequences
             # (paths handled by _serialize_paths_per_dilemma, beats by _serialize_beats_per_path)
             mock_serialize.side_effect = [
-                (MagicMock(model_dump=lambda: {"entities": []}), 10),
-                (MagicMock(model_dump=lambda: {"dilemmas": [_MOCK_DILEMMA]}), 10),
-                (MagicMock(model_dump=lambda: {"consequences": []}), 10),
+                (MagicMock(model_dump=lambda: {"entities": []}), 10, 1),
+                (MagicMock(model_dump=lambda: {"dilemmas": [_MOCK_DILEMMA]}), 10, 1),
+                (MagicMock(model_dump=lambda: {"consequences": []}), 10, 1),
             ]
 
             with patch("questfoundry.agents.serialize.validate_seed_mutations", return_value=[]):
@@ -730,9 +730,9 @@ class TestSerializeSeedAsFunction:
         ):
             mock_serialize.side_effect = [
                 # Initial 3 sections (paths + beats handled separately)
-                (MagicMock(model_dump=lambda: {"entities": []}), 10),
-                (MagicMock(model_dump=lambda: {"dilemmas": [_MOCK_DILEMMA]}), 10),
-                (MagicMock(model_dump=lambda: {"consequences": []}), 10),
+                (MagicMock(model_dump=lambda: {"entities": []}), 10, 1),
+                (MagicMock(model_dump=lambda: {"dilemmas": [_MOCK_DILEMMA]}), 10, 1),
+                (MagicMock(model_dump=lambda: {"consequences": []}), 10, 1),
             ]
 
             with patch(
@@ -770,9 +770,9 @@ class TestSerializeSeedAsFunction:
         ):
             # 3 sections (paths + beats handled separately)
             mock_serialize.side_effect = [
-                (MagicMock(model_dump=lambda: {"entities": []}), 10),
-                (MagicMock(model_dump=lambda: {"dilemmas": [_MOCK_DILEMMA]}), 10),
-                (MagicMock(model_dump=lambda: {"consequences": []}), 10),
+                (MagicMock(model_dump=lambda: {"entities": []}), 10, 1),
+                (MagicMock(model_dump=lambda: {"dilemmas": [_MOCK_DILEMMA]}), 10, 1),
+                (MagicMock(model_dump=lambda: {"consequences": []}), 10, 1),
             ]
 
             with patch("questfoundry.agents.serialize.validate_seed_mutations") as mock_validate:
@@ -822,7 +822,7 @@ class TestSerializeSeedAsFunction:
                 5: "entities",
             }
             section = section_map.get(call_count[0], "unknown")
-            return (create_section_mock(section), 10)
+            return (create_section_mock(section), 10, 1)
 
         with (
             patch(
@@ -883,7 +883,7 @@ class TestSerializeSeedAsFunction:
             }
             section = section_map.get(call_count[0], "unknown")
             data = [_MOCK_DILEMMA] if section == "dilemmas" else []
-            return (MagicMock(model_dump=lambda d=data, s=section: {s: d}), 10)
+            return (MagicMock(model_dump=lambda d=data, s=section: {s: d}), 10, 1)
 
         with (
             patch(
@@ -946,7 +946,7 @@ class TestSerializeSeedAsFunction:
             }
             section = section_map.get(call_count[0], "unknown")
             data = [_MOCK_DILEMMA] if section == "dilemmas" else []
-            return (MagicMock(model_dump=lambda d=data, s=section: {s: d}), 10)
+            return (MagicMock(model_dump=lambda d=data, s=section: {s: d}), 10, 1)
 
         with (
             patch(
@@ -1233,9 +1233,9 @@ class TestBeatRetryAndContextRefresh:
         ):
             # 3 sections (paths + beats handled separately)
             mock_serialize.side_effect = [
-                (MagicMock(model_dump=lambda: {"entities": []}), 10),
-                (MagicMock(model_dump=lambda: {"dilemmas": [_MOCK_DILEMMA]}), 10),
-                (MagicMock(model_dump=lambda: {"consequences": []}), 10),
+                (MagicMock(model_dump=lambda: {"entities": []}), 10, 1),
+                (MagicMock(model_dump=lambda: {"dilemmas": [_MOCK_DILEMMA]}), 10, 1),
+                (MagicMock(model_dump=lambda: {"consequences": []}), 10, 1),
             ]
 
             result = await serialize_seed_as_function(
@@ -1348,9 +1348,9 @@ class TestBeatRetryAndContextRefresh:
             ),
         ):
             mock_serialize.side_effect = [
-                (MagicMock(model_dump=lambda: {"entities": []}), 10),
-                (MagicMock(model_dump=lambda: {"dilemmas": [_MOCK_DILEMMA]}), 10),
-                (MagicMock(model_dump=lambda: {"consequences": []}), 10),
+                (MagicMock(model_dump=lambda: {"entities": []}), 10, 1),
+                (MagicMock(model_dump=lambda: {"dilemmas": [_MOCK_DILEMMA]}), 10, 1),
+                (MagicMock(model_dump=lambda: {"consequences": []}), 10, 1),
             ]
 
             result = await serialize_seed_as_function(
@@ -1427,7 +1427,7 @@ class TestBeatRetryAndContextRefresh:
             }
             section = section_map.get(call_count[0], "unknown")
             data = [_MOCK_DILEMMA] if section == "dilemmas" else []
-            return (MagicMock(model_dump=lambda d=data, s=section: {s: d}), 10)
+            return (MagicMock(model_dump=lambda d=data, s=section: {s: d}), 10, 1)
 
         with (
             patch(
@@ -1534,9 +1534,9 @@ class TestBeatRetryAndContextRefresh:
         ):
             # 3 sections (paths + beats handled separately)
             mock_serialize.side_effect = [
-                (MagicMock(model_dump=lambda: {"entities": []}), 10),
-                (MagicMock(model_dump=lambda: {"dilemmas": [_MOCK_DILEMMA]}), 10),
-                (MagicMock(model_dump=lambda: {"consequences": []}), 10),
+                (MagicMock(model_dump=lambda: {"entities": []}), 10, 1),
+                (MagicMock(model_dump=lambda: {"dilemmas": [_MOCK_DILEMMA]}), 10, 1),
+                (MagicMock(model_dump=lambda: {"consequences": []}), 10, 1),
             ]
 
             result = await serialize_seed_as_function(
@@ -1837,7 +1837,7 @@ class TestEarlyValidateDilemmaAnswers:
         )
 
         with patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_serialize:
-            mock_serialize.return_value = (corrected, 50)
+            mock_serialize.return_value = (corrected, 50, 1)
 
             result, tokens = await _early_validate_dilemma_answers(
                 model=mock_model,
@@ -2463,7 +2463,7 @@ class TestSerializeSharedBeatsForDilemma:
         with patch(
             "questfoundry.agents.serialize.serialize_to_artifact",
             new_callable=AsyncMock,
-            return_value=(mock_section, 42),
+            return_value=(mock_section, 42, 1),
         ) as mock_sat:
             beats, tokens = await _serialize_shared_beats_for_dilemma(
                 model=MagicMock(),
@@ -2504,7 +2504,7 @@ class TestSerializeSharedBeatsForDilemma:
         with patch(
             "questfoundry.agents.serialize.serialize_to_artifact",
             new_callable=AsyncMock,
-            return_value=(mock_section, 10),
+            return_value=(mock_section, 10, 1),
         ):
             beats, _tokens = await _serialize_shared_beats_for_dilemma(
                 model=MagicMock(),
@@ -2528,11 +2528,11 @@ class TestSerializeSharedBeatsForDilemma:
 
         captured: list[str] = []
 
-        async def _capture(**kw: Any) -> tuple[Any, int]:
+        async def _capture(**kw: Any) -> tuple[Any, int, int]:
             captured.append(kw.get("system_prompt", ""))
             sec = MagicMock()
             sec.model_dump.return_value = {"initial_beats": []}
-            return sec, 5
+            return sec, 5, 1
 
         with patch("questfoundry.agents.serialize.serialize_to_artifact", side_effect=_capture):
             await _serialize_shared_beats_for_dilemma(
@@ -2573,11 +2573,11 @@ class TestSerializeSharedBeatsForDilemma:
 
         captured: list[str] = []
 
-        async def _capture(**kw: Any) -> tuple[Any, int]:
+        async def _capture(**kw: Any) -> tuple[Any, int, int]:
             captured.append(kw.get("system_prompt", ""))
             sec = MagicMock()
             sec.model_dump.return_value = {"initial_beats": []}
-            return sec, 5
+            return sec, 5, 1
 
         with patch("questfoundry.agents.serialize.serialize_to_artifact", side_effect=_capture):
             await _serialize_shared_beats_for_dilemma(
@@ -2763,9 +2763,9 @@ class TestSerializeSeedAsFunctionSharedBeats:
             ),
         ):
             mock_serialize.side_effect = [
-                (MagicMock(model_dump=lambda: {"entities": []}), 10),
-                (MagicMock(model_dump=lambda: {"dilemmas": [mock_dilemma_two]}), 10),
-                (MagicMock(model_dump=lambda: {"consequences": []}), 10),
+                (MagicMock(model_dump=lambda: {"entities": []}), 10, 1),
+                (MagicMock(model_dump=lambda: {"dilemmas": [mock_dilemma_two]}), 10, 1),
+                (MagicMock(model_dump=lambda: {"consequences": []}), 10, 1),
             ]
             with patch("questfoundry.agents.serialize.validate_seed_mutations", return_value=[]):
                 await serialize_seed_as_function(
@@ -2834,9 +2834,9 @@ class TestSerializeSeedAsFunctionSharedBeats:
             ),
         ):
             mock_serialize.side_effect = [
-                (MagicMock(model_dump=lambda: {"entities": []}), 10),
-                (MagicMock(model_dump=lambda: {"dilemmas": [mock_dilemma_two]}), 10),
-                (MagicMock(model_dump=lambda: {"consequences": []}), 10),
+                (MagicMock(model_dump=lambda: {"entities": []}), 10, 1),
+                (MagicMock(model_dump=lambda: {"dilemmas": [mock_dilemma_two]}), 10, 1),
+                (MagicMock(model_dump=lambda: {"consequences": []}), 10, 1),
             ]
             with patch("questfoundry.agents.serialize.validate_seed_mutations", return_value=[]):
                 result = await serialize_seed_as_function(
@@ -2886,9 +2886,9 @@ class TestSerializeSeedAsFunctionSharedBeats:
             ),
         ):
             mock_serialize.side_effect = [
-                (MagicMock(model_dump=lambda: {"entities": []}), 10),
-                (MagicMock(model_dump=lambda: {"dilemmas": [mock_dilemma_two]}), 10),
-                (MagicMock(model_dump=lambda: {"consequences": []}), 10),
+                (MagicMock(model_dump=lambda: {"entities": []}), 10, 1),
+                (MagicMock(model_dump=lambda: {"dilemmas": [mock_dilemma_two]}), 10, 1),
+                (MagicMock(model_dump=lambda: {"consequences": []}), 10, 1),
             ]
             with patch("questfoundry.agents.serialize.validate_seed_mutations", return_value=[]):
                 result = await serialize_seed_as_function(

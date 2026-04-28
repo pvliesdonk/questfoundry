@@ -1,8 +1,5 @@
 """Pipeline orchestrator for stage execution."""
 
-# pyright: reportReturnType=false, reportAttributeAccessIssue=false
-# TODO(#1354): cleanup during orchestrator tuple-return widening work
-
 from __future__ import annotations
 
 import os
@@ -308,7 +305,7 @@ class PipelineOrchestrator:
 
         chat_model = create_chat_model(provider_name, model, **kwargs)
 
-        # Add callbacks for logging if enabled
+        # `with_config` widens the return to `Runnable[..., AIMessage]`; callers consume it as a chat model.
         if self._callbacks:
             chat_model = chat_model.with_config(callbacks=self._callbacks)  # type: ignore[assignment]
 
@@ -320,7 +317,7 @@ class PipelineOrchestrator:
             temperature=kwargs.get("temperature"),
         )
 
-        return chat_model, provider_name, model
+        return chat_model, provider_name, model  # pyright: ignore[reportReturnType]
 
     def _ensure_callbacks_initialized(self) -> None:
         """Initialize logging callbacks if needed and enabled.
@@ -853,9 +850,9 @@ class PipelineOrchestrator:
             await unload_ollama_model(self._structured_model)
 
         if self._creative_model is not None:
-            # Some chat models may have async close methods
+            # Some chat models (Ollama, etc.) expose an async `close` that BaseChatModel stubs don't declare.
             if hasattr(self._creative_model, "close"):
-                close_method = self._creative_model.close
+                close_method = self._creative_model.close  # pyright: ignore[reportAttributeAccessIssue]
                 if callable(close_method):
                     result = close_method()
                     if hasattr(result, "__await__"):

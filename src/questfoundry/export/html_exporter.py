@@ -271,10 +271,8 @@ def _render_passage_div(
             label = html.escape(choice.label)
             requires_attr = ""
             grants_attr = ""
-            if choice.requires_codewords:
-                requires_attr = (
-                    f' data-requires="{html.escape(json.dumps(choice.requires_codewords))}"'
-                )
+            if choice.requires:
+                requires_attr = f' data-requires="{html.escape(json.dumps(choice.requires))}"'
             if choice.grants:
                 grants_attr = f' data-grants="{html.escape(json.dumps(choice.grants))}"'
             parts.append(

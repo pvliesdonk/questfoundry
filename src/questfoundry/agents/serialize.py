@@ -207,7 +207,7 @@ async def serialize_to_artifact(
     semantic_error_class: type[SemanticErrorFormatter] | None = None,
     stage: str = "unknown",
     extra_repair_hints: list[str] | None = None,
-) -> tuple[T, int]:
+) -> tuple[T, int, int]:
     """Serialize a brief into a structured artifact.
 
     Uses LangChain's structured output with a validation/repair loop.
@@ -241,7 +241,10 @@ async def serialize_to_artifact(
             self-contained.
 
     Returns:
-        Tuple of (validated_artifact, tokens_used).
+        Tuple of (validated_artifact, tokens_used, attempts_made). The
+        `attempts_made` value is the number of LLM calls actually issued
+        (1 on first-try success, 2..max_retries when retries occurred).
+        Callers use this to keep `llm_calls` counters retry-aware (#1452).
 
     Raises:
         SerializationError: If all attempts fail validation.
@@ -330,7 +333,7 @@ async def serialize_to_artifact(
                         attempt=attempt,
                         tokens=total_tokens,
                     )
-                    return result, total_tokens
+                    return result, total_tokens, attempt
 
                 # If result is a dict, validate and convert
                 if isinstance(result, dict):
@@ -357,7 +360,7 @@ async def serialize_to_artifact(
                         attempt=attempt,
                         tokens=total_tokens,
                     )
-                    return artifact, total_tokens
+                    return artifact, total_tokens, attempt
 
                 # Unexpected result type — retry will follow
                 last_errors = [f"Unexpected result type: {type(result).__name__}"]
@@ -703,7 +706,7 @@ async def _serialize_dilemma_paths(
         explored_count=len(explored),
     )
 
-    result, tokens = await serialize_to_artifact(
+    result, tokens, _ = await serialize_to_artifact(
         model=model,
         brief=brief,
         schema=DilemmaPathsSection,
@@ -996,7 +999,7 @@ async def _serialize_path_beats(
         dilemma_id=dilemma_id,
     )
 
-    result, tokens = await serialize_to_artifact(
+    result, tokens, _ = await serialize_to_artifact(
         model=model,
         brief=brief,
         schema=PathBeatsSection,
@@ -1272,7 +1275,7 @@ async def _serialize_shared_beats_for_dilemma(
         f'`"dilemma_id": "{prefixed_dilemma_id}"`'
     )
 
-    result, tokens = await serialize_to_artifact(
+    result, tokens, _ = await serialize_to_artifact(
         model=model,
         brief=brief,
         schema=SharedBeatsSection,
@@ -1682,7 +1685,7 @@ async def _early_validate_dilemma_answers(
         # Re-serialize dilemmas with corrections
         corrected_prompt = f"{section_prompt}\n\n{corrections}"
         try:
-            result, tokens = await serialize_to_artifact(
+            result, tokens, _ = await serialize_to_artifact(
                 model=model,
                 brief=build_brief_fn(),
                 schema=schema,
@@ -1990,7 +1993,7 @@ async def serialize_seed_as_function(
             section_prompt = f"{section_prompt}\n\n{path_ids_context}"
             log.debug("path_ids_injected_into_consequences_prompt")
 
-        section_result, section_tokens = await serialize_to_artifact(
+        section_result, section_tokens, _ = await serialize_to_artifact(
             model=model,
             brief=current_brief,
             schema=schema,
@@ -2236,7 +2239,7 @@ async def serialize_seed_as_function(
                     current_brief = enhanced_brief
 
                 try:
-                    section_result, section_tokens = await serialize_to_artifact(
+                    section_result, section_tokens, _ = await serialize_to_artifact(
                         model=model,
                         brief=current_brief,
                         schema=schema,
@@ -2448,7 +2451,7 @@ async def serialize_convergence_analysis(
         if on_phase_progress is not None:
             on_phase_progress("Classifying dilemma convergence", "section_7", "")
 
-        section7_result, section7_tokens = await serialize_to_artifact(
+        section7_result, section7_tokens, section7_calls = await serialize_to_artifact(
             model=model,
             brief=dilemma_context,
             schema=DilemmaAnalysisSection,
@@ -2463,8 +2466,9 @@ async def serialize_convergence_analysis(
             "convergence_analysis_complete",
             analyses=len(dilemma_analyses),
             tokens=section7_tokens,
+            calls=section7_calls,
         )
-        return dilemma_analyses, section7_tokens, 1
+        return dilemma_analyses, section7_tokens, section7_calls
     except Exception as e:
         log.warning(
             "seed_analysis_defaulted",
@@ -2535,7 +2539,7 @@ async def serialize_dilemma_relationships(
             candidate_pairs_context=candidates_context
         )
 
-        section8_result, section8_tokens = await serialize_to_artifact(
+        section8_result, section8_tokens, section8_calls = await serialize_to_artifact(
             model=model,
             brief=candidates_context,
             schema=DilemmaRelationshipsSection,
@@ -2566,8 +2570,9 @@ async def serialize_dilemma_relationships(
             "post_prune_section8_complete",
             relationships=len(dilemma_relationships),
             tokens=section8_tokens,
+            calls=section8_calls,
         )
-        return dilemma_relationships, section8_tokens, 1
+        return dilemma_relationships, section8_tokens, section8_calls
     except Exception as e:
         log.warning(
             "seed_analysis_defaulted",

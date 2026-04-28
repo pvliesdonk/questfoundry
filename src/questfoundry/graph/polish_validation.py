@@ -911,13 +911,11 @@ def check_gate_satisfiability(graph: Graph) -> ValidationCheck:
         grants = edge.get("grants", []) or []
         grantable.update(grants)
 
-    # Check each choice edge's requires list. POLISH writes `requires`; older
-    # code paths used `requires_state_flags`. Read both for back-compat.
     unsatisfiable: list[str] = []
 
     sorted_edges = sorted(choice_edges, key=_choice_edge_label)
     for edge in sorted_edges:
-        requires = edge.get("requires") or edge.get("requires_state_flags") or []
+        requires = edge.get("requires") or []
         for req in requires:
             if req not in grantable:
                 unsatisfiable.append(f"{_choice_edge_label(edge)} requires '{req}'")
@@ -981,13 +979,11 @@ def check_gate_co_satisfiability(graph: Graph) -> ValidationCheck:
                     sfs.add(sf)
         arc_state_flags[arc_id] = sfs
 
-    # Check each gated choice edge. POLISH writes `requires`; older code paths
-    # used `requires_state_flags`. Read both for back-compat.
     paradoxical: list[str] = []
 
     sorted_edges = sorted(choice_edges, key=_choice_edge_label)
     for edge in sorted_edges:
-        requires = set(edge.get("requires") or edge.get("requires_state_flags") or [])
+        requires = set(edge.get("requires") or [])
         if not requires:
             continue
 
@@ -1303,8 +1299,7 @@ def check_state_flag_gate_coverage(graph: Graph) -> ValidationCheck:
 
     consumed: set[str] = set()
     for edge in graph.get_edges(edge_type="choice"):
-        # POLISH writes `requires`; older code paths used `requires_state_flags`.
-        consumed.update(edge.get("requires") or edge.get("requires_state_flags") or [])
+        consumed.update(edge.get("requires") or [])
 
     # Overlays are embedded arrays on entity nodes (type="entity"),
     # not separate typed nodes.
@@ -1367,7 +1362,7 @@ def check_forward_path_reachability(graph: Graph) -> ValidationCheck:
         forward = [c for c in outgoing if not c.get("is_return") and not c.get("is_routing")]
         if not forward:
             continue  # ending passage or routing-only — no forward choices
-        ungated = [c for c in forward if not (c.get("requires") or c.get("requires_state_flags"))]
+        ungated = [c for c in forward if not c.get("requires")]
         if not ungated:
             soft_locked.append(pid)
 
@@ -1465,11 +1460,9 @@ def check_routing_coverage(graph: Graph) -> list[ValidationCheck]:
         if not covering_arcs:
             continue
 
-        # Extract requires sets from routing choice edges. POLISH writes
-        # `requires`; older code paths used `requires_state_flags`.
         route_requires: list[set[str]] = []
         for rc in routing_choices:
-            reqs = rc.get("requires") or rc.get("requires_state_flags") or []
+            reqs = rc.get("requires") or []
             route_requires.append(set(reqs) if isinstance(reqs, list) else set())
 
         # Select state flag scope: ending splits use "ending" scope (exhaustive),
