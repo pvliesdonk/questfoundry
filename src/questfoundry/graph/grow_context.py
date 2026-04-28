@@ -62,7 +62,7 @@ def format_valid_entity_ids_by_category(
     graph: Graph,
     entity_ids: list[str],
 ) -> str:
-    """Format ``entity_ids`` grouped by entity_category; the ``(unknown)`` bucket holds entities with no category."""
+    """Format ``entity_ids`` grouped by entity_category; the ``unknown`` bucket holds entities with no category."""
     if not entity_ids:
         return ""
 
