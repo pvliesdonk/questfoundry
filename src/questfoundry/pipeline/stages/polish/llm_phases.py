@@ -827,8 +827,12 @@ class _PolishLLMPhaseMixin:
         enrichment_parts: list[str] = []
 
         # 5a: Choice labels
-        if choice_specs:
-            context = format_choice_label_context(graph, choice_specs, passage_specs)
+        # R-4c.7: Continue choices ship with the literal label "Continue" already
+        # set by compute_choice_edges. They are navigational (linear cross-passage
+        # transitions) and should not be sent to the LLM for diegetic relabeling.
+        labelable_specs = [s for s in choice_specs if s.get("label", "") != "Continue"]
+        if labelable_specs:
+            context = format_choice_label_context(graph, labelable_specs, passage_specs)
             result, llm_calls, tokens = await self._polish_llm_call(  # type: ignore[attr-defined]
                 model=model,
                 template_name="polish_phase5a_choice_labels",
@@ -852,7 +856,7 @@ class _PolishLLMPhaseMixin:
                     )
                 else:
                     label_lookup[key] = item.label
-            for spec in choice_specs:
+            for spec in labelable_specs:
                 key = (spec["from_passage"], spec["to_passage"])
                 if key in label_lookup:
                     spec["label"] = label_lookup[key]

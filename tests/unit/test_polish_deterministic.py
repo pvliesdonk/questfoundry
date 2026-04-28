@@ -338,8 +338,8 @@ class TestComputeChoiceEdges:
         assert from_passages == {"p_start"}
         assert to_passages == {"p_a", "p_b"}
 
-    def test_no_divergence(self) -> None:
-        """Linear chain produces no choices."""
+    def test_no_divergence_emits_continue_choice(self) -> None:
+        """Linear cross-passage transition emits a `Continue` choice (R-4c.7)."""
         graph = Graph.empty()
         graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
         _make_beat(graph, "beat::a", "A")
@@ -354,7 +354,35 @@ class TestComputeChoiceEdges:
         ]
 
         choices = compute_choice_edges(graph, specs)
-        assert len(choices) == 0
+        assert len(choices) == 1
+        assert choices[0].from_passage == "p_a"
+        assert choices[0].to_passage == "p_b"
+        assert choices[0].label == "Continue"
+        assert choices[0].requires == []
+        assert choices[0].grants == []
+
+    def test_within_passage_transitions_emit_no_choice(self) -> None:
+        """Two beats grouped into a single passage do NOT generate a choice
+        (R-4c.7: within-passage transitions belong to FILL prose).
+        """
+        graph = Graph.empty()
+        graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
+        _make_beat(graph, "beat::a", "A")
+        _make_beat(graph, "beat::b", "B")
+        _add_belongs_to(graph, "beat::a", "path::p1")
+        _add_belongs_to(graph, "beat::b", "path::p1")
+        _add_predecessor(graph, "beat::b", "beat::a")
+
+        specs = [
+            PassageSpec(
+                passage_id="p_collapsed",
+                beat_ids=["beat::a", "beat::b"],
+                summary="collapsed",
+            ),
+        ]
+
+        choices = compute_choice_edges(graph, specs)
+        assert choices == []
 
     def test_grants_from_commit(self) -> None:
         """Choice leading to a commit beat populates grants."""
@@ -401,6 +429,105 @@ class TestComputeChoiceEdges:
         choice_to_a = [c for c in choices if c.to_passage == "p_a"]
         assert len(choice_to_a) == 1
         assert len(choice_to_a[0].grants) > 0
+
+
+class TestContinueChoiceEdges:
+    """Tests for R-4c.7: cross-passage non-fork transitions emit Continue edges."""
+
+    def test_three_beat_linear_path_emits_two_continue_choices(self) -> None:
+        """A 3-beat linear path with one beat per passage produces 2 Continue choices."""
+        graph = Graph.empty()
+        graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
+        for raw in ("a", "b", "c"):
+            _make_beat(graph, f"beat::{raw}", raw.upper())
+            _add_belongs_to(graph, f"beat::{raw}", "path::p1")
+        _add_predecessor(graph, "beat::b", "beat::a")
+        _add_predecessor(graph, "beat::c", "beat::b")
+
+        specs = [
+            PassageSpec(passage_id="p_a", beat_ids=["beat::a"], summary="a"),
+            PassageSpec(passage_id="p_b", beat_ids=["beat::b"], summary="b"),
+            PassageSpec(passage_id="p_c", beat_ids=["beat::c"], summary="c"),
+        ]
+
+        choices = compute_choice_edges(graph, specs)
+        assert len(choices) == 2
+        for choice in choices:
+            assert choice.label == "Continue"
+            assert choice.requires == []
+            assert choice.grants == []
+        pairs = {(c.from_passage, c.to_passage) for c in choices}
+        assert pairs == {("p_a", "p_b"), ("p_b", "p_c")}
+
+    def test_fork_plus_linear_emits_fork_choices_and_continue(self) -> None:
+        """A Y-fork followed by linear post-commit paths produces fork choices
+        plus Continue choices on each post-commit segment.
+        """
+        graph = Graph.empty()
+        graph.create_node("path::pa", {"type": "path", "raw_id": "pa"})
+        graph.create_node("path::pb", {"type": "path", "raw_id": "pb"})
+        _setup_dilemma(graph, "dilemma::d1", ["path::pa", "path::pb"])
+
+        _make_beat(graph, "beat::start", "Start")
+        _make_beat(
+            graph,
+            "beat::commit_a",
+            "Commit A",
+            dilemma_impacts=[{"dilemma_id": "dilemma::d1", "effect": "commits"}],
+        )
+        _make_beat(
+            graph,
+            "beat::commit_b",
+            "Commit B",
+            dilemma_impacts=[{"dilemma_id": "dilemma::d1", "effect": "commits"}],
+        )
+        _make_beat(graph, "beat::after_a", "After A")
+        _make_beat(graph, "beat::after_b", "After B")
+
+        _add_belongs_to(graph, "beat::start", "path::pa")
+        _add_belongs_to(graph, "beat::start", "path::pb")
+        _add_belongs_to(graph, "beat::commit_a", "path::pa")
+        _add_belongs_to(graph, "beat::commit_b", "path::pb")
+        _add_belongs_to(graph, "beat::after_a", "path::pa")
+        _add_belongs_to(graph, "beat::after_b", "path::pb")
+
+        _add_predecessor(graph, "beat::commit_a", "beat::start")
+        _add_predecessor(graph, "beat::commit_b", "beat::start")
+        _add_predecessor(graph, "beat::after_a", "beat::commit_a")
+        _add_predecessor(graph, "beat::after_b", "beat::commit_b")
+
+        graph.create_node(
+            "state_flag::pa_committed", {"type": "state_flag", "raw_id": "pa_committed"}
+        )
+        graph.create_node(
+            "state_flag::pb_committed", {"type": "state_flag", "raw_id": "pb_committed"}
+        )
+        graph.add_edge("grants", "beat::commit_a", "state_flag::pa_committed")
+        graph.add_edge("grants", "beat::commit_b", "state_flag::pb_committed")
+
+        specs = [
+            PassageSpec(passage_id="p_start", beat_ids=["beat::start"], summary="start"),
+            PassageSpec(passage_id="p_commit_a", beat_ids=["beat::commit_a"], summary="ca"),
+            PassageSpec(passage_id="p_commit_b", beat_ids=["beat::commit_b"], summary="cb"),
+            PassageSpec(passage_id="p_after_a", beat_ids=["beat::after_a"], summary="aa"),
+            PassageSpec(passage_id="p_after_b", beat_ids=["beat::after_b"], summary="ab"),
+        ]
+
+        choices = compute_choice_edges(graph, specs)
+        fork = [c for c in choices if c.label != "Continue"]
+        cont = [c for c in choices if c.label == "Continue"]
+
+        # Two fork choices from start
+        assert len(fork) == 2
+        assert {c.to_passage for c in fork} == {"p_commit_a", "p_commit_b"}
+        assert all(c.from_passage == "p_start" for c in fork)
+
+        # Two Continue choices on the post-commit linear segments
+        assert len(cont) == 2
+        assert {(c.from_passage, c.to_passage) for c in cont} == {
+            ("p_commit_a", "p_after_a"),
+            ("p_commit_b", "p_after_b"),
+        }
 
 
 class TestChoiceEdgesIntersectionMultiBeat:
@@ -1109,16 +1236,17 @@ class TestChoiceEdgesYShapeAdvancesChild:
 
         choices = compute_choice_edges(graph, specs)
 
-        # Should produce 2 choices: shared → a_setup, shared → b_setup
-        assert len(choices) == 2, (
-            f"Expected 2 choices, got {len(choices)}: "
-            f"{[(c.from_passage, c.to_passage) for c in choices]}"
+        # Filter out R-4c.7 Continue edges; this test asserts the fork shape.
+        fork_choices = [c for c in choices if c.label != "Continue"]
+        assert len(fork_choices) == 2, (
+            f"Expected 2 fork choices, got {len(fork_choices)}: "
+            f"{[(c.from_passage, c.to_passage) for c in fork_choices]}"
         )
-        to_passages = {c.to_passage for c in choices}
+        to_passages = {c.to_passage for c in fork_choices}
         assert "passage::a_setup" in to_passages
         assert "passage::b_setup" in to_passages
-        # All choices should originate from the shared passage
-        assert all(c.from_passage == "passage::shared" for c in choices)
+        # All fork choices should originate from the shared passage
+        assert all(c.from_passage == "passage::shared" for c in fork_choices)
 
     def test_grants_found_via_deep_walk(self) -> None:
         """Grants should be populated even when commits beat is a grandchild."""
@@ -1232,9 +1360,11 @@ class TestChoiceEdgesYShapeAdvancesChild:
 
         choices = compute_choice_edges(graph, specs)
 
-        assert len(choices) == 2
-        # Each choice should have grants from the commits beat downstream
-        for choice in choices:
+        # Filter to fork choices; R-4c.7 Continue edges are linear and have no grants.
+        fork_choices = [c for c in choices if c.label != "Continue"]
+        assert len(fork_choices) == 2
+        # Each fork choice should have grants from the commits beat downstream
+        for choice in fork_choices:
             assert len(choice.grants) > 0, (
                 f"Choice {choice.from_passage}→{choice.to_passage} has no grants; "
                 f"commits beat should have been found via deep walk"

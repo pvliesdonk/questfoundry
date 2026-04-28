@@ -864,6 +864,35 @@ def compute_choice_edges(
                         label="",  # Populated by Phase 5
                     )
 
+    # R-4c.7: emit Continue choice edges for linear cross-passage transitions.
+    # Every cross-passage beat predecessor edge that does not originate at a
+    # divergence point produces a single "Continue" choice. Without this the
+    # passage layer is unreachable past Y-fork commit beats — SHIP's
+    # reachability validator (R-4.2) fires on any post-commit linear chain.
+    for edge in predecessor_edges:
+        from_beat = edge["to"]  # predecessor relation: B requires A → A precedes B
+        to_beat = edge["from"]
+        if from_beat not in beat_nodes or to_beat not in beat_nodes:
+            continue
+        from_p = beat_to_passage.get(from_beat)
+        to_p = beat_to_passage.get(to_beat)
+        if not from_p or not to_p or from_p == to_p:
+            continue
+        if (from_p, to_p) in choices_map:
+            continue  # already covered by Y-fork handler
+        # Skip when source beat is a divergence point: the Y-fork handler
+        # already emitted same-dilemma choices, and other-dilemma children
+        # are temporal interleaving (not player choices).
+        if len(children.get(from_beat, [])) > 1:
+            continue
+        choices_map[(from_p, to_p)] = ChoiceSpec(
+            from_passage=from_p,
+            to_passage=to_p,
+            grants=[],
+            requires=[],
+            label="Continue",
+        )
+
     return list(choices_map.values())
 
 
