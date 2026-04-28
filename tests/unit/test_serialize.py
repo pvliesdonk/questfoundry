@@ -2078,6 +2078,10 @@ class TestSizeProfileInjectedIntoBeatPrompts:
         assert "at least 2 dilemmas" not in prompts["dilemmas"]
         assert "less than 2" not in prompts["dilemmas"]
         assert "fewer than 2" not in prompts["dilemmas"]
+        # The GOOD example label must not claim "2 dilemmas → passes" — under
+        # `long` (size_fully_explored=5) that contradicts the HARD constraint
+        # and gives small models a fallback anchor (caught in PR #1554 review).
+        assert "2 dilemmas fully explored" not in prompts["dilemmas"]
 
 
 class TestDilemmasPromptStructure:

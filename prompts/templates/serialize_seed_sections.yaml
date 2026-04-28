@@ -109,11 +109,12 @@ dilemmas_prompt: |
   {"dilemma_id": "dilemma::host_benevolent_or_selfish", "explored": ["protector"], "unexplored": ["manipulator"]},
   {"dilemma_id": "dilemma::artifact_safe_or_dangerous", "explored": ["safe"], "unexplored": ["dangerous"]}
   ```
-  GOOD (valid): 2 dilemmas fully explored → 4 arcs → passes
+  GOOD (structure example — both answers in `explored`, none in `unexplored`):
   ```json
   {"dilemma_id": "dilemma::host_benevolent_or_selfish", "explored": ["protector", "manipulator"], "unexplored": []},
   {"dilemma_id": "dilemma::artifact_safe_or_dangerous", "explored": ["safe", "dangerous"], "unexplored": []}
   ```
+  Repeat this shape until you have at least {size_fully_explored} fully-explored dilemmas.
 
   ## DEFAULT ANSWER RULE
   In the manifest, one answer per dilemma is marked `(default)`.
