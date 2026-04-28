@@ -202,11 +202,9 @@ class TestFormatEntityArcContext:
         assert "(path: `path::brave`)" in ctx["beat_appearances"]
         # Same backtick convention for the standalone ID lists.
         assert "`path::brave`" in ctx["path_ids"]
-        # `valid_path_ids` is entity-scoped (same as `path_ids`) per #1410 —
-        # the Phase 3 prompt forbids arcs on paths the entity isn't in.
-        assert ctx["valid_path_ids"] == ctx["path_ids"]
-        assert "`beat::intro`" in ctx["valid_beat_ids"]
-        assert "`beat::reveal`" in ctx["valid_beat_ids"]
+        # Grouped Valid IDs block: one bullet per path with its beats.
+        # `path::brave` owns both `beat::intro` and `beat::reveal`.
+        assert "- `path::brave` → `beat::intro`, `beat::reveal`" in ctx["valid_path_beats"]
 
     def test_entity_with_overlays(self) -> None:
         graph = Graph.empty()
@@ -278,18 +276,18 @@ class TestFormatEntityArcContext:
 
         ctx = format_entity_arc_context(graph, "entity::loner", [])
         assert ctx["path_ids"] == "(none)"
-        assert ctx["valid_path_ids"] == "(none)"
-        assert ctx["valid_beat_ids"] == "(none)"
+        assert ctx["valid_path_beats"] == "  (none)"
         assert ctx["anchored_dilemmas"] == "(none)"
         # `beat_appearances` uses the same fallback (with the indent the
         # rendered lines normally carry) so the prompt never receives an
         # empty injection.
         assert ctx["beat_appearances"] == "  (none)"
 
-    def test_valid_path_ids_excludes_paths_entity_does_not_appear_on(self) -> None:
-        """`valid_path_ids` MUST be scoped to paths where the entity actually
-        appears (closes #1410). Showing the broader story-wide list confused
-        models into inventing arcs on paths the entity is never in."""
+    def test_valid_path_beats_excludes_paths_entity_does_not_appear_on(self) -> None:
+        """The grouped `valid_path_beats` block MUST be scoped to paths where
+        the entity actually appears (closes #1410). Showing the broader
+        story-wide list confused models into inventing arcs on paths the
+        entity is never in."""
         graph = Graph.empty()
         # Two paths exist in the story.
         graph.create_node("path::story_a", {"type": "path", "raw_id": "story_a"})
@@ -303,12 +301,40 @@ class TestFormatEntityArcContext:
         graph.add_edge("belongs_to", "beat::b1", "path::story_a")
 
         ctx = format_entity_arc_context(graph, "entity::loner", ["beat::b1"])
-        # Both path_ids and valid_path_ids show only the entity's path,
-        # NOT path::story_b (which exists in the graph but doesn't include
-        # the entity).
+        # `path_ids` shows only the entity's path.
         assert ctx["path_ids"] == "`path::story_a`"
-        assert ctx["valid_path_ids"] == "`path::story_a`"
-        assert "story_b" not in ctx["valid_path_ids"]
+        # The grouped block lists the entity's path + its beat, NOT story_b.
+        assert "- `path::story_a` → `beat::b1`" in ctx["valid_path_beats"]
+        assert "story_b" not in ctx["valid_path_beats"]
+
+    def test_valid_path_beats_lists_y_shape_precommit_under_each_path(self) -> None:
+        """Y-shape pre-commit beats have multi-`belongs_to` (one edge per path
+        of their dilemma). The grouped `valid_path_beats` block MUST list such
+        a beat under EACH of its paths — that's how the LLM knows the beat is
+        legal for both `pivots` entries."""
+        graph = Graph.empty()
+        graph.create_node(
+            "path::canon",
+            {"type": "path", "raw_id": "canon", "dilemma_id": "dilemma::trust"},
+        )
+        graph.create_node(
+            "path::alt",
+            {"type": "path", "raw_id": "alt", "dilemma_id": "dilemma::trust"},
+        )
+        graph.create_node(
+            "entity::mentor",
+            {"type": "entity", "raw_id": "mentor", "name": "Mentor", "description": "guide"},
+        )
+        # `beat::shared` is a Y-shape pre-commit beat (multi-belongs_to)
+        # where the mentor appears.
+        _make_beat(graph, "beat::shared", "Mentor speaks", entities=["entity::mentor"])
+        graph.add_edge("belongs_to", "beat::shared", "path::canon")
+        graph.add_edge("belongs_to", "beat::shared", "path::alt")
+
+        ctx = format_entity_arc_context(graph, "entity::mentor", ["beat::shared"])
+        # The pre-commit beat surfaces under BOTH paths in the grouped block.
+        assert "- `path::alt` → `beat::shared`" in ctx["valid_path_beats"]
+        assert "- `path::canon` → `beat::shared`" in ctx["valid_path_beats"]
 
     def test_anchored_dilemmas_backtick_wrapped(self) -> None:
         """Dilemmas the entity is `anchored_to` are backtick-wrapped per
