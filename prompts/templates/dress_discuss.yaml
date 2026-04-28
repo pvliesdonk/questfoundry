@@ -27,6 +27,8 @@ system: |
   ## Entities to Visualize
   {entity_list}
 
+  {image_renderer_section}
+
   ## Guidelines
   - The visual style should complement the story's genre, tone, and themes
   - Consider how the medium affects mood (watercolor = dreamlike, ink = stark, etc.)
