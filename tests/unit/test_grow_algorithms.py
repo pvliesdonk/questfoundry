@@ -2762,8 +2762,11 @@ def _make_grow_mock_model(graph: Graph) -> MagicMock:
         path_mood="quiet tension",
     )
 
-    # Phase 4f: empty arcs (no eligible entities in test graph)
-    phase4f_output = Phase4fOutput(arcs=[])
+    # Phase 4f: empty arcs (no eligible entities in test graph). Pydantic
+    # min_length=1 normally rejects this, but the orchestrator path here
+    # short-circuits before semantic validation; use model_construct to
+    # bypass the constraint for the no-eligible-entities scenario.
+    phase4f_output = Phase4fOutput.model_construct(arcs=[])
 
     # Map schema title -> output (schema is now a dict with "title" field)
     output_by_title: dict[str, object] = {

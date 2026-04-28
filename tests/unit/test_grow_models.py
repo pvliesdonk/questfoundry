@@ -547,9 +547,9 @@ class TestPathMiniArc:
 
 
 class TestPhase4eOutput:
-    def test_default_empty(self) -> None:
-        out = Phase4eOutput()
-        assert out.arcs == []
+    def test_empty_arcs_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="arcs"):
+            Phase4eOutput(arcs=[])
 
     def test_with_arcs(self) -> None:
         out = Phase4eOutput(
@@ -620,9 +620,9 @@ class TestEntityArcDescriptor:
 
 
 class TestPhase4fOutput:
-    def test_default_empty(self) -> None:
-        out = Phase4fOutput()
-        assert out.arcs == []
+    def test_empty_arcs_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="arcs"):
+            Phase4fOutput(arcs=[])
 
     def test_with_arcs(self) -> None:
         out = Phase4fOutput(

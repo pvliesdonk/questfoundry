@@ -94,7 +94,7 @@ R-1a.1. Inserted gap beats carry `is_gap_beat: True` and `role: gap_beat` and `c
 
 R-1a.2. Inserted gap beats carry zero `dilemma_impacts`. They are structural transition beats; they MUST NOT advance any dilemma. This matches the structural-beat invariant for all POLISH-created beats (R-2.1, R-5.10, etc.).
 
-R-1a.3. Inserted gap beats record traceability fields: `bridges_from` (the earlier beat ID), `bridges_to` (the later beat ID), `transition_style` (free-form descriptor). At least one of `bridges_from` / `bridges_to` MUST be set so the gap beat is placeable in the sequence — a gap with neither anchor is rejected at validation time. Both anchors are preferred when both adjacent beats exist; a single anchor is permitted only at sequence boundaries (open-start at the path's first position, open-end at its last) where the corresponding adjacent beat is genuinely absent. `transition_style` is currently informational free-form text and not yet schema-enforced.
+R-1a.3. Inserted gap beats record traceability fields: `bridges_from` (the earlier beat ID), `bridges_to` (the later beat ID), `transition_style` (`"smooth"` or `"cut"`). At least one of `bridges_from` / `bridges_to` MUST be set so the gap beat is placeable in the sequence — a gap with neither anchor is rejected at validation time. Both anchors are preferred when both adjacent beats exist; a single anchor is permitted only at sequence boundaries (open-start at the path's first position, open-end at its last) where the corresponding adjacent beat is genuinely absent. `transition_style` is computed deterministically by the gap-insertion code from adjacent-beat context (shared location + entities → `"smooth"`; differing location or scene type → `"cut"`); it is intentionally NOT part of the LLM `GapProposal` schema, since the heuristic over adjacent beats is more reliable than a free-form LLM descriptor for this two-value field.
 
 R-1a.4. Per-path cap: maximum 2 gap beats inserted per path per Phase 1a invocation.
 
@@ -825,7 +825,7 @@ One linear section of 4 beats in `mentor_trust`'s post-commit chain. LLM propose
 
 ### Phase 1a
 
-LLM inspects each path's beat sequence. On the `manipulator` path, it flags a leap from setup to confrontation with no rising-tension beat between; proposes one gap beat (`bridges_from`/`bridges_to` set, `transition_style: "rising suspicion"`). The other path passes without insertion. Per-path cap (R-1a.4) not approached.
+LLM inspects each path's beat sequence. On the `manipulator` path, it flags a leap from setup to confrontation with no rising-tension beat between; proposes one gap beat (`bridges_from`/`bridges_to` set). POLISH inserts the gap beat and computes `transition_style` deterministically from adjacent-beat context — setup and confrontation are different `scene_type` values, so `_infer_transition_style` short-circuits to `"cut"`. The other path passes without insertion. Per-path cap (R-1a.4) not approached.
 
 ### Phase 2
 
