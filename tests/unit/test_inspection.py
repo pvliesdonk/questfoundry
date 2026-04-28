@@ -43,33 +43,23 @@ def _make_full_graph() -> Graph:
         ["The hero stood tall in the morning light.", "She ran through the dark forest quickly."]
     )
 
-    # Add choices
-    graph.create_node(
-        "choice::p0__p1",
-        {
-            "type": "choice",
-            "from_passage": "passage::p0",
-            "to_passage": "passage::p1",
-            "label": "Enter the forest",
-            "requires_state_flags": [],
-            "grants": [],
-        },
+    # Add choice edges
+    graph.add_edge(
+        "choice",
+        "passage::p0",
+        "passage::p1",
+        label="Enter the forest",
+        requires=[],
+        grants=[],
     )
-    graph.create_node(
-        "choice::p0__p1_continue",
-        {
-            "type": "choice",
-            "from_passage": "passage::p0",
-            "to_passage": "passage::p1",
-            "label": "continue",
-            "requires_state_flags": [],
-            "grants": [],
-        },
+    graph.add_edge(
+        "choice",
+        "passage::p0",
+        "passage::p1",
+        label="continue",
+        requires=[],
+        grants=[],
     )
-    graph.add_edge("choice_from", "choice::p0__p1", "passage::p0")
-    graph.add_edge("choice_to", "choice::p0__p1", "passage::p1")
-    graph.add_edge("choice_from", "choice::p0__p1_continue", "passage::p0")
-    graph.add_edge("choice_to", "choice::p0__p1_continue", "passage::p1")
 
     # Add entities
     graph.create_node(
@@ -105,7 +95,11 @@ class TestGraphSummary:
         assert summary.total_nodes > 0
         assert summary.total_edges > 0
         assert "passage" in summary.node_counts
-        assert "choice" in summary.node_counts
+        # `choice` is now an edge type, not a node type, so it appears in
+        # edge counts rather than node_counts. Just verify the build had
+        # both nodes (passages) and edges (choice) without asserting on the
+        # specific shape of node_counts.
+        assert summary.total_edges >= 2  # 2 choice edges + HasEntry
 
     def test_node_counts_sorted_by_count(self, tmp_path: Path) -> None:
         graph = _make_full_graph()
@@ -193,34 +187,24 @@ class TestBranchingStats:
             )
 
         # p0 → p1: single outgoing, contextual label
-        graph.create_node(
-            "choice::p0__p1",
-            {
-                "type": "choice",
-                "from_passage": "passage::p0",
-                "to_passage": "passage::p1",
-                "label": "Search the room",
-                "requires_state_flags": [],
-                "grants": [],
-            },
+        graph.add_edge(
+            "choice",
+            "passage::p0",
+            "passage::p1",
+            label="Search the room",
+            requires=[],
+            grants=[],
         )
-        graph.add_edge("choice_from", "choice::p0__p1", "passage::p0")
-        graph.add_edge("choice_to", "choice::p0__p1", "passage::p1")
 
         # p1 → p2: single outgoing, continue label
-        graph.create_node(
-            "choice::p1__p2",
-            {
-                "type": "choice",
-                "from_passage": "passage::p1",
-                "to_passage": "passage::p2",
-                "label": "continue",
-                "requires_state_flags": [],
-                "grants": [],
-            },
+        graph.add_edge(
+            "choice",
+            "passage::p1",
+            "passage::p2",
+            label="continue",
+            requires=[],
+            grants=[],
         )
-        graph.add_edge("choice_from", "choice::p1__p2", "passage::p1")
-        graph.add_edge("choice_to", "choice::p1__p2", "passage::p2")
 
         stats = _branching_stats(graph)
 
@@ -265,46 +249,31 @@ class TestBranchingStats:
         )
 
         # Ensure p0 has 2 outgoing (hub), then add a return link spoke→p0.
-        graph.create_node(
-            "choice::p0__p1",
-            {
-                "type": "choice",
-                "from_passage": "passage::p0",
-                "to_passage": "passage::p1",
-                "label": "continue",
-                "requires_state_flags": [],
-                "grants": [],
-            },
+        graph.add_edge(
+            "choice",
+            "passage::p0",
+            "passage::p1",
+            label="continue",
+            requires=[],
+            grants=[],
         )
-        graph.add_edge("choice_from", "choice::p0__p1", "passage::p0")
-        graph.add_edge("choice_to", "choice::p0__p1", "passage::p1")
-        graph.create_node(
-            "choice::p0__spoke_0",
-            {
-                "type": "choice",
-                "from_passage": "passage::p0",
-                "to_passage": "passage::spoke_0",
-                "label": "Look around",
-                "requires_state_flags": [],
-                "grants": [],
-            },
+        graph.add_edge(
+            "choice",
+            "passage::p0",
+            "passage::spoke_0",
+            label="Look around",
+            requires=[],
+            grants=[],
         )
-        graph.add_edge("choice_from", "choice::p0__spoke_0", "passage::p0")
-        graph.add_edge("choice_to", "choice::p0__spoke_0", "passage::spoke_0")
-        graph.create_node(
-            "choice::spoke_0_return",
-            {
-                "type": "choice",
-                "from_passage": "passage::spoke_0",
-                "to_passage": "passage::p0",
-                "label": "Return",
-                "is_return": True,
-                "requires_state_flags": [],
-                "grants": [],
-            },
+        graph.add_edge(
+            "choice",
+            "passage::spoke_0",
+            "passage::p0",
+            label="Return",
+            is_return=True,
+            requires=[],
+            grants=[],
         )
-        graph.add_edge("choice_from", "choice::spoke_0_return", "passage::spoke_0")
-        graph.add_edge("choice_to", "choice::spoke_0_return", "passage::p0")
 
         stats = _branching_stats(graph)
         assert stats is not None
@@ -585,19 +554,14 @@ class TestBranchingQualityScore:
             },
         )
         graph.add_edge("grouped_in", "beat::s0", "passage::mid")
-        graph.create_node(
-            "choice::mid__ending",
-            {
-                "type": "choice",
-                "from_passage": "passage::mid",
-                "to_passage": "passage::ending",
-                "label": "Continue",
-                "requires_state_flags": [],
-                "grants": [],
-            },
+        graph.add_edge(
+            "choice",
+            "passage::mid",
+            "passage::ending",
+            label="Continue",
+            requires=[],
+            grants=[],
         )
-        graph.add_edge("choice_from", "choice::mid__ending", "passage::mid")
-        graph.add_edge("choice_to", "choice::mid__ending", "passage::ending")
 
         # Give each path a different state flag via consequence
         graph.create_node(
@@ -679,19 +643,14 @@ class TestBranchingQualityScore:
             },
         )
         graph.add_edge("grouped_in", "beat::s2", "passage::mid")
-        graph.create_node(
-            "choice::mid__ending",
-            {
-                "type": "choice",
-                "from_passage": "passage::mid",
-                "to_passage": "passage::ending",
-                "label": "Finish",
-                "requires_state_flags": [],
-                "grants": [],
-            },
+        graph.add_edge(
+            "choice",
+            "passage::mid",
+            "passage::ending",
+            label="Finish",
+            requires=[],
+            grants=[],
         )
-        graph.add_edge("choice_from", "choice::mid__ending", "passage::mid")
-        graph.add_edge("choice_to", "choice::mid__ending", "passage::ending")
 
         result = _branching_quality_score(graph, None)
         assert result is not None
@@ -749,10 +708,8 @@ class TestBranchingQualityScore:
             "choice::to_1",
             {"type": "choice", "raw_id": "to_1"},
         )
-        graph.add_edge("choice_from", "choice::to_0", "passage::hub")
-        graph.add_edge("choice_to", "choice::to_0", "passage::ending_0")
-        graph.add_edge("choice_from", "choice::to_1", "passage::hub")
-        graph.add_edge("choice_to", "choice::to_1", "passage::ending_1")
+        graph.add_edge("choice", "passage::hub", "passage::ending_0")
+        graph.add_edge("choice", "passage::hub", "passage::ending_1")
 
         result = _branching_quality_score(graph, None)
         assert result is not None

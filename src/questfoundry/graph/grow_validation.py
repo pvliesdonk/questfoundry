@@ -632,19 +632,18 @@ def passages_with_forward_incoming(graph: Graph) -> set[str]:
     passages are still recognised as start passages when they have no
     other incoming edges.
     """
-    choice_nodes = graph.get_nodes_by_type("choice")
     has_incoming: set[str] = set()
-    for choice_data in choice_nodes.values():
-        if choice_data.get("is_return"):
+    for edge in graph.get_edges(edge_type="choice"):
+        if edge.get("is_return"):
             continue
-        to_p = choice_data.get("to_passage")
+        to_p = edge.get("to")
         if to_p:
             has_incoming.add(to_p)
     return has_incoming
 
 
 def build_passage_adjacency(graph: Graph) -> dict[str, list[str]]:
-    """Build passage → successor passages adjacency list from choice nodes.
+    """Build passage → successor passages adjacency list from `choice` edges.
 
     Args:
         graph: The story graph.
@@ -652,18 +651,17 @@ def build_passage_adjacency(graph: Graph) -> dict[str, list[str]]:
     Returns:
         Dict mapping each passage ID to a list of successor passage IDs.
     """
-    choices = graph.get_nodes_by_type("choice")
     adjacency: dict[str, list[str]] = {}
-    for _cid, cdata in choices.items():
-        from_p = cdata.get("from_passage", "")
-        to_p = cdata.get("to_passage", "")
+    for edge in graph.get_edges(edge_type="choice"):
+        from_p = edge.get("from", "")
+        to_p = edge.get("to", "")
         if from_p and to_p:
             adjacency.setdefault(from_p, []).append(to_p)
     return adjacency
 
 
 def build_outgoing_count(graph: Graph) -> dict[str, int]:
-    """Count outgoing choices per passage from choice_from edges.
+    """Count outgoing choices per passage from `choice` edges.
 
     Args:
         graph: The story graph.
@@ -671,11 +669,11 @@ def build_outgoing_count(graph: Graph) -> dict[str, int]:
     Returns:
         Dict mapping passage ID to number of outgoing choices.
     """
-    # choice_from edges point choice → source_passage, so e["to"] = source passage.
-    choice_from_edges = graph.get_edges(edge_type="choice_from")
+    # `choice` edges go directly between passages: e["from"] is the source.
+    choice_edges = graph.get_edges(edge_type="choice")
     outgoing_count: dict[str, int] = {}
-    for edge in choice_from_edges:
-        source = edge["to"]
+    for edge in choice_edges:
+        source = edge["from"]
         outgoing_count[source] = outgoing_count.get(source, 0) + 1
     return outgoing_count
 
@@ -919,10 +917,11 @@ def check_single_root_beat(graph: Graph) -> ValidationCheck:
 
 
 def check_single_start(graph: Graph) -> ValidationCheck:
-    """Verify exactly one start passage exists (no incoming choice_to edges).
+    """Verify exactly one start passage exists.
 
-    A start passage is one with no incoming choice_to edges. There must be
-    exactly one for a well-formed story graph.
+    A start passage is one with no forward incoming `choice` edges
+    (excluding `is_return` spoke→hub back-links). There must be exactly
+    one for a well-formed story graph.
     """
     passage_nodes = graph.get_nodes_by_type("passage")
     if not passage_nodes:
@@ -1032,8 +1031,8 @@ def check_passage_dag_cycles(graph: Graph) -> ValidationCheck:
             message="No passages to check",
         )
 
-    choice_nodes = graph.get_nodes_by_type("choice")
-    if not choice_nodes:
+    choice_edges = graph.get_edges(edge_type="choice")
+    if not choice_edges:
         return ValidationCheck(
             name="passage_dag_cycles",
             severity="pass",
@@ -1044,12 +1043,12 @@ def check_passage_dag_cycles(graph: Graph) -> ValidationCheck:
     in_degree: dict[str, int] = dict.fromkeys(passage_nodes, 0)
     successors: dict[str, list[str]] = {pid: [] for pid in passage_nodes}
 
-    for choice_data in choice_nodes.values():
+    for edge in choice_edges:
         # Skip is_return edges (spoke→hub back-links) — they are intentional cycles
-        if choice_data.get("is_return"):
+        if edge.get("is_return"):
             continue
-        from_p = choice_data.get("from_passage")
-        to_p = choice_data.get("to_passage")
+        from_p = edge.get("from")
+        to_p = edge.get("to")
         if from_p and to_p and from_p in passage_nodes and to_p in passage_nodes:
             in_degree[to_p] += 1
             successors[from_p].append(to_p)
