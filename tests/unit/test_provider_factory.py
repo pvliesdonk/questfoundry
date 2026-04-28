@@ -858,7 +858,7 @@ def test_get_model_info_anthropic() -> None:
     """get_model_info works for Anthropic models."""
     info = get_model_info("anthropic", "claude-sonnet-4-20250514")
 
-    assert info.context_window == 200_000
+    assert info.context_window == 1_000_000
     assert info.supports_vision is True
 
 

@@ -43,13 +43,41 @@ class ModelProperties:
 # Consolidates context window and capability information.
 KNOWN_MODELS: dict[str, dict[str, ModelProperties]] = {
     "ollama": {
+        # Practical defaults — set below the model's theoretical max so a stage
+        # doesn't silently spill the KV cache to CPU on a typical consumer GPU.
+        # Use --max-vram to compute a higher num_ctx that still fits in VRAM.
+        # qwen2.5 / qwen3
+        "qwen3:1.7b": ModelProperties(context_window=32_768),
         "qwen3:4b-instruct-32k": ModelProperties(context_window=32_768),
         "qwen3:8b": ModelProperties(context_window=32_768),
-        "qwen2.5:7b": ModelProperties(context_window=128_000),
+        "qwen3:14b": ModelProperties(context_window=32_768),
+        "qwen3:30b": ModelProperties(context_window=32_768),
+        "qwen2.5:7b": ModelProperties(context_window=32_768),
+        # gemma3 / gemma4
+        "gemma3:1b": ModelProperties(context_window=32_768),
+        "gemma3:4b": ModelProperties(context_window=32_768, supports_vision=True),
+        "gemma3:12b": ModelProperties(context_window=32_768, supports_vision=True),
+        "gemma3:27b": ModelProperties(context_window=32_768, supports_vision=True),
+        # gemma4:e2b — model claims more but is unusable above 16K on consumer GPUs.
+        "gemma4:e2b": ModelProperties(context_window=16_384),
+        # phi4
+        "phi4:14b": ModelProperties(context_window=16_384),
+        "phi4-mini:3.8b": ModelProperties(context_window=16_384),
+        # llama3.x
         "llama3:8b": ModelProperties(context_window=8_192),
-        "llama3.1:8b": ModelProperties(context_window=128_000),
+        "llama3.1:8b": ModelProperties(context_window=32_768),
+        "llama3.2:1b": ModelProperties(context_window=32_768),
+        "llama3.2:3b": ModelProperties(context_window=32_768),
+        "llama3.3:70b": ModelProperties(context_window=32_768),
+        # mistral
         "mistral:7b": ModelProperties(context_window=32_768),
+        "mistral-small:22b": ModelProperties(context_window=32_768),
+        "mistral-nemo:12b": ModelProperties(context_window=32_768),
+        # deepseek
         "deepseek-coder:6.7b": ModelProperties(context_window=16_384),
+        "deepseek-r1:7b": ModelProperties(context_window=32_768),
+        "deepseek-r1:14b": ModelProperties(context_window=32_768),
+        "deepseek-r1:32b": ModelProperties(context_window=32_768),
     },
     "openai": {
         # GPT-5 family: verbosity + reasoning_effort, rejects stop sequences
@@ -118,12 +146,19 @@ KNOWN_MODELS: dict[str, dict[str, ModelProperties]] = {
         ),
     },
     "anthropic": {
-        "claude-opus-4-6": ModelProperties(context_window=200_000, supports_vision=True),
-        "claude-opus-4-5-20251101": ModelProperties(context_window=200_000, supports_vision=True),
-        "claude-sonnet-4-5-20250929": ModelProperties(context_window=200_000, supports_vision=True),
-        "claude-sonnet-4-20250514": ModelProperties(context_window=200_000, supports_vision=True),
-        "claude-opus-4-20250514": ModelProperties(context_window=200_000, supports_vision=True),
-        "claude-haiku-4-5-20251001": ModelProperties(context_window=200_000, supports_vision=True),
+        # Claude 4.x family — 1M context available via the 1M-token API.
+        "claude-opus-4-7": ModelProperties(context_window=1_000_000, supports_vision=True),
+        "claude-opus-4-6": ModelProperties(context_window=1_000_000, supports_vision=True),
+        "claude-opus-4-5-20251101": ModelProperties(context_window=1_000_000, supports_vision=True),
+        "claude-sonnet-4-6": ModelProperties(context_window=1_000_000, supports_vision=True),
+        "claude-sonnet-4-5-20250929": ModelProperties(
+            context_window=1_000_000, supports_vision=True
+        ),
+        "claude-sonnet-4-20250514": ModelProperties(context_window=1_000_000, supports_vision=True),
+        "claude-opus-4-20250514": ModelProperties(context_window=1_000_000, supports_vision=True),
+        "claude-haiku-4-5-20251001": ModelProperties(
+            context_window=1_000_000, supports_vision=True
+        ),
     },
     "google": {
         "gemini-2.5-flash": ModelProperties(context_window=1_000_000, supports_vision=True),

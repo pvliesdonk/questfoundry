@@ -154,8 +154,23 @@ class TestModelRegistryContextWindows:
             assert KNOWN_MODELS["openai"][model].context_window == 1_000_000, f"{model}"
 
     def test_qwen25_7b_context_window(self) -> None:
-        """qwen2.5:7b has 128K context window (not 32K)."""
-        assert KNOWN_MODELS["ollama"]["qwen2.5:7b"].context_window == 128_000
+        """qwen2.5:7b has 32K practical context window (uses --max-vram for higher)."""
+        assert KNOWN_MODELS["ollama"]["qwen2.5:7b"].context_window == 32_768
+
+    def test_gemma4_e2b_context_window(self) -> None:
+        """gemma4:e2b is capped at 16K — model claims more but is unusable above on consumer GPUs."""
+        assert KNOWN_MODELS["ollama"]["gemma4:e2b"].context_window == 16_384
+
+    def test_anthropic_1m_context_window(self) -> None:
+        """Anthropic Claude 4.x models have 1M context window (1M-token API)."""
+        for model in (
+            "claude-opus-4-7",
+            "claude-opus-4-6",
+            "claude-sonnet-4-6",
+            "claude-sonnet-4-5-20250929",
+            "claude-haiku-4-5-20251001",
+        ):
+            assert KNOWN_MODELS["anthropic"][model].context_window == 1_000_000, f"{model}"
 
     def test_retired_models_removed(self) -> None:
         """Retired models are no longer in the registry."""
@@ -176,8 +191,10 @@ class TestModelRegistryContextWindows:
             assert model in KNOWN_MODELS["openai"], f"{model} missing"
         # Anthropic
         for model in (
+            "claude-opus-4-7",
             "claude-opus-4-6",
             "claude-opus-4-5-20251101",
+            "claude-sonnet-4-6",
             "claude-sonnet-4-5-20250929",
             "claude-haiku-4-5-20251001",
         ):
@@ -185,3 +202,30 @@ class TestModelRegistryContextWindows:
         # Google
         for model in ("gemini-2.5-flash-lite", "gemini-3-pro-preview", "gemini-3-flash-preview"):
             assert model in KNOWN_MODELS["google"], f"{model} missing"
+        # Ollama — refreshed in #1245
+        for model in (
+            "gemma3:1b",
+            "gemma3:4b",
+            "gemma3:12b",
+            "gemma3:27b",
+            "gemma4:e2b",
+            "phi4:14b",
+            "phi4-mini:3.8b",
+            "qwen3:1.7b",
+            "qwen3:14b",
+            "qwen3:30b",
+            "llama3.2:1b",
+            "llama3.2:3b",
+            "llama3.3:70b",
+            "mistral-small:22b",
+            "mistral-nemo:12b",
+            "deepseek-r1:7b",
+            "deepseek-r1:14b",
+            "deepseek-r1:32b",
+        ):
+            assert model in KNOWN_MODELS["ollama"], f"{model} missing"
+
+    def test_gemma3_vision_support(self) -> None:
+        """gemma3 4b/12b/27b support vision."""
+        for model in ("gemma3:4b", "gemma3:12b", "gemma3:27b"):
+            assert KNOWN_MODELS["ollama"][model].supports_vision is True, f"{model}"
