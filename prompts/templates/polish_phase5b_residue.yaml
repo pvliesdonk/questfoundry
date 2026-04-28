@@ -74,5 +74,6 @@ user: |
 
   REMINDER: Return ONLY valid JSON. Provide exactly one entry per residue, with both
   "content_hint" and "mapping_strategy" fields filled in.
+  REMINDER: `mapping_strategy` MUST be exactly one of: `residue_passage_with_variants`, `parallel_passages`.
 
 components: []
