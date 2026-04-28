@@ -149,7 +149,7 @@ class TestCalculateMaxContext:
             calculate_max_context(12.0, bad)
 
     def test_gqa_factor_affects_kv_cache(self) -> None:
-        """Higher GQA factor (more KV heads per attention head) → larger KV cache."""
+        """Higher GQA grouping (fewer KV heads) → smaller KV cache → larger context fits."""
         no_gqa = _llama8b_show_fixture()
         no_gqa["model_info"]["llama.attention.head_count_kv"] = 32  # GQA factor 1
         with_gqa = _llama8b_show_fixture()  # GQA factor 4 (32/8)

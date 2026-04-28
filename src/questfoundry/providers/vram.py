@@ -35,7 +35,7 @@ All architectural values come from Ollama's ``/api/show`` endpoint:
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from questfoundry.observability.logging import get_logger
 
@@ -205,11 +205,12 @@ def calculate_max_context(
         ]
         raise ValueError(f"show_data.model_info missing required fields: {missing}")
 
-    # mypy: all four are non-None after the all() check above
-    assert block_count is not None
-    assert embedding_length is not None
-    assert head_count is not None
-    assert head_count_kv is not None
+    # mypy narrowing: all four are non-None after the all() check above.
+    # cast (rather than assert) avoids being stripped under `python -O`.
+    block_count = cast("int", block_count)
+    embedding_length = cast("int", embedding_length)
+    head_count = cast("int", head_count)
+    head_count_kv = cast("int", head_count_kv)
 
     weights_gb = parameters_b * bytes_per_weight
     overhead_gb = 0.55 + 0.08 * parameters_b

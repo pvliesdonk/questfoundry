@@ -692,6 +692,36 @@ def test_max_vram_with_cloud_provider_missing_key_still_raises() -> None:
     assert exc_info.value.provider == "openai"
 
 
+def test_create_chat_model_ollama_max_vram_too_small_raises() -> None:
+    """VramTooSmallError surfaces to the caller when max_vram < weights+overhead.
+
+    The factory's `except VramTooSmallError: raise` is a deliberate re-raise —
+    this test confirms it actually propagates (rather than being swallowed by
+    the broader `ValueError` handler immediately below, which would silently
+    fall back to /api/show num_ctx detection and hide the misconfiguration).
+    """
+    from questfoundry.providers.vram import VramTooSmallError
+
+    mock_chat = MagicMock()
+
+    with (
+        patch.dict("os.environ", {"OLLAMA_HOST": "http://test:11434"}, clear=False),
+        patch(
+            "questfoundry.providers.factory._query_ollama_show",
+            return_value=_llama8b_show_response(),
+        ),
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            return_value=mock_chat,
+        ),
+        pytest.raises(VramTooSmallError) as exc_info,
+    ):
+        # 8B Q4_K_M weights ~4.56 GB + overhead ~1.19 GB; 4 GB budget can't fit.
+        create_chat_model("ollama", "model", max_vram=4.0)
+
+    assert exc_info.value.vram_gb == 4.0
+
+
 def test_create_chat_model_ollama_no_temperature_when_not_provided() -> None:
     """Factory does not include temperature when not provided."""
     mock_chat = MagicMock()
