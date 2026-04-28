@@ -1885,8 +1885,10 @@ async def serialize_seed_as_function(
         prompts["per_path_beats"] = prompts["per_path_beats"].replace(
             "{size_post_commit_beats_per_path}", post_range
         )
-    if "dilemmas" in prompts:
-        prompts["dilemmas"] = prompts["dilemmas"].replace("{size_fully_explored}", fully_explored)
+    # `dilemmas` is a required section key (validated in `_load_seed_section_prompts`),
+    # so call `.replace()` directly — no `in prompts` guard. The matching guards
+    # above on `shared_beats` / `per_path_beats` are equally dead but pre-existing.
+    prompts["dilemmas"] = prompts["dilemmas"].replace("{size_fully_explored}", fully_explored)
 
     total_tokens = 0
 
