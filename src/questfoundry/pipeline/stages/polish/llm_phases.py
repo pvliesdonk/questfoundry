@@ -863,7 +863,10 @@ class _PolishLLMPhaseMixin:
 
             # R-5.2: labels are distinct within a source passage.  Case-insensitive
             # uniqueness — detect collisions, log a WARNING so humans can review.
-            for collision in _detect_duplicate_labels_in_passage(choice_specs):
+            # Use labelable_specs (excludes Continue): two Continue edges from the
+            # same passage are navigational, not diegetic, so a "Continue/Continue"
+            # collision is meaningless and should not surface as an R-5.2 warning.
+            for collision in _detect_duplicate_labels_in_passage(labelable_specs):
                 log.warning(
                     "phase5a_duplicate_labels_in_passage",
                     from_passage=collision["from_passage"],

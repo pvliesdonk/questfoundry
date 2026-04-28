@@ -144,20 +144,33 @@ async def phase_plan_computation(
 
     # 4c: Choice edge derivation
     plan.choice_specs = compute_choice_edges(graph, plan.passage_specs)
-    if not plan.choice_specs:
+    # R-4c.2 only fires when there are no Y-fork choices. Continue choices
+    # (R-4c.7) cover linear cross-passage transitions and do NOT satisfy the
+    # "story has Y-forks" invariant — a story with only Continue edges is
+    # still a SEED/GROW failure, just one that R-4c.7 partly masks. Filter
+    # Continue edges out before counting.
+    fork_choices = [c for c in plan.choice_specs if c.label != "Continue"]
+    if not fork_choices:
         from questfoundry.graph.polish_validation import PolishContractError
 
         log.error(
             "polish_zero_choice_halt",
             upstream="SEED/GROW",
             passage_count=len(plan.passage_specs),
-            detail="Phase 4c produced zero choice edges — upstream DAG has no Y-forks",
+            total_choices=len(plan.choice_specs),
+            continue_choices=len(plan.choice_specs),
+            detail="Phase 4c produced no Y-fork choice edges — upstream DAG has no Y-forks",
         )
         raise PolishContractError(
-            "R-4c.2: Phase 4c produced zero choice edges — SEED/GROW DAG has "
-            "no Y-forks.  Upstream bug — halting POLISH."
+            "R-4c.2: Phase 4c produced no Y-fork choice edges (only "
+            f"{len(plan.choice_specs)} Continue edge(s)) — SEED/GROW DAG has "
+            "no Y-forks. Upstream bug — halting POLISH."
         )
-    log.debug("phase4c_complete", choices=len(plan.choice_specs))
+    log.debug(
+        "phase4c_complete",
+        choices=len(plan.choice_specs),
+        fork_choices=len(fork_choices),
+    )
 
     # 4d: False branch candidate identification
     plan.false_branch_candidates = find_false_branch_candidates(graph, plan.passage_specs)
