@@ -138,11 +138,17 @@ def _extract_choices(graph: Graph) -> list[ExportChoice]:
             from_passage=edge["from"],
             to_passage=edge["to"],
             label=edge.get("label", "continue"),
-            requires_codewords=edge.get("requires_state_flags", edge.get("requires_codewords", [])),
+            # POLISH writes the gate-condition key as `"requires"` (see
+            # `_create_choice_edge` in pipeline/stages/polish/deterministic.py).
+            # Older fixtures used `requires_state_flags` / `requires_codewords`
+            # — those fallbacks are kept for migration safety.
+            requires_codewords=edge.get(
+                "requires", edge.get("requires_state_flags", edge.get("requires_codewords", []))
+            ),
             grants=edge.get("grants", []),
             is_return=edge.get("is_return", False),
         )
-        for edge in sorted(edges, key=lambda e: (e["from"], e["to"]))
+        for edge in sorted(edges, key=lambda e: (e["from"], e["to"], e.get("label", "")))
     ]
 
 

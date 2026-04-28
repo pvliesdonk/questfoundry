@@ -161,6 +161,27 @@ class TestBuildExportContext:
         labels = {c.label for c in ctx.choices}
         assert labels == {"Enter the castle", "Flee to the forest"}
 
+    def test_choice_requires_round_trips_polish_edge_key(self) -> None:
+        # Regression for #1532 follow-up: POLISH writes the gate-condition
+        # key as `"requires"` (see _create_choice_edge in
+        # pipeline/stages/polish/deterministic.py:1430). The export must read
+        # the same key — the prior fallback chain (requires_state_flags →
+        # requires_codewords → []) silently dropped POLISH's gate values.
+        g = Graph()
+        g.create_node("passage::a", {"type": "passage", "raw_id": "a", "prose": "."})
+        g.create_node("passage::b", {"type": "passage", "raw_id": "b", "prose": "."})
+        g.add_edge(
+            "choice",
+            "passage::a",
+            "passage::b",
+            label="Open the gate",
+            requires=["state_flag::has_key"],  # POLISH's actual key name
+            grants=[],
+        )
+        ctx = build_export_context(g, "test")
+        assert len(ctx.choices) == 1
+        assert ctx.choices[0].requires_codewords == ["state_flag::has_key"]
+
     def test_start_passage_detected(self) -> None:
         g = _minimal_graph()
         ctx = build_export_context(g, "test")
