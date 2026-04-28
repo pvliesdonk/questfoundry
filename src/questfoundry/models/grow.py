@@ -249,10 +249,9 @@ class Phase4eOutput(BaseModel):
 
     @model_validator(mode="after")
     def _validate_unique_path_ids(self) -> Phase4eOutput:
-        if self.arcs:
-            path_ids = [arc.path_id for arc in self.arcs]
-            if len(path_ids) != len(set(path_ids)):
-                raise ValueError("path_id in arcs list must be unique")
+        path_ids = [arc.path_id for arc in self.arcs]
+        if len(path_ids) != len(set(path_ids)):
+            raise ValueError("path_id in arcs list must be unique")
         return self
 
 
@@ -281,10 +280,9 @@ class Phase4fOutput(BaseModel):
 
     @model_validator(mode="after")
     def _validate_unique_entity_ids(self) -> Phase4fOutput:
-        if self.arcs:
-            eids = [a.entity_id for a in self.arcs]
-            if len(eids) != len(set(eids)):
-                raise ValueError("entity_id in arcs list must be unique")
+        eids = [a.entity_id for a in self.arcs]
+        if len(eids) != len(set(eids)):
+            raise ValueError("entity_id in arcs list must be unique")
         return self
 
 

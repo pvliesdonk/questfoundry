@@ -825,7 +825,7 @@ One linear section of 4 beats in `mentor_trust`'s post-commit chain. LLM propose
 
 ### Phase 1a
 
-LLM inspects each path's beat sequence. On the `manipulator` path, it flags a leap from setup to confrontation with no rising-tension beat between; proposes one gap beat (`bridges_from`/`bridges_to` set). POLISH inserts the gap beat and computes `transition_style` deterministically from the adjacent beats' shared location + entity overlap — here that resolves to `"smooth"`. The other path passes without insertion. Per-path cap (R-1a.4) not approached.
+LLM inspects each path's beat sequence. On the `manipulator` path, it flags a leap from setup to confrontation with no rising-tension beat between; proposes one gap beat (`bridges_from`/`bridges_to` set). POLISH inserts the gap beat and computes `transition_style` deterministically from adjacent-beat context — setup and confrontation are different `scene_type` values, so `_infer_transition_style` short-circuits to `"cut"`. The other path passes without insertion. Per-path cap (R-1a.4) not approached.
 
 ### Phase 2
 
