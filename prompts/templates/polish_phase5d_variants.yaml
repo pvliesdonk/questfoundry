@@ -25,7 +25,8 @@ system: |
 
   The `requires` list gives you the active state flags that gate this
   variant — write a summary that reflects what those flags imply
-  happened on this player's path.
+  happened on this player's path. If the line reads `requires: (none)`,
+  no flags gate this variant; treat it as the base/canonical case.
 
   {variant_details}
 
