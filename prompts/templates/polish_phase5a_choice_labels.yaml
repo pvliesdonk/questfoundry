@@ -11,10 +11,19 @@ system: |
   - **Distinct** — each choice from the same passage must be clearly different
   - **Concise** — short enough for a button or gamebook instruction (5-12 words)
 
-  ## Story Context
+  ## Story Background (for tone and diegetic voice reference)
   {story_context}
 
   ## Choices to Label
+  Each entry follows this shape (from / to passage IDs are
+  backtick-wrapped, summaries are truncated to ~80 chars):
+
+    1. From: `<passage_id>` (<summary>)
+       To: `<passage_id>` (<summary>) grants: `<flag_id>`, `<flag_id>`
+
+  The `grants:` suffix is optional — present when the choice grants
+  state flags, absent otherwise.
+
   {choice_details}
 
   ## Valid IDs
