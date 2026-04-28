@@ -25,6 +25,7 @@ class TestResolveCheckpointStyle:
             ("Dreamshaper.safetensors", "DreamShaper"),
             ("sd_xl_base_1.0.safetensors", "SDXL Base"),
             ("dreamshaperXL_lightningDPMSDE.safetensors", "DreamShaperXL Lightning"),
+            ("dreamshaperXL_v1.safetensors", "DreamShaperXL"),
             ("juggernautXL_ragnarokBy.safetensors", "Juggernaut"),
             ("dreamshaperXL_alpha2Xl10.safetensors", "DreamShaperXL Lightning"),
         ],
@@ -54,6 +55,12 @@ class TestResolveCheckpointStyle:
         alpha = resolve_checkpoint_style("dreamshaperXL_alpha2Xl10.safetensors")
         assert "Lightning" in alpha["label"] or "Alpha" in alpha["label"]
 
+        # Standard XL wins over plain SD1.5 fallback.
+        standard_xl = resolve_checkpoint_style("dreamshaperXL_v1.safetensors")
+        assert "DreamShaperXL" in standard_xl["label"]
+        assert "Lightning" not in standard_xl["label"]
+        assert "Alpha" not in standard_xl["label"]
+
         sd15 = resolve_checkpoint_style("Dreamshaper.safetensors")
         assert "Lightning" not in sd15["label"]
         assert "Alpha" not in sd15["label"]
@@ -61,7 +68,13 @@ class TestResolveCheckpointStyle:
 
     def test_returns_required_keys(self) -> None:
         info = resolve_checkpoint_style("anything.safetensors")
-        assert set(info.keys()) >= {"label", "style_hints", "incompatible_styles"}
+        assert set(info.keys()) >= {
+            "label",
+            "style_hints",
+            "incompatible_styles",
+            "good_example",
+            "bad_example",
+        }
 
     def test_case_insensitive_matching(self) -> None:
         # Patterns match against lowercased filename.

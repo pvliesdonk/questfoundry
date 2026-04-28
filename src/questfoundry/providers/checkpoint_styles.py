@@ -39,6 +39,13 @@ _CHECKPOINT_STYLE_MAP: tuple[tuple[re.Pattern[str], dict[str, str]], ...] = (
                 "also: negative-prompt weighting is weak on Flux — "
                 "do not rely on negative prompts for strong style exclusion"
             ),
+            "good_example": (
+                'style="cinematic urban photography", medium="digital photograph with shallow DOF"'
+            ),
+            "bad_example": (
+                'style="watercolor wash", medium="hand-painted ink" '
+                "(Flux is tuned for photorealism; painterly media will fight the model)"
+            ),
         },
     ),
     # ----- Coloring-book fine-tune (SD1.5 base) -----
@@ -55,6 +62,13 @@ _CHECKPOINT_STYLE_MAP: tuple[tuple[re.Pattern[str], dict[str, str]], ...] = (
                 "photorealism, color renders, painterly textures, "
                 "complex shading, dark backgrounds, photographic lighting"
             ),
+            "good_example": ('style="bold ink linework", medium="black-and-white outline drawing"'),
+            "bad_example": (
+                'style="photorealistic portrait", '
+                'medium="oil paint with rich color" '
+                "(this checkpoint is fine-tuned for line-art only; "
+                "color renders will fail)"
+            ),
         },
     ),
     # ----- Juggernaut XL (photorealistic SDXL) -----
@@ -69,6 +83,12 @@ _CHECKPOINT_STYLE_MAP: tuple[tuple[re.Pattern[str], dict[str, str]], ...] = (
             ),
             "incompatible_styles": (
                 "anime, cartoon, flat illustration, watercolor, comic-book ink outlines, chibi"
+            ),
+            "good_example": ('style="gritty photorealistic urban", medium="digital photo"'),
+            "bad_example": (
+                'style="watercolor wash", medium="traditional ink" '
+                "(Juggernaut is tuned for photorealism; "
+                "stylised media will fight the checkpoint)"
             ),
         },
     ),
@@ -87,6 +107,14 @@ _CHECKPOINT_STYLE_MAP: tuple[tuple[re.Pattern[str], dict[str, str]], ...] = (
                 "gritty texture, oil painting, detailed backgrounds "
                 "without anime stylisation"
             ),
+            "good_example": (
+                'style="anime illustration with cel shading", medium="digital anime art"'
+            ),
+            "bad_example": (
+                'style="documentary photograph", medium="35mm film" '
+                "(Animagine is anime-specialised; "
+                "photographic styles produce off-distribution outputs)"
+            ),
         },
     ),
     # ----- DreamShaperXL Lightning / Alpha (must precede generic dreamshaperxl) -----
@@ -104,6 +132,14 @@ _CHECKPOINT_STYLE_MAP: tuple[tuple[re.Pattern[str], dict[str, str]], ...] = (
                 "highly detailed textures at very low step counts, "
                 "strict architectural accuracy"
             ),
+            "good_example": (
+                'style="dramatic fantasy concept art", medium="painterly digital illustration"'
+            ),
+            "bad_example": (
+                'style="hyperrealistic skin detail at 4K", '
+                'medium="macro photograph" '
+                "(Lightning checkpoints sacrifice fine detail for speed)"
+            ),
         },
     ),
     # ----- DreamShaperXL standard -----
@@ -118,6 +154,15 @@ _CHECKPOINT_STYLE_MAP: tuple[tuple[re.Pattern[str], dict[str, str]], ...] = (
             ),
             "incompatible_styles": (
                 "strict photorealism, clinical document photography, flat-color infographic styles"
+            ),
+            "good_example": (
+                'style="painterly fantasy illustration", medium="digital concept art"'
+            ),
+            "bad_example": (
+                'style="clinical product photography", '
+                'medium="catalog studio shot" '
+                "(DreamShaperXL is stylised by design; "
+                "strict photo-real fights the model)"
             ),
         },
     ),
@@ -137,6 +182,14 @@ _CHECKPOINT_STYLE_MAP: tuple[tuple[re.Pattern[str], dict[str, str]], ...] = (
                 "extreme photorealism (slightly stylised by design), "
                 "Danbooru/anime tag grammar (use natural descriptors instead)"
             ),
+            "good_example": (
+                'style="painterly fantasy character portrait", medium="soft digital illustration"'
+            ),
+            "bad_example": (
+                'style="Danbooru anime tags", medium="cel-shading" '
+                "(DreamShaper SD1.5 expects natural descriptors, "
+                "not anime tag grammar)"
+            ),
         },
     ),
     # ----- SDXL base -----
@@ -152,6 +205,15 @@ _CHECKPOINT_STYLE_MAP: tuple[tuple[re.Pattern[str], dict[str, str]], ...] = (
             "incompatible_styles": (
                 "anime-specific Danbooru vocabulary without style priming, "
                 "very low step counts (needs ≥30 steps for coherence)"
+            ),
+            "good_example": (
+                'style="cinematic illustration with explicit style tokens", medium="digital art"'
+            ),
+            "bad_example": (
+                'style="anime without style priming", '
+                'medium="bare Danbooru tags" '
+                "(SDXL base needs explicit style direction; "
+                "bare anime grammar underperforms)"
             ),
         },
     ),
@@ -169,6 +231,12 @@ _CHECKPOINT_STYLE_MAP: tuple[tuple[re.Pattern[str], dict[str, str]], ...] = (
                 "photorealistic skin detail at high resolution "
                 "(768px ceiling limits fine detail), "
                 "SDXL-native aspect ratios"
+            ),
+            "good_example": ('style="watercolor portraiture", medium="ink illustration"'),
+            "bad_example": (
+                'style="hyperrealistic skin at 1024px", '
+                'medium="macro studio photograph" '
+                "(SD 1.5 caps at ~768px; high-detail photoreal won't render)"
             ),
         },
     ),
@@ -188,6 +256,15 @@ _CHECKPOINT_STYLE_MAP: tuple[tuple[re.Pattern[str], dict[str, str]], ...] = (
                 "coherent embedded text, photographic product catalogs "
                 "without specialised fine-tuning"
             ),
+            "good_example": (
+                'style="painterly fantasy illustration with explicit style tokens", '
+                'medium="digital concept art"'
+            ),
+            "bad_example": (
+                'style="coherent embedded text", '
+                'medium="document scan with readable signage" '
+                "(Stable Diffusion generally cannot render legible text)"
+            ),
         },
     ),
 )
@@ -203,7 +280,8 @@ def resolve_checkpoint_style(model: str) -> dict[str, str]:
         model: Checkpoint filename (with or without extension). Case-insensitive.
 
     Returns:
-        Dict with keys ``label``, ``style_hints``, ``incompatible_styles``.
+        Dict with keys ``label``, ``style_hints``, ``incompatible_styles``,
+        ``good_example``, ``bad_example``.
     """
     lowered = model.lower()
     for pattern, info in _CHECKPOINT_STYLE_MAP:

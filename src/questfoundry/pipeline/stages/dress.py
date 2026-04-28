@@ -188,12 +188,8 @@ def _build_image_renderer_section(provider_spec: str | None) -> str:
         f"This renderer works best with these visual styles: "
         f"{style_info['style_hints']}\n"
         f"It CANNOT faithfully produce: {style_info['incompatible_styles']}\n\n"
-        "GOOD art direction given this renderer: "
-        'style="gritty photorealistic urban", medium="digital photo"\n'
-        "BAD art direction given this renderer: "
-        'style="watercolor wash", medium="traditional ink" '
-        "(this renderer is tuned for photorealism; stylised media will "
-        "fight the checkpoint and degrade image quality)\n\n"
+        f"GOOD art direction given this renderer: {style_info['good_example']}\n"
+        f"BAD art direction given this renderer: {style_info['bad_example']}\n\n"
         "Your art direction MUST be compatible with the renderer. If the "
         "story's tone strongly suggests a medium the renderer cannot "
         "produce well, choose the closest compatible style and note the "

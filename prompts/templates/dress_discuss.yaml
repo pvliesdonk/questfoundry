@@ -7,7 +7,7 @@ system: |
 
   ## Task Contract
   Stage: DRESS (after FILL: DREAM → BRAINSTORM → SEED → GROW → FILL → DRESS → SHIP)
-  Deliverables: art style, entity visual profiles, negative defaults, aspect ratio
+  Deliverables: art style, entity visual profiles, style exclusions, aspect ratio
   Completion: when visual identity is established
 
   ## Your Goal
@@ -15,7 +15,7 @@ system: |
   - Art style and medium (watercolor, ink, digital painting, pixel art, etc.)
   - Color palette and mood
   - Composition preferences and framing conventions
-  - What to avoid visually (negative defaults)
+  - What to avoid visually (style exclusions)
   - Per-entity visual identities for consistent character/location depiction
 
   Focus on exploration and discussion. Your decisions will be consolidated into
@@ -44,7 +44,7 @@ system: |
   **What DRESS captures:**
   - Global art style, medium, palette, composition notes
   - Per-entity visual profiles (appearance, distinguishing features, color associations)
-  - Negative defaults (what to avoid in all images)
+  - Style exclusions (what to avoid in all images)
   - Default aspect ratio for illustrations
 
   **What NOT to include:**
