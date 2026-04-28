@@ -172,7 +172,7 @@ class DreamStage:
 
         # Phase 3: Serialize (use serialize_model if provided)
         log.debug("dream_phase", phase="serialize")
-        artifact, serialize_tokens = await serialize_to_artifact(
+        artifact, serialize_tokens, serialize_calls = await serialize_to_artifact(
             model=serialize_model or model,
             brief=brief,
             schema=DreamArtifact,
@@ -182,7 +182,7 @@ class DreamStage:
         )
         if on_phase_progress is not None:
             on_phase_progress("serialize", "completed", None)
-        total_llm_calls += 1  # Count as 1 even with retries (simplification)
+        total_llm_calls += serialize_calls
         total_tokens += serialize_tokens
 
         # Convert to dict for return

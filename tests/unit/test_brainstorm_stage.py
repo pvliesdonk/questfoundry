@@ -212,7 +212,7 @@ async def test_execute_calls_all_three_phases() -> None:
                 }
             ],
         )
-        mock_serialize.side_effect = [(entities_artifact, 100), (dilemmas_artifact, 100)]
+        mock_serialize.side_effect = [(entities_artifact, 100, 1), (dilemmas_artifact, 100, 1)]
 
         artifact, llm_calls, tokens = await stage.execute(
             model=mock_model,
@@ -230,6 +230,71 @@ async def test_execute_calls_all_three_phases() -> None:
         assert len(artifact["dilemmas"]) == 1
         assert llm_calls == 5  # 2 discuss + 1 summarize + 2 serialize
         assert tokens == 800  # 500 + 100 + 100 + 100
+
+
+@pytest.mark.asyncio
+async def test_execute_counts_serialize_retries() -> None:
+    """Regression for #1452: serialize retries (both passes) increment total_llm_calls.
+
+    Pre-fix, the two-pass split (#1451) doubled the under-counting opportunity.
+    Post-fix the third tuple element from each `serialize_to_artifact` call is
+    the actual attempt count.
+    """
+    stage = BrainstormStage()
+    mock_model = MagicMock()
+    mock_graph = MagicMock()
+    _setup_mock_graph_with_vision(mock_graph)
+
+    with (
+        patch("questfoundry.pipeline.stages.brainstorm.Graph") as MockGraph,
+        patch("questfoundry.pipeline.stages.brainstorm.run_discuss_phase") as mock_discuss,
+        patch("questfoundry.pipeline.stages.brainstorm.summarize_discussion") as mock_summarize,
+        patch("questfoundry.pipeline.stages.brainstorm.serialize_to_artifact") as mock_serialize,
+        patch("questfoundry.pipeline.stages.brainstorm.get_all_research_tools") as mock_tools,
+    ):
+        MockGraph.load.return_value = mock_graph
+        mock_tools.return_value = []
+        mock_discuss.return_value = ([HumanMessage(content="hi"), AIMessage(content="ok")], 2, 500)
+        mock_summarize.return_value = ("Brief", 100)
+        entities_artifact, dilemmas_artifact = _two_pass_artifacts(
+            entities=[
+                {
+                    "entity_id": "character::hero",
+                    "entity_category": "character",
+                    "name": "Hero",
+                    "concept": "A warrior",
+                }
+            ],
+            dilemmas=[
+                {
+                    "dilemma_id": "dilemma::test",
+                    "question": "?",
+                    "answers": [
+                        {"answer_id": "y", "description": "y", "is_canonical": True},
+                        {"answer_id": "n", "description": "n", "is_canonical": False},
+                    ],
+                    "central_entity_ids": ["character::hero"],
+                    "why_it_matters": "test",
+                }
+            ],
+        )
+        # Pass 1 (entities) succeeded after 2 attempts; pass 2 (dilemmas) after 3.
+        mock_serialize.side_effect = [
+            (entities_artifact, 100, 2),
+            (dilemmas_artifact, 100, 3),
+        ]
+
+        _artifact, llm_calls, _tokens = await stage.execute(
+            model=mock_model,
+            user_prompt="t",
+            project_path=Path("/test/project"),
+        )
+
+        # 2 discuss + 1 summarize + 2 serialize-pass-1 + 3 serialize-pass-2 = 8
+        assert llm_calls == 8, (
+            f"Expected total_llm_calls to reflect both serialize passes' retries: "
+            f"discuss(2) + summarize(1) + entities(2) + dilemmas(3) = 8; got {llm_calls}"
+        )
 
 
 @pytest.mark.asyncio
@@ -258,7 +323,7 @@ async def test_execute_emits_phase_progress() -> None:
         )
         mock_summarize.return_value = ("Brief summary", 100)
         entities_artifact, dilemmas_artifact = _two_pass_artifacts()
-        mock_serialize.side_effect = [(entities_artifact, 100), (dilemmas_artifact, 100)]
+        mock_serialize.side_effect = [(entities_artifact, 100, 1), (dilemmas_artifact, 100, 1)]
 
         await stage.execute(
             model=mock_model,
@@ -309,7 +374,7 @@ async def test_execute_passes_vision_context_to_discuss() -> None:
         mock_discuss.return_value = ([], 1, 100)
         mock_summarize.return_value = ("Brief", 50)
         entities_artifact, dilemmas_artifact = _two_pass_artifacts()
-        mock_serialize.side_effect = [(entities_artifact, 100), (dilemmas_artifact, 100)]
+        mock_serialize.side_effect = [(entities_artifact, 100, 1), (dilemmas_artifact, 100, 1)]
 
         await stage.execute(
             model=mock_model,
@@ -346,7 +411,7 @@ async def test_execute_passes_two_pass_serialize_schemas() -> None:
         mock_discuss.return_value = ([], 1, 100)
         mock_summarize.return_value = ("Brief", 50)
         entities_artifact, dilemmas_artifact = _two_pass_artifacts()
-        mock_serialize.side_effect = [(entities_artifact, 100), (dilemmas_artifact, 100)]
+        mock_serialize.side_effect = [(entities_artifact, 100, 1), (dilemmas_artifact, 100, 1)]
 
         await stage.execute(
             model=mock_model,
@@ -388,7 +453,7 @@ async def test_execute_uses_brainstorm_summarize_prompt() -> None:
         mock_discuss.return_value = ([], 1, 100)
         mock_summarize.return_value = ("Brief", 50)
         entities_artifact, dilemmas_artifact = _two_pass_artifacts()
-        mock_serialize.side_effect = [(entities_artifact, 100), (dilemmas_artifact, 100)]
+        mock_serialize.side_effect = [(entities_artifact, 100, 1), (dilemmas_artifact, 100, 1)]
 
         await stage.execute(
             model=mock_model,
@@ -455,7 +520,7 @@ async def test_execute_returns_artifact_as_dict() -> None:
                 }
             ],
         )
-        mock_serialize.side_effect = [(entities_artifact, 60), (dilemmas_artifact, 40)]
+        mock_serialize.side_effect = [(entities_artifact, 60, 1), (dilemmas_artifact, 40, 1)]
 
         artifact, _, _ = await stage.execute(
             model=mock_model,

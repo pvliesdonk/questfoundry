@@ -388,7 +388,7 @@ class BrainstormStage:
         entities_prompt = get_brainstorm_serialize_entities_prompt(
             output_language_instruction=lang_instruction,
         )
-        entities_artifact, entities_tokens = await serialize_to_artifact(
+        entities_artifact, entities_tokens, entities_calls = await serialize_to_artifact(
             model=chosen_serialize_model,
             brief=brief,
             schema=BrainstormEntitiesOutput,
@@ -399,7 +399,7 @@ class BrainstormStage:
             semantic_error_class=BrainstormMutationError,
             stage="brainstorm",
         )
-        total_llm_calls += 1
+        total_llm_calls += entities_calls
         total_tokens += entities_tokens
 
         entities_dump = [e.model_dump() for e in entities_artifact.entities]
@@ -436,7 +436,7 @@ class BrainstormStage:
             "  [ ] Every ID is from the `### Valid Entity IDs` section "
             "(no invented IDs)."
         )
-        dilemmas_artifact, dilemmas_tokens = await serialize_to_artifact(
+        dilemmas_artifact, dilemmas_tokens, dilemmas_calls = await serialize_to_artifact(
             model=chosen_serialize_model,
             brief=brief,
             schema=BrainstormDilemmasOutput,
@@ -448,7 +448,7 @@ class BrainstormStage:
             stage="brainstorm",
             extra_repair_hints=[central_entity_hint],
         )
-        total_llm_calls += 1
+        total_llm_calls += dilemmas_calls
         total_tokens += dilemmas_tokens
 
         if on_phase_progress is not None:

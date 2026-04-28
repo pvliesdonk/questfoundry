@@ -570,7 +570,7 @@ class DressStage:
             "REMINDER — Valid entity IDs for `entity_visuals[].entity_id` "
             f"(use ONLY these — raw IDs, no `entity::` prefix):\n{entity_ids}",
         ]
-        output, serialize_tokens = await serialize_to_artifact(
+        output, serialize_tokens, serialize_calls = await serialize_to_artifact(
             model=self._serialize_model or model,
             brief=brief,
             schema=DressPhase0Output,
@@ -580,7 +580,7 @@ class DressStage:
             stage="dress",
             extra_repair_hints=serialize_repair_hints,
         )
-        total_llm_calls += 1
+        total_llm_calls += serialize_calls
         total_tokens += serialize_tokens
 
         # Apply to graph
