@@ -17,6 +17,17 @@ system: |
   {story_context}
 
   ## Variants to Summarize
+  Each entry follows this shape (two-space indent on the dash,
+  four-space indent on the `requires:` line):
+
+    - variant_id: `<id>` base: `<base_passage_id>` (<base summary>)
+      requires: `<flag_id>`, `<flag_id>`
+
+  The `requires` list gives you the active state flags that gate this
+  variant — write a summary that reflects what those flags imply
+  happened on this player's path. If the line reads `requires: (none)`,
+  no flags gate this variant; treat it as the base/canonical case.
+
   {variant_details}
 
   ## Output Format
