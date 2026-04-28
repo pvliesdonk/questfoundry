@@ -31,8 +31,8 @@ from questfoundry.pipeline.stages.fill import (
 
 
 @pytest.fixture
-def grow_graph(tmp_path: Path) -> Graph:
-    """Create a minimal GROW-completed graph."""
+def polish_graph(tmp_path: Path) -> Graph:
+    """Create a minimal POLISH-completed graph (FILL's actual predecessor)."""
     g = Graph.empty()
     g.set_last_stage("polish")
 
@@ -184,10 +184,11 @@ class TestFillStageExecute:
             await stage.execute(mock_model, "")
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("last_stage", ["dream", "brainstorm", "seed"])
-    async def test_rejects_pre_grow_stages(
+    @pytest.mark.parametrize("last_stage", ["dream", "brainstorm", "seed", "grow"])
+    async def test_rejects_pre_polish_stages(
         self, mock_model: MagicMock, tmp_path: Path, last_stage: str
     ) -> None:
+        """FILL must reject GROW too: POLISH creates the passages and choices FILL needs."""
         g = Graph.empty()
         g.set_last_stage(last_stage)
         g.save(tmp_path / "graph.db")
@@ -198,7 +199,7 @@ class TestFillStageExecute:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("last_stage", ["polish", "fill", "dress", "ship"])
-    async def test_accepts_grow_and_later_stages(
+    async def test_accepts_polish_and_later_stages(
         self, mock_model: MagicMock, tmp_path: Path, last_stage: str
     ) -> None:
         """FILL should accept re-runs when last_stage is polish or any later stage."""
@@ -266,7 +267,7 @@ class TestFillStageExecute:
     async def test_runs_all_phases(
         self,
         mock_model: MagicMock,
-        grow_graph: Graph,  # noqa: ARG002
+        polish_graph: Graph,  # noqa: ARG002
         tmp_path: Path,
     ) -> None:
         stage = FillStage(project_path=tmp_path)
@@ -285,7 +286,7 @@ class TestFillStageExecute:
     async def test_sets_last_stage(
         self,
         mock_model: MagicMock,
-        grow_graph: Graph,  # noqa: ARG002
+        polish_graph: Graph,  # noqa: ARG002
         tmp_path: Path,
     ) -> None:
         stage = FillStage(project_path=tmp_path)
@@ -299,7 +300,7 @@ class TestFillStageExecute:
     async def test_resume_from_phase(
         self,
         mock_model: MagicMock,
-        grow_graph: Graph,  # noqa: ARG002
+        polish_graph: Graph,  # noqa: ARG002
         tmp_path: Path,
     ) -> None:
         stage = FillStage(project_path=tmp_path)
@@ -323,7 +324,7 @@ class TestFillStageExecute:
     async def test_resume_invalid_phase(
         self,
         mock_model: MagicMock,
-        grow_graph: Graph,  # noqa: ARG002
+        polish_graph: Graph,  # noqa: ARG002
         tmp_path: Path,
     ) -> None:
         stage = FillStage(project_path=tmp_path)
@@ -334,7 +335,7 @@ class TestFillStageExecute:
     async def test_gate_reject_rolls_back(
         self,
         mock_model: MagicMock,
-        grow_graph: Graph,  # noqa: ARG002
+        polish_graph: Graph,  # noqa: ARG002
         tmp_path: Path,
     ) -> None:
         gate = MagicMock()
@@ -355,7 +356,7 @@ class TestFillStageExecute:
     async def test_phase_failure_stops_execution(
         self,
         mock_model: MagicMock,
-        grow_graph: Graph,  # noqa: ARG002
+        polish_graph: Graph,  # noqa: ARG002
         tmp_path: Path,
     ) -> None:
         stage = FillStage(project_path=tmp_path)
@@ -375,7 +376,7 @@ class TestFillStageExecute:
     async def test_progress_callback(
         self,
         mock_model: MagicMock,
-        grow_graph: Graph,  # noqa: ARG002
+        polish_graph: Graph,  # noqa: ARG002
         tmp_path: Path,
     ) -> None:
         progress_calls: list[tuple[str, str, str | None]] = []
@@ -395,7 +396,7 @@ class TestFillStageExecute:
     async def test_project_path_override(
         self,
         mock_model: MagicMock,
-        grow_graph: Graph,  # noqa: ARG002
+        polish_graph: Graph,  # noqa: ARG002
         tmp_path: Path,
     ) -> None:
         stage = FillStage(project_path=Path("/nonexistent"))

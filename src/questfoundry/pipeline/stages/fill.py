@@ -1,7 +1,7 @@
 """FILL stage implementation.
 
 The FILL stage generates prose for all passages in the story graph.
-It takes a validated graph from GROW (with passages, arcs, choices)
+It takes a validated graph from POLISH (with passages, arcs, choices)
 and populates each passage with prose text following a voice document.
 
 FILL manages its own graph: it loads, mutates, and saves the graph
@@ -413,7 +413,7 @@ class FillStage:
             Tuple of (artifact_data dict, total_llm_calls, total_tokens).
 
         Raises:
-            FillStageError: If project_path is not provided or GROW not completed.
+            FillStageError: If project_path is not provided or POLISH not completed.
         """
         resolved_path = project_path or self.project_path
         if resolved_path is None:
