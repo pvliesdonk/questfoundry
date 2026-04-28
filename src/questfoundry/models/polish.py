@@ -243,7 +243,14 @@ class ResidueSpec(BaseModel):
     target_passage_id: str = Field(min_length=1)
     residue_id: str = Field(min_length=1)
     flag: str = Field(min_length=1, description="State flag this residue addresses")
-    path_id: str = Field(default="")
+    path_id: str = Field(
+        min_length=1,
+        description=(
+            "Path the residue beat is attributed to. Derived from the flag's "
+            "consequence at construction time; if the lookup misses, the "
+            "residue beat is skipped rather than mis-attributed (#1530)."
+        ),
+    )
     content_hint: str = Field(
         default="", description="Mood-setting prose hint (populated by Phase 5)"
     )

@@ -221,6 +221,7 @@ class TestCreateResidueBeatAndPassage:
     def test_residue_without_content_hint_uses_default(self) -> None:
         graph = Graph.empty()
         _make_beat(graph, "beat::target")
+        graph.create_node("path::brave", {"type": "path", "raw_id": "brave"})
 
         target_spec = PassageSpec(
             passage_id="passage::target",
@@ -233,6 +234,7 @@ class TestCreateResidueBeatAndPassage:
             target_passage_id="passage::target",
             residue_id="residue::r2",
             flag="flag1",
+            path_id="path::brave",
         )
         _create_residue_beat_and_passage(graph, rspec)
 
@@ -439,6 +441,7 @@ class TestCreateResidueBeatAndPassage:
         """
         graph = Graph.empty()
         _make_beat(graph, "beat::target")
+        graph.create_node("path::brave", {"type": "path", "raw_id": "brave"})
 
         target_spec = PassageSpec(
             passage_id="passage::target",
@@ -452,6 +455,7 @@ class TestCreateResidueBeatAndPassage:
             target_passage_id="passage::target",
             residue_id="residue::r_empty",
             flag="flag1",
+            path_id="path::brave",
         )
         _create_residue_beat_and_passage(graph, rspec)
 
