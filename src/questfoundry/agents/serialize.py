@@ -229,13 +229,16 @@ async def serialize_to_artifact(
             for formatting semantic validation errors. Required if semantic_validator
             is provided.
         stage: Pipeline stage name for tracing metadata (e.g., "dream", "seed").
-        extra_repair_hints: Optional caller-supplied reminder strings appended to
-            the validation-failure feedback message on every retry attempt. Used
-            to echo expected values for constraint-to-value mappings the model
-            loses across long context (e.g. SEED shared-beats `also_belongs_to`
-            sibling path id). Per @prompt-engineer Rule 5, the model does not re-read the
-            system prompt on retry — only the new user-message — so the hint
-            must be self-contained.
+        extra_repair_hints: Optional caller-supplied reminder strings placed at
+            the START of the validation-failure feedback message on every retry
+            attempt — the validator-error dump follows as supporting context.
+            Used to echo expected values for constraint-to-value mappings the
+            model loses across long context (e.g. SEED shared-beats
+            `also_belongs_to` sibling path id). Per @prompt-engineer Rule 5,
+            the model does not re-read the system prompt on retry — only the
+            new user-message — and small models attend disproportionately to
+            the opening tokens, so the actionable hint must lead and be
+            self-contained.
 
     Returns:
         Tuple of (validated_artifact, tokens_used).
@@ -1265,8 +1268,8 @@ async def _serialize_shared_beats_for_dilemma(
         "(STRING, not list)\n"
         f'  [ ] No beat has `"effect": "commits"` '
         "(these are pre-commit beats, not commits)\n"
-        f'  [ ] Every beat has `"dilemma_impacts[0].dilemma_id": '
-        f'"{prefixed_dilemma_id}"`'
+        f"  [ ] Every beat's first dilemma_impact has "
+        f'`"dilemma_id": "{prefixed_dilemma_id}"`'
     )
 
     result, tokens = await serialize_to_artifact(
