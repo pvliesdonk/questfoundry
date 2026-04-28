@@ -148,9 +148,11 @@ class _LLMPhaseMixin:
             candidates, beat_nodes, beat_dilemmas, graph=graph
         )
 
+        from questfoundry.graph.grow_context import format_valid_beat_ids_by_dilemma
+
         context: dict[str, str] = {
             "candidate_groups": candidate_groups_text,
-            "valid_beat_ids": ", ".join(sorted(valid_beat_ids)),
+            "valid_beat_ids": format_valid_beat_ids_by_dilemma(graph, valid_beat_ids),
             "structural_feedback": "",
         }
 
@@ -601,9 +603,11 @@ class _LLMPhaseMixin:
             line = f'- {bid}: "{summary}" [impacts={n_impacts}]'
             beat_items.append(ContextItem(id=bid, text=line))
 
+        from questfoundry.graph.grow_context import format_valid_beat_ids_by_dilemma
+
         context = {
             "beat_summaries": compact_items(beat_items, self._compact_config()),  # type: ignore[attr-defined]
-            "valid_beat_ids": ", ".join(sorted(beat_nodes.keys())),
+            "valid_beat_ids": format_valid_beat_ids_by_dilemma(graph, set(beat_nodes.keys())),
             "beat_count": str(len(beat_nodes)),
         }
 
