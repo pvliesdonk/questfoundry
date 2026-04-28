@@ -14,6 +14,14 @@ system: |
     Provide a detour summary, entity assignments, and choice labels.
 
   ## Candidate Stretches
+  Each candidate follows this shape (passage IDs are backtick-wrapped,
+  summaries truncated to ~60 chars; the `Context:` line is optional):
+
+    Candidate <N>:        # 0-based, matches `candidate_index` in output
+      - `<passage_id>`: <summary>
+      - `<passage_id>`: <summary>
+      Context: <context_summary>
+
   {candidate_details}
 
   ## Valid Entity IDs (for sidetrack entity assignments)
@@ -48,6 +56,9 @@ system: |
   - Do NOT add more than one false branch per candidate
   - Do NOT skip any candidate — provide a decision for every candidate listed
   - Do NOT overuse diamond/sidetrack — "skip" is a valid and often best choice
+  - Do NOT propose `diamond` or `sidetrack` at a passage that ends with a real
+    dilemma choice (R-5.12 — false branches are cosmetic and never affect
+    dilemma-driven branching)
   - Do NOT add prose before or after the JSON output
 
 user: |
@@ -55,6 +66,10 @@ user: |
   branch for variety. Prefer "skip" unless the stretch genuinely needs more
   player engagement. Use "diamond" for scenes that work from two angles.
   Use "sidetrack" for stretches that benefit from a brief detour.
+
+  GOOD reason to skip: "Passage run is naturally tense — forcing a choice here would interrupt the momentum"
+  GOOD reason for diamond: "Introductory scene works equally well from two sensory angles"
+  GOOD reason for sidetrack: "Stretch is 5 passages with no narrative texture — a brief encounter adds atmosphere"
 
   REMINDER: Return ONLY valid JSON. Provide exactly one decision per candidate.
 
