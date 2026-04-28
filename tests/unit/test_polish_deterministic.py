@@ -1900,6 +1900,50 @@ class TestAmbiguousFeasibilityDetection:
         assert len(result["ambiguous_specs"]) == 0
         assert len(result["variant_specs"]) == 1  # heavy → variant
 
+    def test_residue_skipped_when_flag_has_no_consequence_mapping(self) -> None:
+        """Single light flag with no derived_from→consequence→path_id wiring →
+        residue spec is skipped (warn + continue), not constructed with empty
+        path_id (#1530).
+        """
+        graph = Graph.empty()
+
+        graph.create_node(
+            "dilemma::d1",
+            {"type": "dilemma", "raw_id": "d1", "residue_weight": "light"},
+        )
+        graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
+
+        # Commit beat creates the state_flag node, but no derived_from edge
+        # to a consequence with a path_id — flag_to_path lookup will miss.
+        sf_p1 = self._make_commit_beat(graph, "beat::c1", "path::p1", "dilemma::d1")
+
+        graph.create_node(
+            "entity::hero",
+            {
+                "type": "entity",
+                "raw_id": "hero",
+                "overlays": [
+                    {"when": [sf_p1], "details": {"mood": "wistful"}},
+                ],
+            },
+        )
+
+        _make_beat(graph, "beat::target", "Target", entities=["entity::hero"])
+        graph.add_edge("belongs_to", "beat::target", "path::p1")
+        _add_predecessor(graph, "beat::target", "beat::c1")
+
+        spec = PassageSpec(
+            passage_id="passage::orphan",
+            beat_ids=["beat::target"],
+            summary="orphan flag passage",
+            entities=["entity::hero"],
+        )
+
+        result = compute_prose_feasibility(graph, [spec])
+        assert result["residue_specs"] == []
+        warnings = result["warnings"]
+        assert any("Residue beat skipped" in w and sf_p1 in w for w in warnings)
+
 
 # ---------------------------------------------------------------------------
 # Tests for Issue #1158: transition_guidance stored on passage node in Phase 6

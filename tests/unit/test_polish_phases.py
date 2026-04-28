@@ -616,6 +616,77 @@ class TestPhase5eAmbiguousFeasibility:
         # Nothing added to variant or residue specs
         assert len(plan_data.get("variant_specs", [])) == 0
 
+    def test_residue_decision_with_unmapped_flag_skips_spec(self) -> None:
+        """LLM 'residue' decision on a flag without a derived_from→consequence
+        path_id mapping skips the spec instead of constructing a malformed one.
+        """
+        from questfoundry.models.polish import (
+            AmbiguousFeasibilityCase,
+            FeasibilityDecisionItem,
+            PassageSpec,
+            Phase5eOutput,
+        )
+
+        graph = Graph.empty()
+
+        passage = PassageSpec(
+            passage_id="passage::ambig_x",
+            beat_ids=["beat::x"],
+            summary="Ambiguous passage with unmapped flag",
+            entities=["entity::hero"],
+            grouping_type="singleton",
+        )
+        ambiguous = AmbiguousFeasibilityCase(
+            passage_id="passage::ambig_x",
+            passage_summary="Ambiguous passage with unmapped flag",
+            entities=["entity::hero"],
+            flags=["dilemma::heavy:path::orphan"],
+        )
+
+        # Intentionally no derived_from edge / consequence wiring for this flag.
+        graph.create_node(
+            "polish_plan::current",
+            {
+                "type": "polish_plan",
+                "raw_id": "current",
+                "passage_count": 1,
+                "variant_count": 0,
+                "residue_count": 0,
+                "choice_count": 0,
+                "candidate_count": 0,
+                "warnings": [],
+                "passage_specs": [passage.model_dump()],
+                "variant_specs": [],
+                "residue_specs": [],
+                "choice_specs": [],
+                "false_branch_candidates": [],
+                "false_branch_specs": [],
+                "feasibility_annotations": {},
+                "ambiguous_specs": [ambiguous.model_dump()],
+                "arc_traversals": {},
+            },
+        )
+
+        llm_output = Phase5eOutput(
+            feasibility_decisions=[
+                FeasibilityDecisionItem(
+                    passage_id="passage::ambig_x",
+                    flag_index=0,
+                    decision="residue",
+                )
+            ]
+        )
+
+        host = _FakePolishLLMHost(llm_output)
+        result = asyncio.run(host._phase_5_llm_enrichment(graph, MagicMock()))  # type: ignore[arg-type]
+
+        assert result.status == "completed"
+
+        plan_nodes = graph.get_nodes_by_type("polish_plan")
+        plan_data = plan_nodes.get("polish_plan::current", {})
+        residue_specs = plan_data.get("residue_specs", [])
+        assert residue_specs == []
+
     def test_skipped_when_no_ambiguous_cases(self) -> None:
         """Phase 5e is skipped when ambiguous_specs is empty."""
         from questfoundry.models.polish import Phase5eOutput

@@ -972,6 +972,16 @@ class _PolishLLMPhaseMixin:
                 c.passage_id: c for c in ambiguous_cases
             }
 
+            # Hoist flag → path_id resolution (mirrors deterministic.py:313-322
+            # so Phase 5e residue construction uses the same lookup as Phase 4b).
+            consequence_nodes = graph.get_nodes_by_type("consequence")
+            flag_to_path: dict[str, str] = {}
+            for edge in graph.get_edges(edge_type="derived_from"):
+                cdata = consequence_nodes.get(edge["to"], {})
+                candidate = cdata.get("path_id", "")
+                if candidate:
+                    flag_to_path[edge["from"]] = candidate
+
             resolved_count = 0
             for decision in result_e.feasibility_decisions:
                 passage_id = decision.passage_id
@@ -1003,27 +1013,16 @@ class _PolishLLMPhaseMixin:
                         ).model_dump()
                     )
                 elif d == "residue":
-                    # Resolve flag → path_id via derived_from→consequence (same
-                    # lookup as Phase 4b in deterministic.py — see #1530).
-                    # The previous `flag.split(":")[-1]` was a string-mangling
-                    # heuristic that did NOT yield a real path_id and silently
-                    # mis-attributed the residue beat downstream.
-                    path_id = ""
-                    consequence_nodes = graph.get_nodes_by_type("consequence")
-                    for edge in graph.get_edges(edge_type="derived_from", from_id=flag):
-                        cdata = consequence_nodes.get(edge["to"], {})
-                        candidate = cdata.get("path_id", "")
-                        if candidate:
-                            path_id = candidate
-                            break
+                    path_id = flag_to_path.get(flag, "")
                     if not path_id:
                         log.warning(
                             "phase5e_residue_skipped_unmapped_flag",
                             flag=flag,
                             passage=passage_id,
+                            available_paths=sorted(set(flag_to_path.values())),
                             detail=(
                                 "state_flag has no derived_from consequence "
-                                "with a path_id; residue beat skipped (#1530)."
+                                "with a path_id; residue beat skipped."
                             ),
                         )
                         continue

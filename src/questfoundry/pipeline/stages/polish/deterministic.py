@@ -458,7 +458,7 @@ def compute_prose_feasibility(
                         "residue_spec_skipped_unmapped_flag",
                         flag=flag,
                         passage=spec.passage_id,
-                        available_paths=sorted(flag_to_path.values()),
+                        available_paths=sorted(set(flag_to_path.values())),
                         detail=(
                             "state_flag has no derived_from consequence with a "
                             "path_id; cannot attribute residue to a path. The "
@@ -1312,9 +1312,7 @@ def _apply_residue_with_variants(graph: Graph, rspec: ResidueSpec) -> None:
         },
     )
 
-    # Add belongs_to edge to path if specified
-    if rspec.path_id:
-        graph.add_edge("belongs_to", beat_id, rspec.path_id)
+    graph.add_edge("belongs_to", beat_id, rspec.path_id)
 
     # Create residue passage containing this beat
     graph.create_node(
@@ -1398,8 +1396,7 @@ def _apply_residue_parallel_passages(graph: Graph, rspec: ResidueSpec) -> None:
         },
     )
 
-    if rspec.path_id:
-        graph.add_edge("belongs_to", beat_id, rspec.path_id)
+    graph.add_edge("belongs_to", beat_id, rspec.path_id)
 
     # Create parallel residue passage — residue_for + mapping_strategy set
     # so Phase 7's _check_residue_mapping_strategy validates successfully.
