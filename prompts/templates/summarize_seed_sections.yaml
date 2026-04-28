@@ -223,10 +223,13 @@ beats_system: |
   - `location`: a RETAINED location entity ID
   - `entities`: key entity IDs present in this beat
   - `path_id`: the beat's primary path (REQUIRED, single path ID)
-  - `also_belongs_to`: for SHARED pre-commit beats, list the OTHER path(s)
-    this beat is shared with (e.g., `[path::keeper_hiding]` on a shared
-    beat whose `path_id` is `path::keeper_honest`). For COMMIT and
+  - `also_belongs_to`: for SHARED pre-commit beats, the sibling path ID as
+    a PLAIN STRING (not a list). E.g., `path::keeper_hiding` on a shared
+    beat whose `path_id` is `path::keeper_honest`. For COMMIT and
     POST-COMMIT beats, use `null`.
+
+    GOOD: `also_belongs_to: path::keeper_hiding`  (plain string)
+    BAD:  `also_belongs_to: [path::keeper_hiding]`  (list — REJECTED)
 
   **Do NOT use the legacy `paths: [a, b]` list field — it was deprecated
   in the Y-shape refactor (#1206) and the serializer will reject it.**

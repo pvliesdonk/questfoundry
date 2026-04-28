@@ -486,26 +486,38 @@ def _build_error_feedback(errors: list[str], extra_hints: list[str] | None = Non
 
     Args:
         errors: List of validation error messages.
-        extra_hints: Optional caller-supplied hints appended after the
-            generic feedback. Used to echo expected values for
+        extra_hints: Optional caller-supplied hints with the actionable
+            directive (expected values, copy-paste JSON snippets) for
             constraint-to-value mappings the model loses across long
-            context (e.g. SEED shared-beats `also_belongs_to` value
-            template — see @prompt-engineer Rule 5 small-model repair-loop
-            blindness).
+            context. When present, hints are placed BEFORE the validator
+            output — small models (qwen3:4b) attend disproportionately to
+            the opening tokens of the most-recent message, and the
+            actionable directive must lead. See @prompt-engineer Rule 5
+            (small-model repair-loop blindness) and the murder4 SEED
+            crash post-mortem (#1521).
 
     Returns:
         Formatted feedback message for the model.
     """
     error_list = "\n".join(f"  - {e}" for e in errors)
-    base = (
+    if extra_hints:
+        # Hint-first ordering: the actionable directive leads, validator
+        # errors follow as supporting context. Reverses the prior layout
+        # where the directive was buried after a multi-line validator dump.
+        hints_block = "\n\n".join(extra_hints)
+        return (
+            f"{hints_block}\n\n"
+            "---\n\n"
+            "Validation errors that triggered this retry:\n"
+            f"{error_list}\n\n"
+            "Resubmit the corrected JSON now."
+        )
+    return (
         "The output had validation errors:\n"
         f"{error_list}\n\n"
         "Please fix these issues and try again. "
         "Ensure all required fields are present and have valid values."
     )
-    if extra_hints:
-        return base + "\n\n" + "\n\n".join(extra_hints)
-    return base
 
 
 # Required prompt keys for SEED section serialization
@@ -1230,13 +1242,31 @@ async def _serialize_shared_beats_for_dilemma(
     # across retry attempts (@prompt-engineer Rule 5 small-model repair-loop
     # blindness — the model doesn't re-read the system prompt on retry).
     # The hint is dilemma-specific so it always applies to this call.
+    #
+    # Format chosen for #1521: leads with a copy-paste JSON snippet, names
+    # the type explicitly (STRING not list/null), and includes a
+    # self-contained mini-checklist mirroring the system prompt FINAL CHECK
+    # so the model doesn't need to re-read upstream context on retry.
     also_belongs_to_hint = (
-        f"REMINDER for shared pre-commit beats of dilemma `{prefixed_dilemma_id}`:\n"
-        f"  - `path_id` MUST be `{primary_path_id}`\n"
-        f"  - `also_belongs_to` MUST be `{sibling_path_id}`\n"
-        f'Add `also_belongs_to: "{sibling_path_id}"` to EVERY beat in this output. '
-        f"Without it the beat is rejected by the Y-shape guard rail "
-        f"(Story Graph Ontology Part 8)."
+        "ACTION REQUIRED — your previous output was rejected.\n\n"
+        "Add this to EVERY beat in `initial_beats` (copy exactly):\n\n"
+        "```json\n"
+        f'  "path_id": "{primary_path_id}",\n'
+        f'  "also_belongs_to": "{sibling_path_id}"\n'
+        "```\n\n"
+        "Type rules for `also_belongs_to`:\n"
+        "  - It is a STRING (not a list, not null).\n"
+        f"  - For this dilemma, the value MUST be `{sibling_path_id}` exactly.\n"
+        "  - Without it, every beat is rejected by the Y-shape guard rail "
+        "(Story Graph Ontology Part 8).\n\n"
+        f"Self-check before submitting (for dilemma `{prefixed_dilemma_id}`):\n"
+        f'  [ ] Every beat has `"path_id": "{primary_path_id}"`\n'
+        f'  [ ] Every beat has `"also_belongs_to": "{sibling_path_id}"` '
+        "(STRING, not list)\n"
+        f'  [ ] No beat has `"effect": "commits"` '
+        "(these are pre-commit beats, not commits)\n"
+        f'  [ ] Every beat has `"dilemma_impacts[0].dilemma_id": '
+        f'"{prefixed_dilemma_id}"`'
     )
 
     result, tokens = await serialize_to_artifact(

@@ -468,6 +468,15 @@ shared_beats_prompt: |
   - Do NOT omit a shared beat for this dilemma — every Y-shape needs at least one.
   - Do NOT use path IDs from other dilemmas.
 
+  ### `also_belongs_to` type contrast
+  This field is the most-frequently-missed value. Type rules:
+  ```
+  GOOD: "also_belongs_to": "{also_belongs_to}"        ← plain string, copy exactly
+  BAD:  "also_belongs_to": null                       ← rejected — this is a SHARED beat
+  BAD:  "also_belongs_to": ["{also_belongs_to}"]      ← rejected — must be a string, not a list
+  BAD:  (field omitted entirely)                      ← rejected — field is REQUIRED
+  ```
+
   ## FINAL CHECK (verify before output)
   For EACH beat you generate:
   1. `path_id` is `{path_id}`

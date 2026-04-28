@@ -115,13 +115,14 @@ system: |
 
   **Y-shape beat shape (R-3.6, CRITICAL).** Each beat carries a `path_id`
   (its primary path). Pre-commit beats — beats SHARED between the two
-  paths of one dilemma — also set `also_belongs_to: [<other_path_id>]`
-  to declare the dual membership. Commit beats and post-commit beats are
-  exclusive to one path; they set `also_belongs_to: null`.
+  paths of one dilemma — also set `also_belongs_to: <other_path_id>` (a
+  PLAIN STRING, not a list) to declare the dual membership. Commit beats
+  and post-commit beats are exclusive to one path; they set
+  `also_belongs_to: null`.
 
-  GOOD (Y-shape with `path_id` + `also_belongs_to`):
+  GOOD (Y-shape with `path_id` + `also_belongs_to` as plain string):
   ```
-  shared pre-commit:  path_id = path::keeper_honest, also_belongs_to = [path::keeper_hiding]
+  shared pre-commit:  path_id = path::keeper_honest, also_belongs_to = path::keeper_hiding
   commit (honest):    path_id = path::keeper_honest, also_belongs_to = null
   post-commit (honest): path_id = path::keeper_honest, also_belongs_to = null
   commit (hiding):    path_id = path::keeper_hiding, also_belongs_to = null
@@ -131,6 +132,12 @@ system: |
   BAD (legacy `paths: [...]` list — DEPRECATED, do not use):
   ```
   paths: [path::keeper_honest, path::keeper_hiding]   # DROP — use path_id + also_belongs_to
+  ```
+
+  BAD (`also_belongs_to` as a list — REJECTED by validator):
+  ```
+  also_belongs_to: [path::keeper_hiding]   # WRONG — must be a plain string
+  also_belongs_to: path::keeper_hiding     # CORRECT
   ```
 
   Beats may also carry optional `temporal_hint` (rough scene ordering),

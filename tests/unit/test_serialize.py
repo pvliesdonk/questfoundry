@@ -380,37 +380,61 @@ class TestHelperFunctions:
         assert "count" in feedback
         assert "fix" in feedback.lower()
 
-    def test_build_error_feedback_appends_extra_hints(self) -> None:
-        """Caller-supplied repair hints land after the generic feedback.
+    def test_build_error_feedback_includes_extra_hints(self) -> None:
+        """Caller-supplied repair hints reach the model with all values echoed.
 
-        Regression for the murder1 SEED halt: the model needs the expected
-        sibling path id template echoed alongside the validation error so
-        small models (qwen3:4b) can recover from constraint-to-value
+        Regression for the murder1/murder4 SEED halt: the model needs the
+        expected sibling path id template echoed alongside the validation
+        error so small models (qwen3:4b) can recover from constraint-to-value
         mapping loss across long context. See @prompt-engineer Rule 5.
         """
         errors = ["beats.0.also_belongs_to: Field required"]
         hint = (
-            "REMINDER for shared pre-commit beats of dilemma `dilemma::x`:\n"
+            "ACTION REQUIRED — your previous output was rejected.\n"
             "  - `path_id` MUST be `path::x__a`\n"
             "  - `also_belongs_to` MUST be `path::x__b`"
         )
 
         feedback = _build_error_feedback(errors, extra_hints=[hint])
 
-        # Generic feedback still present
+        # Validator output still present
         assert "validation errors" in feedback.lower()
         assert "beats.0.also_belongs_to" in feedback
-        # Hint appended verbatim — sibling path id ECHOED (not just named)
+        # Hint preserved verbatim — sibling path id ECHOED (not just named)
         assert "path::x__b" in feedback
-        assert "REMINDER" in feedback
+        assert "ACTION REQUIRED" in feedback
 
-    def test_build_error_feedback_no_hints_unchanged(self) -> None:
-        """Without extra_hints, the output is identical to the legacy form."""
+    def test_build_error_feedback_hints_lead_validator_follows(self) -> None:
+        """Hints precede validator errors so small models attend to the directive first.
+
+        @prompt-engineer audit on the murder4 crash: when the actionable
+        directive is buried after a multi-line validator dump, qwen3:4b
+        attends to the validator output (the opening tokens of the
+        message) and out-attends the directive at the end. The fix
+        reverses ordering — hint-block first, validator errors after.
+        """
+        errors = ["beats.0.also_belongs_to: Field required"]
+        hint_marker = "ACTION REQUIRED — your previous output was rejected."
+
+        feedback = _build_error_feedback(errors, extra_hints=[hint_marker])
+
+        # Hint marker appears strictly before the validator error block
+        assert hint_marker in feedback
+        assert "Validation errors that triggered this retry" in feedback
+        assert feedback.index(hint_marker) < feedback.index(
+            "Validation errors that triggered this retry"
+        )
+
+    def test_build_error_feedback_no_hints_uses_legacy_layout(self) -> None:
+        """Without extra_hints, the output uses the original validator-first form."""
         errors = ["x: required"]
         without = _build_error_feedback(errors)
         with_empty = _build_error_feedback(errors, extra_hints=None)
         with_empty_list = _build_error_feedback(errors, extra_hints=[])
         assert without == with_empty == with_empty_list
+        # Legacy phrasing preserved when no hints
+        assert "The output had validation errors:" in without
+        assert "Please fix these issues and try again" in without
 
 
 class TestSerializationError:
