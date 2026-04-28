@@ -18,14 +18,14 @@ system: |
   ## Examples
 
   **Leak (rank 1 → rank 2):**
-  - rank 1: "A traveling scholar who secretly knows your true identity."
-  - rank 2 (gated by `met_aldric`): "Aldric is the traitor who betrayed your mentor."
+  - rank 1: "A mysterious scholar who secretly knows your true identity."
+  - rank 2 (gated by `state_flag::met_aldric`): "Aldric is the traitor who betrayed your mentor."
   - Verdict: rank 1 leaks the deception angle. The reveal "this trusted figure
     is hiding a major secret about you" is what rank 2 was supposed to deliver.
 
   **No leak:**
-  - rank 1: "A traveling scholar who offers guidance to weary travelers."
-  - rank 2 (gated by `met_aldric`): "Aldric is the traitor who betrayed your mentor."
+  - rank 1: "A mysterious scholar who offers guidance to weary travelers."
+  - rank 2 (gated by `state_flag::met_aldric`): "Aldric is the traitor who betrayed your mentor."
   - Verdict: rank 1 stays in deliberately vague public-knowledge territory.
 
   ## Output Schema
