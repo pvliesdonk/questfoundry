@@ -122,8 +122,9 @@ dilemmas_system: |
   dilemma names.
 
   ## Output Format
-  List EVERY dilemma with its decision. The example below shows a healthy 4-fully + 4-default-only
-  distribution for an 8-dilemma story (50% soft cap):
+  List EVERY dilemma with its decision. The example below shows the output format
+  (4 fully explored + 4 default-only, for illustration — your story's minimum is
+  {size_fully_explored}):
   ```
   - dilemma::host_benevolent_or_selfish: explored=[protector, manipulator], unexplored=[]
   - dilemma::artifact_safe_or_dangerous: explored=[safe, dangerous], unexplored=[]
