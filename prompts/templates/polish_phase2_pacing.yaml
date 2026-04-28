@@ -37,7 +37,8 @@ system: |
   - `### Pacing Issue: <type>` with `type` ∈ {{`consecutive_scene`,
     `consecutive_sequel`, `no_sequel_after_commit`}}
   - `Path: \`<path_id>\`` line naming the path the run lives on
-  - one bullet per beat in the run: `- \`<beat_id>\`: [<scene_type>] <summary>`
+  - one indented bullet per beat in the run:
+    `  - \`<beat_id>\`: [<scene_type>] <summary>`
 
   {pacing_issues}
 
