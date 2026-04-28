@@ -437,7 +437,37 @@ def test_phase_4c_zero_choices_raises_contract_error() -> None:
     # passages → no choices. Phase 4a will produce empty passage_specs.
     graph = Graph.empty()
 
-    with pytest.raises(PolishContractError, match=r"R-4c\.2|zero choice"):
+    with pytest.raises(PolishContractError, match=r"R-4c\.2|zero choice|no Y-fork"):
+        asyncio.run(deterministic.phase_plan_computation(graph, MagicMock()))
+
+
+def test_phase_4c_linear_only_still_raises_contract_error() -> None:
+    """A non-empty linear story (Continue choices but no Y-forks) still trips R-4c.2.
+
+    R-4c.7 emits Continue edges for cross-passage transitions, so a linear-only
+    graph passes `if not plan.choice_specs`. The R-4c.2 halt must filter out
+    Continue edges to keep its "story has no Y-forks" semantics.
+    """
+    from unittest.mock import MagicMock
+
+    from questfoundry.pipeline.stages.polish import deterministic
+
+    graph = Graph.empty()
+    # Two beats in different paths' worth of passages but no Y-fork.
+    graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
+    graph.create_node(
+        "beat::a",
+        {"type": "beat", "raw_id": "a", "summary": "A.", "dilemma_impacts": []},
+    )
+    graph.create_node(
+        "beat::b",
+        {"type": "beat", "raw_id": "b", "summary": "B.", "dilemma_impacts": []},
+    )
+    graph.add_edge("belongs_to", "beat::a", "path::p1")
+    graph.add_edge("belongs_to", "beat::b", "path::p1")
+    graph.add_edge("predecessor", "beat::b", "beat::a")
+
+    with pytest.raises(PolishContractError, match=r"R-4c\.2|no Y-fork"):
         asyncio.run(deterministic.phase_plan_computation(graph, MagicMock()))
 
 

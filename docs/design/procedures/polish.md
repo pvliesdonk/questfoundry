@@ -321,6 +321,8 @@ R-4c.5. Choices with a single outgoing successor across all arcs have empty `req
 
 R-4c.6. False branch choices (cosmetic) have empty `requires` unless they grant a cosmetic state flag that gates a later residue beat.
 
+R-4c.7. Every cross-passage beat predecessor edge that is NOT already covered by a Y-fork (R-4c.1) produces a `Continue` ChoiceSpec with empty `requires` and empty `grants`. Without these edges the passage layer is unreachable past Y-fork commit beats — every linear post-commit chain becomes a dead end and SHIP's reachability validator (R-4.2) fires. The label is the literal string `"Continue"` (Phase 5a does not relabel R-4c.7 choices). Two beats in the same passage do NOT generate a choice — within-passage transitions belong to FILL prose. A divergence-source beat (≥2 successors) is skipped here; its choices are handled by R-4c.1.
+
 **Violations:**
 
 | Symptom | Root cause | Broken rule |
@@ -328,6 +330,7 @@ R-4c.6. False branch choices (cosmetic) have empty `requires` unless they grant 
 | Phase 4c produces zero choice edges | No Y-fork in beat DAG — SEED did not produce Y-shape, or GROW failed. POLISH MUST halt with ERROR identifying the broken upstream stage; silently passing an empty plan forward violates the Silent Degradation policy (see Implementation Constraints) | R-4c.2 |
 | Post-convergence soft-dilemma choice has empty `requires` | Flag gate missing — player on wrong path can take unavailable choice | R-4c.3 |
 | Hard-dilemma choice has `requires` set | Unnecessary gate (passage graph is already separate) | R-4c.4 |
+| Linear post-commit passages produce zero outgoing choices | R-4c.7 not implemented — every cross-passage predecessor edge should yield a `Continue` | R-4c.7 |
 
 #### 4d: False Branch Candidate Identification
 
@@ -705,6 +708,7 @@ R-4c.3: Post-convergence soft-dilemma choices have `requires` set.
 R-4c.4: Hard-dilemma choices have empty `requires`.
 R-4c.5: Single-outgoing-successor choices have empty `requires`.
 R-4c.6: False-branch choices empty `requires` unless granting cosmetic flag.
+R-4c.7: Cross-passage non-fork transitions emit a `Continue` choice (label literal, empty `requires`/`grants`).
 R-4d.1: False branch candidates are 3+ consecutive choice-less passages.
 R-4d.2: Phase 4d identifies only; no node creation.
 R-4d.3: Candidates include surrounding context.

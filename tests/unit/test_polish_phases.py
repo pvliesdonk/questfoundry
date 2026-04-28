@@ -722,6 +722,188 @@ class TestPhase5eAmbiguousFeasibility:
         assert "0 ambiguous cases resolved" in result.detail
 
 
+class _RecordingPolishLLMHost(_PolishLLMPhaseMixin):
+    """Like _FakePolishLLMHost, but records (template_name, context, schema) per call.
+
+    Used by Phase 5a tests to assert which specs were forwarded to the LLM.
+    """
+
+    def __init__(self, results_by_template: dict[str, object]) -> None:
+        self._results = results_by_template
+        self.calls: list[tuple[str, object, object]] = []
+
+    async def _polish_llm_call(
+        self,
+        model: object,  # noqa: ARG002
+        template_name: str,
+        context: object,
+        output_schema: object,
+    ) -> tuple[object, int, int]:
+        self.calls.append((template_name, context, output_schema))
+        result = self._results.get(template_name)
+        if result is None:
+            raise AssertionError(f"Unexpected template call: {template_name}")
+        return (result, 1, 100)
+
+
+class TestPhase5aContinueFiltering:
+    """Phase 5a must NOT forward Continue (R-4c.7) choices to the labeling LLM.
+
+    Continue edges already carry the literal label `"Continue"`, set by
+    `compute_choice_edges`. Sending them to the LLM wastes tokens and risks
+    relabeling them to diegetic phrases.
+    """
+
+    def _build_plan_with_mixed_choices(self, graph: Graph) -> None:
+        from questfoundry.models.polish import ChoiceSpec, PassageSpec
+
+        passages = [
+            PassageSpec(
+                passage_id=f"passage::p{i}",
+                beat_ids=[f"beat::b{i}"],
+                summary=f"summary {i}",
+                entities=[],
+                grouping_type="singleton",
+            )
+            for i in range(3)
+        ]
+
+        # Two choices: one fork (no label yet — to be filled by 5a) and one
+        # Continue (already labeled by R-4c.7).
+        choices = [
+            ChoiceSpec(
+                from_passage="passage::p0",
+                to_passage="passage::p1",
+                grants=[],
+                requires=[],
+                label="",
+            ).model_dump(),
+            ChoiceSpec(
+                from_passage="passage::p1",
+                to_passage="passage::p2",
+                grants=[],
+                requires=[],
+                label="Continue",
+            ).model_dump(),
+        ]
+
+        graph.create_node(
+            "polish_plan::current",
+            {
+                "type": "polish_plan",
+                "raw_id": "current",
+                "passage_count": 3,
+                "variant_count": 0,
+                "residue_count": 0,
+                "choice_count": 2,
+                "candidate_count": 0,
+                "warnings": [],
+                "passage_specs": [p.model_dump() for p in passages],
+                "variant_specs": [],
+                "residue_specs": [],
+                "choice_specs": choices,
+                "false_branch_candidates": [],
+                "false_branch_specs": [],
+                "feasibility_annotations": {},
+                "ambiguous_specs": [],
+                "arc_traversals": {},
+            },
+        )
+
+    def test_continue_specs_not_forwarded_to_llm(self) -> None:
+        from questfoundry.models.polish import (
+            ChoiceLabelItem,
+            Phase5aOutput,
+        )
+
+        graph = Graph.empty()
+        self._build_plan_with_mixed_choices(graph)
+
+        labeled = Phase5aOutput(
+            choice_labels=[
+                ChoiceLabelItem(
+                    from_passage="passage::p0",
+                    to_passage="passage::p1",
+                    label="Trust the mentor",
+                )
+            ]
+        )
+
+        host = _RecordingPolishLLMHost({"polish_phase5a_choice_labels": labeled})
+        result = asyncio.run(host._phase_5_llm_enrichment(graph, MagicMock()))  # type: ignore[arg-type]
+        assert result.status == "completed"
+
+        # Locate the Phase 5a call. The context dict carries "choice_count".
+        phase5a_calls = [c for c in host.calls if c[0] == "polish_phase5a_choice_labels"]
+        assert len(phase5a_calls) == 1
+        _, context, _ = phase5a_calls[0]
+        assert isinstance(context, dict)
+        assert context["choice_count"] == "1"  # Continue spec excluded
+
+        # The fork choice should now carry the LLM-supplied label.
+        plan_data = graph.get_nodes_by_type("polish_plan")["polish_plan::current"]
+        labels = {
+            (c["from_passage"], c["to_passage"]): c["label"] for c in plan_data["choice_specs"]
+        }
+        assert labels[("passage::p0", "passage::p1")] == "Trust the mentor"
+        # Continue label preserved exactly.
+        assert labels[("passage::p1", "passage::p2")] == "Continue"
+
+    def test_only_continue_choices_skips_phase5a_llm_call(self) -> None:
+        """When every choice is a Continue, Phase 5a must not invoke the LLM."""
+        from questfoundry.models.polish import ChoiceSpec, PassageSpec
+
+        graph = Graph.empty()
+        passages = [
+            PassageSpec(
+                passage_id=f"passage::p{i}",
+                beat_ids=[f"beat::b{i}"],
+                summary=f"summary {i}",
+                entities=[],
+                grouping_type="singleton",
+            )
+            for i in range(2)
+        ]
+        choices = [
+            ChoiceSpec(
+                from_passage="passage::p0",
+                to_passage="passage::p1",
+                grants=[],
+                requires=[],
+                label="Continue",
+            ).model_dump(),
+        ]
+        graph.create_node(
+            "polish_plan::current",
+            {
+                "type": "polish_plan",
+                "raw_id": "current",
+                "passage_count": 2,
+                "variant_count": 0,
+                "residue_count": 0,
+                "choice_count": 1,
+                "candidate_count": 0,
+                "warnings": [],
+                "passage_specs": [p.model_dump() for p in passages],
+                "variant_specs": [],
+                "residue_specs": [],
+                "choice_specs": choices,
+                "false_branch_candidates": [],
+                "false_branch_specs": [],
+                "feasibility_annotations": {},
+                "ambiguous_specs": [],
+                "arc_traversals": {},
+            },
+        )
+
+        host = _RecordingPolishLLMHost({})  # no Phase 5a result registered
+        result = asyncio.run(host._phase_5_llm_enrichment(graph, MagicMock()))  # type: ignore[arg-type]
+        assert result.status == "completed"
+
+        phase5a_calls = [c for c in host.calls if c[0] == "polish_phase5a_choice_labels"]
+        assert phase5a_calls == []
+
+
 # ---------------------------------------------------------------------------
 # Tests for Issue #1158: Phase 5f — transition guidance for collapsed passages
 # ---------------------------------------------------------------------------
