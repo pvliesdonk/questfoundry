@@ -2139,7 +2139,7 @@ def build_image_brief(graph: Graph, brief: dict[str, Any]) -> ImageBrief:
         art_style=art_dir.get("style") or None,
         art_medium=art_dir.get("medium") or None,
         palette=art_dir.get("palette", []),
-        negative_defaults=art_dir.get("negative_defaults") or None,
+        style_exclusions=art_dir.get("style_exclusions") or None,
         aspect_ratio=_parse_aspect_ratio(art_dir.get("aspect_ratio", "16:9")),
         category=brief.get("category", "scene"),
     )

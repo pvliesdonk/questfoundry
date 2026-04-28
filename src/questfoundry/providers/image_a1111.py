@@ -351,7 +351,7 @@ class A1111ImageProvider:
             brief_text += f"Style overrides: {brief.style_overrides}\n"
 
         negative_raw = ", ".join(
-            n for n in [brief.negative or "", brief.negative_defaults or ""] if n
+            n for n in [brief.negative or "", brief.style_exclusions or ""] if n
         )
         if negative_raw:
             brief_text += f"Negative: {negative_raw}\n"

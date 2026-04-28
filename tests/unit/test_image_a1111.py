@@ -373,7 +373,7 @@ class TestA1111DistillPrompt:
             "entity_fragments": ["tall warrior, scarred face"],
             "palette": ["crimson", "gold"],
             "negative": "modern elements",
-            "negative_defaults": "photorealism",
+            "style_exclusions": "photorealism",
         }
         defaults.update(overrides)
         return ImageBrief(**defaults)
@@ -538,7 +538,7 @@ class TestA1111DistillPrompt:
         mock_llm.ainvoke = AsyncMock(return_value=mock_response)
 
         provider = A1111ImageProvider(host="http://localhost:7860", llm=mock_llm)
-        brief = self._make_brief(negative="blurry", negative_defaults="text, watermark")
+        brief = self._make_brief(negative="blurry", style_exclusions="text, watermark")
         await provider.distill_prompt(brief)
 
         call = mock_llm.ainvoke.call_args

@@ -32,7 +32,7 @@ class TestImageBrief:
             art_style="oil painting",
             art_medium="canvas",
             palette=["crimson", "gold"],
-            negative_defaults="photorealism",
+            style_exclusions="photorealism",
             aspect_ratio="1:1",
             category="portrait",
         )
@@ -56,7 +56,7 @@ class TestFlattenBriefToPrompt:
             art_style="watercolor",
             art_medium="traditional paper",
             palette=["deep indigo", "gold"],
-            negative_defaults="photorealism",
+            style_exclusions="photorealism",
         )
         positive, negative = flatten_brief_to_prompt(brief)
 
@@ -121,7 +121,7 @@ class TestBuildImageBrief:
                 "style": "watercolor",
                 "medium": "traditional paper",
                 "palette": ["deep indigo", "gold"],
-                "negative_defaults": "photorealism",
+                "style_exclusions": "photorealism",
                 "aspect_ratio": "16:9",
             },
         )
@@ -150,7 +150,7 @@ class TestBuildImageBrief:
         assert result.entity_fragments == ["hero: tall warrior, scarred face"]
         assert result.art_style == "watercolor"
         assert result.palette == ["deep indigo", "gold"]
-        assert result.negative_defaults == "photorealism"
+        assert result.style_exclusions == "photorealism"
         assert result.style_overrides == "darker palette"
         assert result.aspect_ratio == "16:9"
 
@@ -206,7 +206,7 @@ class TestAssembleImagePromptBackwardCompat:
                 "style": "watercolor",
                 "medium": "traditional paper",
                 "palette": ["deep indigo", "gold"],
-                "negative_defaults": "photorealism",
+                "style_exclusions": "photorealism",
             },
         )
 

@@ -101,7 +101,7 @@ def mock_phase0_output() -> DressPhase0Output:
             medium="traditional watercolor on textured paper",
             palette=["deep indigo", "burnt sienna"],
             composition_notes="Wide shots for locations",
-            negative_defaults="photorealism, anime",
+            style_exclusions="photorealism, anime",
             aspect_ratio="16:9",
         ),
         entity_visuals=[
@@ -399,7 +399,7 @@ class TestPhase0ArtDirection:
                 medium="brush ink on rice paper",
                 palette=["midnight blue"],
                 composition_notes="balanced framing",
-                negative_defaults="cartoon",
+                style_exclusions="cartoon",
                 aspect_ratio="16:9",
             ),
             entity_visuals=[
@@ -2508,7 +2508,7 @@ class TestAssembleImagePrompt:
                 "style": "watercolor",
                 "medium": "traditional paper",
                 "palette": ["deep indigo", "gold"],
-                "negative_defaults": "photorealism",
+                "style_exclusions": "photorealism",
             },
         )
 

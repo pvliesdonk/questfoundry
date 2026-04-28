@@ -138,7 +138,7 @@ class TestApplyDressArtDirection:
                 "medium": "traditional",
                 "palette": ["indigo", "rust"],
                 "composition_notes": "wide shots",
-                "negative_defaults": "photorealistic",
+                "style_exclusions": "photorealistic",
             },
             entity_visuals=[
                 {
@@ -175,7 +175,7 @@ class TestApplyDressArtDirection:
                 "medium": "d",
                 "palette": ["b"],
                 "composition_notes": "c",
-                "negative_defaults": "n",
+                "style_exclusions": "n",
             },
             entity_visuals=[
                 {
@@ -198,7 +198,7 @@ class TestApplyDressArtDirection:
                 "medium": "d",
                 "palette": ["b"],
                 "composition_notes": "c",
-                "negative_defaults": "n",
+                "style_exclusions": "n",
             },
             "entity_visuals": [
                 {
@@ -230,7 +230,7 @@ class TestApplyDressArtDirection:
                 "medium": "d",
                 "palette": ["b"],
                 "composition_notes": "c",
-                "negative_defaults": "n",
+                "style_exclusions": "n",
             },
             entity_visuals=[
                 {

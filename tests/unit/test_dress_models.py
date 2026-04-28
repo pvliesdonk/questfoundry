@@ -37,7 +37,7 @@ class TestArtDirection:
             medium="traditional",
             palette=["indigo", "rust"],
             composition_notes="wide shots",
-            negative_defaults="photorealistic",
+            style_exclusions="photorealistic",
             aspect_ratio="16:9",
         )
         assert ad.style == "watercolor"
@@ -49,7 +49,7 @@ class TestArtDirection:
             medium="digital",
             palette=["black"],
             composition_notes="close-up",
-            negative_defaults="text",
+            style_exclusions="text",
             aspect_ratio="1:1",
         )
         assert ad.aspect_ratio == "1:1"
@@ -62,13 +62,13 @@ class TestArtDirection:
                 medium="traditional",
                 palette=["indigo"],
                 composition_notes="wide shots",
-                negative_defaults="photorealistic",
+                style_exclusions="photorealistic",
             )
 
     @pytest.mark.parametrize(
         "field",
-        ["style", "medium", "composition_notes", "negative_defaults"],
-        ids=["style", "medium", "composition_notes", "negative_defaults"],
+        ["style", "medium", "composition_notes", "style_exclusions"],
+        ids=["style", "medium", "composition_notes", "style_exclusions"],
     )
     def test_empty_string_rejected(self, field: str) -> None:
         data = {
@@ -76,7 +76,7 @@ class TestArtDirection:
             "medium": "traditional",
             "palette": ["indigo"],
             "composition_notes": "wide shots",
-            "negative_defaults": "photorealistic",
+            "style_exclusions": "photorealistic",
             "aspect_ratio": "16:9",
         }
         data[field] = ""
@@ -90,7 +90,7 @@ class TestArtDirection:
                 medium="traditional",
                 palette=[],
                 composition_notes="wide shots",
-                negative_defaults="photorealistic",
+                style_exclusions="photorealistic",
                 aspect_ratio="16:9",
             )
 
@@ -323,7 +323,7 @@ class TestDressPhase0Output:
                 medium="sumi-e",
                 palette=["indigo", "rust"],
                 composition_notes="wide shots",
-                negative_defaults="photorealistic",
+                style_exclusions="photorealistic",
                 aspect_ratio="16:9",
             ),
             entity_visuals=[
@@ -345,7 +345,7 @@ class TestDressPhase0Output:
                     medium="digital",
                     palette=["black"],
                     composition_notes="close-up",
-                    negative_defaults="text",
+                    style_exclusions="text",
                     aspect_ratio="16:9",
                 ),
                 entity_visuals=[],
@@ -543,7 +543,7 @@ class TestRoundtrip:
             medium="traditional",
             palette=["indigo"],
             composition_notes="wide shots",
-            negative_defaults="photorealistic",
+            style_exclusions="photorealistic",
             aspect_ratio="16:9",
         )
         data = ad.model_dump()
@@ -565,7 +565,7 @@ class TestRoundtrip:
                 medium="sumi-e",
                 palette=["black"],
                 composition_notes="minimalist",
-                negative_defaults="color",
+                style_exclusions="color",
                 aspect_ratio="16:9",
             ),
             entity_visuals=[
