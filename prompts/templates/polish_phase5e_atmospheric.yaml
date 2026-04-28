@@ -31,7 +31,10 @@ system: |
   - Do NOT write character emotions as atmospheric detail
 
   ## Valid IDs
-  Valid beat_ids (use ONLY these): {valid_beat_ids}
+  Valid beat_ids (use ONLY these — one bullet per ID):
+
+  {valid_beat_ids}
+
   Total beats: {beat_count}
 
   ## Output Format
