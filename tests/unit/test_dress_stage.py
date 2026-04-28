@@ -335,7 +335,7 @@ class TestPhase0ArtDirection:
             patch(
                 "questfoundry.pipeline.stages.dress.serialize_to_artifact",
                 new_callable=AsyncMock,
-                return_value=(mock_phase0_output, 300),
+                return_value=(mock_phase0_output, 300, 1),
             ),
             patch.object(
                 stage,
@@ -435,7 +435,7 @@ class TestPhase0ArtDirection:
             patch(
                 "questfoundry.pipeline.stages.dress.serialize_to_artifact",
                 new_callable=AsyncMock,
-                return_value=(partial_output, 100),
+                return_value=(partial_output, 100, 1),
             ),
             pytest.raises(DressStageError, match="EntityVisual coverage"),
         ):
@@ -470,7 +470,7 @@ class TestPhase0ArtDirection:
             patch(
                 "questfoundry.pipeline.stages.dress.serialize_to_artifact",
                 new_callable=AsyncMock,
-                return_value=(mock_phase0_output, 250),
+                return_value=(mock_phase0_output, 250, 1),
             ),
         ):
             stage.gate = reject_gate
@@ -514,7 +514,7 @@ class TestPhase0ArtDirection:
             patch(
                 "questfoundry.pipeline.stages.dress.serialize_to_artifact",
                 new_callable=AsyncMock,
-                return_value=(mock_phase0_output, 100),
+                return_value=(mock_phase0_output, 100, 1),
             ),
         ):
             await stage.execute(MagicMock(), "Make it look like Studio Ghibli")

@@ -212,7 +212,7 @@ async def test_execute_calls_all_three_phases() -> None:
                 }
             ],
         )
-        mock_serialize.side_effect = [(entities_artifact, 100), (dilemmas_artifact, 100)]
+        mock_serialize.side_effect = [(entities_artifact, 100, 1), (dilemmas_artifact, 100, 1)]
 
         artifact, llm_calls, tokens = await stage.execute(
             model=mock_model,
@@ -258,7 +258,7 @@ async def test_execute_emits_phase_progress() -> None:
         )
         mock_summarize.return_value = ("Brief summary", 100)
         entities_artifact, dilemmas_artifact = _two_pass_artifacts()
-        mock_serialize.side_effect = [(entities_artifact, 100), (dilemmas_artifact, 100)]
+        mock_serialize.side_effect = [(entities_artifact, 100, 1), (dilemmas_artifact, 100, 1)]
 
         await stage.execute(
             model=mock_model,
@@ -309,7 +309,7 @@ async def test_execute_passes_vision_context_to_discuss() -> None:
         mock_discuss.return_value = ([], 1, 100)
         mock_summarize.return_value = ("Brief", 50)
         entities_artifact, dilemmas_artifact = _two_pass_artifacts()
-        mock_serialize.side_effect = [(entities_artifact, 100), (dilemmas_artifact, 100)]
+        mock_serialize.side_effect = [(entities_artifact, 100, 1), (dilemmas_artifact, 100, 1)]
 
         await stage.execute(
             model=mock_model,
@@ -346,7 +346,7 @@ async def test_execute_passes_two_pass_serialize_schemas() -> None:
         mock_discuss.return_value = ([], 1, 100)
         mock_summarize.return_value = ("Brief", 50)
         entities_artifact, dilemmas_artifact = _two_pass_artifacts()
-        mock_serialize.side_effect = [(entities_artifact, 100), (dilemmas_artifact, 100)]
+        mock_serialize.side_effect = [(entities_artifact, 100, 1), (dilemmas_artifact, 100, 1)]
 
         await stage.execute(
             model=mock_model,
@@ -388,7 +388,7 @@ async def test_execute_uses_brainstorm_summarize_prompt() -> None:
         mock_discuss.return_value = ([], 1, 100)
         mock_summarize.return_value = ("Brief", 50)
         entities_artifact, dilemmas_artifact = _two_pass_artifacts()
-        mock_serialize.side_effect = [(entities_artifact, 100), (dilemmas_artifact, 100)]
+        mock_serialize.side_effect = [(entities_artifact, 100, 1), (dilemmas_artifact, 100, 1)]
 
         await stage.execute(
             model=mock_model,
@@ -455,7 +455,7 @@ async def test_execute_returns_artifact_as_dict() -> None:
                 }
             ],
         )
-        mock_serialize.side_effect = [(entities_artifact, 60), (dilemmas_artifact, 40)]
+        mock_serialize.side_effect = [(entities_artifact, 60, 1), (dilemmas_artifact, 40, 1)]
 
         artifact, _, _ = await stage.execute(
             model=mock_model,
