@@ -148,9 +148,7 @@ class Dilemma(BaseModel):
         description=(
             "Entity IDs central to this dilemma — stored as anchored_to edges, "
             "not node properties. MUST contain ≥1 entry per R-3.6 ('every dilemma "
-            "has at least one anchored_to edge to an entity'). An empty list is "
-            "rejected at Pydantic validation so the retry loop sees a concrete "
-            "error message and can repair (#1524)."
+            "has at least one anchored_to edge to an entity')."
         ),
     )
     why_it_matters: str = Field(
