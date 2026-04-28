@@ -43,9 +43,15 @@ class ArtDirection(BaseModel):
         min_length=1,
         description="Framing preferences",
     )
-    negative_defaults: str = Field(
+    style_exclusions: str = Field(
         min_length=1,
-        description="Global things to avoid in image generation",
+        description=(
+            "Visual styles to exclude across all story images — story-tone "
+            "prohibitions only (e.g. 'no photorealism, no modern clothing for "
+            "a Victorian setting'). Do NOT include renderer quality fillers "
+            "(blurry, watermark, etc.) — those are auto-injected by the "
+            "render pipeline."
+        ),
     )
     aspect_ratio: str = Field(
         min_length=1,

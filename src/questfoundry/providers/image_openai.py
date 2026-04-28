@@ -142,9 +142,9 @@ class OpenAIImageProvider:
         prompt = "\n".join(p for p in parts if p)
 
         negative = brief.negative
-        if brief.negative_defaults:
+        if brief.style_exclusions:
             negative = (
-                f"{negative}, {brief.negative_defaults}" if negative else brief.negative_defaults
+                f"{negative}, {brief.style_exclusions}" if negative else brief.style_exclusions
             )
         return prompt, negative or None
 

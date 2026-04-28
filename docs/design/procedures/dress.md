@@ -37,7 +37,7 @@ DRESS adds visual identity and reference material to a completed story. It gener
 
 R-1.1. Exactly one ArtDirection singleton node is created. Retries replace the previous node.
 
-R-1.2. ArtDirection fields include `style`, `medium`, `palette`, `composition_notes`, `negative_defaults`, `aspect_ratio`.
+R-1.2. ArtDirection fields include `style`, `medium`, `palette`, `composition_notes`, `style_exclusions`, `aspect_ratio`.
 
 R-1.3. Every Entity with at least one `appears` edge to a Passage gets an EntityVisual node with a `describes_visual` edge.
 
@@ -283,7 +283,7 @@ R-5.7. No orphan assets: every asset file has a corresponding Illustration node,
 ## Rule Index
 
 R-1.1: Exactly one ArtDirection singleton; retries replace.
-R-1.2: ArtDirection has style, medium, palette, composition_notes, negative_defaults, aspect_ratio.
+R-1.2: ArtDirection has style, medium, palette, composition_notes, style_exclusions, aspect_ratio.
 R-1.3: Every entity with `appears` edge has an EntityVisual.
 R-1.4: Every EntityVisual has non-empty `reference_prompt_fragment`.
 R-1.5: Gate 1 approval required before Phase 2.
@@ -379,7 +379,8 @@ art_direction:
   medium: "digital painting mimicking traditional ink"
   palette: "deep blues and greys, warm amber accents"
   composition_notes: "dramatic lighting, low-angle compositions for tension"
-  negative_defaults: "no photorealism, no cartoon styling, no modern clothing"
+  # Story-tone visual prohibitions only — renderer-quality fillers (blurry, watermark, etc.) are auto-injected at render time.
+  style_exclusions: "no photorealism, no cartoon styling, no modern clothing"
   aspect_ratio: "3:2"
 ```
 

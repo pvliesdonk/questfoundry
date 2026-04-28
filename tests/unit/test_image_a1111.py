@@ -373,7 +373,7 @@ class TestA1111DistillPrompt:
             "entity_fragments": ["tall warrior, scarred face"],
             "palette": ["crimson", "gold"],
             "negative": "modern elements",
-            "negative_defaults": "photorealism",
+            "style_exclusions": "photorealism",
         }
         defaults.update(overrides)
         return ImageBrief(**defaults)
@@ -538,7 +538,7 @@ class TestA1111DistillPrompt:
         mock_llm.ainvoke = AsyncMock(return_value=mock_response)
 
         provider = A1111ImageProvider(host="http://localhost:7860", llm=mock_llm)
-        brief = self._make_brief(negative="blurry", negative_defaults="text, watermark")
+        brief = self._make_brief(negative="blurry", style_exclusions="text, watermark")
         await provider.distill_prompt(brief)
 
         call = mock_llm.ainvoke.call_args
@@ -572,3 +572,56 @@ class TestA1111FactoryRouting:
         provider = create_image_provider("a1111", host="http://localhost:7860")
         assert isinstance(provider, A1111ImageProvider)
         assert provider._model is None
+
+
+class TestDistillerCheckpointHint:
+    """The distiller's `_format_checkpoint_hint` must come from
+    `resolve_checkpoint_style()` (#1557), not from a generic
+    LLM-self-classifying prompt with the bare model name."""
+
+    def _make_provider(self, model: str | None) -> A1111ImageProvider:
+        from unittest.mock import MagicMock
+
+        from questfoundry.providers.image_a1111 import A1111ImageProvider
+
+        # Distiller test doesn't actually invoke the LLM — a MagicMock seam is enough.
+        llm = MagicMock()
+        return A1111ImageProvider(host="http://x", model=model, llm=llm)
+
+    def test_no_model_returns_empty_hint(self) -> None:
+        provider = self._make_provider(None)
+        hint = provider._format_checkpoint_hint()
+        assert hint == ""
+
+    def test_juggernaut_hint_uses_map_label(self) -> None:
+        provider = self._make_provider("juggernautXL_ragnarokBy.safetensors")
+        hint = provider._format_checkpoint_hint()
+        assert "TARGET CHECKPOINT" in hint
+        assert "Juggernaut" in hint
+        # The structured map field must surface in the hint
+        assert "photorealistic" in hint.lower()
+        assert "excels" in hint.lower() or "best at" in hint.lower() or "works best" in hint.lower()
+        assert (
+            "struggles" in hint.lower()
+            or "cannot" in hint.lower()
+            or "incompatible" in hint.lower()
+        )
+
+    def test_anime_checkpoint_warns_against_photorealism(self) -> None:
+        provider = self._make_provider("animagine-xl.safetensors")
+        hint = provider._format_checkpoint_hint()
+        assert "Animagine" in hint
+        assert "anime" in hint.lower()
+
+    def test_unknown_checkpoint_uses_default_label(self) -> None:
+        provider = self._make_provider("totally-made-up-model.safetensors")
+        hint = provider._format_checkpoint_hint()
+        # Default fallback yields the generic label
+        assert "TARGET CHECKPOINT" in hint
+        assert "general-purpose" in hint.lower() or "unknown" in hint.lower()
+
+    def test_hint_includes_translation_guidance(self) -> None:
+        provider = self._make_provider("juggernautXL_ragnarokBy.safetensors")
+        hint = provider._format_checkpoint_hint()
+        # The distiller-time hint should instruct the LLM how to bridge incompatibility
+        assert "translate" in hint.lower() or "adapt" in hint.lower()

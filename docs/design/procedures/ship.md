@@ -149,7 +149,7 @@ R-3.7. Illustration assets are copied into the export bundle (HTML/PDF) or refer
 
 R-3.8. If DRESS was skipped: exports degrade gracefully — no illustrations, no codex, no visual metadata. Core gameplay works.
 
-R-3.9. If DRESS *ran but produced an incomplete `art_direction` node* (one or more of the DRESS-required visual fields — `style`, `medium`, `palette`, `composition_notes`, `negative_defaults`, `aspect_ratio` — missing or blank): the export still proceeds (graceful degradation, like R-3.8), but SHIP logs a WARNING naming the missing fields. Partial DRESS is a recoverable degradation, not a silent one — the user must be told so they can rerun DRESS.
+R-3.9. If DRESS *ran but produced an incomplete `art_direction` node* (one or more of the DRESS-required visual fields — `style`, `medium`, `palette`, `composition_notes`, `style_exclusions`, `aspect_ratio` — missing or blank): the export still proceeds (graceful degradation, like R-3.8), but SHIP logs a WARNING naming the missing fields. Partial DRESS is a recoverable degradation, not a silent one — the user must be told so they can rerun DRESS.
 
 **Violations:**
 

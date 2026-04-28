@@ -456,7 +456,7 @@ class TestPartialDressWarning:
                 "medium": "digital painting",
                 "palette": ["blue", "gold"],
                 "composition_notes": "wide framing",
-                "negative_defaults": "no text overlays",
+                "style_exclusions": "no text overlays",
                 "aspect_ratio": "16:9",
             },
         )
@@ -476,7 +476,7 @@ class TestPartialDressWarning:
                 "medium": "digital painting",
                 # palette omitted
                 "composition_notes": "wide framing",
-                "negative_defaults": "no text overlays",
+                "style_exclusions": "no text overlays",
                 "aspect_ratio": "16:9",
             },
         )
@@ -499,7 +499,7 @@ class TestPartialDressWarning:
                 "medium": "digital painting",
                 "palette": ["blue"],
                 "composition_notes": "wide framing",
-                "negative_defaults": "no text overlays",
+                "style_exclusions": "no text overlays",
                 "aspect_ratio": "16:9",
             },
         )
@@ -525,7 +525,7 @@ class TestPartialDressWarning:
             build_export_context(g, "test")
 
         assert _has_event(caplog, "art_direction_partial")
-        for missing in ("palette", "composition_notes", "negative_defaults", "aspect_ratio"):
+        for missing in ("palette", "composition_notes", "style_exclusions", "aspect_ratio"):
             assert _has_event(caplog, missing), f"missing field {missing!r} not in warning"
 
     def test_no_art_direction_node_no_warning(self, caplog: pytest.LogCaptureFixture) -> None:

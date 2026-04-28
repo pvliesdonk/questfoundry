@@ -18,7 +18,10 @@ system: |
   - medium: What it looks like it was made with (e.g. "traditional watercolor on textured paper")
   - palette: List of dominant color names (e.g. ["deep indigo", "burnt sienna", "mist grey"])
   - composition_notes: Framing preferences (e.g. "wide establishing shots for locations, tight framing for dialogue")
-  - negative_defaults: Things to avoid globally (e.g. "photorealism, anime style, modern elements")
+  - style_exclusions: Visual styles to exclude across all story images — story-tone
+    prohibitions only.
+    GOOD: "no photorealism, no anachronistic technology" (story-tone)
+    BAD:  "blurry, watermark, deformed hands" (renderer-quality fillers — auto-injected at render time, never put them here)
   - aspect_ratio: Default ratio (e.g. "16:9")
 
   **entity_visuals** (list of objects, one per entity):

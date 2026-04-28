@@ -41,7 +41,7 @@ _REQUIRED_ART_DIRECTION_FIELDS = (
     "medium",
     "palette",
     "composition_notes",
-    "negative_defaults",
+    "style_exclusions",
     "aspect_ratio",
 )
 

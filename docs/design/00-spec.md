@@ -331,7 +331,7 @@ art_direction:
   medium: string                   # what it looks like it was made with
   palette: string[]                # dominant colors / mood
   composition_notes: string        # framing preferences
-  negative_defaults: string        # global things to avoid in image generation
+  style_exclusions: string         # story-tone visual styles to exclude
   aspect_ratio: string             # default dimensions, e.g., "16:9"
 ```
 

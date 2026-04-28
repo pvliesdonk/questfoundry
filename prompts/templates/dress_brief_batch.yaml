@@ -71,7 +71,7 @@ system: |
     medium shot, wide establishing shot, over-the-shoulder, Dutch angle.
   - MOOD VARIETY: Use the full emotional spectrum. Not every scene is "haunting".
   - NEGATIVE FIELD: Only list negatives SPECIFIC to this brief that go beyond
-    the global negative_defaults. If no brief-specific negatives apply, use an
+    the global style_exclusions. If no brief-specific negatives apply, use an
     empty string.
   - PATH UNDERTONE: If present, let the path's emotional undertone subtly tint the
     image — a color choice, a shadow direction, an expression — not dominate the subject.

@@ -101,7 +101,7 @@ def mock_phase0_output() -> DressPhase0Output:
             medium="traditional watercolor on textured paper",
             palette=["deep indigo", "burnt sienna"],
             composition_notes="Wide shots for locations",
-            negative_defaults="photorealism, anime",
+            style_exclusions="photorealism, anime",
             aspect_ratio="16:9",
         ),
         entity_visuals=[
@@ -399,7 +399,7 @@ class TestPhase0ArtDirection:
                 medium="brush ink on rice paper",
                 palette=["midnight blue"],
                 composition_notes="balanced framing",
-                negative_defaults="cartoon",
+                style_exclusions="cartoon",
                 aspect_ratio="16:9",
             ),
             entity_visuals=[
@@ -2508,7 +2508,7 @@ class TestAssembleImagePrompt:
                 "style": "watercolor",
                 "medium": "traditional paper",
                 "palette": ["deep indigo", "gold"],
-                "negative_defaults": "photorealism",
+                "style_exclusions": "photorealism",
             },
         )
 
@@ -3015,3 +3015,56 @@ class TestRunGenerateOnly:
         assert "Distilling 1 prompts" in (in_progress[0][2] or "")
         assert "Rendering sample" in (in_progress[1][2] or "")
         assert progress_calls[-1][1] == "completed"
+
+
+class TestImageRendererSection:
+    """`_build_image_renderer_section()` produces the hint block injected
+    into dress_discuss when an image provider is selected at orchestrator
+    init (#1557)."""
+
+    def test_no_provider_returns_empty_string(self) -> None:
+        from questfoundry.pipeline.stages.dress import _build_image_renderer_section
+
+        assert _build_image_renderer_section(None) == ""
+
+    def test_provider_with_checkpoint_includes_label(self) -> None:
+        from questfoundry.pipeline.stages.dress import _build_image_renderer_section
+
+        section = _build_image_renderer_section("a1111/juggernautXL_ragnarokBy")
+        assert "Image Renderer Constraint" in section
+        assert "Juggernaut" in section
+        assert "photorealistic" in section.lower()
+        # Must include both positive and negative guidance
+        assert (
+            "best with" in section.lower()
+            or "excels" in section.lower()
+            or "works best" in section.lower()
+        )
+        assert (
+            "cannot" in section.lower()
+            or "incompatible" in section.lower()
+            or "struggles" in section.lower()
+        )
+
+    def test_provider_without_checkpoint_uses_default(self) -> None:
+        from questfoundry.pipeline.stages.dress import _build_image_renderer_section
+
+        section = _build_image_renderer_section("a1111")
+        assert "Image Renderer Constraint" in section
+        # Default fallback label
+        assert "general-purpose" in section.lower() or "unknown" in section.lower()
+
+    def test_anime_checkpoint_warns_against_photorealism(self) -> None:
+        from questfoundry.pipeline.stages.dress import _build_image_renderer_section
+
+        section = _build_image_renderer_section("a1111/animagine-xl")
+        assert "anime" in section.lower()
+        # Should signal incompatible vocabulary somewhere
+        assert "photoreal" in section.lower() or "photo" in section.lower()
+
+    def test_section_contains_tiebreaker_for_collisions(self) -> None:
+        from questfoundry.pipeline.stages.dress import _build_image_renderer_section
+
+        section = _build_image_renderer_section("a1111/juggernaut")
+        # The hint must instruct conflict resolution into composition_notes
+        assert "composition_notes" in section

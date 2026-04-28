@@ -304,7 +304,7 @@ class TestOpenAIDistillPrompt:
             entity_fragments=["tall warrior, scarred face"],
             palette=["crimson", "gold"],
             negative="gore",
-            negative_defaults="photorealism",
+            style_exclusions="photorealism",
         )
 
         positive, negative = await provider.distill_prompt(brief)

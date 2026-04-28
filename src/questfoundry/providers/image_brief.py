@@ -29,7 +29,7 @@ class ImageBrief:
     art_style: str | None = None
     art_medium: str | None = None
     palette: list[str] = field(default_factory=list)
-    negative_defaults: str | None = None
+    style_exclusions: str | None = None
     aspect_ratio: str = "16:9"
     category: str = "scene"
 
@@ -65,7 +65,7 @@ def flatten_brief_to_prompt(brief: ImageBrief) -> tuple[str, str | None]:
 
     negative_parts = [
         brief.negative or "",
-        brief.negative_defaults or "",
+        brief.style_exclusions or "",
     ]
     negative = ", ".join(n for n in negative_parts if n)
 

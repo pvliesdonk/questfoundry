@@ -82,7 +82,7 @@ system: |
     in the passage.
   - CAPTION: See format above (10-60 chars, "[Subject] [action/state]")
   - NEGATIVE FIELD: Only list negatives SPECIFIC to this brief that go beyond
-    the global negative_defaults. If no brief-specific negatives apply, use an
+    the global style_exclusions. If no brief-specific negatives apply, use an
     empty string.
   - PATH UNDERTONE: If present, let the path's emotional undertone subtly tint the
     image — a color choice, a shadow direction, an expression — not dominate the subject.
