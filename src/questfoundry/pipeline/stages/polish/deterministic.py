@@ -534,10 +534,10 @@ def _audit_overlay_composition(
     # Pre-fetch entity overlay data once
     entity_nodes = graph.get_nodes_by_type("entity")
 
-    # Phase 4b populates feasibility["split_passages"] with the IDs of any
-    # passage flagged as structural_split (#1170). The previous version of
-    # this audit re-derived that set by parsing the warning string format,
-    # which silently broke the moment the message changed.
+    # `feasibility["split_passages"]` is populated by compute_prose_feasibility
+    # with every passage ID flagged as structural_split. Reading it directly
+    # rather than re-deriving from warning strings means a future change to
+    # the warning text cannot silently break dedup.
     already_split: set[str] = feasibility.get("split_passages", set())
 
     for spec in specs:
@@ -584,7 +584,12 @@ def _audit_overlay_composition(
                         f"overlays on entity {entity_id} — structural split recommended "
                         f"(overlay composition limit exceeded)"
                     )
-                    feasibility.setdefault("split_passages", set()).add(spec.passage_id)
+                    # `already_split` aliases feasibility["split_passages"] when
+                    # the key is present (always the case in production); this
+                    # also catches the "key missing" edge so a later spec sees
+                    # this passage in the dedup set in the same audit run.
+                    already_split.add(spec.passage_id)
+                    feasibility["split_passages"] = already_split
                     flagged = True
                     break
 

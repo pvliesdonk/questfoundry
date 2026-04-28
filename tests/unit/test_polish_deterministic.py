@@ -2475,6 +2475,55 @@ class TestAuditOverlayComposition:
         # Should still have exactly 1 warning — no double-add despite mismatched string.
         assert feasibility["warnings"] == ["some unrelated warning"]
 
+    def test_overlay_audit_writes_to_split_passages(self) -> None:
+        """When _audit_overlay_composition flags a NEW passage via the overlay
+        threshold, it must add the passage ID to feasibility["split_passages"]
+        (#1170 symmetry invariant: the set always contains every passage ever
+        flagged as structural_split, regardless of which check raised it).
+        """
+        from questfoundry.pipeline.stages.polish.deterministic import _audit_overlay_composition
+
+        graph = Graph.empty()
+        graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
+        graph.create_node(
+            "entity::hero",
+            {
+                "type": "entity",
+                "raw_id": "hero",
+                "overlays": [
+                    {"when": [], "details": {"key": "a"}},
+                    {"when": [], "details": {"key": "b"}},
+                    {"when": [], "details": {"key": "c"}},
+                    {"when": [], "details": {"key": "d"}},
+                ],
+            },
+        )
+        graph.create_node(
+            "beat::target",
+            {
+                "type": "beat",
+                "raw_id": "target",
+                "summary": "Target beat",
+                "dilemma_impacts": [],
+                "entities": ["entity::hero"],
+                "scene_type": "scene",
+            },
+        )
+        graph.add_edge("belongs_to", "beat::target", "path::p1")
+
+        spec = PassageSpec(
+            passage_id="passage::needs_split",
+            beat_ids=["beat::target"],
+            summary="overlay-flagged passage",
+            entities=["entity::hero"],
+        )
+
+        feasibility: dict = {"warnings": [], "split_passages": set()}
+        _audit_overlay_composition(graph, [spec], feasibility)
+
+        assert "passage::needs_split" in feasibility["split_passages"]
+        assert any("passage::needs_split" in w for w in feasibility["warnings"])
+
     def test_unconditional_overlays_always_active(self) -> None:
         """Overlays with empty ``when`` lists are always active regardless of flag combo.
 
