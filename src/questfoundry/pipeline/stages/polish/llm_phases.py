@@ -208,9 +208,9 @@ class _PolishLLMPhaseMixin:
         # original context shape so the prompt can be migrated verbatim).
         path_sequences: list[str] = []
         valid_beat_ids: set[str] = set()
-        # Per-path beat lists for the grouped Valid IDs block (#1489 — replaces
-        # the two flat ``valid_path_ids`` + ``valid_beat_ids`` lists that small
-        # models had to cross-correlate by hand).
+        # Per-path beat lists for the grouped Valid IDs block — replaces
+        # the two flat ``valid_path_ids`` + ``valid_beat_ids`` lists that
+        # small models had to cross-correlate by hand.
         path_beats: dict[str, list[str]] = {}
         for pid in sorted(path_nodes.keys()):
             sequence = get_path_beat_sequence(graph, pid)
@@ -249,7 +249,7 @@ class _PolishLLMPhaseMixin:
         path_dilemma_map_text, _ = build_path_dilemma_context(graph, path_nodes)
 
         # Combined Valid IDs block grouped by path so the LLM sees the
-        # path→beats relationship at point of use (#1489).
+        # path→beats relationship at point of use.
         valid_path_beats_lines: list[str] = []
         for pid in sorted(path_beats):
             beats = ", ".join(f"`{b}`" for b in path_beats[pid])
