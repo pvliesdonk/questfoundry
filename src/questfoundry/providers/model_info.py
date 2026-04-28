@@ -62,7 +62,7 @@ KNOWN_MODELS: dict[str, dict[str, ModelProperties]] = {
         "gemma3:27b": ModelProperties(context_window=32_768, supports_vision=True),
         # gemma4:e2b — model claims more but is unusable above 16K on consumer GPUs.
         "gemma4:e2b": ModelProperties(context_window=16_384),
-        # phi4
+        # phi4 — 16K is the model's native context (not a hardware-safety cap).
         "phi4:14b": ModelProperties(context_window=16_384),
         "phi4-mini:3.8b": ModelProperties(context_window=16_384),
         # llama3.x

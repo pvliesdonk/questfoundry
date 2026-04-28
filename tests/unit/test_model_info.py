@@ -162,12 +162,15 @@ class TestModelRegistryContextWindows:
         assert KNOWN_MODELS["ollama"]["gemma4:e2b"].context_window == 16_384
 
     def test_anthropic_1m_context_window(self) -> None:
-        """Anthropic Claude 4.x models have 1M context window (1M-token API)."""
+        """All registered Anthropic Claude 4.x models have 1M context (1M-token API)."""
         for model in (
             "claude-opus-4-7",
             "claude-opus-4-6",
+            "claude-opus-4-5-20251101",
+            "claude-opus-4-20250514",
             "claude-sonnet-4-6",
             "claude-sonnet-4-5-20250929",
+            "claude-sonnet-4-20250514",
             "claude-haiku-4-5-20251001",
         ):
             assert KNOWN_MODELS["anthropic"][model].context_window == 1_000_000, f"{model}"
@@ -229,6 +232,7 @@ class TestModelRegistryContextWindows:
             assert model in KNOWN_MODELS["ollama"], f"{model} missing"
 
     def test_gemma3_vision_support(self) -> None:
-        """gemma3 4b/12b/27b support vision."""
+        """gemma3 4b/12b/27b support vision; 1b is the odd one out and does not."""
         for model in ("gemma3:4b", "gemma3:12b", "gemma3:27b"):
             assert KNOWN_MODELS["ollama"][model].supports_vision is True, f"{model}"
+        assert KNOWN_MODELS["ollama"]["gemma3:1b"].supports_vision is False
