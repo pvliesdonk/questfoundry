@@ -3203,9 +3203,10 @@ def _build_hint_base_dag(
 
     Concurrent entry-beat ordering is intentionally absent from this base DAG.
     Entry-beat ordering is a soft heuristic that must yield to hints rather than
-    block them.  Cycle-safety for accepted hints against entry-beat edges is
-    guaranteed by ``detect_temporal_hint_conflicts``, which simulates entry-beat
-    edges when testing each hint individually.
+    block them.  Cycle-safety is preserved at apply time: in
+    ``interleave_cross_path_beats`` the entry-beat heuristic is added with
+    ``from_hint=False``, so cycle conflicts with previously-applied hints are
+    soft-skipped rather than rejecting the hint.
 
     Args:
         graph: The story graph.
@@ -3820,8 +3821,9 @@ def interleave_cross_path_beats(graph: Graph) -> int:
     # so that a hint accepted by build_hint_conflict_graph cannot create a cycle here
     # due to a narrower incremental DAG (#1147).  Entry-beat ordering is intentionally
     # absent from _build_hint_base_dag — it is a soft heuristic that must yield to hints
-    # rather than block them.  detect_temporal_hint_conflicts simulates entry-beat edges
-    # when testing each hint, so accepted hints are already safe against that ordering.
+    # rather than block them.  Below, the entry-beat heuristic is applied with
+    # ``from_hint=False``, so cycle conflicts with previously-applied hints soft-skip
+    # the heuristic edge instead of rejecting the hint.
     #
     # ``_base_edges`` contains real graph edges + simulated heuristic edges.
     # ``successors`` is derived from the full base and is used for cycle detection.
