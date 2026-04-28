@@ -326,6 +326,29 @@ class A1111ImageProvider:
     def _tag_count(self, text: str) -> int:
         return len([t.strip() for t in text.split(",") if t.strip()])
 
+    def _format_checkpoint_hint(self) -> str:
+        """Build the TARGET CHECKPOINT hint block injected into the
+        distiller's system prompt. Sources data from
+        `resolve_checkpoint_style()` (single map, shared with DRESS
+        Phase 0) so the distiller's guidance and the upstream Phase 0
+        guidance cannot drift apart (#1557)."""
+        if not self._model:
+            return ""
+
+        from questfoundry.providers.checkpoint_styles import resolve_checkpoint_style
+
+        info = resolve_checkpoint_style(self._model)
+        return (
+            f"\nTARGET CHECKPOINT: {info['label']}\n"
+            f"This checkpoint excels at: {info['style_hints']}\n"
+            f"This checkpoint struggles with: {info['incompatible_styles']}\n"
+            "Adapt your CLIP tags accordingly. If the brief asks for a "
+            "style this checkpoint can't render well, translate to the "
+            "closest compatible vocabulary (e.g. brief says 'watercolor "
+            "wash' on a photoreal checkpoint → render as 'soft natural "
+            "light, painterly atmosphere').\n"
+        )
+
     async def _distill_with_llm(self, brief: ImageBrief) -> tuple[str, str | None]:
         """Use an LLM to condense the brief into SD-optimised tags.
 
@@ -389,15 +412,7 @@ class A1111ImageProvider:
                 "blurry, text, watermark, deformed hands, extra fingers"
             )
 
-        checkpoint_hint = ""
-        if self._model:
-            checkpoint_hint = (
-                f"\nTARGET CHECKPOINT: {self._model}\n"
-                "Adapt your tag style to this checkpoint. For example, anime/"
-                "illustration models (Animagine, NovelAI, etc.) expect Danbooru-"
-                "style tags (1girl, blue_hair, masterpiece). Photorealistic "
-                "models prefer natural descriptive tags.\n"
-            )
+        checkpoint_hint = self._format_checkpoint_hint()
 
         system_msg = (
             "CONTEXT: Stable Diffusion's CLIP encoder has a hard token window. "
