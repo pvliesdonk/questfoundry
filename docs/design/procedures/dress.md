@@ -149,7 +149,7 @@ R-3.8. LLM call per entity receives: full Entity description (base + overlays), 
 |---------|-----------|-------------|
 | Entity has no CodexEntry | Phase 3 skipped | R-3.1 |
 | Rank-1 entry has `visible_when: [state_flag::mentor_hostile]` | Rank 1 must be unconditional | R-3.2 |
-| Rank-1 entry: "A mysterious scholar who secretly knows your true identity." Rank 2 (gated behind `met_aldric`): "Aldric is the traitor who betrayed your mentor." | Rank 1 prematurely disclosed the deception angle — that reveal was supposed to be gated behind rank 2. Direction of spoiler is low tier → high tier content | R-3.6 |
+| Rank-1 entry: "A mysterious scholar who secretly knows your true identity." Rank 2 (gated behind `state_flag::met_aldric`): "Aldric is the traitor who betrayed your mentor." | Rank 1 prematurely disclosed the deception angle — that reveal was supposed to be gated behind rank 2. Direction of spoiler is low tier → high tier content | R-3.6 |
 | `visible_when` references `codeword::met_aldric` | Should be a state flag ID; codewords are SHIP's projection | R-3.7 |
 | Entry: "Aldric is a character who serves as the protagonist's mentor" | Non-diegetic voice | R-3.4 |
 
