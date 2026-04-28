@@ -231,10 +231,9 @@ class Phase4dOutput(BaseModel):
 
     @model_validator(mode="after")
     def _validate_unique_beat_ids(self) -> Phase4dOutput:
-        if self.details:
-            detail_ids = [d.beat_id for d in self.details]
-            if len(detail_ids) != len(set(detail_ids)):
-                raise ValueError("beat_id in details list must be unique")
+        detail_ids = [d.beat_id for d in self.details]
+        if len(detail_ids) != len(set(detail_ids)):
+            raise ValueError("beat_id in details list must be unique")
         return self
 
 
@@ -343,13 +342,7 @@ class GapProposal(BaseModel):
 
     @model_validator(mode="after")
     def _require_placement(self) -> GapProposal:
-        """POLISH R-1a.3: gap beats record `bridges_from` / `bridges_to`.
-
-        Both `after_beat` and `before_beat` being null makes the gap
-        unplaceable in the beat sequence. POLISH has no semantic_validator
-        hook (#1498), so any retry-bypass in a POLISH-shaped output relies
-        on Pydantic enforcement to fire the retry loop.
-        """
+        """POLISH R-1a.3: at least one of after_beat/before_beat must be set."""
         if self.after_beat is None and self.before_beat is None:
             raise ValueError(
                 "GapProposal must have at least one of `after_beat` or "
