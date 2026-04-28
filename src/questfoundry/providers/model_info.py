@@ -78,8 +78,9 @@ KNOWN_MODELS: dict[str, dict[str, ModelProperties]] = {
         # deepseek
         "deepseek-coder:6.7b": ModelProperties(context_window=16_384),
         "deepseek-r1:1.5b": ModelProperties(context_window=32_768),
+        # deepseek-r1:7b is the Qwen2.5-7B distill.
         "deepseek-r1:7b": ModelProperties(context_window=32_768),
-        # deepseek-r1:8b is the Llama-3.1-8B distill (separate from the 7b qwen distill).
+        # deepseek-r1:8b is the Llama-3.1-8B distill (separate from the 7b Qwen distill).
         "deepseek-r1:8b": ModelProperties(context_window=32_768),
         "deepseek-r1:14b": ModelProperties(context_window=32_768),
         "deepseek-r1:32b": ModelProperties(context_window=32_768),

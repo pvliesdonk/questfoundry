@@ -153,9 +153,16 @@ class TestModelRegistryContextWindows:
         for model in ("gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano"):
             assert KNOWN_MODELS["openai"][model].context_window == 1_000_000, f"{model}"
 
-    def test_qwen25_7b_context_window(self) -> None:
-        """qwen2.5:7b has 32K practical context window (uses --max-vram for higher)."""
-        assert KNOWN_MODELS["ollama"]["qwen2.5:7b"].context_window == 32_768
+    def test_ollama_practical_defaults(self) -> None:
+        """Models with 128K+ theoretical context are capped at 32K practical default.
+
+        Both qwen2.5:7b and llama3.1:8b ship with 128K theoretical max but
+        spill KV cache to CPU at that size on a typical consumer GPU. The
+        registry caps both at 32K; --max-vram (sub-task 2 of #1245) computes
+        a higher fitting num_ctx per call when VRAM allows.
+        """
+        for model in ("qwen2.5:7b", "llama3.1:8b"):
+            assert KNOWN_MODELS["ollama"][model].context_window == 32_768, f"{model}"
 
     def test_gemma4_e2b_context_window(self) -> None:
         """gemma4:e2b is capped at 16K — model claims more but is unusable above 16K on consumer GPUs."""
