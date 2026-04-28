@@ -158,7 +158,7 @@ class TestModelRegistryContextWindows:
         assert KNOWN_MODELS["ollama"]["qwen2.5:7b"].context_window == 32_768
 
     def test_gemma4_e2b_context_window(self) -> None:
-        """gemma4:e2b is capped at 16K — model claims more but is unusable above on consumer GPUs."""
+        """gemma4:e2b is capped at 16K — model claims more but is unusable above 16K on consumer GPUs."""
         assert KNOWN_MODELS["ollama"]["gemma4:e2b"].context_window == 16_384
 
     def test_anthropic_1m_context_window(self) -> None:
@@ -214,12 +214,15 @@ class TestModelRegistryContextWindows:
             "qwen3:1.7b",
             "qwen3:14b",
             "qwen3:30b",
+            "qwen3:32b",
             "llama3.2:1b",
             "llama3.2:3b",
             "llama3.3:70b",
             "mistral-small:22b",
             "mistral-nemo:12b",
+            "deepseek-r1:1.5b",
             "deepseek-r1:7b",
+            "deepseek-r1:8b",
             "deepseek-r1:14b",
             "deepseek-r1:32b",
         ):

@@ -51,7 +51,9 @@ KNOWN_MODELS: dict[str, dict[str, ModelProperties]] = {
         "qwen3:4b-instruct-32k": ModelProperties(context_window=32_768),
         "qwen3:8b": ModelProperties(context_window=32_768),
         "qwen3:14b": ModelProperties(context_window=32_768),
+        # qwen3:30b is the 30B-A3B MoE; qwen3:32b is the dense 32B variant.
         "qwen3:30b": ModelProperties(context_window=32_768),
+        "qwen3:32b": ModelProperties(context_window=32_768),
         "qwen2.5:7b": ModelProperties(context_window=32_768),
         # gemma3 / gemma4
         "gemma3:1b": ModelProperties(context_window=32_768),
@@ -75,7 +77,10 @@ KNOWN_MODELS: dict[str, dict[str, ModelProperties]] = {
         "mistral-nemo:12b": ModelProperties(context_window=32_768),
         # deepseek
         "deepseek-coder:6.7b": ModelProperties(context_window=16_384),
+        "deepseek-r1:1.5b": ModelProperties(context_window=32_768),
         "deepseek-r1:7b": ModelProperties(context_window=32_768),
+        # deepseek-r1:8b is the Llama-3.1-8B distill (separate from the 7b qwen distill).
+        "deepseek-r1:8b": ModelProperties(context_window=32_768),
         "deepseek-r1:14b": ModelProperties(context_window=32_768),
         "deepseek-r1:32b": ModelProperties(context_window=32_768),
     },
