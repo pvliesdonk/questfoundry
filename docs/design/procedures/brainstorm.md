@@ -274,7 +274,9 @@ R-3.8: No Path / Beat / Consequence / State Flag / Passage / Intersection Group 
 vision:
   genre: "dark fantasy"
   subgenre: "mystery"
-  tone: "atmospheric, morally ambiguous"
+  tone:
+    - "atmospheric"
+    - "morally ambiguous"
   themes: ["forbidden knowledge", "trust", "corruption"]
   audience: "adult readers of literary speculative fiction"
   scope: short
