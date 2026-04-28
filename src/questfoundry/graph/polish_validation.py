@@ -387,7 +387,6 @@ def _check_divergences_have_choices(
     errors: list[str],
 ) -> None:
     """Beats with 2+ children on different paths must live in a passage with 2+ outgoing choices."""
-    # Find beats that have 2+ outgoing next/branch edges leading to beats on different paths
     beat_nodes = graph.get_nodes_by_type("beat")
     belongs_to_edges = graph.get_edges(edge_type="belongs_to")
     _accum: dict[str, set[str]] = {}
