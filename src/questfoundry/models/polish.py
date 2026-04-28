@@ -23,7 +23,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 # ---------------------------------------------------------------------------
 # Phase 1: Beat Reordering — LLM output schema
@@ -198,7 +198,14 @@ class PassageSpec(BaseModel):
 
     passage_id: str = Field(min_length=1)
     beat_ids: list[str] = Field(min_length=1)
-    summary: str = Field(default="")
+    summary: str = Field(
+        min_length=1,
+        description=(
+            "Human-readable scene summary derived from the passage's beats. "
+            "Stage Output Contract item 2 requires every passage to have a "
+            "non-empty summary; FILL has no prose context without it."
+        ),
+    )
     entities: list[str] = Field(default_factory=list)
     grouping_type: str = Field(
         default="singleton",
@@ -317,9 +324,22 @@ class ChoiceLabelItem(BaseModel):
 
 
 class Phase5aOutput(BaseModel):
-    """Output of Phase 5a: Choice Label Generation."""
+    """Output of Phase 5a: Choice Label Generation.
 
-    choice_labels: list[ChoiceLabelItem] = Field(default_factory=list)
+    POLISH has no semantic_validator hook (#1498), so Pydantic is the only
+    in-retry enforcement point. An empty list silently leaves all
+    `ChoiceSpec.label` fields at their default `""`, which Phase 7 R-7.7
+    catches at exit AFTER Phase 6 has committed all passages — too late
+    for repair. `min_length=1` fires the retry loop instead.
+    """
+
+    choice_labels: list[ChoiceLabelItem] = Field(
+        min_length=1,
+        description=(
+            "Diegetic, concise labels for choices. MUST contain ≥1 entry; "
+            "empty list is treated as LLM failure and triggers retry."
+        ),
+    )
 
 
 class ResidueContentItem(BaseModel):
@@ -357,6 +377,35 @@ class FalseBranchDecisionItem(BaseModel):
     sidetrack_entities: list[str] = Field(default_factory=list)
     choice_label_enter: str = Field(default="")
     choice_label_return: str = Field(default="")
+
+    @model_validator(mode="after")
+    def _require_decision_specific_fields(self) -> FalseBranchDecisionItem:
+        """R-5.9 / R-5.10: decision-specific fields MUST be populated.
+
+        - sidetrack: sidetrack_summary MUST be non-empty (R-5.9)
+        - diamond: diamond_summary_a AND diamond_summary_b MUST be non-empty (R-5.10)
+        - skip: no additional content required
+
+        POLISH has no semantic_validator hook (#1498); this Pydantic check is
+        the only in-retry enforcement point. Phase 6 would otherwise create
+        false branch beats with empty summaries that FILL has nothing to
+        write from.
+        """
+        if self.decision == "sidetrack" and not self.sidetrack_summary:
+            raise ValueError(
+                "FalseBranchDecisionItem with decision='sidetrack' MUST have "
+                "non-empty `sidetrack_summary` (R-5.9). FILL has no prose "
+                "context to write the sidetrack beat without it."
+            )
+        if self.decision == "diamond" and (
+            not self.diamond_summary_a or not self.diamond_summary_b
+        ):
+            raise ValueError(
+                "FalseBranchDecisionItem with decision='diamond' MUST have "
+                "non-empty `diamond_summary_a` AND `diamond_summary_b` "
+                "(R-5.10). Both alternative passages need prose hints."
+            )
+        return self
 
 
 class Phase5cOutput(BaseModel):

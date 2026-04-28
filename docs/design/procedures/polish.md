@@ -263,6 +263,8 @@ R-4a.4. POLISH does NOT consume Intersection Group nodes as a constraint on grou
 
 R-4a.5. (Subsumed by R-4a.3.) The prior allowance for optional multi-path grouping is now automatic: multi-path chains that are linear in the DAG are collapsed by the topology rule; those separated by divergences or convergences are in different passages by topology.
 
+R-4a.6. Every `PassageSpec` produced by Phase 4a has a non-empty `summary` field, derived from the constituent beats' summaries. Empty summaries are rejected at Pydantic validation — FILL has no prose context without them, and Phase 7's exit validator catches the gap only after Phase 6 commits. Pydantic enforcement (`min_length=1`) keeps the rule in the in-retry repair path.
+
 **Notes on structural beats.** Residue and false-branch beats are created by POLISH in Phase 6 *after* Phase 4a completes; their passage placement is governed by Phase 6 creation rules (R-6.x), not Phase 4a. Micro-beats (Phase 2, from POLISH), gap beats (Phase 1a, from POLISH), and transition beats (from GROW) are already in the DAG at Phase 4a and are grouped uniformly by R-4a.3. No sub-type-specific grouping rules are needed in Phase 4a.
 
 **Violations:**
@@ -377,6 +379,8 @@ R-5.3. Labels are concise (suitable for a button or gamebook instruction).
 
 R-5.4. The LLM receives full context for each choice: source passage summary, target passage summary, surrounding beat summaries, active state flags, relevant dilemma question.
 
+R-5.4a. The Phase 5a output (`Phase5aOutput.choice_labels`) MUST contain at least one entry — an empty list is treated as full LLM failure and triggers retry. POLISH has no semantic-validator hook (#1498), so Pydantic enforcement (`min_length=1`) is the only in-retry guard; without it, `ChoiceSpec.label` fields stay at their default empty string and Phase 7 R-7.7 fails post-Phase-6 with no repair opportunity.
+
 **Violations:**
 
 | Symptom | Root cause | Broken rule |
@@ -384,6 +388,7 @@ R-5.4. The LLM receives full context for each choice: source passage summary, ta
 | Choice label: "Choose option 1" | Non-diegetic | R-5.1 |
 | Two choices from same passage labeled "Go" and "Continue" | Not distinct | R-5.2 |
 | Label generation LLM call has bare ChoiceSpec IDs | Context missing | R-5.4 |
+| `Phase5aOutput.choice_labels = []` accepted by Pydantic | Empty list = LLM failure; Pydantic must reject so retry fires | R-5.4a |
 
 #### Residue Beat Content Generation
 
@@ -416,7 +421,7 @@ R-5.8. The chosen mapping is recorded in the plan so Phase 6 can apply it atomic
 
 **Rules:**
 
-R-5.9. False branch decisions are one of: `skip` (no branch), `diamond` (two alternatives reconverging), `sidetrack` (1–2 beat detour).
+R-5.9. False branch decisions are one of: `skip` (no branch), `diamond` (two alternatives reconverging), `sidetrack` (1–2 beat detour). For `decision = sidetrack`, the LLM MUST populate `sidetrack_summary` (Pydantic-enforced, non-empty). For `decision = diamond`, the LLM MUST populate BOTH `diamond_summary_a` AND `diamond_summary_b` (Pydantic-enforced, non-empty). Empty content is rejected at validation time so the retry loop fires; FILL has no prose context to write false-branch beats from.
 
 R-5.10. False-branch beats created here have `role: "false_branch_beat"`, zero `dilemma_impacts`, zero `belongs_to`.
 
