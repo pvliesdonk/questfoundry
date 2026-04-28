@@ -2341,7 +2341,9 @@ def test_format_entries_for_spoiler_check_orders_by_rank() -> None:
     # Rank 1 must appear before Rank 2 in the rendered block
     assert rendered.index("Rank 1") < rendered.index("Rank 2")
     assert "always visible" in rendered
-    assert "gated by `met`" in rendered
+    # state_flag:: prefix preserved per R-3.7 (matches few-shot examples in
+    # dress_codex_spoiler_check.yaml — caught by gemini on PR #1516).
+    assert "gated by `state_flag::met`" in rendered
 
 
 def test_minimal_rank_one_codex_uses_entity_name() -> None:
