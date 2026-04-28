@@ -590,11 +590,16 @@ class _PolishLLMPhaseMixin:
         # POLISH's _polish_llm_call doesn't accept a compact-config the way
         # GROW does; pass the items directly with a generous default budget
         # since the prompt is small and the LLM can handle many beats.
+        # Bullet list per ID; small models lose track of flat comma-separated
+        # lists for 60+ beats (#1505 — mirrors Phase 1 / 1a / 3 bulletization).
+        sorted_beat_ids = sorted(beat_nodes.keys())
+        valid_beat_ids_block = "\n".join(f"- `{b}`" for b in sorted_beat_ids)
+
         context = {
             "narrative_frame": narrative_frame,
             "beat_summaries": compact_items(beat_items, None),
             "beat_count": str(len(beat_nodes)),
-            "valid_beat_ids": ", ".join(sorted(beat_nodes.keys())),
+            "valid_beat_ids": valid_beat_ids_block,
         }
 
         result, llm_calls, tokens = await self._polish_llm_call(  # type: ignore[attr-defined]
