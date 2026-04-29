@@ -182,7 +182,7 @@ R-3.9. No beat has `belongs_to` edges referencing Paths from different Dilemmas.
 
 R-3.10. Every Dilemma with two explored Answers has at least one pre-commit beat. The number is a narrative decision — some dilemmas need one shared setup beat, others need several. Zero pre-commit beats means no Y-shape fork, which breaks downstream choice derivation.
 
-R-3.11. Every explored Path has exactly one commit beat.
+R-3.11. Every explored Path has exactly one commit beat, and that commit beat MUST be the first exclusive beat in the path's beat sequence. No `advances`, `reveals`, or `complicates` beat may precede it in the exclusive (post-pre-commit) region. The structural slot is fixed by the graph definition (Story Graph Ontology Part 1, "Commit beat is the first beat exclusive to one path") — narrative judgment about "when the dilemma feels most decisive" does not relocate the slot.
 
 R-3.12. Every explored Path has 2–4 post-commit beats.
 
@@ -204,6 +204,7 @@ R-3.15. Setup and epilogue beats are optional — a story may have zero of each.
 | Dilemma has zero pre-commit beats | Y-fork missing — per the Y-shape requirement stated in the Overview, the last shared pre-commit beat is the divergence point that seeds the Y-fork. Without it, POLISH Phase 4c's `compute_choice_edges()` finds no divergence and produces zero choices | R-3.10 |
 | Path has zero commit beats | Path cannot "commit" — no point of irreversible choice | R-3.11 |
 | Path has two commit beats | A path commits once, not twice | R-3.11 |
+| First exclusive beat has effect other than `commits` (e.g., `advances`) and commit beat is at position 2+ | Commit beat placed on wrong structural slot — position is fixed by the graph definition (SGO Part 1), not by narrative judgment | R-3.11 |
 | Path has only one post-commit beat | Minimum is 2; single post-commit gives no space to prove the answer | R-3.12 |
 | Path has six post-commit beats | Maximum is 4; longer sequences belong in GROW/POLISH as added beats | R-3.12 |
 | Beat has `summary: ""` | Required field empty | R-3.13 |
@@ -215,7 +216,7 @@ R-3.15. Setup and epilogue beats are optional — a story may have zero of each.
 2. Every Path has ≥1 `has_consequence` edge to a Consequence with ≥1 ripple.
 3. Consequences describe world state, not player actions.
 4. Every Dilemma with two explored Answers has ≥1 pre-commit beat (two `belongs_to` edges to paths of that dilemma).
-5. Every explored Path has exactly one commit beat (one `belongs_to`, `effect: commits` in `dilemma_impacts`).
+5. Every explored Path has exactly one commit beat (one `belongs_to`, `effect: commits` in `dilemma_impacts`), and it is positionally first in the path's exclusive-beat sequence.
 6. Every explored Path has 2–4 post-commit beats (each with one `belongs_to`, no commits impact).
 7. No beat has cross-dilemma dual `belongs_to`.
 8. Zero or more setup beats exist (structural, zero `belongs_to`, zero `dilemma_impacts`), for story-opening world-building.
@@ -489,7 +490,7 @@ R-8.5. If the LLM call fails, no relationships are declared — the graph is lef
 2. Every explored Answer has exactly one Path with an `explores` edge.
 3. Every Path has ≥1 Consequence with ≥1 ripple via `has_consequence` edges.
 4. Every Dilemma with two explored Answers has a shared pre-commit beat chain (≥1 beats, each with two `belongs_to` edges to the two paths of that Dilemma).
-5. Every explored Path has exactly one commit beat (one `belongs_to` edge, `dilemma_impacts.effect: commits`) and 2–4 post-commit beats (each with one `belongs_to`, no commits impact).
+5. Every explored Path has exactly one commit beat (one `belongs_to` edge, `dilemma_impacts.effect: commits`), positionally first in the path's exclusive-beat sequence, and 2–4 post-commit beats (each with one `belongs_to`, no commits impact).
 6. No beat has cross-dilemma dual `belongs_to`.
 7. Every beat has non-empty `summary` and `entities`.
 8. Beats may carry zero or more `flexibility` edges, each with a `role` property.
@@ -545,7 +546,7 @@ R-3.7: Commit beats have one `belongs_to` and `dilemma_impacts.effect: commits`.
 R-3.8: Post-commit beats have one `belongs_to` and no commits impact.
 R-3.9: No beat has cross-dilemma dual `belongs_to`.
 R-3.10: Every Dilemma with two explored Answers has ≥1 pre-commit beat.
-R-3.11: Every explored Path has exactly one commit beat.
+R-3.11: Every explored Path has exactly one commit beat, and it MUST be the first exclusive beat (not at position 2+).
 R-3.12: Every explored Path has 2–4 post-commit beats.
 R-3.13: Every beat has non-empty `summary` and `entities`.
 R-3.14: Setup and epilogue beats are structural (zero `belongs_to`, zero `dilemma_impacts`).
