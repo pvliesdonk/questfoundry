@@ -21,10 +21,14 @@ from typing import TYPE_CHECKING, Any
 import httpx
 
 from questfoundry.observability.logging import get_logger
+from questfoundry.providers.checkpoint_styles import prompt_format_for_checkpoint
 from questfoundry.providers.image import (
     ImageProviderConnectionError,
     ImageProviderError,
     ImageResult,
+)
+from questfoundry.providers.image_brief import (
+    flatten_brief_to_prompt,
 )
 from questfoundry.providers.settings import (
     _detect_model_variant,
@@ -225,11 +229,26 @@ class A1111ImageProvider:
     # -- PromptDistiller implementation ------------------------------------
 
     async def distill_prompt(self, brief: ImageBrief) -> tuple[str, str | None]:
-        """Transform a structured brief into SD-optimised prompts via LLM.
+        """Transform a structured brief into a renderer-shaped prompt.
+
+        Branches on the active checkpoint's prompt format (#1559):
+
+        - ``"natural_language"`` (Flux on Forge Neo, T5 encoder, ~512-token
+          window): skip LLM distillation entirely. The structured brief
+          already encodes subject/composition/mood/entities/style/medium/
+          palette as comma-joined prose via :func:`flatten_brief_to_prompt`,
+          which is the shape T5 was trained on.
+        - ``"clip_tags"`` (SDXL, SD1.5, etc.): LLM-distill into the comma-tag
+          form CLIP expects, using the existing :meth:`_distill_with_llm`.
 
         Raises:
-            ImageProviderError: If no LLM was provided at construction.
+            ImageProviderError: If the active checkpoint requires
+                ``clip_tags`` distillation but no LLM was provided at
+                construction. ``natural_language`` mode runs without an LLM.
         """
+        if prompt_format_for_checkpoint(self._model) == "natural_language":
+            return flatten_brief_to_prompt(brief)
+
         if self._llm is None:
             raise ImageProviderError(
                 "a1111",
