@@ -8,8 +8,12 @@ from typing import TYPE_CHECKING, Any
 
 from ruamel.yaml import YAML
 
+from questfoundry.observability.logging import get_logger
+
 if TYPE_CHECKING:
     from questfoundry.providers.settings import PhaseSettings
+
+log = get_logger(__name__)
 
 # Default configuration values
 DEFAULT_PROVIDER = "ollama"
@@ -214,9 +218,7 @@ class ProvidersConfig:
                 # User wrote something for ``max_concurrency`` but it didn't
                 # parse — flag it so a typo (``"two"``, ``2.5``, ``True``)
                 # doesn't silently fall back to per-provider defaults.
-                from questfoundry.observability.logging import get_logger
-
-                get_logger(__name__).warning(
+                log.warning(
                     "invalid_max_concurrency",
                     value=raw_concurrency,
                     value_type=type(raw_concurrency).__name__,

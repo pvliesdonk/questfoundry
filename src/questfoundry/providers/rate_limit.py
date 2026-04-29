@@ -53,9 +53,12 @@ DEFAULT_INITIAL_WAIT_SECONDS: float = 5.0
 ``Retry-After`` header. Doubles on each consecutive rate-limit until either
 ``SINGLE_WAIT_CAP_SECONDS`` is hit or we exit."""
 
-_MAX_BACKOFF_ATTEMPTS: int = 12
-"""Hard ceiling on backoff loop iterations — prevents an infinite loop when
-both the total-wait cap math and the provider behave pathologically."""
+_MAX_BACKOFF_ATTEMPTS: int = 600
+"""Hard ceiling on backoff loop iterations — defensive only. The real
+give-up gate is ``TOTAL_WAIT_CAP_SECONDS``. Set high enough that a provider
+returning ``Retry-After: 1`` (the smallest realistic short hint) can still
+exhaust the full 300s budget before this cap fires; an earlier value of 12
+silently capped runs at ~12s on short hints, defeating the time budget."""
 
 _JITTER_FRACTION: float = 0.10
 """±10% jitter applied to every sleep so parallel callers don't stampede the
@@ -245,7 +248,7 @@ async def ainvoke_with_rate_limit_retry(
     # Iteration ceiling reached without success.  ``last_classified`` is set
     # because every loop iteration either returns, re-raises a non-rate-limit
     # exception, or assigns ``last_classified`` before retrying — and an empty
-    # iteration range is impossible (range(1, 13)).
+    # iteration range is impossible (range(1, _MAX_BACKOFF_ATTEMPTS + 1)).
     log.error(
         "rate_limit_attempts_exhausted",
         attempts=_MAX_BACKOFF_ATTEMPTS,

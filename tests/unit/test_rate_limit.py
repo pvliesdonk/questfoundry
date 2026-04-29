@@ -91,6 +91,36 @@ class TestClassifierRecognizesWrappedHttpx:
         assert classify_rate_limit_error(exc) is None
 
 
+class TestClassifierRecognizesGoogleResourceExhausted:
+    def test_google_resource_exhausted_by_class_name_and_module(self) -> None:
+        """``google.api_core.exceptions.ResourceExhausted`` is detected by
+        class-name + module-prefix gating, without requiring the optional
+        ``google-api-core`` package to be installed."""
+        fake_cls = type(
+            "ResourceExhausted",
+            (Exception,),
+            {"__module__": "google.api_core.exceptions"},
+        )
+        exc = fake_cls("quota exceeded")
+
+        classified = classify_rate_limit_error(exc)
+
+        assert classified is not None
+        assert classified.provider == "google"
+
+    def test_other_module_with_same_classname_not_classified(self) -> None:
+        """A class named ``ResourceExhausted`` from an unrelated module is NOT
+        classified — the module-prefix gate is the safeguard."""
+        fake_cls = type(
+            "ResourceExhausted",
+            (Exception,),
+            {"__module__": "some.unrelated.package"},
+        )
+        exc = fake_cls("not actually rate-limited")
+
+        assert classify_rate_limit_error(exc) is None
+
+
 class TestClassifierWalksExceptionChain:
     def test_walks_cause_chain(self) -> None:
         """Classifier finds rate-limit deeper in __cause__."""
@@ -207,6 +237,49 @@ class TestAinvokeWithRateLimitRetryGivesUp:
         # Some sleeps should have happened before giving up.
         assert sum(slept) <= TOTAL_WAIT_CAP_SECONDS + SINGLE_WAIT_CAP_SECONDS
         assert len(slept) >= 1
+
+
+class TestBudgetCapDominatesIterationCap:
+    @pytest.mark.asyncio
+    async def test_short_retry_after_uses_full_time_budget(self) -> None:
+        """A provider sending ``Retry-After: 1`` should be retried until the
+        full ``TOTAL_WAIT_CAP_SECONDS`` budget is spent, not capped at the
+        iteration ceiling.
+
+        Regression for the iteration-cap-vs-budget interaction: an earlier
+        ``_MAX_BACKOFF_ATTEMPTS`` of 12 silently bounded short-hint retries to
+        ~12 seconds even though the time budget was 300s.
+        """
+        import anthropic
+
+        response = _build_httpx_response(429, {"retry-after": "1"})
+
+        class _Model:
+            calls = 0
+
+            async def ainvoke(self, _messages: list[Any], **_kwargs: Any) -> str:
+                _Model.calls += 1
+                raise anthropic.RateLimitError("rate", response=response, body=None)
+
+        slept: list[float] = []
+
+        async def _fake_sleep(seconds: float) -> None:
+            slept.append(seconds)
+
+        with (
+            patch("questfoundry.providers.rate_limit.asyncio.sleep", _fake_sleep),
+            pytest.raises(ProviderRateLimitError),
+        ):
+            await ainvoke_with_rate_limit_retry(_Model(), [], config=None)
+
+        # With ``Retry-After: 1`` and ±10% jitter, expect roughly TOTAL_WAIT_CAP / 1
+        # iterations before the helper gives up — far more than the historical
+        # ceiling of 12.
+        assert _Model.calls >= 50, (
+            f"short Retry-After should let the helper retry many times before the "
+            f"time budget is spent — got only {_Model.calls} attempts"
+        )
+        assert sum(slept) <= TOTAL_WAIT_CAP_SECONDS + SINGLE_WAIT_CAP_SECONDS
 
 
 class TestBackoffPolicy:
