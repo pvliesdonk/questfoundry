@@ -275,11 +275,14 @@ def _prune_demoted_dilemmas(
         c for c in seed_output.consequences if strip_scope_prefix(c.path_id) not in paths_to_drop
     ]
 
-    # 3. Filter beats — each beat belongs to exactly one path
+    # 3. Filter beats — drop any beat whose primary path (belongs_to[0]) is being
+    # pruned.  Pre-commit shared beats (belongs_to of length 2) are also dropped
+    # when their dilemma is demoted to single-path; both paths of a demoted
+    # dilemma are in paths_to_drop, so checking belongs_to[0] suffices.
     pruned_beats: list[InitialBeat] = [
         beat
         for beat in seed_output.initial_beats
-        if strip_scope_prefix(beat.path_id) not in paths_to_drop
+        if strip_scope_prefix(beat.belongs_to[0]) not in paths_to_drop
     ]
 
     dropped_beat_count = len(seed_output.initial_beats) - len(pruned_beats)

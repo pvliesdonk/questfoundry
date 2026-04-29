@@ -16,7 +16,6 @@ Terminology (v5):
 
 from __future__ import annotations
 
-import warnings
 from collections import Counter
 from enum import StrEnum
 from typing import Any, Literal
@@ -241,13 +240,15 @@ class InitialBeat(BaseModel):
 
     Beats carry either a single or a dual ``belongs_to`` edge to path nodes:
 
-    * **Post-commit beats** (the default) belong to exactly one path via
-      ``path_id``; ``also_belongs_to`` is ``None``. These beats prove one
-      answer and are exclusive to the path they belong to.
+    * **Post-commit beats** (the default) belong to exactly one path —
+      ``belongs_to`` is a single-element list. These beats prove one answer
+      and are exclusive to the path they belong to.
     * **Pre-commit beats** (shared dilemma setup) belong to *both* paths of
-      their dilemma via ``path_id`` and ``also_belongs_to``. This is the
-      Y-shape ratified in #1206/#1208: every player experiences pre-commit
-      beats regardless of which answer they later choose.
+      their dilemma — ``belongs_to`` is a two-element list, both referencing
+      paths of the same parent dilemma. This is the Y-shape ratified in
+      #1206/#1208 (and refined to symmetric list form in #1564): every
+      player experiences pre-commit beats regardless of which answer they
+      later choose.
 
     The commit beat itself is single-``belongs_to`` — it is the first beat
     exclusive to its path.
@@ -255,12 +256,10 @@ class InitialBeat(BaseModel):
     Attributes:
         beat_id: Unique identifier for the beat.
         summary: What happens in this beat.
-        path_id: Primary path this beat belongs to.
-        also_belongs_to: Sibling path for pre-commit (shared) beats. ``None``
-            for post-commit beats. MUST reference a path that shares the same
-            parent dilemma with ``path_id`` — cross-dilemma dual membership
-            is a Part-8 guard-rail violation and is rejected by the mutation
-            layer.
+        belongs_to: Path(s) this beat belongs to. Single-element list for
+            commit/post-commit/gap beats; two-element list (both paths of
+            the same dilemma) for pre-commit shared beats. Cross-dilemma
+            dual membership is rejected by the mutation layer.
         dilemma_impacts: How this beat affects dilemmas.
         entities: Entity IDs present in this beat.
         location: Primary location entity ID.
@@ -270,63 +269,28 @@ class InitialBeat(BaseModel):
 
     beat_id: str = Field(min_length=1, description="Unique identifier for this beat")
     summary: str = Field(min_length=1, description="What happens in this beat")
-    path_id: str = Field(
+    belongs_to: list[str] = Field(
         min_length=1,
-        description="Primary path this beat belongs to (first belongs_to edge)",
-    )
-    also_belongs_to: str | None = Field(
-        default=None,
-        min_length=1,
+        max_length=2,
         description=(
-            "Sibling path for pre-commit (Y-shape) beats: creates a second "
-            "belongs_to edge. Must be null for post-commit beats. Must "
-            "reference a path with the same parent dilemma as path_id."
+            "Path(s) this beat belongs to. List of length 2 means dual "
+            "membership (pre-commit shared beat — both paths of the same "
+            "dilemma). List of length 1 means singular membership (commit, "
+            "post-commit, or gap beat). Cross-dilemma dual membership is "
+            "rejected by the mutation layer; same-dilemma sibling-pair check "
+            "happens there as well, where path→dilemma resolution is available."
         ),
     )
 
-    @model_validator(mode="before")
-    @classmethod
-    def _migrate_paths_to_path_id(cls, data: Any) -> Any:
-        """Accept legacy ``paths`` and convert to Y-shape (``path_id`` + optional ``also_belongs_to``).
-
-        - ``paths: [single_id]`` → ``path_id = single_id`` (post-commit beat).
-        - ``paths: [p_a, p_b]`` → ``path_id = p_a``, ``also_belongs_to = p_b``
-          (pre-commit beat, Y-shape dual membership).
-        - ``paths: []`` is rejected — every beat must reference at least one path.
-        - ``paths`` with 3+ entries is rejected — dual membership is bounded to
-          the two paths of one dilemma (Part 8 guard rail 1).
-        """
-        if not isinstance(data, dict):
-            return data
-        if "paths" in data and "path_id" not in data:
-            paths = data.pop("paths")
-            if not isinstance(paths, list):
-                return data  # Let Pydantic reject the non-list type.
-            if len(paths) == 0:
-                msg = "InitialBeat.paths is empty — each beat must belong to at least one path."
-                raise ValueError(msg)
-            if len(paths) > 2:
-                msg = (
-                    "InitialBeat.paths has at most 2 entries (Y-shape guard rail 1). "
-                    f"Got {len(paths)}: {paths!r}."
-                )
-                raise ValueError(msg)
-            data["path_id"] = paths[0]
-            if len(paths) == 2:
-                warnings.warn(
-                    f"InitialBeat.paths=[{paths[0]!r}, {paths[1]!r}] is deprecated — use "
-                    "path_id and also_belongs_to directly.",
-                    DeprecationWarning,
-                    stacklevel=2,
-                )
-                data["also_belongs_to"] = paths[1]
-        return data
-
     @model_validator(mode="after")
-    def _also_belongs_to_differs_from_path_id(self) -> InitialBeat:
-        """Dual membership requires two distinct path IDs."""
-        if self.also_belongs_to is not None and self.also_belongs_to == self.path_id:
-            msg = "also_belongs_to must differ from path_id — dual membership needs two paths."
+    def _belongs_to_elements_valid(self) -> InitialBeat:
+        """Validate belongs_to element constraints."""
+        for path_id in self.belongs_to:
+            if not path_id:
+                msg = "belongs_to elements must be non-empty strings."
+                raise ValueError(msg)
+        if len(self.belongs_to) == 2 and self.belongs_to[0] == self.belongs_to[1]:
+            msg = "belongs_to elements must be distinct — dual membership needs two paths."
             raise ValueError(msg)
         return self
 
@@ -714,8 +678,8 @@ class SharedBeatsSection(BaseModel):
 
     Used by per-dilemma shared-beat serialization (Y-shape, issue #1227).
     One LLM call per dilemma generates the pre-commit beats that both explored
-    paths share.  Each beat MUST have both ``path_id`` and ``also_belongs_to``
-    set to the two explored paths of the dilemma (Story Graph Ontology Part 8).
+    paths share.  Each beat MUST have ``belongs_to`` set to a two-element list
+    containing both explored paths of the dilemma (Story Graph Ontology Part 8).
 
     A minimum of 1 beat is required so that every dilemma has at least one
     shared setup scene.  The maximum of 4 prevents over-stuffing the shared
@@ -735,26 +699,26 @@ class SharedBeatsSection(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def _require_also_belongs_to(self) -> SharedBeatsSection:
-        """Assert every shared beat has also_belongs_to set (Part 8 guard rail 2).
+    def _require_dual_belongs_to(self) -> SharedBeatsSection:
+        """Assert every shared beat has belongs_to of length 2 (Part 8 guard rail 2).
 
         Shared pre-commit beats MUST carry dual ``belongs_to`` edges — one to
-        each explored path of their dilemma.  A beat with ``also_belongs_to``
-        unset would silently become a single-membership post-commit beat,
+        each explored path of their dilemma.  A beat with ``belongs_to`` of
+        length 1 would silently become a single-membership post-commit beat,
         violating the Y-shape invariant.
 
         Story Graph Ontology Part 8 guard rail 2: multi-``belongs_to`` is ONLY
-        valid for pre-commit beats; ``also_belongs_to`` is the field that signals
-        pre-commit membership.
+        valid for pre-commit beats; a two-element ``belongs_to`` list signals
+        pre-commit shared membership.
         """
-        offending = [b.beat_id for b in self.initial_beats if b.also_belongs_to is None]
+        offending = [b.beat_id for b in self.initial_beats if len(b.belongs_to) < 2]
         if offending:
             beat_ids_str = ", ".join(f"`{bid}`" for bid in offending)
             msg = (
-                "SharedBeatsSection: every shared beat must have `also_belongs_to` set "
+                "SharedBeatsSection: every shared beat must have `belongs_to` of length 2 "
                 "(Story Graph Ontology Part 8 guard rail 2 — pre-commit beats carry dual "
                 "belongs_to edges, one per explored path of their dilemma). "
-                f"Beats missing `also_belongs_to`: {beat_ids_str}"
+                f"Beats with single-element `belongs_to`: {beat_ids_str}"
             )
             raise ValueError(msg)
         return self
