@@ -212,7 +212,31 @@ def calculate_max_context(
     head_count = cast("int", head_count)
     head_count_kv = cast("int", head_count_kv)
 
+    # Base weights estimate at the quantized rate, then add an FP16
+    # surcharge for huge-vocab models (≥100K tokens). Embedding +
+    # untied lm_head matrices are stored at FP16 in GGUF even when the
+    # transformer blocks are quantized — for Gemma-class vocab sizes
+    # (~262K) this adds ≥1 GB that the flat-rate formula misses (#1523).
+    # Conservative assumption: lm_head is untied (separate from embedding).
+    # If the model is actually tied, the surcharge over-estimates by ~50%
+    # which is the safer side: under-estimating causes silent CPU
+    # spillover; over-estimating just yields a smaller-than-optimal num_ctx.
     weights_gb = parameters_b * bytes_per_weight
+    vocab_size = _extract_arch_field(model_info, ".vocab_size")
+    if vocab_size is not None and vocab_size >= 100_000:
+        # The base weights estimate counts these params at the quantized rate;
+        # add only the FP16 ↔ quantized *delta* to avoid double-counting.
+        # FP16 = 2 bytes/element; embedding + untied lm_head = 2 matrices.
+        delta_bytes_per_param = max(2.0 - bytes_per_weight, 0.0)
+        embedding_params = 2 * vocab_size * embedding_length
+        embedding_surcharge_gb = (embedding_params * delta_bytes_per_param) / 1e9
+        weights_gb += embedding_surcharge_gb
+        log.debug(
+            "vram_huge_vocab_surcharge_applied",
+            vocab_size=vocab_size,
+            embedding_length=embedding_length,
+            surcharge_gb=round(embedding_surcharge_gb, 3),
+        )
     overhead_gb = 0.55 + 0.08 * parameters_b
 
     available_for_kv_gb = vram_gb - weights_gb - overhead_gb

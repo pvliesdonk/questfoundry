@@ -203,6 +203,19 @@ def _preprocess_provider_kwargs(
 
                 try:
                     architectural_max = _extract_architectural_max_from_show(show_data, model)
+                    # Cap at the KNOWN_MODELS registry value when the registry
+                    # is tighter than the architectural maximum. The registry
+                    # encodes empirical "max usable on consumer GPUs" caps
+                    # (e.g., gemma4:e2b reports 128K architecturally but
+                    # 16K is the practical ceiling) — letting the calculator
+                    # exceed it produces silent CPU spillover. See #1523.
+                    from questfoundry.providers.model_info import KNOWN_MODELS
+
+                    provider_models = KNOWN_MODELS.get("ollama", {})
+                    if model in provider_models:
+                        registry_max = provider_models[model].context_window
+                        if architectural_max is None or registry_max < architectural_max:
+                            architectural_max = registry_max
                     num_ctx = calculate_max_context(
                         max_vram, show_data, architectural_max=architectural_max
                     )

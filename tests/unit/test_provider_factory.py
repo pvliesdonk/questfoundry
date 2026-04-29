@@ -517,6 +517,62 @@ def _llama8b_show_response() -> dict[str, Any]:
     }
 
 
+def test_create_chat_model_ollama_known_models_caps_max_vram_calculation() -> None:
+    """KNOWN_MODELS context_window caps the VRAM calculator's architectural_max.
+
+    Regression for #1523: previously the calculator received only the
+    architectural max from /api/show, not the registry's empirical cap.
+    For models like gemma4:e2b (architecturally 128K, registry-capped 16K
+    "model claims more but is unusable above 16K on consumer GPUs") this
+    let the calculator climb to 131072 and Ollama then spilled weights to
+    CPU. Verifies the registry cap wins when tighter.
+    """
+    from questfoundry.providers.model_info import KNOWN_MODELS, ModelProperties
+
+    mock_chat = MagicMock()
+    show_response = {
+        "details": {
+            "family": "llama",
+            "parameter_size": "8.0B",
+            "quantization_level": "Q4_K_M",
+        },
+        "model_info": {
+            "general.architecture": "llama",
+            "llama.block_count": 32,
+            "llama.embedding_length": 4096,
+            "llama.attention.head_count": 32,
+            "llama.attention.head_count_kv": 8,
+            "llama.context_length": 131_072,  # arch supports 128K
+        },
+        "parameters": "",
+    }
+    # Inject a registry entry that caps tighter than architectural max.
+    capped_models = dict(KNOWN_MODELS)
+    capped_models["ollama"] = dict(KNOWN_MODELS["ollama"])
+    capped_models["ollama"]["test-capped"] = ModelProperties(context_window=16_384)
+
+    with (
+        patch.dict("os.environ", {"OLLAMA_HOST": "http://test:11434"}, clear=False),
+        patch.dict("questfoundry.providers.model_info.KNOWN_MODELS", capped_models, clear=True),
+        patch(
+            "questfoundry.providers.factory._query_ollama_show",
+            return_value=show_response,
+        ),
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            return_value=mock_chat,
+        ) as mock_init,
+    ):
+        # Generous VRAM budget — calculator would otherwise climb to ~128K.
+        create_chat_model("ollama", "test-capped", max_vram=64.0)
+
+    call_kwargs = mock_init.call_args[1]
+    # Registry cap is 16K; the calculator must not exceed it.
+    assert call_kwargs["num_ctx"] <= 16_384, (
+        f"registry cap of 16K bypassed; calculator returned {call_kwargs['num_ctx']}"
+    )
+
+
 def test_create_chat_model_ollama_max_vram_kwarg_drives_num_ctx() -> None:
     """max_vram kwarg triggers VRAM-aware num_ctx calculation for Ollama."""
     mock_chat = MagicMock()
