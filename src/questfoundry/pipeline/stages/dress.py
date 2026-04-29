@@ -72,9 +72,11 @@ from questfoundry.observability.tracing import traceable
 from questfoundry.pipeline.batching import batch_llm_calls
 from questfoundry.pipeline.gates import AutoApprovePhaseGate
 from questfoundry.prompts.compiler import safe_format
+from questfoundry.providers.base import ProviderRateLimitError
 from questfoundry.providers.image import PromptDistiller
 from questfoundry.providers.image_brief import ImageBrief, flatten_brief_to_prompt
 from questfoundry.providers.image_factory import create_image_provider
+from questfoundry.providers.rate_limit import ainvoke_with_rate_limit_retry
 from questfoundry.providers.structured_output import (
     StructuredOutputStrategy,
     unwrap_structured_result,
@@ -743,7 +745,12 @@ class DressStage:
             )
 
             try:
-                raw_result = await structured_model.ainvoke(messages, config=config)
+                # Rate-limit-aware invocation: transport-level 429s back off
+                # transparently without consuming this loop's semantic-retry
+                # budget (#1581).
+                raw_result = await ainvoke_with_rate_limit_retry(
+                    structured_model, messages, config=config
+                )
                 llm_calls += 1
                 total_tokens += extract_tokens(raw_result)
 
@@ -754,6 +761,11 @@ class DressStage:
                     else output_schema.model_validate(result)
                 )
                 return validated, llm_calls, total_tokens
+
+            except ProviderRateLimitError:
+                # Backoff exhausted — surface as a hard transport failure,
+                # not a schema-repair attempt (#1581).
+                raise
 
             except (ValidationError, TypeError) as e:
                 log.warning(

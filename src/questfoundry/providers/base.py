@@ -18,9 +18,22 @@ class ProviderConnectionError(ProviderError):
 
 
 class ProviderRateLimitError(ProviderError):
-    """Raised when rate limit is exceeded."""
+    """Raised when rate limit is exceeded.
 
-    pass
+    Carries an optional ``retry_after_seconds`` hint extracted from the provider
+    response (HTTP ``Retry-After`` header or equivalent). Used by the rate-limit
+    helper to schedule backoff and by callers that need to surface the wait
+    window — see ``providers/rate_limit.py``.
+    """
+
+    def __init__(
+        self,
+        provider: str,
+        message: str,
+        retry_after_seconds: float | None = None,
+    ) -> None:
+        super().__init__(provider, message)
+        self.retry_after_seconds = retry_after_seconds
 
 
 class ProviderModelError(ProviderError):

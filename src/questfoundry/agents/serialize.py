@@ -39,6 +39,8 @@ from questfoundry.observability.tracing import (
     traceable,
 )
 from questfoundry.pipeline.size import size_template_vars
+from questfoundry.providers.base import ProviderRateLimitError
+from questfoundry.providers.rate_limit import ainvoke_with_rate_limit_retry
 from questfoundry.providers.structured_output import (
     StructuredOutputStrategy,
     unwrap_structured_result,
@@ -309,8 +311,16 @@ async def serialize_to_artifact(
                     callbacks=callbacks,
                 )
 
-                # Invoke structured output
-                raw_result = await structured_model.ainvoke(messages, config=config)
+                # Invoke structured output through the rate-limit-aware helper
+                # so transport-level 429s back off (sleeping retry_after) without
+                # consuming this loop's semantic-retry budget. See #1581: the
+                # bare ``except Exception`` below was absorbing rate-limit
+                # errors and routing them through schema repair, which both
+                # burned attempts and grew the prompt — making the rate-limit
+                # pressure worse on each "retry".
+                raw_result = await ainvoke_with_rate_limit_retry(
+                    structured_model, messages, config=config
+                )
 
                 # Extract token usage from response if available
                 tokens = extract_tokens(raw_result)
@@ -401,6 +411,13 @@ async def serialize_to_artifact(
                     messages.append(HumanMessage(content=error_feedback))
 
             except (KeyboardInterrupt, asyncio.CancelledError):
+                raise
+
+            except ProviderRateLimitError:
+                # Rate-limit helper exhausted its own backoff budget. This is a
+                # hard transport-level failure, NOT a schema/validation error —
+                # surface it to the caller instead of routing through the
+                # schema-repair retry path. See #1581.
                 raise
 
             except Exception as e:

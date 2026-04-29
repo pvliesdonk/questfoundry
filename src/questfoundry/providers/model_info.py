@@ -192,6 +192,50 @@ _PROVIDER_MAX_CONCURRENCY: dict[str, int] = {
 }
 
 
+# Process-global concurrency override, set from project.yaml's
+# ``providers.max_concurrency`` by the orchestrator at startup.  Exists so
+# project config can constrain a parallel-friendly provider (e.g. drop
+# Anthropic from 10 to 2 on a Haiku-tier key) without threading the value
+# through every ``get_model_info()`` call site.  The env var
+# ``QF_MAX_CONCURRENCY`` still takes precedence — see ``get_model_info``.
+_max_concurrency_override: int | None = None
+
+
+def _resolve_max_concurrency(provider_lower: str) -> int:
+    """Resolve the concurrency cap using the documented precedence chain.
+
+    Precedence: ``QF_MAX_CONCURRENCY`` env > project.yaml override >
+    per-provider default. A non-positive or malformed env value falls
+    through rather than silently being clamped — an operator setting
+    ``QF_MAX_CONCURRENCY=0`` is far more likely trying to disable
+    concurrency than to pin it to 1, and silently rewriting their input
+    would surprise.
+    """
+    env_concurrency = os.environ.get("QF_MAX_CONCURRENCY")
+    if env_concurrency is not None:
+        try:
+            parsed = int(env_concurrency)
+        except ValueError:
+            parsed = None
+        if parsed is not None and parsed > 0:
+            return parsed
+        # Malformed or non-positive env — fall through to the next tier.
+    if _max_concurrency_override is not None:
+        return _max_concurrency_override
+    return _PROVIDER_MAX_CONCURRENCY.get(provider_lower, 2)
+
+
+def set_max_concurrency_override(value: int | None) -> None:
+    """Set the process-global concurrency override.
+
+    Pass ``None`` to clear (revert to env var / per-provider default). Pass a
+    positive int to apply. Non-positive values are coerced to ``None`` since
+    a 0 or negative cap would deadlock every parallel call site.
+    """
+    global _max_concurrency_override
+    _max_concurrency_override = None if value is None or value <= 0 else value
+
+
 def get_model_info(provider: str, model: str) -> ModelInfo:
     """Get model information from known values or defaults.
 
@@ -215,17 +259,12 @@ def get_model_info(provider: str, model: str) -> ModelInfo:
         supports_vision = False
         supports_tools = True  # Default to True for unknown models
 
-    # Concurrency: env var override > provider default > fallback
-    env_concurrency = os.environ.get("QF_MAX_CONCURRENCY")
-    if env_concurrency is not None:
-        try:
-            max_concurrency = int(env_concurrency)
-            if max_concurrency <= 0:
-                max_concurrency = 1
-        except ValueError:
-            max_concurrency = _PROVIDER_MAX_CONCURRENCY.get(provider_lower, 2)
-    else:
-        max_concurrency = _PROVIDER_MAX_CONCURRENCY.get(provider_lower, 2)
+    # Concurrency precedence (#1581):
+    #   QF_MAX_CONCURRENCY env > project.yaml override > per-provider default
+    # A malformed env var falls through to the next tier (override, then
+    # default) — silently bypassing the override on bad input would surprise
+    # the operator who set both.
+    max_concurrency = _resolve_max_concurrency(provider_lower)
 
     return ModelInfo(
         context_window=context_window,

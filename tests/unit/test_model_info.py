@@ -9,7 +9,11 @@ from questfoundry.providers.model_info import (
     ModelInfo,
     ModelProperties,
     get_model_info,
+    set_max_concurrency_override,
 )
+
+# The autouse fixture in tests/conftest.py resets the concurrency override
+# around every test, so no per-file fixture is needed here.
 
 
 class TestModelInfoDefaults:
@@ -51,6 +55,44 @@ class TestModelInfoDefaults:
         with patch.dict("os.environ", {"QF_MAX_CONCURRENCY": "10"}):
             info = get_model_info("ollama", "qwen3:4b-instruct-32k")
             assert info.max_concurrency == 10
+
+    def test_global_override_via_set_max_concurrency_override(self) -> None:
+        """set_max_concurrency_override() affects subsequent get_model_info() calls."""
+        set_max_concurrency_override(3)
+        info = get_model_info("anthropic", "claude-haiku-4-5-20251001")
+        assert info.max_concurrency == 3
+
+    def test_env_var_takes_precedence_over_global_override(self) -> None:
+        """Precedence: env QF_MAX_CONCURRENCY > project config override > per-provider default."""
+        set_max_concurrency_override(3)
+        with patch.dict("os.environ", {"QF_MAX_CONCURRENCY": "7"}):
+            info = get_model_info("anthropic", "claude-haiku-4-5-20251001")
+            assert info.max_concurrency == 7
+
+    def test_global_override_cleared_with_none(self) -> None:
+        """Setting the override to None reverts to per-provider default."""
+        set_max_concurrency_override(3)
+        set_max_concurrency_override(None)
+        info = get_model_info("anthropic", "claude-haiku-4-5-20251001")
+        assert info.max_concurrency == 10  # Anthropic default
+
+    def test_malformed_env_falls_through_to_override(self) -> None:
+        """A non-integer QF_MAX_CONCURRENCY does not silently bypass the override."""
+        set_max_concurrency_override(3)
+        with patch.dict("os.environ", {"QF_MAX_CONCURRENCY": "not-a-number"}):
+            info = get_model_info("anthropic", "claude-haiku-4-5-20251001")
+            assert info.max_concurrency == 3  # override, not anthropic default of 10
+
+    def test_zero_or_negative_env_falls_through_to_override(self) -> None:
+        """A non-positive QF_MAX_CONCURRENCY is treated as 'unset', not clamped to 1.
+
+        Silently rewriting ``0`` to ``1`` would surprise operators trying to
+        disable concurrency.
+        """
+        set_max_concurrency_override(3)
+        with patch.dict("os.environ", {"QF_MAX_CONCURRENCY": "0"}):
+            info = get_model_info("anthropic", "claude-haiku-4-5-20251001")
+            assert info.max_concurrency == 3  # override, not 1
 
 
 class TestModelInfoDataclass:

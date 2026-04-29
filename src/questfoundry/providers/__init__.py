@@ -25,6 +25,10 @@ from questfoundry.providers.model_info import (
     ModelInfo,
     get_model_info,
 )
+from questfoundry.providers.rate_limit import (
+    ainvoke_with_rate_limit_retry,
+    classify_rate_limit_error,
+)
 from questfoundry.providers.structured_output import (
     StructuredOutputStrategy,
     get_default_strategy,
@@ -46,6 +50,8 @@ __all__ = [
     "ProviderModelError",
     "ProviderRateLimitError",
     "StructuredOutputStrategy",
+    "ainvoke_with_rate_limit_retry",
+    "classify_rate_limit_error",
     "create_chat_model",
     "create_image_provider",
     "create_model_for_structured_output",
