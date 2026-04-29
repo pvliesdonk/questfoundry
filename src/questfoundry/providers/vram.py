@@ -234,12 +234,13 @@ def calculate_max_context(
         embedding_params = 2 * vocab_size * embedding_length
         embedding_surcharge_gb = (embedding_params * delta_bytes_per_param) / 1e9
         weights_gb += embedding_surcharge_gb
-        log.debug(
-            "vram_huge_vocab_surcharge_applied",
-            vocab_size=vocab_size,
-            embedding_length=embedding_length,
-            surcharge_gb=round(embedding_surcharge_gb, 3),
-        )
+        if embedding_surcharge_gb > 0.0:
+            log.debug(
+                "vram_huge_vocab_surcharge_applied",
+                vocab_size=vocab_size,
+                embedding_length=embedding_length,
+                surcharge_gb=round(embedding_surcharge_gb, 3),
+            )
     overhead_gb = 0.55 + 0.08 * parameters_b
 
     available_for_kv_gb = vram_gb - weights_gb - overhead_gb
