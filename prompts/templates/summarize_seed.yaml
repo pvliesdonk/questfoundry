@@ -102,9 +102,20 @@ system: |
   3. Each path has at least the configured number of POST-COMMIT beats
      (`belongs_to` length 1).
   4. Pre-commit beats appear before commit beats in the listing (or, if `temporal_hint` is set, its `position` is `before_commit`). `temporal_hint` is OPTIONAL — listing order alone is sufficient.
+  5. For each path, the FIRST exclusive (post-pre-commit) beat listed IS
+     that path's commit beat — the moment the dilemma decision becomes
+     binding for that path. The commit beat is ALWAYS beat 1 of the
+     exclusive sequence; placing any `advances` / `reveals` / `complicates`
+     beat before it is a structural violation (seed.md R-3.11 / SGO Part 1).
+     Note: the `effect` field itself is set by the per-path serializer in
+     the next stage — your job here is to put the structurally-correct beat
+     in the first exclusive slot so the serializer assigns `effect: commits`
+     to it.
 
-  If any of the above is missing, the serializer will fail and the repair
-  loop will rebuild the section from scratch — fix the gap here.
+  If items 1–4 are missing, the serializer will fail and the repair loop
+  will rebuild the section from scratch. Item 5 (commit-beat position) is
+  validated downstream at GROW R-1.4 (Y-fork postcondition) — fixing it
+  here saves a full GROW re-serialize pass. Fix all gaps here.
 
   ### Convergence Sketch
   - convergence_points: where paths should merge

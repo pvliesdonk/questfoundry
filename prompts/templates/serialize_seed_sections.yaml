@@ -624,24 +624,54 @@ per_path_beats_prompt: |
     its primary location
 
   ## ARC STRUCTURE (CRITICAL — determines beat ordering)
-  Beats must follow this arc pattern for a complete path scaffold:
-  1. **Setup** (advances/reveals): Introduce tensions, reveal information
-  2. **Turning point** (commits): The moment the dilemma locks in — NOT the last beat
-  3. **Aftermath**: At least one beat AFTER commits showing consequences
 
-  WRONG: [advances, reveals, commits] — commits is last, no aftermath
-  RIGHT: [advances, commits, reveals] — aftermath beat follows the turning point
+  Beat 1 (commits): STRUCTURAL SLOT — always the first beat. The moment the
+    path diverges structurally. This is NOT about dramatic weight; even a
+    quiet, passive moment is the commit beat if it is the first exclusive
+    beat of this path.
+  Beats 2–N (advances / reveals / complicates): Aftermath beats that prove
+    the answer. At least one is required.
+
+  WRONG: Deciding beat 1 is "setup" and beat 2 is "commits" because beat 2
+    feels more dramatically decisive. The structural slot is fixed — beat 1 IS
+    the commit beat. Always.
+
+  WRONG sequence: [advances, commits] — no aftermath beat
+  RIGHT sequence: [commits, advances] or [commits, reveals, complicates]
 
   ## COMMITS BEAT REQUIREMENT (HARD CONSTRAINT)
   You MUST include exactly one beat with `effect: "commits"` for `{dilemma_id}`.
   This beat represents the moment where this path's dilemma is locked in.
   The commits beat MUST NOT be the last beat — at least one consequence beat MUST follow it.
 
-  WRONG (rejected): commits is the last beat — no consequence
-  `[advances, commits]` or `[advances, reveals, commits]` ← pipeline fails
+  WRONG (commits not first): `[advances, commits, advances]` or `[reveals, commits, complicates]` ← position violation; see COMMIT BEAT POSITION below
+  WRONG (commits last): `[commits, advances, commits]` ← cardinality violation, no aftermath after the second commits
 
-  RIGHT (valid): aftermath beat follows the decision
-  `[advances, commits, advances]` or `[reveals, commits, complicates]` ← passes
+  RIGHT: `[commits, advances]` or `[commits, advances, reveals]` or `[commits, reveals, complicates]` ← passes
+
+  ## COMMIT BEAT POSITION (HARD CONSTRAINT — structural, not narrative)
+
+  The FIRST beat in your list MUST have `effect: "commits"` in `dilemma_impacts`.
+
+  WHY: In the Y-shape, the commit beat IS defined as the first beat exclusive to this
+  path (Story Graph Ontology Part 1, seed.md R-3.11). Its slot is fixed by graph
+  structure, not by when the decision "feels dramatic." Even if the first exclusive
+  moment is quiet or passive, it is still the structural commit beat. You prove the
+  answer in the beats that FOLLOW it.
+
+  GOOD (structurally correct):
+    Beat 1: effect: "commits"  ← first exclusive beat, regardless of dramatic weight
+    Beat 2: effect: "advances" ← plays out consequences
+    Beat 3: effect: "reveals"  ← proves the answer
+
+  BAD (structurally wrong — the murder-haiku failure pattern):
+    Beat 1: effect: "advances"  ← "passive listening" feels less decisive
+    Beat 2: effect: "commits"   ← "active suppression" feels more dramatic
+    Beat 3: effect: "reveals"   ← aftermath
+  The beat ordering above VIOLATES the Y-fork contract. Downstream validation
+  (GROW R-1.4 Y-fork postcondition, see seed.md R-3.11) rejects this output —
+  the failure surfaces after SEED at the GROW exit-validator, requiring a full
+  re-serialize pass.
 
   ## What NOT to Do
   - Do NOT use generic beat IDs like `beat_001` (must include path name prefix)
@@ -649,6 +679,7 @@ per_path_beats_prompt: |
   - Do NOT reference other dilemma_ids in your first dilemma_impact
   - Do NOT skip the commits beat
   - Do NOT make commits the last beat — a consequence beat MUST follow it
+  - Do NOT place `effect: "commits"` on beat 2 or later — it MUST be beat 1
   - Do NOT use IDs not in the manifest
   - Do NOT put the dilemma ID in the `belongs_to` list (see COMMON MISTAKE above)
   - Do NOT emit `belongs_to` with 2 elements — these are post-commit beats, single-membership only
@@ -660,9 +691,12 @@ per_path_beats_prompt: |
   2. `dilemma_impacts[0].dilemma_id` is `{dilemma_id}`
   3. `belongs_to` has exactly 1 element (these are POST-COMMIT beats, exclusive
      to one path — never shared)
+  4. The FIRST beat in your list has `dilemma_impacts[0].effect == "commits"` —
+     beat 1 is the commit beat by structural definition (seed.md R-3.11).
 
   If you see a dilemma ID in your `belongs_to` list, YOU MADE A MISTAKE. Fix it.
   If `belongs_to` has 2 elements, YOU MADE A MISTAKE. Fix it.
+  If beat 1 has `effect` other than `"commits"`, YOU MADE A MISTAKE. Fix it.
 
   ## Output
   Return ONLY valid JSON with the "initial_beats" array ({size_post_commit_beats_per_path} beats).
