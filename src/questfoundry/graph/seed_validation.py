@@ -248,6 +248,29 @@ def _check_belongs_to_yshape(graph: Graph, errors: list[str]) -> None:
                 f"found {len(commits)}: {sorted(commits)}"
             )
 
+    # R-3.11 (position): commit beat MUST be the first exclusive beat per path.
+    # SGO Part 1 defines the commit beat structurally as the first beat exclusive
+    # to one path; the sort matches GROW Phase 1's intra-path chain order
+    # (alphabetical by beat_id within the exclusive group). Catching this at
+    # SEED exit lets the per-section repair loop fix it; otherwise it slips
+    # past SEED and surfaces at GROW R-1.4, requiring a full SEED re-run.
+    for path_id in sorted(path_nodes.keys()):
+        commits = commit_beats_per_path.get(path_id, [])
+        if len(commits) != 1:
+            continue  # cardinality already errored above; skip position check
+        commit_beat = commits[0]
+        exclusive_beats = sorted(commits + post_beats_per_path.get(path_id, []))
+        first_exclusive = exclusive_beats[0]
+        if first_exclusive != commit_beat:
+            errors.append(
+                f"R-3.11 (position): path {path_id!r} first exclusive beat is "
+                f"{first_exclusive!r}, but commit beat {commit_beat!r} must be FIRST "
+                f"in the exclusive sequence (Story Graph Ontology Part 1: the "
+                f"commit beat IS the first beat exclusive to a path). Move "
+                f"`effect: commits` onto {first_exclusive!r} or rename so the "
+                f"commit beat sorts first."
+            )
+
     # R-3.12: 2-4 post-commit beats per path.
     for path_id in sorted(path_nodes.keys()):
         post = post_beats_per_path.get(path_id, [])
