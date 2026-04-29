@@ -376,6 +376,52 @@ def test_R_3_11_path_needs_exactly_one_commit_beat(compliant_graph: Graph) -> No
     assert any("commit" in e.lower() for e in errors)
 
 
+def test_R_3_11_position_commit_beat_must_be_first_exclusive(compliant_graph: Graph) -> None:
+    """R-3.11 (position): commit beat MUST be the first exclusive beat per path.
+
+    The murder-haiku failure pattern: an `advances` beat that sorts before the
+    commit beat (e.g. `beat::adv_*` < `beat::commit_*`) makes the first
+    exclusive beat a non-commit, which slips past SEED's cardinality check
+    today and only fails downstream at GROW R-1.4. This test asserts the
+    SEED-stage position check catches it before GROW.
+    """
+    # Add an `advances` beat that sorts BEFORE beat::commit_protector
+    # alphabetically, with single belongs_to to protector path.
+    compliant_graph.create_node(
+        "beat::adv_protector_pre",
+        {
+            "type": "beat",
+            "raw_id": "adv_protector_pre",
+            "summary": "Mentor frowns; protagonist hesitates",
+            "entities": ["character::mentor", "character::kay"],
+            "dilemma_impacts": [{"dilemma_id": "dilemma::mentor_trust", "effect": "advances"}],
+        },
+    )
+    compliant_graph.add_edge(
+        "belongs_to", "beat::adv_protector_pre", "path::mentor_trust__protector"
+    )
+    errors = validate_seed_output(compliant_graph)
+    assert any(
+        "R-3.11" in e
+        and "first exclusive beat" in e.lower()
+        and "path::mentor_trust__protector" in e
+        for e in errors
+    ), f"Expected R-3.11 position error for protector path, got: {errors}"
+
+
+def test_R_3_11_position_passes_when_commit_beat_sorts_first(compliant_graph: Graph) -> None:
+    """R-3.11 (position): the compliant fixture passes (commit beat sorts first).
+
+    `beat::commit_protector` < `beat::post_protector_01` alphabetically, so the
+    commit beat is naturally the first exclusive beat. This verifies the
+    position check doesn't false-positive on legitimate Y-shape graphs.
+    """
+    errors = validate_seed_output(compliant_graph)
+    assert not any("R-3.11" in e and "first exclusive beat" in e.lower() for e in errors), (
+        f"R-3.11 position check false-positive on compliant fixture: {errors}"
+    )
+
+
 def test_R_3_12_post_commit_count_below_min(compliant_graph: Graph) -> None:
     # Remove two post-commit beats on protector path.
     compliant_graph.delete_node("beat::post_protector_02", cascade=True)

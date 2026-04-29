@@ -415,7 +415,7 @@ def _make_complete_seed_output(entities: list[dict[str, Any]]) -> dict[str, Any]
                 ],
             },
             {
-                "beat_id": "reveal_choice",
+                "beat_id": "reveal_commit",
                 "summary": "Protagonist tells the truth.",
                 "belongs_to": ["truth_or_secret__reveal"],
                 "entities": ["character::lady_beatrice"],
@@ -428,7 +428,7 @@ def _make_complete_seed_output(entities: list[dict[str, Any]]) -> dict[str, Any]
                 ],
             },
             {
-                "beat_id": "reveal_aftermath_1",
+                "beat_id": "reveal_post_1",
                 "summary": "Aftermath of revelation.",
                 "belongs_to": ["truth_or_secret__reveal"],
                 "entities": ["character::lady_beatrice"],
@@ -441,7 +441,7 @@ def _make_complete_seed_output(entities: list[dict[str, Any]]) -> dict[str, Any]
                 ],
             },
             {
-                "beat_id": "reveal_aftermath_2",
+                "beat_id": "reveal_post_2",
                 "summary": "Resolution of revelation.",
                 "belongs_to": ["truth_or_secret__reveal"],
                 "entities": ["character::butler"],
@@ -454,7 +454,7 @@ def _make_complete_seed_output(entities: list[dict[str, Any]]) -> dict[str, Any]
                 ],
             },
             {
-                "beat_id": "conceal_choice",
+                "beat_id": "conceal_commit",
                 "summary": "Protagonist keeps the secret.",
                 "belongs_to": ["truth_or_secret__conceal"],
                 "entities": ["character::butler"],
@@ -467,7 +467,7 @@ def _make_complete_seed_output(entities: list[dict[str, Any]]) -> dict[str, Any]
                 ],
             },
             {
-                "beat_id": "conceal_aftermath_1",
+                "beat_id": "conceal_post_1",
                 "summary": "Tension from keeping secret.",
                 "belongs_to": ["truth_or_secret__conceal"],
                 "entities": ["character::lady_beatrice"],
@@ -480,7 +480,7 @@ def _make_complete_seed_output(entities: list[dict[str, Any]]) -> dict[str, Any]
                 ],
             },
             {
-                "beat_id": "conceal_aftermath_2",
+                "beat_id": "conceal_post_2",
                 "summary": "Secret remains hidden.",
                 "belongs_to": ["truth_or_secret__conceal"],
                 "entities": ["character::butler"],

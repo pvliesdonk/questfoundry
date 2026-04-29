@@ -248,6 +248,35 @@ def _check_belongs_to_yshape(graph: Graph, errors: list[str]) -> None:
                 f"found {len(commits)}: {sorted(commits)}"
             )
 
+    # R-3.11 (position): commit beat MUST be the first exclusive beat per path.
+    # SGO Part 1 defines the commit beat structurally as the first beat exclusive
+    # to one path. At SEED exit the predecessor edges on exclusive beats don't
+    # exist yet (GROW Phase 1 establishes them), so alphabetical beat_id sort
+    # is the best available proxy: it matches the naming convention
+    # (commit_* < post_*) and catches the murder-haiku pattern
+    # (adv_* < commit_*) before GROW R-1.4 surfaces it. Catching this here lets
+    # the per-section repair loop fix it; otherwise it surfaces at GROW R-1.4
+    # and forces a full SEED re-run.
+    # post_beats_per_path is already sorted ascending — populated by the
+    # sorted(beat_nodes.keys()) iteration above. Rather than concat + re-sort,
+    # just check whether the smallest non-commit exclusive beat sorts before
+    # the commit beat.
+    for path_id in sorted(path_nodes.keys()):
+        commits = commit_beats_per_path.get(path_id, [])
+        if len(commits) != 1:
+            continue  # cardinality already errored above; skip position check
+        commit_beat = commits[0]
+        posts = post_beats_per_path.get(path_id, [])
+        if posts and posts[0] < commit_beat:
+            errors.append(
+                f"R-3.11 (position): path {path_id!r} first exclusive beat is "
+                f"{posts[0]!r}, but commit beat {commit_beat!r} must be FIRST "
+                f"in the exclusive sequence (Story Graph Ontology Part 1: the "
+                f"commit beat IS the first beat exclusive to a path). Rename the "
+                f"commit beat so it sorts before {posts[0]!r}, or move/remove "
+                f"the earlier exclusive beat."
+            )
+
     # R-3.12: 2-4 post-commit beats per path.
     for path_id in sorted(path_nodes.keys()):
         post = post_beats_per_path.get(path_id, [])
