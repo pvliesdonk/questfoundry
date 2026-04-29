@@ -245,7 +245,8 @@ vision:
     - "trust"
     - "corruption"
   audience: "adult readers of literary speculative fiction"
-  scope: short                     # enum value — unquoted
+  scope:
+    story_size: short              # enum value — unquoted; one of micro/short/medium/long
   content_notes:
     includes:
       - "intimate scope (few key relationships)"
