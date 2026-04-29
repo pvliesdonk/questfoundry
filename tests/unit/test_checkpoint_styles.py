@@ -81,3 +81,63 @@ class TestResolveCheckpointStyle:
         upper = resolve_checkpoint_style("FLUX1-DEV.safetensors")
         lower = resolve_checkpoint_style("flux1-dev.safetensors")
         assert upper == lower
+
+
+class TestPromptFormat:
+    """`prompt_format` field on each map entry + `prompt_format_for_checkpoint()`
+    helper. Drives the A1111 distiller's clip_tags vs natural_language
+    branching for Flux on Forge Neo (#1559)."""
+
+    def test_resolve_checkpoint_style_returns_prompt_format(self) -> None:
+        # Every entry must carry a prompt_format key.
+        info = resolve_checkpoint_style("anything.safetensors")
+        assert "prompt_format" in info
+        assert info["prompt_format"] in {"clip_tags", "natural_language"}
+
+    def test_flux_uses_natural_language(self) -> None:
+        from questfoundry.providers.checkpoint_styles import (
+            prompt_format_for_checkpoint,
+        )
+
+        assert (
+            prompt_format_for_checkpoint("flux1-dev-bnb-nf4-v2.safetensors") == "natural_language"
+        )
+        assert prompt_format_for_checkpoint("flux1-dev-bnb-nf4.safetensors") == "natural_language"
+
+    @pytest.mark.parametrize(
+        "model",
+        [
+            "coloring_book.ckpt",
+            "v1-5-pruned-emaonly.safetensors",
+            "animagine-xl.safetensors",
+            "Dreamshaper.safetensors",
+            "sd_xl_base_1.0.safetensors",
+            "dreamshaperXL_lightningDPMSDE.safetensors",
+            "juggernautXL_ragnarokBy.safetensors",
+            "dreamshaperXL_alpha2Xl10.safetensors",
+            "dreamshaperXL_v1.safetensors",
+        ],
+    )
+    def test_non_flux_checkpoints_use_clip_tags(self, model: str) -> None:
+        from questfoundry.providers.checkpoint_styles import (
+            prompt_format_for_checkpoint,
+        )
+
+        assert prompt_format_for_checkpoint(model) == "clip_tags"
+
+    def test_unknown_checkpoint_uses_clip_tags(self) -> None:
+        from questfoundry.providers.checkpoint_styles import (
+            prompt_format_for_checkpoint,
+        )
+
+        # Default fallback: SD-family is the long tail; safer assumption is CLIP.
+        assert prompt_format_for_checkpoint("totally-made-up-model.safetensors") == "clip_tags"
+
+    def test_no_model_uses_clip_tags(self) -> None:
+        # When no model is set, preserve the LLM-distill default path.
+        from questfoundry.providers.checkpoint_styles import (
+            prompt_format_for_checkpoint,
+        )
+
+        assert prompt_format_for_checkpoint(None) == "clip_tags"
+        assert prompt_format_for_checkpoint("") == "clip_tags"
