@@ -74,6 +74,7 @@ class TestResolveCheckpointStyle:
             "incompatible_styles",
             "good_example",
             "bad_example",
+            "prompt_format",
         }
 
     def test_case_insensitive_matching(self) -> None:

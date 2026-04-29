@@ -11,6 +11,7 @@ import pytest
 
 from questfoundry.providers.image import ImageProviderConnectionError, ImageProviderError
 from questfoundry.providers.image_a1111 import (
+    _FLUX_PRESET,
     _SD15_PRESET,
     _SDXL_LIGHTNING_PRESET,
     _SDXL_PRESET,
@@ -286,6 +287,29 @@ class TestA1111Provider:
             await provider.aclose()
 
         mock_close.assert_called_once()
+
+
+class TestResolvePresetFlux:
+    """Flux checkpoints must use the Flux-tuned preset, not the SD1.5
+    fallback (#1560 review)."""
+
+    def test_flux_dev_resolves_to_flux_preset(self) -> None:
+        assert _resolve_preset("flux1-dev-bnb-nf4-v2.safetensors") is _FLUX_PRESET
+        assert _resolve_preset("flux1-dev-bnb-nf4.safetensors") is _FLUX_PRESET
+
+    def test_flux_preset_uses_low_cfg_and_xl_resolution(self) -> None:
+        assert _FLUX_PRESET.cfg_scale == 1.0
+        assert _FLUX_PRESET.sizes["1:1"] == (1024, 1024)
+        assert _FLUX_PRESET.sampler == "Euler"
+        assert _FLUX_PRESET.scheduler == "simple"
+
+    def test_flux_does_not_fall_through_to_sd15(self) -> None:
+        preset = _resolve_preset("flux1-dev-bnb-nf4-v2.safetensors")
+        assert preset is not _SD15_PRESET
+        assert preset.cfg_scale != 7.0
+
+    def test_flux_case_insensitive(self) -> None:
+        assert _resolve_preset("FLUX1_DEV.safetensors") is _FLUX_PRESET
 
 
 class TestA1111Presets:
@@ -719,5 +743,5 @@ class TestDistillPromptFormatBranch:
         )
 
         brief = self._make_brief()
-        with pytest.raises(ImageProviderError):
+        with pytest.raises(ImageProviderError, match="requires an LLM"):
             await provider.distill_prompt(brief)

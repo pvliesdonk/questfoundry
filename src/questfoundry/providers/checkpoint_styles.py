@@ -26,6 +26,7 @@ Adding a new entry:
 from __future__ import annotations
 
 import re
+from typing import Literal, cast
 
 _CHECKPOINT_STYLE_MAP: tuple[tuple[re.Pattern[str], dict[str, str]], ...] = (
     # ----- Flux (NF4 quantised; both v1 and v2 quants share identity) -----
@@ -296,7 +297,7 @@ def resolve_checkpoint_style(model: str) -> dict[str, str]:
 
     Returns:
         Dict with keys ``label``, ``style_hints``, ``incompatible_styles``,
-        ``good_example``, ``bad_example``.
+        ``good_example``, ``bad_example``, ``prompt_format``.
     """
     lowered = model.lower()
     for pattern, info in _CHECKPOINT_STYLE_MAP:
@@ -307,7 +308,9 @@ def resolve_checkpoint_style(model: str) -> dict[str, str]:
     )
 
 
-def prompt_format_for_checkpoint(model: str | None) -> str:
+def prompt_format_for_checkpoint(
+    model: str | None,
+) -> Literal["clip_tags", "natural_language"]:
     """Return the prompt format the active checkpoint expects.
 
     Returns ``"clip_tags"`` when no model is set — preserves the LLM-distill
@@ -324,4 +327,6 @@ def prompt_format_for_checkpoint(model: str | None) -> str:
     """
     if not model:
         return "clip_tags"
-    return resolve_checkpoint_style(model)["prompt_format"]
+    return cast(
+        "Literal['clip_tags', 'natural_language']", resolve_checkpoint_style(model)["prompt_format"]
+    )

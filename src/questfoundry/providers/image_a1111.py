@@ -21,7 +21,10 @@ from typing import TYPE_CHECKING, Any
 import httpx
 
 from questfoundry.observability.logging import get_logger
-from questfoundry.providers.checkpoint_styles import prompt_format_for_checkpoint
+from questfoundry.providers.checkpoint_styles import (
+    prompt_format_for_checkpoint,
+    resolve_checkpoint_style,
+)
 from questfoundry.providers.image import (
     ImageProviderConnectionError,
     ImageProviderError,
@@ -154,6 +157,21 @@ _SDXL_LIGHTNING_PRESET = _A1111Preset(
     quality_tier="high",
 )
 
+_FLUX_PRESET = _A1111Preset(
+    sizes={
+        "1:1": (1024, 1024),
+        "16:9": (1360, 768),
+        "9:16": (768, 1360),
+        "3:2": (1216, 832),
+        "2:3": (832, 1216),
+    },
+    steps=20,
+    sampler="Euler",
+    scheduler="simple",
+    cfg_scale=1.0,
+    quality_tier="high",
+)
+
 _XL_TAGS = ("sdxl", "xl_", "_xl", "-xl")
 _LIGHTNING_TAGS = ("lightning", "turbo")
 
@@ -162,13 +180,16 @@ def _resolve_preset(model: str | None) -> _A1111Preset:
     """Choose generation preset based on checkpoint name.
 
     Detection order:
-    1. Lightning/Turbo SDXL — low steps, low CFG, DPM++ SDE
-    2. Standard SDXL — matches "sdxl", "xl_", "_xl", "-xl"
-    3. SD 1.5 — fallback default
+    1. Flux — matches "flux"; uses low CFG (1.0), Euler/simple, 1024px
+    2. Lightning/Turbo SDXL — low steps, low CFG, DPM++ SDE
+    3. Standard SDXL — matches "sdxl", "xl_", "_xl", "-xl"
+    4. SD 1.5 — fallback default
     """
     if not model:
         return _SD15_PRESET
     lower = model.lower()
+    if "flux" in lower:
+        return _FLUX_PRESET
     is_xl = any(tag in lower for tag in _XL_TAGS)
     is_lightning = any(tag in lower for tag in _LIGHTNING_TAGS)
     if is_xl and is_lightning:
@@ -247,6 +268,11 @@ class A1111ImageProvider:
                 construction. ``natural_language`` mode runs without an LLM.
         """
         if prompt_format_for_checkpoint(self._model) == "natural_language":
+            log.info(
+                "image_prompt_distilled_nl",
+                subject=brief.subject[:80],
+                model=self._model,
+            )
             return flatten_brief_to_prompt(brief)
 
         if self._llm is None:
@@ -353,8 +379,6 @@ class A1111ImageProvider:
         guidance cannot drift apart (#1557)."""
         if not self._model:
             return ""
-
-        from questfoundry.providers.checkpoint_styles import resolve_checkpoint_style
 
         info = resolve_checkpoint_style(self._model)
         return (
