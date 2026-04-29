@@ -5,6 +5,11 @@ Used by DRESS Phase 0 (prevention — when `--image-provider` is set, biases
 ArtDirection toward checkpoint-compatible styles) and the A1111 distiller
 (recovery — adapts CLIP-tag selection to the active checkpoint).
 
+The A1111 distiller also reads `prompt_format` (via
+`prompt_format_for_checkpoint`) to choose between LLM-driven CLIP-tag
+distillation (CLIP-encoder checkpoints) and direct prose flattening
+(T5-encoder checkpoints like Flux on Forge Neo) — see PR #1559.
+
 Pattern matching:
     Patterns are matched against the lowercased checkpoint filename via
     `re.Pattern.search`. First match wins. Specific patterns MUST precede
@@ -46,6 +51,7 @@ _CHECKPOINT_STYLE_MAP: tuple[tuple[re.Pattern[str], dict[str, str]], ...] = (
                 'style="watercolor wash", medium="hand-painted ink" '
                 "(Flux is tuned for photorealism; painterly media will fight the model)"
             ),
+            "prompt_format": "natural_language",
         },
     ),
     # ----- Coloring-book fine-tune (SD1.5 base) -----
@@ -69,6 +75,7 @@ _CHECKPOINT_STYLE_MAP: tuple[tuple[re.Pattern[str], dict[str, str]], ...] = (
                 "(this checkpoint is fine-tuned for line-art only; "
                 "color renders will fail)"
             ),
+            "prompt_format": "clip_tags",
         },
     ),
     # ----- Juggernaut XL (photorealistic SDXL) -----
@@ -90,6 +97,7 @@ _CHECKPOINT_STYLE_MAP: tuple[tuple[re.Pattern[str], dict[str, str]], ...] = (
                 "(Juggernaut is tuned for photorealism; "
                 "stylised media will fight the checkpoint)"
             ),
+            "prompt_format": "clip_tags",
         },
     ),
     # ----- Animagine XL (anime-focused SDXL) -----
@@ -115,6 +123,7 @@ _CHECKPOINT_STYLE_MAP: tuple[tuple[re.Pattern[str], dict[str, str]], ...] = (
                 "(Animagine is anime-specialised; "
                 "photographic styles produce off-distribution outputs)"
             ),
+            "prompt_format": "clip_tags",
         },
     ),
     # ----- DreamShaperXL Lightning / Alpha (must precede generic dreamshaperxl) -----
@@ -140,6 +149,7 @@ _CHECKPOINT_STYLE_MAP: tuple[tuple[re.Pattern[str], dict[str, str]], ...] = (
                 'medium="macro photograph" '
                 "(Lightning checkpoints sacrifice fine detail for speed)"
             ),
+            "prompt_format": "clip_tags",
         },
     ),
     # ----- DreamShaperXL standard -----
@@ -164,6 +174,7 @@ _CHECKPOINT_STYLE_MAP: tuple[tuple[re.Pattern[str], dict[str, str]], ...] = (
                 "(DreamShaperXL is stylised by design; "
                 "strict photo-real fights the model)"
             ),
+            "prompt_format": "clip_tags",
         },
     ),
     # ----- DreamShaper SD1.5 (generic, must come after XL variants) -----
@@ -190,6 +201,7 @@ _CHECKPOINT_STYLE_MAP: tuple[tuple[re.Pattern[str], dict[str, str]], ...] = (
                 "(DreamShaper SD1.5 expects natural descriptors, "
                 "not anime tag grammar)"
             ),
+            "prompt_format": "clip_tags",
         },
     ),
     # ----- SDXL base -----
@@ -215,6 +227,7 @@ _CHECKPOINT_STYLE_MAP: tuple[tuple[re.Pattern[str], dict[str, str]], ...] = (
                 "(SDXL base needs explicit style direction; "
                 "bare anime grammar underperforms)"
             ),
+            "prompt_format": "clip_tags",
         },
     ),
     # ----- SD 1.5 base / pruned -----
@@ -238,6 +251,7 @@ _CHECKPOINT_STYLE_MAP: tuple[tuple[re.Pattern[str], dict[str, str]], ...] = (
                 'medium="macro studio photograph" '
                 "(SD 1.5 caps at ~768px; high-detail photoreal won't render)"
             ),
+            "prompt_format": "clip_tags",
         },
     ),
     # ----- Default — always matches; must be last -----
@@ -265,6 +279,7 @@ _CHECKPOINT_STYLE_MAP: tuple[tuple[re.Pattern[str], dict[str, str]], ...] = (
                 'medium="document scan with readable signage" '
                 "(Stable Diffusion generally cannot render legible text)"
             ),
+            "prompt_format": "clip_tags",
         },
     ),
 )
@@ -290,3 +305,23 @@ def resolve_checkpoint_style(model: str) -> dict[str, str]:
     raise AssertionError(  # pragma: no cover — default fallback always matches
         "default-fallback entry must always match"
     )
+
+
+def prompt_format_for_checkpoint(model: str | None) -> str:
+    """Return the prompt format the active checkpoint expects.
+
+    Returns ``"clip_tags"`` when no model is set — preserves the LLM-distill
+    default path through ``A1111ImageProvider.distill_prompt``. CLIP-encoder
+    checkpoints (SDXL, SD1.5, etc.) take ``"clip_tags"``; T5-encoder
+    checkpoints (Flux) take ``"natural_language"``. See PR #1559.
+
+    Args:
+        model: Checkpoint filename (with or without extension), or None / empty
+            string when no checkpoint is selected.
+
+    Returns:
+        ``"clip_tags"`` or ``"natural_language"``.
+    """
+    if not model:
+        return "clip_tags"
+    return resolve_checkpoint_style(model)["prompt_format"]
