@@ -681,7 +681,8 @@ For `dilemma::mentor_trust`, LLM generates Y-shape scaffold:
 # Commit beat on protector path (singular belongs_to)
 - id: beat_mentor_confession_protector
   summary: "Mentor reveals the protective motive behind the warnings"
-  path_id: path::mentor_trust__protector
+  belongs_to:
+    - path::mentor_trust__protector
   dilemma_impacts:
     - dilemma_id: dilemma::mentor_trust
       effect: commits
@@ -691,7 +692,8 @@ For `dilemma::mentor_trust`, LLM generates Y-shape scaffold:
 # Post-commit beats on protector path (3 of them)
 - id: beat_mentor_shield_01
   summary: "Mentor shields Kay during antagonist confrontation"
-  path_id: path::mentor_trust__protector
+  belongs_to:
+    - path::mentor_trust__protector
   dilemma_impacts: []
   entities: [character::mentor, character::kay, character::antagonist]
 ```

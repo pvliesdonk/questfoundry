@@ -940,7 +940,7 @@ This section documents where the current implementation (`docs/design/00-spec.md
 
 ### InitialBeat.paths — Same-Dilemma Dual belongs_to
 
-**Current:** `InitialBeat.paths` is `list[str]` with `min_length=1`. The mutation creates one `belongs_to` edge per path in the list.
+**Current (pre-#1206 original):** `InitialBeat.paths` is `list[str]` with `min_length=1`. The mutation creates one `belongs_to` edge per path in the list.
 
 **This document:** Pre-commit beats belong to both paths of their dilemma (two `belongs_to` edges); post-commit beats belong to one path (one `belongs_to` edge). This is structurally correct: pre-commit beats are experienced by all players before the choice is made. The historical prohibition on multi-path `belongs_to` (Part 8) targeted cross-dilemma multi-assignment — the pattern that caused hard-convergence violations. Same-dilemma pre-commit dual membership is a different structural relationship and is explicitly permitted (see Part 8, "Path Membership ≠ Scene Participation").
 
