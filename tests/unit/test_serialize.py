@@ -709,6 +709,11 @@ class TestSerializeSeedAsFunction:
         Each call to ``serialize_to_artifact`` returns ``(result, tokens, calls)``
         where ``calls`` ≥ 1 when retries occurred. The orchestrator must sum
         these into ``SerializeResult.call_count``.
+
+        Uses a two-explored-answer dilemma so ``_serialize_shared_beats_per_dilemma``
+        fires (binary dilemmas trigger Y-shape shared-beats generation), exercising
+        every aggregation path: direct sections, per-dilemma paths, shared beats,
+        per-path beats.
         """
         from questfoundry.agents.serialize import SerializeResult, serialize_seed_as_function
 
@@ -724,14 +729,24 @@ class TestSerializeSeedAsFunction:
             "unexplored_answer_ids": [],
             "path_importance": "major",
         }
+        # Two-explored dilemma so _serialize_shared_beats_per_dilemma fires.
+        mock_dilemma_two = {
+            "dilemma_id": "dilemma::test_dilemma",
+            "explored": ["alt1", "alt2"],
+            "unexplored": [],
+        }
 
         with (
             patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_serialize,
-            # Helpers: one retry on the per-dilemma path call (calls=2), and
-            # the per-path beats call (calls=1).
+            # Helpers: one retry on the per-dilemma path call (calls=2),
+            # shared-beats called once (calls=1), per-path beats (calls=1).
             patch(
                 "questfoundry.agents.serialize._serialize_paths_per_dilemma",
                 return_value=([mock_path], 15, 2),
+            ),
+            patch(
+                "questfoundry.agents.serialize._serialize_shared_beats_per_dilemma",
+                return_value=([], 5, 1),
             ),
             patch(
                 "questfoundry.agents.serialize._serialize_beats_per_path",
@@ -740,10 +755,10 @@ class TestSerializeSeedAsFunction:
         ):
             # Section calls: entities=1, dilemmas=3 (Pydantic retried twice),
             # consequences=1. Total direct serialize_to_artifact calls = 5,
-            # plus paths=2 and beats=1 from the helpers = 8 LLM calls.
+            # plus paths=2 + shared=1 + beats=1 from helpers = 9 LLM calls.
             mock_serialize.side_effect = [
                 (MagicMock(model_dump=lambda: {"entities": []}), 10, 1),
-                (MagicMock(model_dump=lambda: {"dilemmas": [_MOCK_DILEMMA]}), 30, 3),
+                (MagicMock(model_dump=lambda: {"dilemmas": [mock_dilemma_two]}), 30, 3),
                 (MagicMock(model_dump=lambda: {"consequences": []}), 10, 1),
             ]
 
@@ -756,8 +771,8 @@ class TestSerializeSeedAsFunction:
 
                 assert isinstance(result, SerializeResult)
                 # entities(1) + dilemmas(3 — two retries) + consequences(1)
-                # + paths(2) + beats(1) = 8
-                assert result.call_count == 8
+                # + paths(2) + shared(1) + beats(1) = 9
+                assert result.call_count == 9
 
     @pytest.mark.asyncio
     async def test_returns_result_with_errors_when_semantic_validation_fails(self) -> None:

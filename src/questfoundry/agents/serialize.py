@@ -93,6 +93,9 @@ class SerializeResult:
         call_count: Total LLM calls including Pydantic-retry attempts across
             all sections, per-dilemma helpers, per-path helpers, shared-beat
             helpers, early-validation corrections, and semantic-retry passes.
+            Defaults to 0 for back-compat with existing constructors; new
+            callers in this module MUST pass the summed count or operator
+            llm-call totals will under-report (see #1550).
         semantic_errors: List of semantic validation errors (if any).
     """
 
