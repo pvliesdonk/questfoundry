@@ -927,6 +927,74 @@ async def test_low_arc_count_raises_seed_stage_error() -> None:
             )
 
 
+@pytest.mark.parametrize(
+    ("preset", "expected_min_fully_explored", "expected_phrase"),
+    [
+        # max_arcs=2  → min_arcs_required=2 → log2(2)=1 → "at least 1 dilemma"
+        ("micro", 1, "at least 1 dilemma"),
+        # max_arcs=8  → min_arcs_required=2 → log2(2)=1 → "at least 1 dilemma"
+        ("short", 1, "at least 1 dilemma"),
+        # max_arcs=16 → min_arcs_required=4 → log2(4)=2 → "at least 2 dilemmas"
+        ("medium", 2, "at least 2 dilemmas"),
+        # max_arcs=32 → min_arcs_required=8 → log2(8)=3 → "at least 3 dilemmas"
+        ("long", 3, "at least 3 dilemmas"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_low_arc_error_message_scales_with_size_preset(
+    preset: str, expected_min_fully_explored: int, expected_phrase: str
+) -> None:
+    """SeedStageError recovery hint scales with min_arcs_required (#1555).
+
+    The hardcoded "at least 2 dilemmas" was wrong for `long` stories where
+    min_arcs_required=8 and the user actually needs 3+ fully-explored.
+    The message now derives the count from log2(min_arcs_required).
+    """
+    from questfoundry.pipeline.size import get_size_profile
+
+    stage = SeedStage()
+
+    mock_model = MagicMock()
+    mock_graph = MagicMock()
+    mock_graph.get_nodes_by_type.side_effect = lambda t: (
+        {"entity1": {"type": "entity"}} if t == "entity" else {}
+    )
+    mock_graph.get_edges.return_value = []
+
+    mock_artifact = SeedOutput(entities=[], dilemmas=[], paths=[], initial_beats=[])
+    size_profile = get_size_profile(preset)
+
+    with (
+        patch("questfoundry.pipeline.stages.seed.Graph") as MockGraph,
+        patch("questfoundry.pipeline.stages.seed.run_discuss_phase") as mock_discuss,
+        patch("questfoundry.pipeline.stages.seed.summarize_seed_chunked") as mock_summarize,
+        patch("questfoundry.pipeline.stages.seed.serialize_seed_as_function") as mock_serialize,
+        patch("questfoundry.pipeline.stages.seed.get_all_research_tools") as mock_tools,
+        patch("questfoundry.pipeline.stages.seed.compute_arc_count", return_value=0),
+    ):
+        MockGraph.load.return_value = mock_graph
+        mock_tools.return_value = []
+        mock_discuss.return_value = ([], 1, 100)
+        mock_summarize.return_value = (_MOCK_SECTION_BRIEFS, 50)
+        mock_serialize.return_value = SerializeResult(
+            artifact=mock_artifact, tokens_used=100, semantic_errors=[]
+        )
+
+        with pytest.raises(SeedStageError) as exc_info:
+            await stage.execute(
+                model=mock_model,
+                user_prompt="test",
+                project_path=Path("/test/project"),
+                size_profile=size_profile,
+            )
+
+    msg = str(exc_info.value)
+    assert expected_phrase in msg, (
+        f"Expected message to contain {expected_phrase!r} for preset={preset!r} "
+        f"(min_fully_explored={expected_min_fully_explored}); got: {msg!r}"
+    )
+
+
 # --- Path Freeze Approval Gate Tests (R-6.4) ---
 
 
