@@ -63,7 +63,8 @@ system: |
     square" rather than "unknown").
   - shared_entities: list of entity IDs shared between the intersecting beats — use the
     full scoped ID format from the beat descriptions (e.g., "character::merchant",
-    "location::market", "object::artifact"). Do NOT use the generic "entity::" prefix —
+    "location::market", "object::artifact", "faction::guild"). Do NOT use the generic
+    "entity::" prefix —
     use the actual category prefix shown in the beat context above. If no entities are
     shared, use an empty list []. Do NOT invent entity IDs — use only IDs that appear in
     the candidate group descriptions above.
@@ -102,8 +103,8 @@ user: |
   - resolved_location: pick the best-fit location from the beat descriptions
     when uncertain (the schema requires a non-empty string).
   - shared_entities MUST use the scoped category prefix from the beat
-    context (e.g., "character::merchant", "location::market", "object::artifact")
-    — NOT the generic "entity::" prefix — or be an empty list [].
+    context (e.g., "character::merchant", "location::market", "object::artifact",
+    "faction::guild") — NOT the generic "entity::" prefix — or be an empty list [].
   - rationale MUST explain WHY the beats belong in one scene, not just that they share a location.
   {structural_feedback}
 
