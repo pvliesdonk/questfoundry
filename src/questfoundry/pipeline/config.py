@@ -58,6 +58,12 @@ class ProvidersConfig:
         structured: Optional provider override for structured role (alias: serialize).
         image: Optional image generation provider (opt-in, no default).
         settings: Role/phase-specific model settings (temperature, top_p, seed).
+        max_concurrency: Optional cap on parallel LLM calls within a stage. When
+            ``None``, falls back to env var ``QF_MAX_CONCURRENCY`` and then the
+            per-provider default in :mod:`questfoundry.providers.model_info`.
+            Useful when a project's API key has a tighter rate limit than the
+            generic provider default — e.g. Anthropic Haiku-tier keys may need
+            ``max_concurrency: 2`` (#1581).
     """
 
     default: str
@@ -66,6 +72,7 @@ class ProvidersConfig:
     structured: str | None = None
     image: str | None = None
     settings: dict[str, PhaseSettings] = field(default_factory=dict)
+    max_concurrency: int | None = None
 
     # Legacy aliases — read-only properties for backwards compatibility
     @property
@@ -187,6 +194,34 @@ class ProvidersConfig:
         balanced = data.get("balanced") or data.get("summarize")
         structured = data.get("structured") or data.get("serialize")
 
+        # Optional concurrency cap. Reject non-positive values rather than
+        # storing them — a 0 or negative cap would deadlock every parallel
+        # call site, so we treat invalid input as "unset" (falls back to env
+        # var and per-provider default).  ``isinstance(True, int)`` is True
+        # in Python, so guard against ``True``/``False`` being mistaken for
+        # an integer cap.
+        raw_concurrency = data.get("max_concurrency")
+        max_concurrency: int | None
+        if (
+            isinstance(raw_concurrency, int)
+            and not isinstance(raw_concurrency, bool)
+            and raw_concurrency > 0
+        ):
+            max_concurrency = raw_concurrency
+        else:
+            max_concurrency = None
+            if raw_concurrency is not None:
+                # User wrote something for ``max_concurrency`` but it didn't
+                # parse — flag it so a typo (``"two"``, ``2.5``, ``True``)
+                # doesn't silently fall back to per-provider defaults.
+                from questfoundry.observability.logging import get_logger
+
+                get_logger(__name__).warning(
+                    "invalid_max_concurrency",
+                    value=raw_concurrency,
+                    value_type=type(raw_concurrency).__name__,
+                )
+
         return cls(
             default=default,
             creative=creative,
@@ -194,6 +229,7 @@ class ProvidersConfig:
             structured=structured,
             image=data.get("image"),
             settings=settings,
+            max_concurrency=max_concurrency,
         )
 
 

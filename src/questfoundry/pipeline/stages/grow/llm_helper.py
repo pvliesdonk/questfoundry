@@ -32,6 +32,8 @@ from questfoundry.pipeline.stages.grow._helpers import (
     log,
 )
 from questfoundry.prompts.compiler import safe_format
+from questfoundry.providers.base import ProviderRateLimitError
+from questfoundry.providers.rate_limit import ainvoke_with_rate_limit_retry
 from questfoundry.providers.structured_output import (
     unwrap_structured_result,
     with_structured_output,
@@ -137,7 +139,11 @@ class _LLMHelperMixin:
             )
 
             try:
-                raw_result = await structured_model.ainvoke(messages, config=config)
+                # Rate-limit-aware invocation: 429s back off transparently
+                # without consuming this loop's semantic-retry budget (#1581).
+                raw_result = await ainvoke_with_rate_limit_retry(
+                    structured_model, messages, config=config
+                )
                 llm_calls += 1
                 total_tokens += extract_tokens(raw_result)
 
@@ -178,6 +184,11 @@ class _LLMHelperMixin:
                         # Below threshold or last attempt: return for caller to filter
 
                 return validated, llm_calls, total_tokens
+
+            except ProviderRateLimitError:
+                # Backoff exhausted — surface as a hard transport failure,
+                # not a schema-repair attempt (#1581).
+                raise
 
             except (ValidationError, TypeError) as e:
                 log.info(

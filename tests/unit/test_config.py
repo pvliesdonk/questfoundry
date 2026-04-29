@@ -8,6 +8,8 @@ from unittest.mock import patch
 if TYPE_CHECKING:
     from pathlib import Path
 
+    import pytest
+
 from questfoundry.pipeline.config import (
     DEFAULT_MODEL,
     DEFAULT_PROVIDER,
@@ -221,6 +223,67 @@ class TestProvidersConfig:
 
         with patch.dict("os.environ", {"QF_IMAGE_PROVIDER": "placeholder"}):
             assert config.get_image_provider() == "openai/gpt-image-1"
+
+    def test_from_dict_with_max_concurrency(self) -> None:
+        """providers.max_concurrency parses as an int (#1581)."""
+        config = ProvidersConfig.from_dict(
+            {"default": "anthropic/claude-haiku-4-5-20251001", "max_concurrency": 2}
+        )
+
+        assert config.max_concurrency == 2
+
+    def test_from_dict_max_concurrency_default_none(self) -> None:
+        """max_concurrency is optional — absent means 'use per-provider default'."""
+        config = ProvidersConfig.from_dict({"default": "ollama/qwen3:4b-instruct-32k"})
+
+        assert config.max_concurrency is None
+
+    def test_from_dict_max_concurrency_invalid_falls_back(self) -> None:
+        """Non-positive max_concurrency is rejected (treated as None)."""
+        config = ProvidersConfig.from_dict(
+            {"default": "ollama/qwen3:4b-instruct-32k", "max_concurrency": 0}
+        )
+
+        assert config.max_concurrency is None
+
+    def test_from_dict_max_concurrency_rejects_bool(self) -> None:
+        """``True`` / ``False`` are not valid concurrency caps even though
+        ``isinstance(True, int)`` is true in Python."""
+        config = ProvidersConfig.from_dict(
+            {"default": "ollama/qwen3:4b-instruct-32k", "max_concurrency": True}
+        )
+
+        assert config.max_concurrency is None
+
+    def test_from_dict_max_concurrency_logs_warning_on_invalid_input(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Invalid types (string, float) emit a warning so users catch typos."""
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            config = ProvidersConfig.from_dict(
+                {"default": "ollama/qwen3:4b-instruct-32k", "max_concurrency": "two"}
+            )
+
+        assert config.max_concurrency is None
+        # structlog routes through stdlib logging; the event name appears in
+        # the rendered message regardless of whether stdlib or structlog
+        # formatting is active.
+        assert any("invalid_max_concurrency" in record.getMessage() for record in caplog.records)
+
+    def test_from_dict_max_concurrency_no_warning_when_absent(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """A missing ``max_concurrency`` is not invalid input — no warning."""
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            ProvidersConfig.from_dict({"default": "ollama/qwen3:4b-instruct-32k"})
+
+        assert not any(
+            "invalid_max_concurrency" in record.getMessage() for record in caplog.records
+        )
 
 
 # --- Tests for ProjectConfig with hybrid providers ---

@@ -226,6 +226,14 @@ class PipelineOrchestrator:
 
             self.config = create_default_config("unnamed")
 
+        # Apply project.yaml's optional concurrency override to the
+        # process-global so per-call-site get_model_info() picks it up
+        # without needing to thread the value through every parallel
+        # batch site (#1581). Env var QF_MAX_CONCURRENCY still wins.
+        from questfoundry.providers.model_info import set_max_concurrency_override
+
+        set_max_concurrency_override(self.config.providers.max_concurrency)
+
         # Load global user config (lowest priority)
         from questfoundry.pipeline.user_config import load_user_config
 
