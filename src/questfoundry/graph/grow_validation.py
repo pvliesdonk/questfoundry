@@ -1420,8 +1420,15 @@ def run_grow_checks(graph: Graph) -> ValidationReport:
             ]
         )
 
+    # check_single_root_beat is intentionally NOT in this list. R-4a.6 of
+    # docs/design/procedures/grow.md (added with #1583) explicitly permits
+    # multi-root beat-DAG output from Phase 4a when no serial / wraps / hint
+    # relationship orders the dilemmas. Root unification — if any — is
+    # downstream. The validator is retained as a public diagnostic helper
+    # (callable ad-hoc and exercised by unit tests) but is no longer wired
+    # into ``run_grow_checks`` / ``run_all_checks``. See #1584 for the
+    # deliberate downstream-unification policy decision.
     checks: list[ValidationCheck] = [
-        check_single_root_beat(graph),
         check_single_start(graph),
         check_passage_dag_cycles(graph),
         check_spine_arc_exists(graph),
