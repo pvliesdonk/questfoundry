@@ -1032,11 +1032,7 @@ class _PolishLLMPhaseMixin:
                                 "with a path_id; residue beat skipped."
                             ),
                         )
-                        # Propagate to plan.warnings so operators see this in
-                        # the plan artifact, mirroring Phase 4b's symmetric skip
-                        # path (deterministic.py:487-490). The two phases skip
-                        # for the same R-5.5 root cause but at different decision
-                        # points, so the message labels Phase 5e explicitly.
+                        # R-5.5 skip must surface in the plan artifact, not just structlog.
                         plan_node = graph.get_node("polish_plan::current") or {}
                         prior_warnings = list(plan_node.get("warnings", []))
                         prior_warnings.append(
