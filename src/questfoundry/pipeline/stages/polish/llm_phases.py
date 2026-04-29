@@ -1032,6 +1032,14 @@ class _PolishLLMPhaseMixin:
                                 "with a path_id; residue beat skipped."
                             ),
                         )
+                        # R-5.5 skip must surface in the plan artifact, not just structlog.
+                        plan_node = graph.get_node("polish_plan::current") or {}
+                        prior_warnings = list(plan_node.get("warnings", []))
+                        prior_warnings.append(
+                            f"Phase 5e residue beat skipped for unmapped flag {flag} on "
+                            f"passage {passage_id} (R-5.5 path attribution)."
+                        )
+                        graph.update_node("polish_plan::current", warnings=prior_warnings)
                         continue
                     passage_raw = passage_id.split("::")[-1]
                     residue_specs.append(
