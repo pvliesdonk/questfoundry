@@ -64,7 +64,7 @@ system: |
   {{
     "character_arcs": [
       {{
-        "entity_id": "entity::mentor",
+        "entity_id": "character::mentor",
         "start": "The mentor appears as a calm authority figure, offering guidance",
         "pivots": [
           {{

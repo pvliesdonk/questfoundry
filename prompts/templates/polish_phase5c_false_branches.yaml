@@ -45,7 +45,7 @@ system: |
         "decision": "sidetrack",
         "details": "A brief encounter adds character depth",
         "sidetrack_summary": "A mysterious stranger offers cryptic advice",
-        "sidetrack_entities": ["entity::stranger"],
+        "sidetrack_entities": ["character::stranger"],
         "choice_label_enter": "Approach the stranger",
         "choice_label_return": "Continue on your way"
       }}
