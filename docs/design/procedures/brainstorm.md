@@ -279,8 +279,14 @@ vision:
     - "morally ambiguous"
   themes: ["forbidden knowledge", "trust", "corruption"]
   audience: "adult readers of literary speculative fiction"
-  scope: short
-  content_notes: ["single protagonist POV", "no explicit magic system", "no graphic violence"]
+  scope:
+    story_size: short
+  content_notes:
+    includes:
+      - "intimate scope (few key relationships)"
+    excludes:
+      - "explicit magic system"
+      - "graphic violence"
   pov_style: third_person_limited
 ```
 
