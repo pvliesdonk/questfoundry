@@ -11,7 +11,10 @@ The formula (from https://localllm.in/blog/interactive-vram-calculator):
     VRAM = model_weights + overhead + kv_cache
 
 where:
-    model_weights = P * b_w                      # params * bytes/weight
+    model_weights = P * b_w + fp16_surcharge     # params * bytes/weight
+                                                 # huge-vocab models add an
+                                                 # FP16 embedding+lm_head delta
+                                                 # — see #1523
     overhead      = 0.55 + 0.08 * P              # CUDA buffers + scratchpad
     kv_cache      = B * N * 2 * L * (d/g) * b_kv / 1e9
 
