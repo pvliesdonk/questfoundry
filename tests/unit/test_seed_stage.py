@@ -160,7 +160,7 @@ async def test_execute_calls_all_three_phases() -> None:
             ],
         )
         mock_serialize.return_value = SerializeResult(
-            artifact=mock_artifact, tokens_used=200, semantic_errors=[]
+            artifact=mock_artifact, tokens_used=200, call_count=6, semantic_errors=[]
         )
         # Convergence analysis: (analyses, tokens, llm_calls)
         mock_convergence.return_value = ([], 30, 1)
@@ -226,7 +226,7 @@ async def test_execute_emits_phase_progress() -> None:
         mock_summarize.return_value = (_MOCK_SECTION_BRIEFS, 100)
         mock_artifact = SeedOutput(entities=[], dilemmas=[], paths=[], initial_beats=[])
         mock_serialize.return_value = SerializeResult(
-            artifact=mock_artifact, tokens_used=200, semantic_errors=[]
+            artifact=mock_artifact, tokens_used=200, call_count=6, semantic_errors=[]
         )
 
         await stage.execute(

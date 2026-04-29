@@ -90,6 +90,12 @@ class SerializeResult:
     Attributes:
         artifact: The successfully serialized SeedOutput, or None if failed.
         tokens_used: Total tokens consumed during serialization.
+        call_count: Total LLM calls including Pydantic-retry attempts across
+            all sections, per-dilemma helpers, per-path helpers, shared-beat
+            helpers, early-validation corrections, and semantic-retry passes.
+            Defaults to 0 for back-compat with existing constructors; new
+            callers in this module MUST pass the summed count or operator
+            llm-call totals will under-report (see #1550).
         semantic_errors: List of semantic validation errors (if any).
     """
 
@@ -98,6 +104,7 @@ class SerializeResult:
     # returns a SeedOutput (or raises SerializationError on Pydantic failure).
     artifact: SeedOutput | None
     tokens_used: int
+    call_count: int = 0
     semantic_errors: list[SeedValidationError] = field(default_factory=list)
 
     @property
@@ -639,7 +646,7 @@ async def _serialize_dilemma_paths(
     provider_name: str | None,
     max_retries: int,
     callbacks: list[BaseCallbackHandler] | None,
-) -> tuple[list[dict[str, Any]], int]:
+) -> tuple[list[dict[str, Any]], int, int]:
     """Serialize paths for a single dilemma.
 
     Uses a constrained prompt with the dilemma's ID and explored answers hard-coded.
@@ -654,7 +661,7 @@ async def _serialize_dilemma_paths(
         callbacks: LangChain callback handlers.
 
     Returns:
-        Tuple of (list of path dicts, tokens used).
+        Tuple of (list of path dicts, tokens used, LLM calls including retries).
     """
     from questfoundry.models.seed import DilemmaPathsSection
 
@@ -673,7 +680,7 @@ async def _serialize_dilemma_paths(
             dilemma_id=dilemma_id,
             reason="no_explored_answers",
         )
-        return [], 0
+        return [], 0, 0
 
     # Build explored/unexplored answer text
     explored_text = "\n".join(f"- `{a}` — generate a path for this answer" for a in explored)
@@ -706,7 +713,7 @@ async def _serialize_dilemma_paths(
         explored_count=len(explored),
     )
 
-    result, tokens, _ = await serialize_to_artifact(
+    result, tokens, calls = await serialize_to_artifact(
         model=model,
         brief=brief,
         schema=DilemmaPathsSection,
@@ -724,9 +731,10 @@ async def _serialize_dilemma_paths(
         dilemma_id=dilemma_id,
         path_count=len(paths),
         tokens=tokens,
+        calls=calls,
     )
 
-    return paths, tokens
+    return paths, tokens, calls
 
 
 async def _serialize_paths_per_dilemma(
@@ -739,7 +747,7 @@ async def _serialize_paths_per_dilemma(
     callbacks: list[BaseCallbackHandler] | None,
     on_phase_progress: PhaseProgressFn | None = None,
     max_concurrency: int = 2,
-) -> tuple[list[dict[str, Any]], int]:
+) -> tuple[list[dict[str, Any]], int, int]:
     """Serialize paths for all dilemmas with bounded concurrency.
 
     Filters to dilemmas with explored answers, then generates paths for each
@@ -757,7 +765,7 @@ async def _serialize_paths_per_dilemma(
         max_concurrency: Max parallel LLM requests (default 2).
 
     Returns:
-        Tuple of (all paths merged, total tokens used).
+        Tuple of (all paths merged, total tokens used, total LLM calls).
     """
     # Filter to dilemmas with explored answers
     active_dilemmas = [d for d in dilemma_decisions if d.get("explored")]
@@ -769,13 +777,13 @@ async def _serialize_paths_per_dilemma(
     )
 
     if not active_dilemmas:
-        return [], 0
+        return [], 0, 0
 
     semaphore = asyncio.Semaphore(max_concurrency)
 
     async def _limited_serialize(
         dilemma: dict[str, Any],
-    ) -> tuple[list[dict[str, Any]], int]:
+    ) -> tuple[list[dict[str, Any]], int, int]:
         async with semaphore:
             return await _serialize_dilemma_paths(
                 model=model,
@@ -794,11 +802,13 @@ async def _serialize_paths_per_dilemma(
 
     all_paths: list[dict[str, Any]] = []
     total_tokens = 0
+    total_calls = 0
     dilemma_count = len(active_dilemmas)
 
-    for i, (paths, tokens) in enumerate(results, start=1):
+    for i, (paths, tokens, calls) in enumerate(results, start=1):
         all_paths.extend(paths)
         total_tokens += tokens
+        total_calls += calls
         if on_phase_progress is not None:
             did = dilemma_ids[i - 1]
             detail = f"{did} ({len(paths)} paths)" if did else f"{len(paths)} paths"
@@ -809,9 +819,10 @@ async def _serialize_paths_per_dilemma(
         dilemma_count=len(active_dilemmas),
         total_paths=len(all_paths),
         total_tokens=total_tokens,
+        total_calls=total_calls,
     )
 
-    return all_paths, total_tokens
+    return all_paths, total_tokens, total_calls
 
 
 def _build_per_path_beat_context(
@@ -946,7 +957,7 @@ async def _serialize_path_beats(
     callbacks: list[BaseCallbackHandler] | None,
     all_paths: list[dict[str, Any]] | None = None,
     shared_beats_by_dilemma: dict[str, list[dict[str, Any]]] | None = None,
-) -> tuple[list[dict[str, Any]], int]:
+) -> tuple[list[dict[str, Any]], int, int]:
     """Serialize beats for a single path.
 
     Uses a constrained prompt with the path's ID and dilemma hard-coded.
@@ -965,7 +976,7 @@ async def _serialize_path_beats(
             (criterion 3 of #1227).
 
     Returns:
-        Tuple of (list of beat dicts, tokens used).
+        Tuple of (list of beat dicts, tokens used, LLM calls including retries).
     """
     from questfoundry.models.seed import PathBeatsSection
 
@@ -999,7 +1010,7 @@ async def _serialize_path_beats(
         dilemma_id=dilemma_id,
     )
 
-    result, tokens, _ = await serialize_to_artifact(
+    result, tokens, calls = await serialize_to_artifact(
         model=model,
         brief=brief,
         schema=PathBeatsSection,
@@ -1017,9 +1028,10 @@ async def _serialize_path_beats(
         path_id=path_id,
         beat_count=len(beats),
         tokens=tokens,
+        calls=calls,
     )
 
-    return beats, tokens
+    return beats, tokens, calls
 
 
 async def _serialize_beats_per_path(
@@ -1033,7 +1045,7 @@ async def _serialize_beats_per_path(
     on_phase_progress: PhaseProgressFn | None = None,
     max_concurrency: int = 2,
     shared_beats_by_dilemma: dict[str, list[dict[str, Any]]] | None = None,
-) -> tuple[list[dict[str, Any]], int]:
+) -> tuple[list[dict[str, Any]], int, int]:
     """Serialize beats for all paths with bounded concurrency.
 
     Creates tasks for all paths but limits how many run simultaneously
@@ -1057,7 +1069,7 @@ async def _serialize_beats_per_path(
             the pre-commit setup (#1227 criterion 3).
 
     Returns:
-        Tuple of (all beats merged, total tokens used).
+        Tuple of (all beats merged, total tokens used, total LLM calls).
     """
     log.info(
         "serialize_beats_per_path_started",
@@ -1068,7 +1080,7 @@ async def _serialize_beats_per_path(
     path_count = len(paths)
     semaphore = asyncio.Semaphore(max_concurrency)
 
-    async def _limited_serialize(path: dict[str, Any]) -> tuple[list[dict[str, Any]], int]:
+    async def _limited_serialize(path: dict[str, Any]) -> tuple[list[dict[str, Any]], int, int]:
         async with semaphore:
             return await _serialize_path_beats(
                 model=model,
@@ -1083,8 +1095,8 @@ async def _serialize_beats_per_path(
             )
 
     # Create tasks for all paths (semaphore limits actual concurrency)
-    tasks: list[asyncio.Future[tuple[list[dict[str, Any]], int]]] = []
-    task_to_path_id: dict[asyncio.Future[tuple[list[dict[str, Any]], int]], str] = {}
+    tasks: list[asyncio.Future[tuple[list[dict[str, Any]], int, int]]] = []
+    task_to_path_id: dict[asyncio.Future[tuple[list[dict[str, Any]], int, int]], str] = {}
     for path in paths:
         task = asyncio.create_task(_limited_serialize(path))
         tasks.append(task)
@@ -1093,11 +1105,13 @@ async def _serialize_beats_per_path(
     # Collect results as they complete (allows per-path progress reporting)
     all_beats: list[dict[str, Any]] = []
     total_tokens = 0
+    total_calls = 0
 
     for i, future in enumerate(asyncio.as_completed(tasks), start=1):
-        beats, tokens = await future
+        beats, tokens, calls = await future
         all_beats.extend(beats)
         total_tokens += tokens
+        total_calls += calls
         if on_phase_progress is not None:
             path_id = task_to_path_id.get(future, "")
             detail = f"{path_id} ({len(beats)} beats)" if path_id else f"{len(beats)} beats"
@@ -1108,9 +1122,10 @@ async def _serialize_beats_per_path(
         path_count=len(paths),
         total_beats=len(all_beats),
         total_tokens=total_tokens,
+        total_calls=total_calls,
     )
 
-    return all_beats, total_tokens
+    return all_beats, total_tokens, total_calls
 
 
 def _build_shared_beat_context(
@@ -1179,7 +1194,7 @@ async def _serialize_shared_beats_for_dilemma(
     provider_name: str | None,
     max_retries: int,
     callbacks: list[BaseCallbackHandler] | None,
-) -> tuple[list[dict[str, Any]], int]:
+) -> tuple[list[dict[str, Any]], int, int]:
     """Serialize shared pre-commit beats for a single dilemma (Y-shape, #1227).
 
     Issues ONE LLM call that generates the pre-commit beats both explored paths
@@ -1201,7 +1216,7 @@ async def _serialize_shared_beats_for_dilemma(
         callbacks: LangChain callback handlers.
 
     Returns:
-        Tuple of (list of shared beat dicts, tokens used).
+        Tuple of (list of shared beat dicts, tokens used, LLM calls including retries).
     """
     from questfoundry.models.seed import SharedBeatsSection
 
@@ -1216,7 +1231,7 @@ async def _serialize_shared_beats_for_dilemma(
             reason="fewer_than_2_explored_answers",
             explored_count=len(explored),
         )
-        return [], 0
+        return [], 0, 0
 
     prefixed_dilemma_id = normalize_scoped_id(dilemma_id, SCOPE_DILEMMA)
     dilemma_name = prefixed_dilemma_id.removeprefix(f"{SCOPE_DILEMMA}::")
@@ -1273,7 +1288,7 @@ async def _serialize_shared_beats_for_dilemma(
         f'`"dilemma_id": "{prefixed_dilemma_id}"`'
     )
 
-    result, tokens, _ = await serialize_to_artifact(
+    result, tokens, calls = await serialize_to_artifact(
         model=model,
         brief=brief,
         schema=SharedBeatsSection,
@@ -1292,9 +1307,10 @@ async def _serialize_shared_beats_for_dilemma(
         dilemma_id=dilemma_id,
         beat_count=len(beats),
         tokens=tokens,
+        calls=calls,
     )
 
-    return beats, tokens
+    return beats, tokens, calls
 
 
 async def _serialize_shared_beats_per_dilemma(
@@ -1308,7 +1324,7 @@ async def _serialize_shared_beats_per_dilemma(
     callbacks: list[BaseCallbackHandler] | None,
     on_phase_progress: PhaseProgressFn | None = None,
     max_concurrency: int = 2,
-) -> tuple[list[dict[str, Any]], int]:
+) -> tuple[list[dict[str, Any]], int, int]:
     """Serialize shared pre-commit beats for all dilemmas with bounded concurrency.
 
     Filters to dilemmas with at least two explored answers (required for Y-shape
@@ -1331,7 +1347,7 @@ async def _serialize_shared_beats_per_dilemma(
         max_concurrency: Max parallel LLM requests (default 2).
 
     Returns:
-        Tuple of (all shared beats merged, total tokens used).
+        Tuple of (all shared beats merged, total tokens used, total LLM calls).
     """
     # Filter to dilemmas with 2+ explored answers (Y-shape requires dual membership)
     active_dilemmas = [d for d in dilemma_decisions if len(d.get("explored", [])) >= 2]
@@ -1344,13 +1360,13 @@ async def _serialize_shared_beats_per_dilemma(
     )
 
     if not active_dilemmas:
-        return [], 0
+        return [], 0, 0
 
     semaphore = asyncio.Semaphore(max_concurrency)
 
     async def _limited_serialize(
         dilemma: dict[str, Any],
-    ) -> tuple[list[dict[str, Any]], int]:
+    ) -> tuple[list[dict[str, Any]], int, int]:
         async with semaphore:
             return await _serialize_shared_beats_for_dilemma(
                 model=model,
@@ -1370,11 +1386,13 @@ async def _serialize_shared_beats_per_dilemma(
 
     all_shared_beats: list[dict[str, Any]] = []
     total_tokens = 0
+    total_calls = 0
     dilemma_count = len(active_dilemmas)
 
-    for i, (beats, tokens) in enumerate(results, start=1):
+    for i, (beats, tokens, calls) in enumerate(results, start=1):
         all_shared_beats.extend(beats)
         total_tokens += tokens
+        total_calls += calls
         if on_phase_progress is not None:
             did = dilemma_ids[i - 1]
             detail = f"{did} ({len(beats)} beats)" if did else f"{len(beats)} beats"
@@ -1387,9 +1405,10 @@ async def _serialize_shared_beats_per_dilemma(
         dilemma_count=len(active_dilemmas),
         total_beats=len(all_shared_beats),
         total_tokens=total_tokens,
+        total_calls=total_calls,
     )
 
-    return all_shared_beats, total_tokens
+    return all_shared_beats, total_tokens, total_calls
 
 
 # Maps SeedOutput field_path prefixes to section names used in serialization.
@@ -1605,7 +1624,7 @@ async def _early_validate_dilemma_answers(
     max_early_retries: int = 1,
     dilemma_schema: type[BaseModel] | None = None,
     brainstorm_answers: dict[str, list[str]] | None = None,
-) -> tuple[list[dict[str, Any]], int]:
+) -> tuple[list[dict[str, Any]], int, int]:
     """Validate dilemma answer IDs against brainstorm truth and fix if needed.
 
     Checks every explored/unexplored answer ID against the authoritative
@@ -1630,7 +1649,7 @@ async def _early_validate_dilemma_answers(
             already have this data).
 
     Returns:
-        Tuple of (corrected dilemma decisions, tokens used for corrections).
+        Tuple of (corrected dilemma decisions, tokens used, LLM calls used).
     """
     from questfoundry.models.seed import DilemmasSection
 
@@ -1639,6 +1658,7 @@ async def _early_validate_dilemma_answers(
     if brainstorm_answers is None:
         brainstorm_answers = get_brainstorm_answer_ids(graph)
     total_tokens = 0
+    total_calls = 0
 
     for attempt in range(max_early_retries):
         # Collect invalid answer IDs
@@ -1653,7 +1673,7 @@ async def _early_validate_dilemma_answers(
                     invalid.append((did, ans, valid))
 
         if not invalid:
-            return dilemma_decisions, total_tokens
+            return dilemma_decisions, total_tokens, total_calls
 
         log.info(
             "early_dilemma_validation_failed",
@@ -1683,7 +1703,7 @@ async def _early_validate_dilemma_answers(
         # Re-serialize dilemmas with corrections
         corrected_prompt = f"{section_prompt}\n\n{corrections}"
         try:
-            result, tokens, _ = await serialize_to_artifact(
+            result, tokens, calls = await serialize_to_artifact(
                 model=model,
                 brief=build_brief_fn(),
                 schema=schema,
@@ -1694,6 +1714,7 @@ async def _early_validate_dilemma_answers(
                 stage="seed",
             )
             total_tokens += tokens
+            total_calls += calls
             section_data = result.model_dump()
             corrected_dilemmas = section_data.get("dilemmas")
             if not corrected_dilemmas:
@@ -1704,12 +1725,13 @@ async def _early_validate_dilemma_answers(
                 "early_dilemma_validation_corrected",
                 attempt=attempt + 1,
                 tokens=tokens,
+                calls=calls,
             )
         except SerializationError as e:
             log.warning("early_dilemma_correction_failed", error=str(e))
             break
 
-    return dilemma_decisions, total_tokens
+    return dilemma_decisions, total_tokens, total_calls
 
 
 def _suggest_closest(bad_id: str, valid_ids: list[str]) -> str | None:
@@ -1889,6 +1911,7 @@ async def serialize_seed_as_function(
     prompts["dilemmas"] = prompts["dilemmas"].replace("{size_fully_explored}", fully_explored)
 
     total_tokens = 0
+    total_llm_calls = 0
 
     def _build_section_brief(section_name: str) -> str:
         """Build the brief for a specific section.
@@ -1993,7 +2016,7 @@ async def serialize_seed_as_function(
             section_prompt = f"{section_prompt}\n\n{path_ids_context}"
             log.debug("path_ids_injected_into_consequences_prompt")
 
-        section_result, section_tokens, _ = await serialize_to_artifact(
+        section_result, section_tokens, section_calls = await serialize_to_artifact(
             model=model,
             brief=current_brief,
             schema=schema,
@@ -2004,6 +2027,7 @@ async def serialize_seed_as_function(
             stage="seed",
         )
         total_tokens += section_tokens
+        total_llm_calls += section_calls
 
         section_data = section_result.model_dump()
         if output_field not in section_data:
@@ -2052,7 +2076,11 @@ async def serialize_seed_as_function(
             # Catches hallucinated answer IDs (e.g., "trust_strength" instead of
             # "strength") before they cascade to path generation.
             if graph is not None:
-                collected["dilemmas"], early_tokens = await _early_validate_dilemma_answers(
+                (
+                    collected["dilemmas"],
+                    early_tokens,
+                    early_calls,
+                ) = await _early_validate_dilemma_answers(
                     model=model,
                     dilemma_decisions=collected["dilemmas"],
                     graph=graph,
@@ -2065,6 +2093,7 @@ async def serialize_seed_as_function(
                     brainstorm_answers=brainstorm_answers,
                 )
                 total_tokens += early_tokens
+                total_llm_calls += early_calls
 
             # Enrich dilemma decisions with question from graph for prompt.
             # Must run AFTER _early_validate_dilemma_answers because that
@@ -2078,7 +2107,7 @@ async def serialize_seed_as_function(
                         d["question"] = node.get("question", "")
 
             # Generate paths per-dilemma
-            paths, paths_tokens = await _serialize_paths_per_dilemma(
+            paths, paths_tokens, paths_calls = await _serialize_paths_per_dilemma(
                 model=model,
                 dilemma_decisions=collected["dilemmas"],
                 per_dilemma_prompt=prompts["per_dilemma_paths"],
@@ -2090,6 +2119,7 @@ async def serialize_seed_as_function(
             )
             collected["paths"] = paths
             total_tokens += paths_tokens
+            total_llm_calls += paths_calls
 
             # Inject path IDs for consequences and beats
             if collected.get("paths"):
@@ -2104,7 +2134,11 @@ async def serialize_seed_as_function(
             # consumers see the shared setup first.
             shared_beats_by_dilemma: dict[str, list[dict[str, Any]]] = {}
             if collected.get("paths") and collected.get("dilemmas"):
-                shared_beats, shared_beats_tokens = await _serialize_shared_beats_per_dilemma(
+                (
+                    shared_beats,
+                    shared_beats_tokens,
+                    shared_beats_calls,
+                ) = await _serialize_shared_beats_per_dilemma(
                     model=model,
                     dilemma_decisions=collected["dilemmas"],
                     paths=collected["paths"],
@@ -2117,6 +2151,7 @@ async def serialize_seed_as_function(
                 )
                 collected["initial_beats"] = shared_beats
                 total_tokens += shared_beats_tokens
+                total_llm_calls += shared_beats_calls
 
                 # Group shared beats by raw dilemma ID so per-path calls receive
                 # only the beats relevant to their own dilemma (#1227 criterion 3).
@@ -2152,7 +2187,7 @@ async def serialize_seed_as_function(
             # shared_beats_by_dilemma is passed so each per-path call knows what
             # the shared setup established (#1227 criterion 3).
             if collected.get("paths"):
-                beats, beats_tokens = await _serialize_beats_per_path(
+                beats, beats_tokens, beats_calls = await _serialize_beats_per_path(
                     model=model,
                     paths=collected["paths"],
                     per_path_prompt=prompts["per_path_beats"],
@@ -2169,6 +2204,7 @@ async def serialize_seed_as_function(
                 existing_beats = collected.get("initial_beats", [])
                 collected["initial_beats"] = existing_beats + beats
                 total_tokens += beats_tokens
+                total_llm_calls += beats_calls
 
         log.debug(
             "serialize_section_completed",
@@ -2247,7 +2283,7 @@ async def serialize_seed_as_function(
                     current_brief = enhanced_brief
 
                 try:
-                    section_result, section_tokens, _ = await serialize_to_artifact(
+                    section_result, section_tokens, section_calls = await serialize_to_artifact(
                         model=model,
                         brief=current_brief,
                         schema=schema,
@@ -2258,6 +2294,7 @@ async def serialize_seed_as_function(
                         stage="seed",
                     )
                     total_tokens += section_tokens
+                    total_llm_calls += section_calls
                     section_data = section_result.model_dump()
                     if output_field in section_data:
                         collected[output_field] = section_data[output_field]
@@ -2300,7 +2337,7 @@ async def serialize_seed_as_function(
                 if path_corrections:
                     path_prompt = f"{path_prompt}\n\n{path_corrections}"
                 try:
-                    paths, paths_tokens = await _serialize_paths_per_dilemma(
+                    paths, paths_tokens, paths_calls = await _serialize_paths_per_dilemma(
                         model=model,
                         dilemma_decisions=collected["dilemmas"],
                         per_dilemma_prompt=path_prompt,
@@ -2312,6 +2349,7 @@ async def serialize_seed_as_function(
                     )
                     collected["paths"] = paths
                     total_tokens += paths_tokens
+                    total_llm_calls += paths_calls
                     # Refresh path_ids_context
                     path_ids_context = format_path_ids_context(collected["paths"])
                     if path_ids_context:
@@ -2337,8 +2375,8 @@ async def serialize_seed_as_function(
                     beat_prompt = f"{beat_prompt}\n\n{beat_corrections}"
                 try:
                     # Re-generate all beats with current (possibly corrected) paths.
-                    # If paths is empty, _serialize_beats_per_path returns ([], 0) gracefully.
-                    beats, beats_tokens = await _serialize_beats_per_path(
+                    # If paths is empty, _serialize_beats_per_path returns ([], 0, 0) gracefully.
+                    beats, beats_tokens, beats_calls = await _serialize_beats_per_path(
                         model=model,
                         paths=collected["paths"],
                         per_path_prompt=beat_prompt,
@@ -2359,6 +2397,7 @@ async def serialize_seed_as_function(
                     ]
                     collected["initial_beats"] = shared + beats
                     total_tokens += beats_tokens
+                    total_llm_calls += beats_calls
                     retried_any = True
                 except SerializationError as e:
                     log.warning(
@@ -2395,6 +2434,7 @@ async def serialize_seed_as_function(
             return SerializeResult(
                 artifact=seed_output,
                 tokens_used=total_tokens,
+                call_count=total_llm_calls,
                 semantic_errors=blocking_errors,
             )
 
@@ -2406,11 +2446,13 @@ async def serialize_seed_as_function(
         consequences=len(seed_output.consequences),
         beats=len(seed_output.initial_beats),
         tokens=total_tokens,
+        calls=total_llm_calls,
     )
 
     return SerializeResult(
         artifact=seed_output,
         tokens_used=total_tokens,
+        call_count=total_llm_calls,
         semantic_errors=[],
     )
 
