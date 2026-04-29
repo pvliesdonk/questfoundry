@@ -182,7 +182,7 @@ R-3.9. No beat has `belongs_to` edges referencing Paths from different Dilemmas.
 
 R-3.10. Every Dilemma with two explored Answers has at least one pre-commit beat. The number is a narrative decision — some dilemmas need one shared setup beat, others need several. Zero pre-commit beats means no Y-shape fork, which breaks downstream choice derivation.
 
-R-3.11. Every explored Path has exactly one commit beat.
+R-3.11. Every explored Path has exactly one commit beat, and that commit beat MUST be the first exclusive beat in the path's beat sequence. No `advances`, `reveals`, or `complicates` beat may precede it in the exclusive (post-pre-commit) region. The structural slot is fixed by the graph definition (Story Graph Ontology Part 1, "Commit beat is the first beat exclusive to one path") — narrative judgment about "when the dilemma feels most decisive" does not relocate the slot.
 
 R-3.12. Every explored Path has 2–4 post-commit beats.
 
@@ -204,6 +204,7 @@ R-3.15. Setup and epilogue beats are optional — a story may have zero of each.
 | Dilemma has zero pre-commit beats | Y-fork missing — per the Y-shape requirement stated in the Overview, the last shared pre-commit beat is the divergence point that seeds the Y-fork. Without it, POLISH Phase 4c's `compute_choice_edges()` finds no divergence and produces zero choices | R-3.10 |
 | Path has zero commit beats | Path cannot "commit" — no point of irreversible choice | R-3.11 |
 | Path has two commit beats | A path commits once, not twice | R-3.11 |
+| First exclusive beat has `effect: advances` and commit beat is at position 2+ | Commit beat placed on wrong structural slot — position is fixed by the graph definition (SGO Part 1), not by narrative judgment | R-3.11 |
 | Path has only one post-commit beat | Minimum is 2; single post-commit gives no space to prove the answer | R-3.12 |
 | Path has six post-commit beats | Maximum is 4; longer sequences belong in GROW/POLISH as added beats | R-3.12 |
 | Beat has `summary: ""` | Required field empty | R-3.13 |
