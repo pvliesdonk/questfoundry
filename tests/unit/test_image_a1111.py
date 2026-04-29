@@ -11,6 +11,7 @@ import pytest
 
 from questfoundry.providers.image import ImageProviderConnectionError, ImageProviderError
 from questfoundry.providers.image_a1111 import (
+    _FLUX_PRESET,
     _SD15_PRESET,
     _SDXL_LIGHTNING_PRESET,
     _SDXL_PRESET,
@@ -286,6 +287,29 @@ class TestA1111Provider:
             await provider.aclose()
 
         mock_close.assert_called_once()
+
+
+class TestResolvePresetFlux:
+    """Flux checkpoints must use the Flux-tuned preset, not the SD1.5
+    fallback (#1560 review)."""
+
+    def test_flux_dev_resolves_to_flux_preset(self) -> None:
+        assert _resolve_preset("flux1-dev-bnb-nf4-v2.safetensors") is _FLUX_PRESET
+        assert _resolve_preset("flux1-dev-bnb-nf4.safetensors") is _FLUX_PRESET
+
+    def test_flux_preset_uses_low_cfg_and_xl_resolution(self) -> None:
+        assert _FLUX_PRESET.cfg_scale == 1.0
+        assert _FLUX_PRESET.sizes["1:1"] == (1024, 1024)
+        assert _FLUX_PRESET.sampler == "Euler"
+        assert _FLUX_PRESET.scheduler == "simple"
+
+    def test_flux_does_not_fall_through_to_sd15(self) -> None:
+        preset = _resolve_preset("flux1-dev-bnb-nf4-v2.safetensors")
+        assert preset is not _SD15_PRESET
+        assert preset.cfg_scale != 7.0
+
+    def test_flux_case_insensitive(self) -> None:
+        assert _resolve_preset("FLUX1_DEV.safetensors") is _FLUX_PRESET
 
 
 class TestA1111Presets:
@@ -625,3 +649,99 @@ class TestDistillerCheckpointHint:
         hint = provider._format_checkpoint_hint()
         # The distiller-time hint should instruct the LLM how to bridge incompatibility
         assert "translate" in hint.lower() or "adapt" in hint.lower()
+
+
+class TestDistillPromptFormatBranch:
+    """`distill_prompt` branches on `prompt_format_for_checkpoint(self._model)`.
+    Flux (T5 encoder) skips the LLM distill entirely and flattens the brief's
+    prose fields via `flatten_brief_to_prompt()`. Standard SD/SDXL checkpoints
+    keep the existing LLM-distill path (#1559)."""
+
+    def _make_brief(self) -> ImageBrief:
+        return ImageBrief(
+            subject="warrior on a stone bridge",
+            composition="wide shot, low angle",
+            mood="tense, golden hour",
+            entity_fragments=["scarred warrior with leather armor"],
+            art_style="cinematic photography",
+            art_medium="digital photo",
+            palette=["amber", "slate"],
+            style_exclusions="no anime, no anachronistic technology",
+            aspect_ratio="16:9",
+            category="scene",
+        )
+
+    @pytest.mark.asyncio()
+    async def test_flux_skips_llm_and_uses_flattener(self) -> None:
+        from unittest.mock import AsyncMock, MagicMock
+
+        from questfoundry.providers.image_a1111 import A1111ImageProvider
+        from questfoundry.providers.image_brief import flatten_brief_to_prompt
+
+        # MagicMock LLM whose method usage we can audit.
+        llm = MagicMock()
+        llm.ainvoke = AsyncMock()  # would be called by _distill_with_llm
+        provider = A1111ImageProvider(
+            host="http://x", model="flux1-dev-bnb-nf4-v2.safetensors", llm=llm
+        )
+
+        brief = self._make_brief()
+        result = await provider.distill_prompt(brief)
+
+        # NL mode: result equals flatten_brief_to_prompt() output exactly.
+        expected = flatten_brief_to_prompt(brief)
+        assert result == expected
+
+        # NL mode: LLM is never invoked.
+        assert llm.ainvoke.await_count == 0
+
+    @pytest.mark.asyncio()
+    async def test_clip_tags_checkpoint_still_uses_llm_distill(self) -> None:
+        # Sanity: a non-Flux checkpoint must still go through _distill_with_llm.
+        # We verify by stubbing _distill_with_llm and checking it was called.
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from questfoundry.providers.image_a1111 import A1111ImageProvider
+
+        llm = MagicMock()
+        provider = A1111ImageProvider(
+            host="http://x", model="juggernautXL_ragnarokBy.safetensors", llm=llm
+        )
+
+        brief = self._make_brief()
+        with patch.object(
+            provider, "_distill_with_llm", new=AsyncMock(return_value=("pos", "neg"))
+        ) as mock_distill:
+            result = await provider.distill_prompt(brief)
+
+        assert result == ("pos", "neg")
+        mock_distill.assert_awaited_once_with(brief)
+
+    @pytest.mark.asyncio()
+    async def test_flux_works_without_llm(self) -> None:
+        # NL mode should not require an LLM at all — `_llm=None` is OK.
+        from questfoundry.providers.image_a1111 import A1111ImageProvider
+        from questfoundry.providers.image_brief import flatten_brief_to_prompt
+
+        provider = A1111ImageProvider(
+            host="http://x", model="flux1-dev-bnb-nf4-v2.safetensors", llm=None
+        )
+
+        brief = self._make_brief()
+        result = await provider.distill_prompt(brief)
+
+        assert result == flatten_brief_to_prompt(brief)
+
+    @pytest.mark.asyncio()
+    async def test_clip_tags_without_llm_raises(self) -> None:
+        # Sanity: clip_tags branch still raises when no LLM is provided.
+        from questfoundry.providers.image import ImageProviderError
+        from questfoundry.providers.image_a1111 import A1111ImageProvider
+
+        provider = A1111ImageProvider(
+            host="http://x", model="juggernautXL_ragnarokBy.safetensors", llm=None
+        )
+
+        brief = self._make_brief()
+        with pytest.raises(ImageProviderError, match="requires an LLM"):
+            await provider.distill_prompt(brief)
