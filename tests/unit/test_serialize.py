@@ -1324,6 +1324,9 @@ class TestBeatRetryAndContextRefresh:
             assert beat_retry_count[0] == 2
             # Should succeed after retry
             assert result.success is True
+            # Semantic-retry accumulator must include the retried beats helper
+            # call: 3 sections + initial beats + retried beats = at least 5.
+            assert result.call_count >= 5
 
     @pytest.mark.asyncio
     async def test_beats_retry_preserves_shared_beats(self) -> None:
@@ -1445,6 +1448,9 @@ class TestBeatRetryAndContextRefresh:
                 f"Found {len(shared_in_output)} shared beats, expected 1"
             )
             assert shared_in_output[0]["beat_id"] == "shared_setup_01"
+            # Semantic-retry accumulator must include the retried beats helper.
+            # 3 sections + paths + shared + initial beats + retried beats = 7+.
+            assert result.call_count >= 7
 
     @pytest.mark.asyncio
     async def test_path_retry_refreshes_context(self) -> None:
@@ -1530,6 +1536,9 @@ class TestBeatRetryAndContextRefresh:
             # Path retry happened (initial + retry = 2 calls)
             assert path_call_count[0] == 2
             assert result.success is True
+            # Semantic-retry accumulator must include the retried paths helper.
+            # 3 sections + initial paths + retried paths + initial beats = 6+.
+            assert result.call_count >= 6
 
     @pytest.mark.asyncio
     async def test_beat_retry_failure_continues_gracefully(self) -> None:
