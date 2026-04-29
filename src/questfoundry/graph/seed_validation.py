@@ -250,10 +250,13 @@ def _check_belongs_to_yshape(graph: Graph, errors: list[str]) -> None:
 
     # R-3.11 (position): commit beat MUST be the first exclusive beat per path.
     # SGO Part 1 defines the commit beat structurally as the first beat exclusive
-    # to one path; the sort matches GROW Phase 1's intra-path chain order
-    # (alphabetical by beat_id within the exclusive group). Catching this at
-    # SEED exit lets the per-section repair loop fix it; otherwise it slips
-    # past SEED and surfaces at GROW R-1.4, requiring a full SEED re-run.
+    # to one path. At SEED exit the predecessor edges on exclusive beats don't
+    # exist yet (GROW Phase 1 establishes them), so alphabetical beat_id sort
+    # is the best available proxy: it matches the naming convention
+    # (commit_* < post_*) and catches the murder-haiku pattern
+    # (adv_* < commit_*) before GROW R-1.4 surfaces it. Catching this here lets
+    # the per-section repair loop fix it; otherwise it surfaces at GROW R-1.4
+    # and forces a full SEED re-run.
     for path_id in sorted(path_nodes.keys()):
         commits = commit_beats_per_path.get(path_id, [])
         if len(commits) != 1:
@@ -266,9 +269,9 @@ def _check_belongs_to_yshape(graph: Graph, errors: list[str]) -> None:
                 f"R-3.11 (position): path {path_id!r} first exclusive beat is "
                 f"{first_exclusive!r}, but commit beat {commit_beat!r} must be FIRST "
                 f"in the exclusive sequence (Story Graph Ontology Part 1: the "
-                f"commit beat IS the first beat exclusive to a path). Move "
-                f"`effect: commits` onto {first_exclusive!r} or rename so the "
-                f"commit beat sorts first."
+                f"commit beat IS the first beat exclusive to a path). Rename the "
+                f"commit beat so it sorts before {first_exclusive!r}, or move/remove "
+                f"the earlier exclusive beat."
             )
 
     # R-3.12: 2-4 post-commit beats per path.
