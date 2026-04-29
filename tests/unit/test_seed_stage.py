@@ -154,7 +154,7 @@ async def test_execute_calls_all_three_phases() -> None:
                 {
                     "beat_id": "beat1",
                     "summary": "Opening beat",
-                    "path_id": "path::trust__yes",
+                    "belongs_to": ["path::trust__yes"],
                     "entities": ["entity::kay"],
                 }
             ],
@@ -422,7 +422,7 @@ async def test_execute_returns_artifact_as_dict() -> None:
                 {
                     "beat_id": "beat1",
                     "summary": "Test beat",
-                    "path_id": "path::t1__a1",
+                    "belongs_to": ["path::t1__a1"],
                     "entities": ["entity::kay"],
                 }
             ],
@@ -519,7 +519,7 @@ def test_seed_output_model_validates() -> None:
             {
                 "beat_id": "beat1",
                 "summary": "Opening scene",
-                "path_id": "path::trust__yes",
+                "belongs_to": ["path::trust__yes"],
                 "entities": ["entity::kay"],
             }
         ],
@@ -1067,7 +1067,7 @@ class TestPathBeatsSectionValidation:
             InitialBeat(
                 beat_id=f"beat_{i}",
                 summary=f"Beat {i}",
-                paths=["path_a"],
+                belongs_to=["path_a"],
                 entities=["char_x"],
             )
             for i in range(4)
@@ -1080,8 +1080,12 @@ class TestPathBeatsSectionValidation:
         from questfoundry.models.seed import InitialBeat, PathBeatsSection
 
         beats = [
-            InitialBeat(beat_id="beat_0", summary="Start", paths=["path_a"], entities=["char_x"]),
-            InitialBeat(beat_id="beat_1", summary="End", paths=["path_a"], entities=["char_x"]),
+            InitialBeat(
+                beat_id="beat_0", summary="Start", belongs_to=["path_a"], entities=["char_x"]
+            ),
+            InitialBeat(
+                beat_id="beat_1", summary="End", belongs_to=["path_a"], entities=["char_x"]
+            ),
         ]
         section = PathBeatsSection(initial_beats=beats)
         assert len(section.initial_beats) == 2
@@ -1096,7 +1100,10 @@ class TestPathBeatsSectionValidation:
             PathBeatsSection(
                 initial_beats=[
                     InitialBeat(
-                        beat_id="beat_0", summary="Only one", paths=["path_a"], entities=["char_x"]
+                        beat_id="beat_0",
+                        summary="Only one",
+                        belongs_to=["path_a"],
+                        entities=["char_x"],
                     ),
                 ]
             )
@@ -1111,7 +1118,7 @@ class TestPathBeatsSectionValidation:
             InitialBeat(
                 beat_id=f"beat_{i}",
                 summary=f"Beat {i}",
-                paths=["path_a"],
+                belongs_to=["path_a"],
                 entities=["char_x"],
             )
             for i in range(7)
@@ -1126,8 +1133,12 @@ class TestPathBeatsSectionValidation:
         from questfoundry.models.seed import InitialBeat, PathBeatsSection
 
         beats = [
-            InitialBeat(beat_id="same_id", summary="First", paths=["path_a"], entities=["char_x"]),
-            InitialBeat(beat_id="same_id", summary="Second", paths=["path_a"], entities=["char_x"]),
+            InitialBeat(
+                beat_id="same_id", summary="First", belongs_to=["path_a"], entities=["char_x"]
+            ),
+            InitialBeat(
+                beat_id="same_id", summary="Second", belongs_to=["path_a"], entities=["char_x"]
+            ),
         ]
         with pytest.raises(ValidationError, match="Duplicates found for beat_id"):
             PathBeatsSection(initial_beats=beats)
@@ -1154,37 +1165,33 @@ def test_seed_advisory_warning_splits_shared_vs_post_commit(caplog) -> None:
         "initial_beats": [
             {
                 "beat_id": "b1",
-                "path_id": "p_a1",
-                "also_belongs_to": "p_a2",
+                "belongs_to": ["p_a1", "p_a2"],
                 "dilemma_impacts": [{"dilemma_id": "d_a", "effect": "advances"}],
             },
             {
                 "beat_id": "b2",
-                "path_id": "p_a1",
-                "also_belongs_to": "p_a2",
+                "belongs_to": ["p_a1", "p_a2"],
                 "dilemma_impacts": [{"dilemma_id": "d_a", "effect": "advances"}],
             },
             {
                 "beat_id": "b3",
-                "path_id": "p_b1",
-                "also_belongs_to": "p_b2",
+                "belongs_to": ["p_b1", "p_b2"],
                 "dilemma_impacts": [{"dilemma_id": "d_b", "effect": "advances"}],
             },
             {
                 "beat_id": "b4",
-                "path_id": "p_b1",
-                "also_belongs_to": "p_b2",
+                "belongs_to": ["p_b1", "p_b2"],
                 "dilemma_impacts": [{"dilemma_id": "d_b", "effect": "advances"}],
             },
             # 2 post-commit per path (only for p_a1 here — light fixture):
             {
                 "beat_id": "b5",
-                "path_id": "p_a1",
+                "belongs_to": ["p_a1"],
                 "dilemma_impacts": [{"dilemma_id": "d_a", "effect": "commits"}],
             },
             {
                 "beat_id": "b6",
-                "path_id": "p_a1",
+                "belongs_to": ["p_a1"],
                 "dilemma_impacts": [{"dilemma_id": "d_a", "effect": "advances"}],
             },
         ],
@@ -1238,13 +1245,13 @@ def test_seed_advisory_no_shared_warning_when_some_dilemmas_single_path(caplog) 
         ],
         "initial_beats": [
             # 2 shared beats on each multi-path dilemma — 4 total.
-            {"beat_id": "s_0_1", "path_id": "p_0a", "also_belongs_to": "p_0b"},
-            {"beat_id": "s_0_2", "path_id": "p_0a", "also_belongs_to": "p_0b"},
-            {"beat_id": "s_1_1", "path_id": "p_1a", "also_belongs_to": "p_1b"},
-            {"beat_id": "s_1_2", "path_id": "p_1a", "also_belongs_to": "p_1b"},
+            {"beat_id": "s_0_1", "belongs_to": ["p_0a", "p_0b"]},
+            {"beat_id": "s_0_2", "belongs_to": ["p_0a", "p_0b"]},
+            {"beat_id": "s_1_1", "belongs_to": ["p_1a", "p_1b"]},
+            {"beat_id": "s_1_2", "belongs_to": ["p_1a", "p_1b"]},
             # ≥2 post-commit beats per path so the post warning doesn't fire.
             *(
-                {"beat_id": f"pc_{i}", "path_id": p_id}
+                {"beat_id": f"pc_{i}", "belongs_to": [p_id]}
                 for i, p_id in enumerate(
                     [
                         "p_0a",
@@ -1296,10 +1303,10 @@ def test_seed_advisory_warns_when_multi_path_dilemma_lacks_shared_beat(caplog) -
         ],
         "initial_beats": [
             # Only one shared beat across both multi-path dilemmas → 1/2 = 0.5 < 1.0.
-            {"beat_id": "s_only", "path_id": "p_a1", "also_belongs_to": "p_a2"},
+            {"beat_id": "s_only", "belongs_to": ["p_a1", "p_a2"]},
             # Plenty of post-commit so we isolate the shared warning.
             *(
-                {"beat_id": f"pc_{i}", "path_id": p_id}
+                {"beat_id": f"pc_{i}", "belongs_to": [p_id]}
                 for i, p_id in enumerate(
                     ["p_a1", "p_a1", "p_a2", "p_a2", "p_b1", "p_b1", "p_b2", "p_b2"]
                 )

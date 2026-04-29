@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import warnings
 from typing import ClassVar
 
 import pytest
@@ -213,13 +212,13 @@ class TestPathBeatsSectionDedup:
     _BEAT_A: ClassVar[dict] = {
         "beat_id": "beat_a",
         "summary": "Something happens",
-        "path_id": "path::trust_or_betray__trust",
+        "belongs_to": ["path::trust_or_betray__trust"],
         "entities": ["character::protagonist"],
     }
     _BEAT_B: ClassVar[dict] = {
         "beat_id": "beat_b",
         "summary": "Something else happens",
-        "path_id": "path::trust_or_betray__trust",
+        "belongs_to": ["path::trust_or_betray__trust"],
         "entities": ["character::protagonist"],
     }
 
@@ -250,7 +249,7 @@ class TestPathBeatsSectionDedup:
             {
                 "beat_id": f"beat_{i}",
                 "summary": f"Beat {i}",
-                "path_id": "path::trust_or_betray__trust",
+                "belongs_to": ["path::trust_or_betray__trust"],
                 "entities": ["character::protagonist"],
             }
             for i in range(5)
@@ -673,15 +672,20 @@ class TestDilemmaRelationshipsSectionDedup:
 def _make_shared_beat_dict(
     beat_id: str = "shared_01",
     path_id: str = "path::trust_or_betray__trust",
-    also_belongs_to: str | None = "path::trust_or_betray__betray",
+    sibling_path_id: str | None = "path::trust_or_betray__betray",
     summary: str = "The hero meets the informant.",
 ) -> dict:
-    """Build a minimal shared beat dict for testing."""
+    """Build a minimal shared beat dict for testing.
+
+    Uses the ``belongs_to`` list form. ``sibling_path_id=None`` maps to
+    a single-element list (which will fail SharedBeatsSection validation as
+    intended — that guard rail checks length < 2).
+    """
+    belongs_to = [path_id] if sibling_path_id is None else [path_id, sibling_path_id]
     return {
         "beat_id": beat_id,
         "summary": summary,
-        "path_id": path_id,
-        "also_belongs_to": also_belongs_to,
+        "belongs_to": belongs_to,
         "entities": ["character::protagonist"],
         "dilemma_impacts": [
             {
@@ -694,44 +698,44 @@ def _make_shared_beat_dict(
 
 
 class TestSharedBeatsSectionValidator:
-    """SharedBeatsSection must enforce also_belongs_to on every beat (Part 8 guard rail 2)."""
+    """SharedBeatsSection must enforce belongs_to of length 2 on every beat (Part 8 guard rail 2)."""
 
-    def test_valid_section_all_beats_have_also_belongs_to(self) -> None:
-        """Section with all beats having also_belongs_to passes validation."""
+    def test_valid_section_all_beats_have_dual_belongs_to(self) -> None:
+        """Section with all beats having belongs_to of length 2 passes validation."""
         section = SharedBeatsSection(
             initial_beats=[
                 _make_shared_beat_dict(beat_id="shared_01"),
                 _make_shared_beat_dict(
                     beat_id="shared_02",
                     path_id="path::trust_or_betray__trust",
-                    also_belongs_to="path::trust_or_betray__betray",
+                    sibling_path_id="path::trust_or_betray__betray",
                     summary="The hero learns the truth.",
                 ),
             ]
         )
         assert len(section.initial_beats) == 2
-        assert all(b.also_belongs_to is not None for b in section.initial_beats)
+        assert all(len(b.belongs_to) == 2 for b in section.initial_beats)
 
-    def test_single_beat_with_also_belongs_to_accepted(self) -> None:
-        """Minimum valid case: one beat with also_belongs_to set."""
+    def test_single_beat_with_dual_belongs_to_accepted(self) -> None:
+        """Minimum valid case: one beat with belongs_to of length 2."""
         section = SharedBeatsSection(initial_beats=[_make_shared_beat_dict()])
         assert len(section.initial_beats) == 1
-        assert section.initial_beats[0].also_belongs_to is not None
+        assert len(section.initial_beats[0].belongs_to) == 2
 
-    def test_beat_missing_also_belongs_to_raises_value_error(self) -> None:
-        """A beat with also_belongs_to=None violates Part 8 guard rail 2 and must raise."""
+    def test_beat_single_element_belongs_to_raises_value_error(self) -> None:
+        """A beat with belongs_to of length 1 violates Part 8 guard rail 2 and must raise."""
         with pytest.raises(ValidationError) as exc_info:
             SharedBeatsSection(
                 initial_beats=[
-                    _make_shared_beat_dict(also_belongs_to=None),
+                    _make_shared_beat_dict(sibling_path_id=None),
                 ]
             )
         error_text = str(exc_info.value)
-        assert "also_belongs_to" in error_text
+        assert "belongs_to" in error_text
         assert "guard rail" in error_text.lower() or "Part 8" in error_text
 
-    def test_mixed_beats_some_missing_also_belongs_to_raises(self) -> None:
-        """If ANY beat in the section lacks also_belongs_to, validation fails.
+    def test_mixed_beats_some_single_element_raises(self) -> None:
+        """If ANY beat in the section has belongs_to of length 1, validation fails.
 
         The offending beat ID must be named in the error message.
         """
@@ -739,18 +743,18 @@ class TestSharedBeatsSectionValidator:
             SharedBeatsSection(
                 initial_beats=[
                     _make_shared_beat_dict(beat_id="good_beat"),
-                    _make_shared_beat_dict(beat_id="bad_beat", also_belongs_to=None),
+                    _make_shared_beat_dict(beat_id="bad_beat", sibling_path_id=None),
                 ]
             )
         assert "bad_beat" in str(exc_info.value)
 
-    def test_all_beats_missing_also_belongs_to_names_all_offenders(self) -> None:
-        """When all beats are missing also_belongs_to, all beat IDs appear in the error."""
+    def test_all_beats_single_element_names_all_offenders(self) -> None:
+        """When all beats have belongs_to of length 1, all beat IDs appear in the error."""
         with pytest.raises(ValidationError) as exc_info:
             SharedBeatsSection(
                 initial_beats=[
-                    _make_shared_beat_dict(beat_id="beat_a", also_belongs_to=None),
-                    _make_shared_beat_dict(beat_id="beat_b", also_belongs_to=None),
+                    _make_shared_beat_dict(beat_id="beat_a", sibling_path_id=None),
+                    _make_shared_beat_dict(beat_id="beat_b", sibling_path_id=None),
                 ]
             )
         error_text = str(exc_info.value)
@@ -969,7 +973,7 @@ class TestMakeConstrainedDilemmasSection:
 _BEAT_KWARGS: dict[str, str | list] = {
     "beat_id": "trust_beat_01",
     "summary": "The protagonist confronts the mentor about the hidden letter.",
-    "path_id": "path::trust_or_betray__trust",
+    "belongs_to": ["path::trust_or_betray__trust"],
     "entities": ["character::protagonist"],
 }
 
@@ -1046,134 +1050,104 @@ class TestInitialBeatTemporalHint:
 
 
 # ---------------------------------------------------------------------------
-# InitialBeat.path_id (singular path, #983)
+# InitialBeat.belongs_to (path membership list, #1564; previously path_id #983)
 # ---------------------------------------------------------------------------
 
 
-class TestInitialBeatPathId:
-    """InitialBeat.path_id enforces singular path ownership."""
+class TestInitialBeatBelongsTo:
+    """InitialBeat.belongs_to enforces path membership (single or dual)."""
 
-    def test_path_id_stored(self) -> None:
+    def test_single_element_belongs_to_stored(self) -> None:
         beat = InitialBeat(
             beat_id="b1",
             summary="Test",
-            path_id="path::trust__yes",
+            belongs_to=["path::trust__yes"],
             entities=["character::protagonist"],
         )
-        assert beat.path_id == "path::trust__yes"
+        assert beat.belongs_to == ["path::trust__yes"]
 
-    def test_legacy_paths_list_migrated(self) -> None:
-        """Legacy single-element paths list is accepted and migrated."""
+    def test_dual_element_belongs_to_stored(self) -> None:
+        """Two-element belongs_to list is accepted (pre-commit shared beat)."""
         beat = InitialBeat(
             beat_id="b1",
             summary="Test",
-            paths=["path::trust__yes"],
+            belongs_to=["path::a__x", "path::b__y"],
             entities=["character::protagonist"],
         )
-        assert beat.path_id == "path::trust__yes"
+        assert beat.belongs_to == ["path::a__x", "path::b__y"]
 
-    def test_legacy_multi_paths_warns(self) -> None:
-        """Two-element paths list triggers deprecation warning and maps to Y-shape dual."""
-        with pytest.warns(DeprecationWarning, match="also_belongs_to"):
-            beat = InitialBeat(
-                beat_id="b1",
-                summary="Test",
-                paths=["path::a__x", "path::b__y"],
-                entities=["character::protagonist"],
-            )
-        assert beat.path_id == "path::a__x"
-        assert beat.also_belongs_to == "path::b__y"
-
-    def test_empty_path_id_rejected(self) -> None:
-        with pytest.raises(ValidationError, match="path_id"):
+    def test_empty_belongs_to_rejected(self) -> None:
+        """Empty belongs_to violates min_length=1."""
+        with pytest.raises(ValidationError):
             InitialBeat(
                 beat_id="b1",
                 summary="Test",
-                path_id="",
+                belongs_to=[],
                 entities=["character::protagonist"],
             )
 
-    def test_legacy_empty_paths_rejected(self) -> None:
-        """Empty paths list raises ValueError — beats must belong to a path."""
-        with pytest.raises(ValidationError, match="must belong to at least one path"):
+    def test_three_element_belongs_to_rejected(self) -> None:
+        """More than 2 elements violates max_length=2."""
+        with pytest.raises(ValidationError):
             InitialBeat(
                 beat_id="b1",
                 summary="Test",
-                paths=[],
+                belongs_to=["path::a__x", "path::b__y", "path::c__z"],
+                entities=["character::protagonist"],
+            )
+
+    def test_missing_belongs_to_rejected(self) -> None:
+        """Missing belongs_to field is rejected."""
+        with pytest.raises(ValidationError):
+            InitialBeat(
+                beat_id="b1",
+                summary="Test",
                 entities=["character::protagonist"],
             )
 
 
 def test_initial_beat_pre_commit_dual_belongs_to() -> None:
-    """Pre-commit beats carry ``also_belongs_to`` pointing at the sibling path."""
+    """Pre-commit beats carry a 2-element belongs_to pointing at both paths."""
     beat = InitialBeat(
         beat_id="b1",
         summary="Shared setup before the fork.",
-        path_id="path::trust__protector",
-        also_belongs_to="path::trust__manipulator",
+        belongs_to=["path::trust__protector", "path::trust__manipulator"],
         entities=["character::protagonist"],
     )
-    assert beat.path_id == "path::trust__protector"
-    assert beat.also_belongs_to == "path::trust__manipulator"
+    assert beat.belongs_to[0] == "path::trust__protector"
+    assert beat.belongs_to[1] == "path::trust__manipulator"
 
 
-def test_initial_beat_post_commit_single_belongs_to_default() -> None:
-    """Post-commit beats default to ``also_belongs_to = None``."""
+def test_initial_beat_post_commit_single_belongs_to() -> None:
+    """Post-commit beats carry a 1-element belongs_to."""
     beat = InitialBeat(
         beat_id="b1",
         summary="Payoff beat.",
-        path_id="path::trust__protector",
+        belongs_to=["path::trust__protector"],
         entities=["character::protagonist"],
     )
-    assert beat.also_belongs_to is None
+    assert len(beat.belongs_to) == 1
+    assert beat.belongs_to[0] == "path::trust__protector"
 
 
-def test_initial_beat_also_belongs_to_equal_path_id_is_rejected() -> None:
-    """``also_belongs_to`` must differ from ``path_id`` — dual membership needs two paths."""
-    with pytest.raises(ValidationError, match="also_belongs_to must differ from path_id"):
+def test_initial_beat_belongs_to_duplicate_elements_is_rejected() -> None:
+    """``belongs_to`` elements must be distinct — dual membership needs two different paths."""
+    with pytest.raises(ValidationError, match="belongs_to elements must be distinct"):
         InitialBeat(
             beat_id="b1",
             summary="Broken dual.",
-            path_id="path::trust__protector",
-            also_belongs_to="path::trust__protector",
+            belongs_to=["path::trust__protector", "path::trust__protector"],
             entities=["character::protagonist"],
         )
 
 
-def test_initial_beat_legacy_paths_two_elements_becomes_dual() -> None:
-    """Legacy ``paths: [p_a, p_b]`` migrates to Y-shape dual membership."""
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
-        beat = InitialBeat(
-            beat_id="b1",
-            summary="Legacy dual.",
-            paths=["path::trust__protector", "path::trust__manipulator"],
-            entities=["character::protagonist"],
-        )
-
-    assert beat.path_id == "path::trust__protector"
-    assert beat.also_belongs_to == "path::trust__manipulator"
-    assert any(issubclass(w.category, DeprecationWarning) for w in caught)
-
-
-def test_initial_beat_legacy_paths_three_elements_is_rejected() -> None:
-    """A list of three or more paths is a schema error — not a migration target."""
-    with pytest.raises(ValidationError, match="at most 2 entries"):
-        InitialBeat(
-            beat_id="b1",
-            summary="Bad.",
-            paths=["p_a", "p_b", "p_c"],
-            entities=["character::protagonist"],
-        )
-
-
-def test_initial_beat_also_belongs_to_empty_string_is_rejected() -> None:
+def test_initial_beat_belongs_to_empty_string_element_is_rejected() -> None:
+    """Empty string inside belongs_to violates min_length constraint on list elements."""
     with pytest.raises(ValidationError):
         InitialBeat(
             beat_id="b1",
             summary="Test.",
-            path_id="path::trust__protector",
-            also_belongs_to="",
+            belongs_to=[""],
             entities=["character::protagonist"],
         )
 
@@ -1196,7 +1170,7 @@ def test_initial_beat_role_accepts_setup_and_epilogue(role: str | None) -> None:
     beat = InitialBeat(
         beat_id="b1",
         summary="The story begins.",
-        path_id="path::trust_or_betray__trust",
+        belongs_to=["path::trust_or_betray__trust"],
         entities=["character::protagonist"],
         role=role,
     )
@@ -1208,7 +1182,7 @@ def test_initial_beat_role_defaults_to_none() -> None:
     beat = InitialBeat(
         beat_id="b1",
         summary="A dilemma beat.",
-        path_id="path::trust_or_betray__trust",
+        belongs_to=["path::trust_or_betray__trust"],
         entities=["character::protagonist"],
     )
     assert beat.role is None
@@ -1220,7 +1194,7 @@ def test_initial_beat_role_rejects_invalid_values() -> None:
         InitialBeat(
             beat_id="b1",
             summary="Invalid role.",
-            path_id="path::trust_or_betray__trust",
+            belongs_to=["path::trust_or_betray__trust"],
             entities=["character::protagonist"],
             role="something_else",  # type: ignore[arg-type]
         )
@@ -1266,7 +1240,7 @@ def test_initial_beat_entities_must_be_non_empty() -> None:
         InitialBeat(
             beat_id="b1",
             summary="A beat with no entities.",
-            path_id="path::trust_or_betray__trust",
+            belongs_to=["path::trust_or_betray__trust"],
             entities=[],  # R-3.13 violation
         )
 
@@ -1276,7 +1250,7 @@ def test_initial_beat_entities_with_one_entity_accepted() -> None:
     beat = InitialBeat(
         beat_id="b1",
         summary="A beat.",
-        path_id="path::trust_or_betray__trust",
+        belongs_to=["path::trust_or_betray__trust"],
         entities=["character::protagonist"],
     )
     assert beat.entities == ["character::protagonist"]
@@ -1287,7 +1261,7 @@ def test_initial_beat_entities_with_multiple_accepted() -> None:
     beat = InitialBeat(
         beat_id="b1",
         summary="A beat.",
-        path_id="path::trust_or_betray__trust",
+        belongs_to=["path::trust_or_betray__trust"],
         entities=["character::protagonist", "location::manor"],
     )
     assert len(beat.entities) == 2

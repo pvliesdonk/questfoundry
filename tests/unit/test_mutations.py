@@ -378,50 +378,49 @@ class TestApplyMutations:
                 {
                     "beat_id": "shared_pre",
                     "summary": "Both players encounter the mentor's cryptic hint.",
-                    "path_id": "trust__protector",
-                    "also_belongs_to": "trust__manipulator",
+                    "belongs_to": ["trust__protector", "trust__manipulator"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "commit_protector",
                     "summary": "Protagonist trusts the mentor.",
-                    "path_id": "trust__protector",
+                    "belongs_to": ["trust__protector"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "commits"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "post_protector_1",
                     "summary": "Mentor reveals a vital secret.",
-                    "path_id": "trust__protector",
+                    "belongs_to": ["trust__protector"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "post_protector_2",
                     "summary": "Ally bond confirmed.",
-                    "path_id": "trust__protector",
+                    "belongs_to": ["trust__protector"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "commit_manipulator",
                     "summary": "Protagonist distrusts the mentor.",
-                    "path_id": "trust__manipulator",
+                    "belongs_to": ["trust__manipulator"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "commits"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "post_manipulator_1",
                     "summary": "Mentor's true motive surfaces.",
-                    "path_id": "trust__manipulator",
+                    "belongs_to": ["trust__manipulator"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "post_manipulator_2",
                     "summary": "Protagonist faces danger alone.",
-                    "path_id": "trust__manipulator",
+                    "belongs_to": ["trust__manipulator"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
@@ -1600,21 +1599,21 @@ class TestSeedMutations:
                 {
                     "beat_id": "commit",
                     "summary": "Trust decided.",
-                    "path_id": "trust__protector",
+                    "belongs_to": ["trust__protector"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "commits"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "post_1",
                     "summary": "Aftermath follows.",
-                    "path_id": "trust__protector",
+                    "belongs_to": ["trust__protector"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "post_2",
                     "summary": "Ally bond forms.",
-                    "path_id": "trust__protector",
+                    "belongs_to": ["trust__protector"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
@@ -1704,7 +1703,7 @@ class TestSeedMutations:
                 {
                     "beat_id": "resolution",
                     "summary": "Mentor's true nature revealed.",
-                    "path_id": "path_mentor_trust",
+                    "belongs_to": ["path_mentor_trust"],
                     "dilemma_impacts": [
                         {"dilemma_id": "mentor_trust", "effect": "commits", "note": "Locked in"}
                     ],
@@ -1713,7 +1712,7 @@ class TestSeedMutations:
                 {
                     "beat_id": "resolution_post",
                     "summary": "Consequences of the revelation.",
-                    "path_id": "path_mentor_trust",
+                    "belongs_to": ["path_mentor_trust"],
                     "dilemma_impacts": [
                         {"dilemma_id": "mentor_trust", "effect": "advances", "note": "Fallout"}
                     ],
@@ -1722,7 +1721,7 @@ class TestSeedMutations:
                 {
                     "beat_id": "resolution_post_2",
                     "summary": "Aftermath settles.",
-                    "path_id": "path_mentor_trust",
+                    "belongs_to": ["path_mentor_trust"],
                     "dilemma_impacts": [
                         {"dilemma_id": "mentor_trust", "effect": "advances", "note": "Settling"}
                     ],
@@ -1731,21 +1730,21 @@ class TestSeedMutations:
                 {
                     "beat_id": "trust_commit",
                     "summary": "Trust resolved.",
-                    "path_id": "trust__protector",
+                    "belongs_to": ["trust__protector"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "commits"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "trust_post_1",
                     "summary": "Trust aftermath.",
-                    "path_id": "trust__protector",
+                    "belongs_to": ["trust__protector"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "trust_post_2",
                     "summary": "Trust settled.",
-                    "path_id": "trust__protector",
+                    "belongs_to": ["trust__protector"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
@@ -1843,15 +1842,14 @@ class TestSeedMutations:
                 {
                     "beat_id": "shared_setup",
                     "summary": "Both paths share this setup beat.",
-                    "path_id": "mentor_protects",
-                    "also_belongs_to": "mentor_manipulates",
+                    "belongs_to": ["mentor_protects", "mentor_manipulates"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "protects_beat_01",
                     "summary": "Mentor reveals protection.",
-                    "path_id": "mentor_protects",
+                    "belongs_to": ["mentor_protects"],
                     "dilemma_impacts": [
                         {"dilemma_id": "trust", "effect": "commits", "note": "Locked"}
                     ],
@@ -1860,7 +1858,7 @@ class TestSeedMutations:
                 {
                     "beat_id": "protects_beat_02",
                     "summary": "Protection confirmed.",
-                    "path_id": "mentor_protects",
+                    "belongs_to": ["mentor_protects"],
                     "dilemma_impacts": [
                         {"dilemma_id": "trust", "effect": "advances", "note": "Fallout"}
                     ],
@@ -1869,7 +1867,7 @@ class TestSeedMutations:
                 {
                     "beat_id": "protects_beat_03",
                     "summary": "Ally bond solidifies.",
-                    "path_id": "mentor_protects",
+                    "belongs_to": ["mentor_protects"],
                     "dilemma_impacts": [
                         {"dilemma_id": "trust", "effect": "advances", "note": "Growth"}
                     ],
@@ -1878,7 +1876,7 @@ class TestSeedMutations:
                 {
                     "beat_id": "manipulates_beat_01",
                     "summary": "Mentor reveals manipulation.",
-                    "path_id": "mentor_manipulates",
+                    "belongs_to": ["mentor_manipulates"],
                     "dilemma_impacts": [
                         {"dilemma_id": "trust", "effect": "commits", "note": "Locked"}
                     ],
@@ -1887,7 +1885,7 @@ class TestSeedMutations:
                 {
                     "beat_id": "manipulates_beat_02",
                     "summary": "Manipulation confirmed.",
-                    "path_id": "mentor_manipulates",
+                    "belongs_to": ["mentor_manipulates"],
                     "dilemma_impacts": [
                         {"dilemma_id": "trust", "effect": "advances", "note": "Fallout"}
                     ],
@@ -1896,7 +1894,7 @@ class TestSeedMutations:
                 {
                     "beat_id": "manipulates_beat_03",
                     "summary": "Protagonist must stand alone.",
-                    "path_id": "mentor_manipulates",
+                    "belongs_to": ["mentor_manipulates"],
                     "dilemma_impacts": [
                         {"dilemma_id": "trust", "effect": "advances", "note": "Hardship"}
                     ],
@@ -1991,12 +1989,11 @@ class TestSeedMutations:
                 },
             ],
             "initial_beats": [
-                # Shared pre-commit beat (dual belongs_to via also_belongs_to)
+                # Shared pre-commit beat (dual belongs_to — two-element list)
                 {
                     "beat_id": "opening_001",
                     "summary": "Kay meets the mentor for the first time",
-                    "path_id": "trust__protector",
-                    "also_belongs_to": "trust__manipulator",
+                    "belongs_to": ["trust__protector", "trust__manipulator"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
                     "entities": ["kay", "mentor"],
                     "location": "archive",
@@ -2005,7 +2002,7 @@ class TestSeedMutations:
                 {
                     "beat_id": "commit_protector",
                     "summary": "Kay decides to trust the mentor.",
-                    "path_id": "trust__protector",
+                    "belongs_to": ["trust__protector"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "commits"}],
                     "entities": ["kay", "mentor"],
                 },
@@ -2013,14 +2010,14 @@ class TestSeedMutations:
                 {
                     "beat_id": "post_protector_1",
                     "summary": "Mentor reveals a vital secret.",
-                    "path_id": "trust__protector",
+                    "belongs_to": ["trust__protector"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "post_protector_2",
                     "summary": "Ally bond confirmed.",
-                    "path_id": "trust__protector",
+                    "belongs_to": ["trust__protector"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
@@ -2028,7 +2025,7 @@ class TestSeedMutations:
                 {
                     "beat_id": "commit_manipulator",
                     "summary": "Kay distrusts the mentor.",
-                    "path_id": "trust__manipulator",
+                    "belongs_to": ["trust__manipulator"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "commits"}],
                     "entities": ["kay", "mentor"],
                 },
@@ -2036,14 +2033,14 @@ class TestSeedMutations:
                 {
                     "beat_id": "post_manipulator_1",
                     "summary": "Mentor's true motive surfaces.",
-                    "path_id": "trust__manipulator",
+                    "belongs_to": ["trust__manipulator"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "post_manipulator_2",
                     "summary": "Protagonist faces danger alone.",
-                    "path_id": "trust__manipulator",
+                    "belongs_to": ["trust__manipulator"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
                     "entities": ["kay"],
                 },
@@ -2175,8 +2172,7 @@ class TestSeedMutations:
                 {
                     "beat_id": "trust_pre",
                     "summary": "Protagonist encounters the mentor",
-                    "path_id": "trust__protector",
-                    "also_belongs_to": "trust__manipulator",
+                    "belongs_to": ["trust__protector", "trust__manipulator"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
@@ -2184,7 +2180,7 @@ class TestSeedMutations:
                 {
                     "beat_id": "opening_001",
                     "summary": "Kay decides to trust the mentor",
-                    "path_id": "trust__protector",
+                    "belongs_to": ["trust__protector"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "commits"}],
                     "entities": ["mentor"],
                     "temporal_hint": {
@@ -2196,14 +2192,14 @@ class TestSeedMutations:
                 {
                     "beat_id": "post_protector_1",
                     "summary": "Mentor shares vital information.",
-                    "path_id": "trust__protector",
+                    "belongs_to": ["trust__protector"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "post_protector_2",
                     "summary": "Ally bond confirmed.",
-                    "path_id": "trust__protector",
+                    "belongs_to": ["trust__protector"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
@@ -2211,7 +2207,7 @@ class TestSeedMutations:
                 {
                     "beat_id": "commit_manipulator",
                     "summary": "Kay distrusts the mentor.",
-                    "path_id": "trust__manipulator",
+                    "belongs_to": ["trust__manipulator"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "commits"}],
                     "entities": ["mentor"],
                 },
@@ -2219,14 +2215,14 @@ class TestSeedMutations:
                 {
                     "beat_id": "post_manipulator_1",
                     "summary": "Mentor's true motive surfaces.",
-                    "path_id": "trust__manipulator",
+                    "belongs_to": ["trust__manipulator"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "post_manipulator_2",
                     "summary": "Protagonist faces danger alone.",
-                    "path_id": "trust__manipulator",
+                    "belongs_to": ["trust__manipulator"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
@@ -2234,8 +2230,7 @@ class TestSeedMutations:
                 {
                     "beat_id": "fight_pre",
                     "summary": "Danger approaches.",
-                    "path_id": "fight_or_flee__fight",
-                    "also_belongs_to": "fight_or_flee__flee",
+                    "belongs_to": ["fight_or_flee__fight", "fight_or_flee__flee"],
                     "dilemma_impacts": [{"dilemma_id": "fight_or_flee", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
@@ -2243,14 +2238,14 @@ class TestSeedMutations:
                 {
                     "beat_id": "commit_fight",
                     "summary": "Character stands and fights.",
-                    "path_id": "fight_or_flee__fight",
+                    "belongs_to": ["fight_or_flee__fight"],
                     "dilemma_impacts": [{"dilemma_id": "fight_or_flee", "effect": "commits"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "commit_flee",
                     "summary": "Character flees the danger.",
-                    "path_id": "fight_or_flee__flee",
+                    "belongs_to": ["fight_or_flee__flee"],
                     "dilemma_impacts": [{"dilemma_id": "fight_or_flee", "effect": "commits"}],
                     "entities": ["mentor"],
                 },
@@ -2258,28 +2253,28 @@ class TestSeedMutations:
                 {
                     "beat_id": "post_fight_1",
                     "summary": "Wounds slow the journey.",
-                    "path_id": "fight_or_flee__fight",
+                    "belongs_to": ["fight_or_flee__fight"],
                     "dilemma_impacts": [{"dilemma_id": "fight_or_flee", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "post_fight_2",
                     "summary": "Victory is hollow.",
-                    "path_id": "fight_or_flee__fight",
+                    "belongs_to": ["fight_or_flee__fight"],
                     "dilemma_impacts": [{"dilemma_id": "fight_or_flee", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "post_flee_1",
                     "summary": "Cowardice haunts.",
-                    "path_id": "fight_or_flee__flee",
+                    "belongs_to": ["fight_or_flee__flee"],
                     "dilemma_impacts": [{"dilemma_id": "fight_or_flee", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "post_flee_2",
                     "summary": "Escape has a price.",
-                    "path_id": "fight_or_flee__flee",
+                    "belongs_to": ["fight_or_flee__flee"],
                     "dilemma_impacts": [{"dilemma_id": "fight_or_flee", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
@@ -2318,7 +2313,7 @@ class TestSeedMutations:
         """Build a fully contract-compliant SEED output using only the trust dilemma.
 
         Provides two paths (trust__protector, trust__manipulator) with:
-        - one shared pre-commit beat (dual belongs_to via also_belongs_to)
+        - one shared pre-commit beat (dual belongs_to — two-element list)
         - one commit beat per path
         - two post-commit beats per path
         - consequences with ripples
@@ -2330,7 +2325,7 @@ class TestSeedMutations:
         commit_beat: dict[str, Any] = {
             "beat_id": "opening_001",
             "summary": "Kay decides to trust the mentor",
-            "path_id": "trust__protector",
+            "belongs_to": ["trust__protector"],
             "dilemma_impacts": [{"dilemma_id": "trust", "effect": "commits"}],
             "entities": ["mentor"],
         }
@@ -2383,8 +2378,7 @@ class TestSeedMutations:
                 {
                     "beat_id": "trust_pre",
                     "summary": "Protagonist encounters the mentor",
-                    "path_id": "trust__protector",
-                    "also_belongs_to": "trust__manipulator",
+                    "belongs_to": ["trust__protector", "trust__manipulator"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
@@ -2394,14 +2388,14 @@ class TestSeedMutations:
                 {
                     "beat_id": "post_protector_1",
                     "summary": "Mentor shares vital information.",
-                    "path_id": "trust__protector",
+                    "belongs_to": ["trust__protector"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "post_protector_2",
                     "summary": "Ally bond confirmed.",
-                    "path_id": "trust__protector",
+                    "belongs_to": ["trust__protector"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
@@ -2409,7 +2403,7 @@ class TestSeedMutations:
                 {
                     "beat_id": "commit_manipulator",
                     "summary": "Kay distrusts the mentor.",
-                    "path_id": "trust__manipulator",
+                    "belongs_to": ["trust__manipulator"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "commits"}],
                     "entities": ["mentor"],
                 },
@@ -2417,14 +2411,14 @@ class TestSeedMutations:
                 {
                     "beat_id": "post_manipulator_1",
                     "summary": "Mentor's true motive surfaces.",
-                    "path_id": "trust__manipulator",
+                    "belongs_to": ["trust__manipulator"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "post_manipulator_2",
                     "summary": "Protagonist faces danger alone.",
-                    "path_id": "trust__manipulator",
+                    "belongs_to": ["trust__manipulator"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
@@ -2534,7 +2528,7 @@ class TestSeedCompletenessValidation:
                 {
                     "beat_id": "discovery",
                     "summary": "Trust questioned",
-                    "paths": ["trust_arc"],
+                    "belongs_to": ["trust_arc"],
                     "dilemma_impacts": [
                         {"dilemma_id": "trust", "effect": "advances", "note": "Tension builds"}
                     ],
@@ -2542,7 +2536,7 @@ class TestSeedCompletenessValidation:
                 {
                     "beat_id": "resolution",
                     "summary": "Trust resolved",
-                    "paths": ["trust_arc"],
+                    "belongs_to": ["trust_arc"],
                     "dilemma_impacts": [
                         {"dilemma_id": "trust", "effect": "commits", "note": "Locked in"}
                     ],
@@ -2550,7 +2544,7 @@ class TestSeedCompletenessValidation:
                 {
                     "beat_id": "aftermath",
                     "summary": "Consequences unfold",
-                    "paths": ["trust_arc"],
+                    "belongs_to": ["trust_arc"],
                     "dilemma_impacts": [
                         {"dilemma_id": "trust", "effect": "advances", "note": "Fallout"}
                     ],
@@ -3030,7 +3024,7 @@ class TestBeatDilemmaAlignment:
             {
                 "beat_id": "opening",
                 "summary": "Start",
-                "paths": ["trust_arc"],
+                "belongs_to": ["trust_arc"],
                 "dilemma_impacts": [
                     # Wrong dilemma - should be 'trust' for path trust_arc
                     {"dilemma_id": "loyalty", "effect": "commits", "note": "Wrong"}
@@ -3053,7 +3047,7 @@ class TestBeatDilemmaAlignment:
             {
                 "beat_id": "opening",
                 "summary": "Start",
-                "paths": ["trust_arc"],
+                "belongs_to": ["trust_arc"],
                 # No dilemma_impacts at all
             }
         ]
@@ -3071,7 +3065,7 @@ class TestBeatDilemmaAlignment:
             {
                 "beat_id": "opening",
                 "summary": "Start",
-                "paths": ["trust_arc"],
+                "belongs_to": ["trust_arc"],
                 "dilemma_impacts": [
                     {"dilemma_id": "trust", "effect": "advances", "note": "Begins"}
                 ],
@@ -3102,7 +3096,7 @@ class TestBeatDilemmaAlignment:
             {
                 "beat_id": "opening",
                 "summary": "Start",
-                "paths": ["trust_arc"],
+                "belongs_to": ["trust_arc"],
                 "dilemma_impacts": [
                     {"dilemma_id": "trust", "effect": "commits", "note": "Primary"},
                     {"dilemma_id": "loyalty", "effect": "advances", "note": "Secondary"},
@@ -3111,7 +3105,7 @@ class TestBeatDilemmaAlignment:
             {
                 "beat_id": "opening_post",
                 "summary": "Trust aftermath",
-                "paths": ["trust_arc"],
+                "belongs_to": ["trust_arc"],
                 "dilemma_impacts": [
                     {"dilemma_id": "trust", "effect": "advances", "note": "Fallout"},
                 ],
@@ -3119,7 +3113,7 @@ class TestBeatDilemmaAlignment:
             {
                 "beat_id": "loyalty_commit",
                 "summary": "Loyalty locked",
-                "paths": ["loyalty_arc"],
+                "belongs_to": ["loyalty_arc"],
                 "dilemma_impacts": [
                     {"dilemma_id": "loyalty", "effect": "commits", "note": "Locked"}
                 ],
@@ -3127,7 +3121,7 @@ class TestBeatDilemmaAlignment:
             {
                 "beat_id": "loyalty_commit_post",
                 "summary": "Loyalty aftermath",
-                "paths": ["loyalty_arc"],
+                "belongs_to": ["loyalty_arc"],
                 "dilemma_impacts": [
                     {"dilemma_id": "loyalty", "effect": "advances", "note": "Fallout"}
                 ],
@@ -3155,14 +3149,14 @@ class TestBeatDilemmaAlignment:
             {
                 "beat_id": "trust_commit",
                 "summary": "Trust resolved",
-                "paths": ["trust_arc"],
+                "belongs_to": ["trust_arc"],
                 "dilemma_impacts": [{"dilemma_id": "trust", "effect": "commits", "note": "Locked"}],
             },
             # loyalty_arc has no commits beat
             {
                 "beat_id": "loyalty_advance",
                 "summary": "Loyalty tested",
-                "paths": ["loyalty_arc"],
+                "belongs_to": ["loyalty_arc"],
                 "dilemma_impacts": [
                     {"dilemma_id": "loyalty", "effect": "advances", "note": "Tested"}
                 ],
@@ -3191,13 +3185,13 @@ class TestBeatDilemmaAlignment:
             {
                 "beat_id": "trust_commit",
                 "summary": "Trust resolved",
-                "paths": ["trust_arc"],
+                "belongs_to": ["trust_arc"],
                 "dilemma_impacts": [{"dilemma_id": "trust", "effect": "commits", "note": "Locked"}],
             },
             {
                 "beat_id": "trust_commit_post",
                 "summary": "Trust aftermath",
-                "paths": ["trust_arc"],
+                "belongs_to": ["trust_arc"],
                 "dilemma_impacts": [
                     {"dilemma_id": "trust", "effect": "advances", "note": "Fallout"}
                 ],
@@ -3205,7 +3199,7 @@ class TestBeatDilemmaAlignment:
             {
                 "beat_id": "loyalty_commit",
                 "summary": "Loyalty locked",
-                "paths": ["loyalty_arc"],
+                "belongs_to": ["loyalty_arc"],
                 "dilemma_impacts": [
                     {"dilemma_id": "loyalty", "effect": "commits", "note": "Locked"}
                 ],
@@ -3213,7 +3207,7 @@ class TestBeatDilemmaAlignment:
             {
                 "beat_id": "loyalty_commit_post",
                 "summary": "Loyalty aftermath",
-                "paths": ["loyalty_arc"],
+                "belongs_to": ["loyalty_arc"],
                 "dilemma_impacts": [
                     {"dilemma_id": "loyalty", "effect": "advances", "note": "Fallout"}
                 ],
@@ -3272,7 +3266,7 @@ class TestSeedArcStructureValidation:
                 {
                     "beat_id": "develop",
                     "summary": "Trust tested",
-                    "paths": ["trust_arc"],
+                    "belongs_to": ["trust_arc"],
                     "dilemma_impacts": [
                         {"dilemma_id": "trust", "effect": "advances", "note": "Builds tension"}
                     ],
@@ -3280,7 +3274,7 @@ class TestSeedArcStructureValidation:
                 {
                     "beat_id": "commit",
                     "summary": "Trust decided",
-                    "paths": ["trust_arc"],
+                    "belongs_to": ["trust_arc"],
                     "dilemma_impacts": [
                         {"dilemma_id": "trust", "effect": "commits", "note": "Locked in"}
                     ],
@@ -3288,7 +3282,7 @@ class TestSeedArcStructureValidation:
                 {
                     "beat_id": "aftermath",
                     "summary": "Consequences",
-                    "paths": ["trust_arc"],
+                    "belongs_to": ["trust_arc"],
                     "dilemma_impacts": [
                         {"dilemma_id": "trust", "effect": "advances", "note": "Fallout"}
                     ],
@@ -3308,7 +3302,7 @@ class TestSeedArcStructureValidation:
                 {
                     "beat_id": "reveal",
                     "summary": "Secret uncovered",
-                    "paths": ["trust_arc"],
+                    "belongs_to": ["trust_arc"],
                     "dilemma_impacts": [
                         {"dilemma_id": "trust", "effect": "reveals", "note": "Truth emerges"}
                     ],
@@ -3316,7 +3310,7 @@ class TestSeedArcStructureValidation:
                 {
                     "beat_id": "commit",
                     "summary": "Trust decided",
-                    "paths": ["trust_arc"],
+                    "belongs_to": ["trust_arc"],
                     "dilemma_impacts": [
                         {"dilemma_id": "trust", "effect": "commits", "note": "Locked in"}
                     ],
@@ -3324,7 +3318,7 @@ class TestSeedArcStructureValidation:
                 {
                     "beat_id": "aftermath",
                     "summary": "Consequences",
-                    "paths": ["trust_arc"],
+                    "belongs_to": ["trust_arc"],
                     "dilemma_impacts": [
                         {"dilemma_id": "trust", "effect": "advances", "note": "Fallout"}
                     ],
@@ -3344,7 +3338,7 @@ class TestSeedArcStructureValidation:
                 {
                     "beat_id": "commit",
                     "summary": "Trust decided",
-                    "paths": ["trust_arc"],
+                    "belongs_to": ["trust_arc"],
                     "dilemma_impacts": [
                         {"dilemma_id": "trust", "effect": "commits", "note": "Locked in"}
                     ],
@@ -3352,7 +3346,7 @@ class TestSeedArcStructureValidation:
                 {
                     "beat_id": "aftermath",
                     "summary": "Consequences",
-                    "paths": ["trust_arc"],
+                    "belongs_to": ["trust_arc"],
                     "dilemma_impacts": [
                         {"dilemma_id": "trust", "effect": "advances", "note": "Fallout"}
                     ],
@@ -3379,7 +3373,7 @@ class TestSeedArcStructureValidation:
                 {
                     "beat_id": "develop",
                     "summary": "Trust tested",
-                    "paths": ["trust_arc"],
+                    "belongs_to": ["trust_arc"],
                     "dilemma_impacts": [
                         {"dilemma_id": "trust", "effect": "advances", "note": "Builds tension"}
                     ],
@@ -3387,7 +3381,7 @@ class TestSeedArcStructureValidation:
                 {
                     "beat_id": "commit",
                     "summary": "Trust decided",
-                    "paths": ["trust_arc"],
+                    "belongs_to": ["trust_arc"],
                     "dilemma_impacts": [
                         {"dilemma_id": "trust", "effect": "commits", "note": "Locked in"}
                     ],
@@ -3414,7 +3408,7 @@ class TestSeedArcStructureValidation:
                 {
                     "beat_id": "commit",
                     "summary": "Trust decided",
-                    "paths": ["trust_arc"],
+                    "belongs_to": ["trust_arc"],
                     "dilemma_impacts": [
                         {"dilemma_id": "trust", "effect": "commits", "note": "Locked in"}
                     ],
@@ -3441,7 +3435,7 @@ class TestSeedArcStructureValidation:
                 {
                     "beat_id": "complication",
                     "summary": "Things get harder",
-                    "paths": ["trust_arc"],
+                    "belongs_to": ["trust_arc"],
                     "dilemma_impacts": [
                         {"dilemma_id": "trust", "effect": "complicates", "note": "Setback"}
                     ],
@@ -3449,7 +3443,7 @@ class TestSeedArcStructureValidation:
                 {
                     "beat_id": "commit",
                     "summary": "Trust decided",
-                    "paths": ["trust_arc"],
+                    "belongs_to": ["trust_arc"],
                     "dilemma_impacts": [
                         {"dilemma_id": "trust", "effect": "commits", "note": "Locked in"}
                     ],
@@ -3457,7 +3451,7 @@ class TestSeedArcStructureValidation:
                 {
                     "beat_id": "aftermath",
                     "summary": "Consequences",
-                    "paths": ["trust_arc"],
+                    "belongs_to": ["trust_arc"],
                     "dilemma_impacts": [
                         {"dilemma_id": "trust", "effect": "advances", "note": "Fallout"}
                     ],
@@ -3537,8 +3531,7 @@ class TestSeedArcStructureValidation:
                 {
                     "beat_id": "trust_pre",
                     "summary": "Protagonist encounters the mentor",
-                    "path_id": "trust__protector",
-                    "also_belongs_to": "trust__manipulator",
+                    "belongs_to": ["trust__protector", "trust__manipulator"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
@@ -3546,7 +3539,7 @@ class TestSeedArcStructureValidation:
                 {
                     "beat_id": "commit_protector",
                     "summary": "Trust decided — protagonist sides with mentor.",
-                    "path_id": "trust__protector",
+                    "belongs_to": ["trust__protector"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "commits"}],
                     "entities": ["mentor"],
                 },
@@ -3554,14 +3547,14 @@ class TestSeedArcStructureValidation:
                 {
                     "beat_id": "post_protector_1",
                     "summary": "Mentor reveals a vital secret.",
-                    "path_id": "trust__protector",
+                    "belongs_to": ["trust__protector"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "post_protector_2",
                     "summary": "Ally bond confirmed.",
-                    "path_id": "trust__protector",
+                    "belongs_to": ["trust__protector"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
@@ -3569,7 +3562,7 @@ class TestSeedArcStructureValidation:
                 {
                     "beat_id": "commit_manipulator",
                     "summary": "Trust betrayed — protagonist distrusts mentor.",
-                    "path_id": "trust__manipulator",
+                    "belongs_to": ["trust__manipulator"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "commits"}],
                     "entities": ["mentor"],
                 },
@@ -3577,14 +3570,14 @@ class TestSeedArcStructureValidation:
                 {
                     "beat_id": "post_manipulator_1",
                     "summary": "Mentor's true motive surfaces.",
-                    "path_id": "trust__manipulator",
+                    "belongs_to": ["trust__manipulator"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "post_manipulator_2",
                     "summary": "Protagonist faces danger alone.",
-                    "path_id": "trust__manipulator",
+                    "belongs_to": ["trust__manipulator"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
@@ -3617,7 +3610,7 @@ class TestSeedArcStructureValidation:
                 {
                     "beat_id": "develop",
                     "summary": "Trust tested",
-                    "paths": ["trust_arc"],
+                    "belongs_to": ["trust_arc"],
                     "dilemma_impacts": [
                         {"dilemma_id": "trust", "effect": "advances", "note": "Builds tension"}
                     ],
@@ -3859,8 +3852,7 @@ class TestMutationIntegration:
                 {
                     "beat_id": "opening",
                     "summary": "Kay meets the mentor for the first time",
-                    "path_id": "mentor_trust__protector",
-                    "also_belongs_to": "mentor_trust__manipulator",
+                    "belongs_to": ["mentor_trust__protector", "mentor_trust__manipulator"],
                     "dilemma_impacts": [{"dilemma_id": "mentor_trust", "effect": "advances"}],
                     "entities": ["kay", "mentor"],
                 },
@@ -3868,7 +3860,7 @@ class TestMutationIntegration:
                 {
                     "beat_id": "commit_protector",
                     "summary": "Kay decides to trust the mentor",
-                    "path_id": "mentor_trust__protector",
+                    "belongs_to": ["mentor_trust__protector"],
                     "dilemma_impacts": [{"dilemma_id": "mentor_trust", "effect": "commits"}],
                     "entities": ["mentor"],
                 },
@@ -3876,14 +3868,14 @@ class TestMutationIntegration:
                 {
                     "beat_id": "post_protector_1",
                     "summary": "The mentor reveals a vital secret.",
-                    "path_id": "mentor_trust__protector",
+                    "belongs_to": ["mentor_trust__protector"],
                     "dilemma_impacts": [{"dilemma_id": "mentor_trust", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "post_protector_2",
                     "summary": "Ally bond confirmed.",
-                    "path_id": "mentor_trust__protector",
+                    "belongs_to": ["mentor_trust__protector"],
                     "dilemma_impacts": [{"dilemma_id": "mentor_trust", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
@@ -3891,7 +3883,7 @@ class TestMutationIntegration:
                 {
                     "beat_id": "commit_manipulator",
                     "summary": "Kay distrusts the mentor.",
-                    "path_id": "mentor_trust__manipulator",
+                    "belongs_to": ["mentor_trust__manipulator"],
                     "dilemma_impacts": [{"dilemma_id": "mentor_trust", "effect": "commits"}],
                     "entities": ["mentor"],
                 },
@@ -3899,14 +3891,14 @@ class TestMutationIntegration:
                 {
                     "beat_id": "opening_post",
                     "summary": "The mentor's nature becomes clear",
-                    "path_id": "mentor_trust__manipulator",
+                    "belongs_to": ["mentor_trust__manipulator"],
                     "dilemma_impacts": [{"dilemma_id": "mentor_trust", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "manipulator_end",
                     "summary": "Protagonist faces danger alone.",
-                    "path_id": "mentor_trust__manipulator",
+                    "belongs_to": ["mentor_trust__manipulator"],
                     "dilemma_impacts": [{"dilemma_id": "mentor_trust", "effect": "advances"}],
                     "entities": ["kay"],
                 },
@@ -4264,7 +4256,7 @@ class TestScopedIdValidation:
                 {
                     "beat_id": "resolution",
                     "summary": "Trust resolved",
-                    "paths": ["trust_arc"],
+                    "belongs_to": ["trust_arc"],
                     "dilemma_impacts": [
                         {"dilemma_id": "dilemma::trust", "effect": "commits", "note": "Locked in"}
                     ],
@@ -4272,7 +4264,7 @@ class TestScopedIdValidation:
                 {
                     "beat_id": "resolution_post",
                     "summary": "Trust aftermath",
-                    "paths": ["trust_arc"],
+                    "belongs_to": ["trust_arc"],
                     "dilemma_impacts": [
                         {"dilemma_id": "dilemma::trust", "effect": "advances", "note": "Fallout"}
                     ],
@@ -4308,7 +4300,7 @@ class TestScopedIdValidation:
                 {
                     "beat_id": "opening",
                     "summary": "The beginning",
-                    "paths": ["path::mentor"],  # Scoped path ID
+                    "belongs_to": ["path::mentor"],  # Scoped path ID
                     "entities": ["entity::hero"],
                     "dilemma_impacts": [
                         {"dilemma_id": "dilemma::trust", "effect": "commits", "note": "Locked in"}
@@ -4317,7 +4309,7 @@ class TestScopedIdValidation:
                 {
                     "beat_id": "opening_post",
                     "summary": "Trust aftermath",
-                    "paths": ["path::mentor"],
+                    "belongs_to": ["path::mentor"],
                     "dilemma_impacts": [
                         {"dilemma_id": "dilemma::trust", "effect": "advances", "note": "Fallout"}
                     ],
@@ -4393,7 +4385,7 @@ class TestScopedIdValidation:
                 {
                     "beat_id": "opening",
                     "summary": "The beginning",
-                    "paths": ["entity::mentor"],  # Wrong scope - should be path::
+                    "belongs_to": ["entity::mentor"],  # Wrong scope - should be path::
                 }
             ],
         }
@@ -4500,7 +4492,7 @@ class TestScopedIdValidation:
                     "summary": "Meet mentor",
                     "entities": ["entity::hero", "entity::mentor"],  # Scoped IDs
                     "location": "entity::hero",  # Scoped location
-                    "paths": ["path::mentor_arc"],
+                    "belongs_to": ["path::mentor_arc"],
                     "dilemma_impacts": [
                         {"dilemma_id": "dilemma::trust", "effect": "commits", "note": "Locked in"}
                     ],
@@ -4508,7 +4500,7 @@ class TestScopedIdValidation:
                 {
                     "beat_id": "opening_post",
                     "summary": "Trust aftermath",
-                    "paths": ["path::mentor_arc"],
+                    "belongs_to": ["path::mentor_arc"],
                     "dilemma_impacts": [
                         {"dilemma_id": "dilemma::trust", "effect": "advances", "note": "Fallout"}
                     ],
@@ -4544,7 +4536,7 @@ class TestScopedIdValidation:
                 {
                     "beat_id": "opening",
                     "summary": "Build trust",
-                    "paths": ["path::mentor_arc"],
+                    "belongs_to": ["path::mentor_arc"],
                     "dilemma_impacts": [
                         {"dilemma_id": "dilemma::trust", "effect": "advances"}  # Scoped ID
                     ],
@@ -4552,13 +4544,13 @@ class TestScopedIdValidation:
                 {
                     "beat_id": "resolution",
                     "summary": "Trust locked in",
-                    "paths": ["path::mentor_arc"],
+                    "belongs_to": ["path::mentor_arc"],
                     "dilemma_impacts": [{"dilemma_id": "dilemma::trust", "effect": "commits"}],
                 },
                 {
                     "beat_id": "resolution_post",
                     "summary": "Trust aftermath",
-                    "paths": ["path::mentor_arc"],
+                    "belongs_to": ["path::mentor_arc"],
                     "dilemma_impacts": [{"dilemma_id": "dilemma::trust", "effect": "advances"}],
                 },
             ],
@@ -4598,7 +4590,7 @@ class TestScopedIdValidation:
                 {
                     "beat_id": "resolution",
                     "summary": "Trust resolved",
-                    "paths": ["mentor_arc"],
+                    "belongs_to": ["mentor_arc"],
                     "dilemma_impacts": [
                         {"dilemma_id": "dilemma::trust", "effect": "commits", "note": "Locked in"}
                     ],
@@ -4606,7 +4598,7 @@ class TestScopedIdValidation:
                 {
                     "beat_id": "resolution_post",
                     "summary": "Trust aftermath",
-                    "paths": ["mentor_arc"],
+                    "belongs_to": ["mentor_arc"],
                     "dilemma_impacts": [
                         {"dilemma_id": "dilemma::trust", "effect": "advances", "note": "Fallout"}
                     ],
@@ -4653,7 +4645,7 @@ class TestScopedIdValidation:
                 {
                     "beat_id": "resolution",
                     "summary": "Trust resolved",
-                    "paths": ["path::mentor_arc"],
+                    "belongs_to": ["path::mentor_arc"],
                     "dilemma_impacts": [
                         {"dilemma_id": "dilemma::trust", "effect": "commits", "note": "Locked in"}
                     ],
@@ -4661,7 +4653,7 @@ class TestScopedIdValidation:
                 {
                     "beat_id": "resolution_post",
                     "summary": "Trust aftermath",
-                    "paths": ["path::mentor_arc"],
+                    "belongs_to": ["path::mentor_arc"],
                     "dilemma_impacts": [
                         {"dilemma_id": "dilemma::trust", "effect": "advances", "note": "Fallout"}
                     ],
@@ -5584,7 +5576,7 @@ class TestValidation11cPathAlternativeInExplored:
                 {
                     "beat_id": "b1",
                     "summary": "Test",
-                    "paths": ["path1"],
+                    "belongs_to": ["path1"],
                     "dilemma_impacts": [
                         {"dilemma_id": "choice_a_or_b", "effect": "commits", "note": "Commits"}
                     ],
@@ -5592,7 +5584,7 @@ class TestValidation11cPathAlternativeInExplored:
                 {
                     "beat_id": "b2",
                     "summary": "Test",
-                    "paths": ["path2"],
+                    "belongs_to": ["path2"],
                     "dilemma_impacts": [
                         {"dilemma_id": "choice_a_or_b", "effect": "commits", "note": "Commits"}
                     ],
@@ -5646,7 +5638,7 @@ class TestValidation11cPathAlternativeInExplored:
                 {
                     "beat_id": "b1",
                     "summary": "Test",
-                    "paths": ["path1"],
+                    "belongs_to": ["path1"],
                     "dilemma_impacts": [
                         {"dilemma_id": "choice_a_or_b", "effect": "commits", "note": "Commits"}
                     ],
@@ -5654,7 +5646,7 @@ class TestValidation11cPathAlternativeInExplored:
                 {
                     "beat_id": "b2",
                     "summary": "Test",
-                    "paths": ["path2"],
+                    "belongs_to": ["path2"],
                     "dilemma_impacts": [
                         {"dilemma_id": "choice_a_or_b", "effect": "commits", "note": "Commits"}
                     ],
@@ -5705,7 +5697,7 @@ class TestValidation11cPathAlternativeInExplored:
                 {
                     "beat_id": "b1",
                     "summary": "Test",
-                    "paths": ["path1"],
+                    "belongs_to": ["path1"],
                     "dilemma_impacts": [
                         {"dilemma_id": "choice_a_or_b", "effect": "commits", "note": "Commits"}
                     ],
@@ -5753,7 +5745,7 @@ class TestValidation11cPathAlternativeInExplored:
                 {
                     "beat_id": "b1",
                     "summary": "Test",
-                    "paths": ["path1"],
+                    "belongs_to": ["path1"],
                     "dilemma_impacts": [
                         {"dilemma_id": "choice_a_or_b", "effect": "commits", "note": "Commits"}
                     ],
@@ -5833,8 +5825,7 @@ class TestBackfillIntegrationWithApplySeedMutations:
                 {
                     "beat_id": "trust_pre",
                     "summary": "Protagonist encounters the mentor",
-                    "path_id": "trust__protector",
-                    "also_belongs_to": "trust__manipulator",
+                    "belongs_to": ["trust__protector", "trust__manipulator"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
@@ -5842,14 +5833,14 @@ class TestBackfillIntegrationWithApplySeedMutations:
                 {
                     "beat_id": "b1",
                     "summary": "Kay trusts the mentor.",
-                    "path_id": "trust__protector",
+                    "belongs_to": ["trust__protector"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "commits"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "b2",
                     "summary": "Kay distrusts the mentor.",
-                    "path_id": "trust__manipulator",
+                    "belongs_to": ["trust__manipulator"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "commits"}],
                     "entities": ["mentor"],
                 },
@@ -5857,28 +5848,28 @@ class TestBackfillIntegrationWithApplySeedMutations:
                 {
                     "beat_id": "b1_post",
                     "summary": "Protector path aftermath",
-                    "path_id": "trust__protector",
+                    "belongs_to": ["trust__protector"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "b1_post2",
                     "summary": "Protector path continues",
-                    "path_id": "trust__protector",
+                    "belongs_to": ["trust__protector"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "b2_post",
                     "summary": "Manipulator path aftermath",
-                    "path_id": "trust__manipulator",
+                    "belongs_to": ["trust__manipulator"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "b2_post2",
                     "summary": "Manipulator path continues",
-                    "path_id": "trust__manipulator",
+                    "belongs_to": ["trust__manipulator"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
@@ -6233,50 +6224,49 @@ class TestApplySeedConvergenceAnalysis:
                 {
                     "beat_id": "trust_pre",
                     "summary": "Mentor encounter",
-                    "path_id": "trust__protector",
-                    "also_belongs_to": "trust__manipulator",
+                    "belongs_to": ["trust__protector", "trust__manipulator"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "trust_commit_protector",
                     "summary": "Kay trusts the mentor.",
-                    "path_id": "trust__protector",
+                    "belongs_to": ["trust__protector"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "commits"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "trust_post_p1",
                     "summary": "Mentor reveals vital secret.",
-                    "path_id": "trust__protector",
+                    "belongs_to": ["trust__protector"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "trust_post_p2",
                     "summary": "Ally bond confirmed.",
-                    "path_id": "trust__protector",
+                    "belongs_to": ["trust__protector"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "trust_commit_manipulator",
                     "summary": "Kay distrusts the mentor.",
-                    "path_id": "trust__manipulator",
+                    "belongs_to": ["trust__manipulator"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "commits"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "trust_post_m1",
                     "summary": "Mentor's true motive surfaces.",
-                    "path_id": "trust__manipulator",
+                    "belongs_to": ["trust__manipulator"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "trust_post_m2",
                     "summary": "Protagonist faces danger alone.",
-                    "path_id": "trust__manipulator",
+                    "belongs_to": ["trust__manipulator"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
@@ -6284,50 +6274,49 @@ class TestApplySeedConvergenceAnalysis:
                 {
                     "beat_id": "ton_pre",
                     "summary": "Trust question arises.",
-                    "path_id": "trust_or_not__trust",
-                    "also_belongs_to": "trust_or_not__distrust",
+                    "belongs_to": ["trust_or_not__trust", "trust_or_not__distrust"],
                     "dilemma_impacts": [{"dilemma_id": "trust_or_not", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "b_trust",
                     "summary": "Commit trust",
-                    "path_id": "trust_or_not__trust",
+                    "belongs_to": ["trust_or_not__trust"],
                     "dilemma_impacts": [{"dilemma_id": "trust_or_not", "effect": "commits"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "b_trust_post",
                     "summary": "Trust aftermath",
-                    "path_id": "trust_or_not__trust",
+                    "belongs_to": ["trust_or_not__trust"],
                     "dilemma_impacts": [{"dilemma_id": "trust_or_not", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "b_trust_post2",
                     "summary": "Trust confirmed.",
-                    "path_id": "trust_or_not__trust",
+                    "belongs_to": ["trust_or_not__trust"],
                     "dilemma_impacts": [{"dilemma_id": "trust_or_not", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "b_distrust",
                     "summary": "Commit distrust",
-                    "path_id": "trust_or_not__distrust",
+                    "belongs_to": ["trust_or_not__distrust"],
                     "dilemma_impacts": [{"dilemma_id": "trust_or_not", "effect": "commits"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "b_distrust_post",
                     "summary": "Distrust aftermath",
-                    "path_id": "trust_or_not__distrust",
+                    "belongs_to": ["trust_or_not__distrust"],
                     "dilemma_impacts": [{"dilemma_id": "trust_or_not", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "b_distrust_post2",
                     "summary": "Distrust confirmed.",
-                    "path_id": "trust_or_not__distrust",
+                    "belongs_to": ["trust_or_not__distrust"],
                     "dilemma_impacts": [{"dilemma_id": "trust_or_not", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
@@ -6335,50 +6324,49 @@ class TestApplySeedConvergenceAnalysis:
                 {
                     "beat_id": "sog_pre",
                     "summary": "The choice to stay or leave.",
-                    "path_id": "stay_or_go__stay",
-                    "also_belongs_to": "stay_or_go__go",
+                    "belongs_to": ["stay_or_go__stay", "stay_or_go__go"],
                     "dilemma_impacts": [{"dilemma_id": "stay_or_go", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "b_stay",
                     "summary": "Commit stay",
-                    "path_id": "stay_or_go__stay",
+                    "belongs_to": ["stay_or_go__stay"],
                     "dilemma_impacts": [{"dilemma_id": "stay_or_go", "effect": "commits"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "b_stay_post",
                     "summary": "Stay aftermath",
-                    "path_id": "stay_or_go__stay",
+                    "belongs_to": ["stay_or_go__stay"],
                     "dilemma_impacts": [{"dilemma_id": "stay_or_go", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "b_stay_post2",
                     "summary": "Safety confirmed.",
-                    "path_id": "stay_or_go__stay",
+                    "belongs_to": ["stay_or_go__stay"],
                     "dilemma_impacts": [{"dilemma_id": "stay_or_go", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "b_go",
                     "summary": "Commit go",
-                    "path_id": "stay_or_go__go",
+                    "belongs_to": ["stay_or_go__go"],
                     "dilemma_impacts": [{"dilemma_id": "stay_or_go", "effect": "commits"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "b_go_post",
                     "summary": "Go aftermath",
-                    "path_id": "stay_or_go__go",
+                    "belongs_to": ["stay_or_go__go"],
                     "dilemma_impacts": [{"dilemma_id": "stay_or_go", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "b_go_post2",
                     "summary": "Discovery confirmed.",
-                    "path_id": "stay_or_go__go",
+                    "belongs_to": ["stay_or_go__go"],
                     "dilemma_impacts": [{"dilemma_id": "stay_or_go", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
@@ -6864,50 +6852,49 @@ class TestApplySeedConcurrentOrdering:
                 {
                     "beat_id": "trust_pre",
                     "summary": "Mentor encounter",
-                    "path_id": "trust__protector",
-                    "also_belongs_to": "trust__manipulator",
+                    "belongs_to": ["trust__protector", "trust__manipulator"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "trust_cp",
                     "summary": "Kay trusts.",
-                    "path_id": "trust__protector",
+                    "belongs_to": ["trust__protector"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "commits"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "trust_pp1",
                     "summary": "Secret revealed.",
-                    "path_id": "trust__protector",
+                    "belongs_to": ["trust__protector"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "trust_pp2",
                     "summary": "Bond confirmed.",
-                    "path_id": "trust__protector",
+                    "belongs_to": ["trust__protector"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "trust_cm",
                     "summary": "Kay distrusts.",
-                    "path_id": "trust__manipulator",
+                    "belongs_to": ["trust__manipulator"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "commits"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "trust_pm1",
                     "summary": "Motive exposed.",
-                    "path_id": "trust__manipulator",
+                    "belongs_to": ["trust__manipulator"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "trust_pm2",
                     "summary": "Danger alone.",
-                    "path_id": "trust__manipulator",
+                    "belongs_to": ["trust__manipulator"],
                     "dilemma_impacts": [{"dilemma_id": "trust", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
@@ -6915,50 +6902,49 @@ class TestApplySeedConcurrentOrdering:
                 {
                     "beat_id": "mt_pre",
                     "summary": "Trust question",
-                    "path_id": "mentor_trust__yes",
-                    "also_belongs_to": "mentor_trust__no",
+                    "belongs_to": ["mentor_trust__yes", "mentor_trust__no"],
                     "dilemma_impacts": [{"dilemma_id": "mentor_trust", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "b1",
                     "summary": "Commit mentor trust",
-                    "path_id": "mentor_trust__yes",
+                    "belongs_to": ["mentor_trust__yes"],
                     "dilemma_impacts": [{"dilemma_id": "mentor_trust", "effect": "commits"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "b1_post",
                     "summary": "After mentor trust",
-                    "path_id": "mentor_trust__yes",
+                    "belongs_to": ["mentor_trust__yes"],
                     "dilemma_impacts": [{"dilemma_id": "mentor_trust", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "b1_post2",
                     "summary": "Trust confirmed.",
-                    "path_id": "mentor_trust__yes",
+                    "belongs_to": ["mentor_trust__yes"],
                     "dilemma_impacts": [{"dilemma_id": "mentor_trust", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "b1_no",
                     "summary": "Commit no trust",
-                    "path_id": "mentor_trust__no",
+                    "belongs_to": ["mentor_trust__no"],
                     "dilemma_impacts": [{"dilemma_id": "mentor_trust", "effect": "commits"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "b1_no_post",
                     "summary": "Distrust aftermath.",
-                    "path_id": "mentor_trust__no",
+                    "belongs_to": ["mentor_trust__no"],
                     "dilemma_impacts": [{"dilemma_id": "mentor_trust", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "b1_no_post2",
                     "summary": "Distrust confirmed.",
-                    "path_id": "mentor_trust__no",
+                    "belongs_to": ["mentor_trust__no"],
                     "dilemma_impacts": [{"dilemma_id": "mentor_trust", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
@@ -6966,50 +6952,49 @@ class TestApplySeedConcurrentOrdering:
                 {
                     "beat_id": "zl_pre",
                     "summary": "Later question",
-                    "path_id": "z_later__yes",
-                    "also_belongs_to": "z_later__no",
+                    "belongs_to": ["z_later__yes", "z_later__no"],
                     "dilemma_impacts": [{"dilemma_id": "z_later", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "b2",
                     "summary": "Commit z later",
-                    "path_id": "z_later__yes",
+                    "belongs_to": ["z_later__yes"],
                     "dilemma_impacts": [{"dilemma_id": "z_later", "effect": "commits"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "b2_post",
                     "summary": "After z later",
-                    "path_id": "z_later__yes",
+                    "belongs_to": ["z_later__yes"],
                     "dilemma_impacts": [{"dilemma_id": "z_later", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "b2_post2",
                     "summary": "Later confirmed.",
-                    "path_id": "z_later__yes",
+                    "belongs_to": ["z_later__yes"],
                     "dilemma_impacts": [{"dilemma_id": "z_later", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "b2_no",
                     "summary": "Commit go now",
-                    "path_id": "z_later__no",
+                    "belongs_to": ["z_later__no"],
                     "dilemma_impacts": [{"dilemma_id": "z_later", "effect": "commits"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "b2_no_post",
                     "summary": "Now aftermath.",
-                    "path_id": "z_later__no",
+                    "belongs_to": ["z_later__no"],
                     "dilemma_impacts": [{"dilemma_id": "z_later", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
                 {
                     "beat_id": "b2_no_post2",
                     "summary": "Now confirmed.",
-                    "path_id": "z_later__no",
+                    "belongs_to": ["z_later__no"],
                     "dilemma_impacts": [{"dilemma_id": "z_later", "effect": "advances"}],
                     "entities": ["mentor"],
                 },
@@ -7112,22 +7097,22 @@ class TestApplySeedConcurrentOrdering:
 def test_get_path_ids_from_beat_post_commit_returns_one() -> None:
     from questfoundry.graph.mutations import _get_path_ids_from_beat
 
-    beat = {"path_id": "path::a"}
+    beat = {"belongs_to": ["path::a"]}
     assert _get_path_ids_from_beat(beat) == ("path::a",)
 
 
 def test_get_path_ids_from_beat_pre_commit_returns_both() -> None:
     from questfoundry.graph.mutations import _get_path_ids_from_beat
 
-    beat = {"path_id": "path::a", "also_belongs_to": "path::b"}
+    beat = {"belongs_to": ["path::a", "path::b"]}
     assert _get_path_ids_from_beat(beat) == ("path::a", "path::b")
 
 
-def test_get_path_ids_from_beat_legacy_paths_list_returns_all() -> None:
+def test_get_path_ids_from_beat_single_returns_one() -> None:
     from questfoundry.graph.mutations import _get_path_ids_from_beat
 
-    beat = {"paths": ["path::a", "path::b"]}
-    assert _get_path_ids_from_beat(beat) == ("path::a", "path::b")
+    beat = {"belongs_to": ["path::a"]}
+    assert _get_path_ids_from_beat(beat) == ("path::a",)
 
 
 def test_get_path_ids_from_beat_empty_returns_empty_tuple() -> None:
@@ -7239,8 +7224,10 @@ def _trust_seed_output(initial_beats: list[dict[str, Any]] | None = None) -> dic
             {
                 "beat_id": "shared_setup",
                 "summary": "Protagonist observes the mentor's first move.",
-                "path_id": "trust_protector_or_manipulator__protector",
-                "also_belongs_to": "trust_protector_or_manipulator__manipulator",
+                "belongs_to": [
+                    "trust_protector_or_manipulator__protector",
+                    "trust_protector_or_manipulator__manipulator",
+                ],
                 "entities": ["character::mentor"],
                 "dilemma_impacts": [
                     {
@@ -7253,7 +7240,7 @@ def _trust_seed_output(initial_beats: list[dict[str, Any]] | None = None) -> dic
             {
                 "beat_id": "commit_protector",
                 "summary": "Protagonist decides to trust the mentor.",
-                "path_id": "trust_protector_or_manipulator__protector",
+                "belongs_to": ["trust_protector_or_manipulator__protector"],
                 "entities": ["character::mentor"],
                 "dilemma_impacts": [
                     {
@@ -7266,7 +7253,7 @@ def _trust_seed_output(initial_beats: list[dict[str, Any]] | None = None) -> dic
             {
                 "beat_id": "post_protector_1",
                 "summary": "Mentor reveals hidden allies.",
-                "path_id": "trust_protector_or_manipulator__protector",
+                "belongs_to": ["trust_protector_or_manipulator__protector"],
                 "entities": ["character::mentor"],
                 "dilemma_impacts": [
                     {
@@ -7279,7 +7266,7 @@ def _trust_seed_output(initial_beats: list[dict[str, Any]] | None = None) -> dic
             {
                 "beat_id": "post_protector_2",
                 "summary": "Protagonist gains mentor's full support.",
-                "path_id": "trust_protector_or_manipulator__protector",
+                "belongs_to": ["trust_protector_or_manipulator__protector"],
                 "entities": ["character::mentor"],
                 "dilemma_impacts": [
                     {
@@ -7292,7 +7279,7 @@ def _trust_seed_output(initial_beats: list[dict[str, Any]] | None = None) -> dic
             {
                 "beat_id": "commit_manipulator",
                 "summary": "Protagonist sees through the mentor's deception.",
-                "path_id": "trust_protector_or_manipulator__manipulator",
+                "belongs_to": ["trust_protector_or_manipulator__manipulator"],
                 "entities": ["character::mentor"],
                 "dilemma_impacts": [
                     {
@@ -7305,7 +7292,7 @@ def _trust_seed_output(initial_beats: list[dict[str, Any]] | None = None) -> dic
             {
                 "beat_id": "post_manipulator_1",
                 "summary": "Protagonist confronts the mentor.",
-                "path_id": "trust_protector_or_manipulator__manipulator",
+                "belongs_to": ["trust_protector_or_manipulator__manipulator"],
                 "entities": ["character::mentor"],
                 "dilemma_impacts": [
                     {
@@ -7318,7 +7305,7 @@ def _trust_seed_output(initial_beats: list[dict[str, Any]] | None = None) -> dic
             {
                 "beat_id": "post_manipulator_2",
                 "summary": "Mentor escapes with stolen knowledge.",
-                "path_id": "trust_protector_or_manipulator__manipulator",
+                "belongs_to": ["trust_protector_or_manipulator__manipulator"],
                 "entities": ["character::mentor"],
                 "dilemma_impacts": [
                     {
@@ -7503,42 +7490,42 @@ def _two_dilemma_seed_output(initial_beats: list[dict[str, Any]] | None = None) 
             {
                 "beat_id": "commit_a",
                 "summary": "Dilemma A commits.",
-                "path_id": "dilemma_a__answer_a1",
+                "belongs_to": ["dilemma_a__answer_a1"],
                 "entities": ["character::mentor"],
                 "dilemma_impacts": [{"dilemma_id": "dilemma_a", "effect": "commits", "note": "x"}],
             },
             {
                 "beat_id": "post_a_1",
                 "summary": "Dilemma A aftermath.",
-                "path_id": "dilemma_a__answer_a1",
+                "belongs_to": ["dilemma_a__answer_a1"],
                 "entities": ["character::mentor"],
                 "dilemma_impacts": [{"dilemma_id": "dilemma_a", "effect": "advances", "note": "x"}],
             },
             {
                 "beat_id": "post_a_2",
                 "summary": "Dilemma A resolution.",
-                "path_id": "dilemma_a__answer_a1",
+                "belongs_to": ["dilemma_a__answer_a1"],
                 "entities": ["character::mentor"],
                 "dilemma_impacts": [{"dilemma_id": "dilemma_a", "effect": "advances", "note": "x"}],
             },
             {
                 "beat_id": "commit_b",
                 "summary": "Dilemma B commits.",
-                "path_id": "dilemma_b__answer_b1",
+                "belongs_to": ["dilemma_b__answer_b1"],
                 "entities": ["character::mentor"],
                 "dilemma_impacts": [{"dilemma_id": "dilemma_b", "effect": "commits", "note": "x"}],
             },
             {
                 "beat_id": "post_b_1",
                 "summary": "Dilemma B aftermath.",
-                "path_id": "dilemma_b__answer_b1",
+                "belongs_to": ["dilemma_b__answer_b1"],
                 "entities": ["character::mentor"],
                 "dilemma_impacts": [{"dilemma_id": "dilemma_b", "effect": "advances", "note": "x"}],
             },
             {
                 "beat_id": "post_b_2",
                 "summary": "Dilemma B resolution.",
-                "path_id": "dilemma_b__answer_b1",
+                "belongs_to": ["dilemma_b__answer_b1"],
                 "entities": ["character::mentor"],
                 "dilemma_impacts": [{"dilemma_id": "dilemma_b", "effect": "advances", "note": "x"}],
             },
@@ -7610,7 +7597,7 @@ def _two_dilemma_seed_output(initial_beats: list[dict[str, Any]] | None = None) 
 
 
 def test_apply_seed_mutations_emits_dual_belongs_to_for_pre_commit_beat() -> None:
-    """Pre-commit beats with ``also_belongs_to`` get two ``belongs_to`` edges."""
+    """Pre-commit beats with two-element ``belongs_to`` get two ``belongs_to`` edges."""
     from questfoundry.graph.mutations import apply_seed_mutations
 
     graph = _trust_graph()
@@ -7619,8 +7606,10 @@ def test_apply_seed_mutations_emits_dual_belongs_to_for_pre_commit_beat() -> Non
             {
                 "beat_id": "shared_setup",
                 "summary": "Both players see this setup.",
-                "path_id": "trust_protector_or_manipulator__protector",
-                "also_belongs_to": "trust_protector_or_manipulator__manipulator",
+                "belongs_to": [
+                    "trust_protector_or_manipulator__protector",
+                    "trust_protector_or_manipulator__manipulator",
+                ],
                 "entities": ["character::mentor"],
                 "dilemma_impacts": [
                     {
@@ -7634,7 +7623,7 @@ def test_apply_seed_mutations_emits_dual_belongs_to_for_pre_commit_beat() -> Non
             {
                 "beat_id": "commit_protector",
                 "summary": "Protector path commits.",
-                "path_id": "trust_protector_or_manipulator__protector",
+                "belongs_to": ["trust_protector_or_manipulator__protector"],
                 "entities": ["character::mentor"],
                 "dilemma_impacts": [
                     {
@@ -7647,7 +7636,7 @@ def test_apply_seed_mutations_emits_dual_belongs_to_for_pre_commit_beat() -> Non
             {
                 "beat_id": "post_protector_1",
                 "summary": "Protector aftermath begins.",
-                "path_id": "trust_protector_or_manipulator__protector",
+                "belongs_to": ["trust_protector_or_manipulator__protector"],
                 "entities": ["character::mentor"],
                 "dilemma_impacts": [
                     {
@@ -7660,7 +7649,7 @@ def test_apply_seed_mutations_emits_dual_belongs_to_for_pre_commit_beat() -> Non
             {
                 "beat_id": "post_protector_2",
                 "summary": "Protector path resolves.",
-                "path_id": "trust_protector_or_manipulator__protector",
+                "belongs_to": ["trust_protector_or_manipulator__protector"],
                 "entities": ["character::mentor"],
                 "dilemma_impacts": [
                     {
@@ -7673,7 +7662,7 @@ def test_apply_seed_mutations_emits_dual_belongs_to_for_pre_commit_beat() -> Non
             {
                 "beat_id": "commit_manipulator",
                 "summary": "Manipulator path commits.",
-                "path_id": "trust_protector_or_manipulator__manipulator",
+                "belongs_to": ["trust_protector_or_manipulator__manipulator"],
                 "entities": ["character::mentor"],
                 "dilemma_impacts": [
                     {
@@ -7686,7 +7675,7 @@ def test_apply_seed_mutations_emits_dual_belongs_to_for_pre_commit_beat() -> Non
             {
                 "beat_id": "post_manipulator_1",
                 "summary": "Manipulator aftermath begins.",
-                "path_id": "trust_protector_or_manipulator__manipulator",
+                "belongs_to": ["trust_protector_or_manipulator__manipulator"],
                 "entities": ["character::mentor"],
                 "dilemma_impacts": [
                     {
@@ -7699,7 +7688,7 @@ def test_apply_seed_mutations_emits_dual_belongs_to_for_pre_commit_beat() -> Non
             {
                 "beat_id": "post_manipulator_2",
                 "summary": "Manipulator path resolves.",
-                "path_id": "trust_protector_or_manipulator__manipulator",
+                "belongs_to": ["trust_protector_or_manipulator__manipulator"],
                 "entities": ["character::mentor"],
                 "dilemma_impacts": [
                     {
@@ -7738,8 +7727,7 @@ def test_apply_seed_mutations_rejects_cross_dilemma_dual_belongs_to() -> None:
             {
                 "beat_id": "bad_dual",
                 "summary": "Cross-dilemma.",
-                "path_id": "dilemma_a__answer_a1",
-                "also_belongs_to": "dilemma_b__answer_b1",
+                "belongs_to": ["dilemma_a__answer_a1", "dilemma_b__answer_b1"],
                 "dilemma_impacts": [
                     {"dilemma_id": "dilemma_a", "effect": "advances", "note": "x"},
                 ],
@@ -7748,25 +7736,25 @@ def test_apply_seed_mutations_rejects_cross_dilemma_dual_belongs_to() -> None:
             {
                 "beat_id": "commit_a",
                 "summary": "Dilemma A commits.",
-                "path_id": "dilemma_a__answer_a1",
+                "belongs_to": ["dilemma_a__answer_a1"],
                 "dilemma_impacts": [{"dilemma_id": "dilemma_a", "effect": "commits", "note": "x"}],
             },
             {
                 "beat_id": "post_a",
                 "summary": "Dilemma A aftermath.",
-                "path_id": "dilemma_a__answer_a1",
+                "belongs_to": ["dilemma_a__answer_a1"],
                 "dilemma_impacts": [{"dilemma_id": "dilemma_a", "effect": "advances", "note": "x"}],
             },
             {
                 "beat_id": "commit_b",
                 "summary": "Dilemma B commits.",
-                "path_id": "dilemma_b__answer_b1",
+                "belongs_to": ["dilemma_b__answer_b1"],
                 "dilemma_impacts": [{"dilemma_id": "dilemma_b", "effect": "commits", "note": "x"}],
             },
             {
                 "beat_id": "post_b",
                 "summary": "Dilemma B aftermath.",
-                "path_id": "dilemma_b__answer_b1",
+                "belongs_to": ["dilemma_b__answer_b1"],
                 "dilemma_impacts": [{"dilemma_id": "dilemma_b", "effect": "advances", "note": "x"}],
             },
         ]
@@ -7776,8 +7764,8 @@ def test_apply_seed_mutations_rejects_cross_dilemma_dual_belongs_to() -> None:
         apply_seed_mutations(graph, seed)
 
 
-def test_apply_seed_mutations_rejects_also_belongs_to_equal_path_id() -> None:
-    """Raw-dict input with path_id == also_belongs_to must be rejected (defense-in-depth)."""
+def test_apply_seed_mutations_rejects_duplicate_belongs_to_elements() -> None:
+    """Raw-dict input with duplicate elements in belongs_to must be rejected (defense-in-depth)."""
     # Bypass Pydantic by constructing the seed dict directly.
     from questfoundry.graph.mutations import apply_seed_mutations
 
@@ -7787,8 +7775,7 @@ def test_apply_seed_mutations_rejects_also_belongs_to_equal_path_id() -> None:
             {
                 "beat_id": "bad_beat",
                 "summary": "Same path twice.",
-                "path_id": "dilemma_a__answer_a1",
-                "also_belongs_to": "dilemma_a__answer_a1",
+                "belongs_to": ["dilemma_a__answer_a1", "dilemma_a__answer_a1"],
                 "dilemma_impacts": [
                     {
                         "dilemma_id": "dilemma_a",
@@ -7800,25 +7787,25 @@ def test_apply_seed_mutations_rejects_also_belongs_to_equal_path_id() -> None:
             {
                 "beat_id": "commit_a",
                 "summary": "Dilemma A commits.",
-                "path_id": "dilemma_a__answer_a1",
+                "belongs_to": ["dilemma_a__answer_a1"],
                 "dilemma_impacts": [{"dilemma_id": "dilemma_a", "effect": "commits", "note": "x"}],
             },
             {
                 "beat_id": "post_a",
                 "summary": "Dilemma A aftermath.",
-                "path_id": "dilemma_a__answer_a1",
+                "belongs_to": ["dilemma_a__answer_a1"],
                 "dilemma_impacts": [{"dilemma_id": "dilemma_a", "effect": "advances", "note": "x"}],
             },
             {
                 "beat_id": "commit_b",
                 "summary": "Dilemma B commits.",
-                "path_id": "dilemma_b__answer_b1",
+                "belongs_to": ["dilemma_b__answer_b1"],
                 "dilemma_impacts": [{"dilemma_id": "dilemma_b", "effect": "commits", "note": "x"}],
             },
             {
                 "beat_id": "post_b",
                 "summary": "Dilemma B aftermath.",
-                "path_id": "dilemma_b__answer_b1",
+                "belongs_to": ["dilemma_b__answer_b1"],
                 "dilemma_impacts": [{"dilemma_id": "dilemma_b", "effect": "advances", "note": "x"}],
             },
         ]
@@ -7844,8 +7831,10 @@ def test_apply_seed_mutations_rejects_dual_on_commit_beat() -> None:
             {
                 "beat_id": "bad_commit",
                 "summary": "A commit beat cannot be pre-commit.",
-                "path_id": "trust_protector_or_manipulator__protector",
-                "also_belongs_to": "trust_protector_or_manipulator__manipulator",
+                "belongs_to": [
+                    "trust_protector_or_manipulator__protector",
+                    "trust_protector_or_manipulator__manipulator",
+                ],
                 "dilemma_impacts": [
                     {
                         "dilemma_id": "trust_protector_or_manipulator",
@@ -7858,7 +7847,7 @@ def test_apply_seed_mutations_rejects_dual_on_commit_beat() -> None:
             {
                 "beat_id": "commit_protector",
                 "summary": "Protector commits.",
-                "path_id": "trust_protector_or_manipulator__protector",
+                "belongs_to": ["trust_protector_or_manipulator__protector"],
                 "dilemma_impacts": [
                     {
                         "dilemma_id": "trust_protector_or_manipulator",
@@ -7870,7 +7859,7 @@ def test_apply_seed_mutations_rejects_dual_on_commit_beat() -> None:
             {
                 "beat_id": "post_protector",
                 "summary": "Protector aftermath.",
-                "path_id": "trust_protector_or_manipulator__protector",
+                "belongs_to": ["trust_protector_or_manipulator__protector"],
                 "dilemma_impacts": [
                     {
                         "dilemma_id": "trust_protector_or_manipulator",
@@ -7882,7 +7871,7 @@ def test_apply_seed_mutations_rejects_dual_on_commit_beat() -> None:
             {
                 "beat_id": "commit_manipulator",
                 "summary": "Manipulator commits.",
-                "path_id": "trust_protector_or_manipulator__manipulator",
+                "belongs_to": ["trust_protector_or_manipulator__manipulator"],
                 "dilemma_impacts": [
                     {
                         "dilemma_id": "trust_protector_or_manipulator",
@@ -7894,7 +7883,7 @@ def test_apply_seed_mutations_rejects_dual_on_commit_beat() -> None:
             {
                 "beat_id": "post_manipulator",
                 "summary": "Manipulator aftermath.",
-                "path_id": "trust_protector_or_manipulator__manipulator",
+                "belongs_to": ["trust_protector_or_manipulator__manipulator"],
                 "dilemma_impacts": [
                     {
                         "dilemma_id": "trust_protector_or_manipulator",
@@ -7927,8 +7916,7 @@ def test_apply_seed_mutations_rejects_precommit_with_mismatched_dilemmas() -> No
             {
                 "beat_id": "bad_precommit",
                 "summary": "Cross-dilemma pre-commit beat.",
-                "path_id": "dilemma_a__answer_a1",
-                "also_belongs_to": "dilemma_b__answer_b1",
+                "belongs_to": ["dilemma_a__answer_a1", "dilemma_b__answer_b1"],
                 "dilemma_impacts": [
                     {"dilemma_id": "dilemma_a", "effect": "advances", "note": "x"},
                 ],
@@ -7937,25 +7925,25 @@ def test_apply_seed_mutations_rejects_precommit_with_mismatched_dilemmas() -> No
             {
                 "beat_id": "commit_a",
                 "summary": "Dilemma A commits.",
-                "path_id": "dilemma_a__answer_a1",
+                "belongs_to": ["dilemma_a__answer_a1"],
                 "dilemma_impacts": [{"dilemma_id": "dilemma_a", "effect": "commits", "note": "x"}],
             },
             {
                 "beat_id": "post_a",
                 "summary": "Dilemma A aftermath.",
-                "path_id": "dilemma_a__answer_a1",
+                "belongs_to": ["dilemma_a__answer_a1"],
                 "dilemma_impacts": [{"dilemma_id": "dilemma_a", "effect": "advances", "note": "x"}],
             },
             {
                 "beat_id": "commit_b",
                 "summary": "Dilemma B commits.",
-                "path_id": "dilemma_b__answer_b1",
+                "belongs_to": ["dilemma_b__answer_b1"],
                 "dilemma_impacts": [{"dilemma_id": "dilemma_b", "effect": "commits", "note": "x"}],
             },
             {
                 "beat_id": "post_b",
                 "summary": "Dilemma B aftermath.",
-                "path_id": "dilemma_b__answer_b1",
+                "belongs_to": ["dilemma_b__answer_b1"],
                 "dilemma_impacts": [{"dilemma_id": "dilemma_b", "effect": "advances", "note": "x"}],
             },
         ]
@@ -7970,8 +7958,8 @@ def test_apply_seed_mutations_rejects_precommit_with_mismatched_dilemmas() -> No
 # Task 12 (#1283): post-apply property test — no beat has cross-dilemma
 # belongs_to edges in the resulting graph (R-3.9).
 #
-# This test covers the *broader* prohibition: not just the primary path_id +
-# also_belongs_to pair, but any beat in the graph after apply completes.
+# This test covers the *broader* prohibition: not just the dual-element belongs_to
+# list, but any beat in the graph after apply completes.
 # If future code adds a second belongs_to write path this test catches it.
 # ---------------------------------------------------------------------------
 
@@ -7984,8 +7972,8 @@ def test_apply_seed_mutations_never_produces_cross_dilemma_belongs_to() -> None:
     independently of fixture completeness. This is a property test of the write
     path, not of the exit validator.
 
-    Broader than Task 11 (#1282): that test guards the primary path_id +
-    also_belongs_to pair; this test inspects the full resulting graph."""
+    Broader than Task 11 (#1282): that test guards the dual-element belongs_to list;
+    this test inspects the full resulting graph."""
     from unittest.mock import patch
 
     from questfoundry.graph.mutations import apply_seed_mutations
@@ -7996,25 +7984,25 @@ def test_apply_seed_mutations_never_produces_cross_dilemma_belongs_to() -> None:
             {
                 "beat_id": "commit_a",
                 "summary": "Dilemma A commits.",
-                "path_id": "dilemma_a__answer_a1",
+                "belongs_to": ["dilemma_a__answer_a1"],
                 "dilemma_impacts": [{"dilemma_id": "dilemma_a", "effect": "commits", "note": "x"}],
             },
             {
                 "beat_id": "post_a",
                 "summary": "Dilemma A aftermath.",
-                "path_id": "dilemma_a__answer_a1",
+                "belongs_to": ["dilemma_a__answer_a1"],
                 "dilemma_impacts": [{"dilemma_id": "dilemma_a", "effect": "advances", "note": "x"}],
             },
             {
                 "beat_id": "commit_b",
                 "summary": "Dilemma B commits.",
-                "path_id": "dilemma_b__answer_b1",
+                "belongs_to": ["dilemma_b__answer_b1"],
                 "dilemma_impacts": [{"dilemma_id": "dilemma_b", "effect": "commits", "note": "x"}],
             },
             {
                 "beat_id": "post_b",
                 "summary": "Dilemma B aftermath.",
-                "path_id": "dilemma_b__answer_b1",
+                "belongs_to": ["dilemma_b__answer_b1"],
                 "dilemma_impacts": [{"dilemma_id": "dilemma_b", "effect": "advances", "note": "x"}],
             },
         ]

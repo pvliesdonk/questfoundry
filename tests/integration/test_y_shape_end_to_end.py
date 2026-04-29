@@ -219,8 +219,10 @@ def _make_seed_output() -> dict[str, Any]:
             {
                 "beat_id": "shared_setup",
                 "summary": "The mentor delivers a cryptic warning.",
-                "path_id": "trust_protector_or_manipulator__protector",
-                "also_belongs_to": "trust_protector_or_manipulator__manipulator",
+                "belongs_to": [
+                    "trust_protector_or_manipulator__protector",
+                    "trust_protector_or_manipulator__manipulator",
+                ],
                 "dilemma_impacts": [
                     {
                         "dilemma_id": "trust_protector_or_manipulator",
@@ -234,7 +236,7 @@ def _make_seed_output() -> dict[str, Any]:
             {
                 "beat_id": "commit_protector",
                 "summary": "Kay chooses to trust the mentor.",
-                "path_id": "trust_protector_or_manipulator__protector",
+                "belongs_to": ["trust_protector_or_manipulator__protector"],
                 "dilemma_impacts": [
                     {
                         "dilemma_id": "trust_protector_or_manipulator",
@@ -248,7 +250,7 @@ def _make_seed_output() -> dict[str, Any]:
             {
                 "beat_id": "post_protector",
                 "summary": "The mentor shields Kay from danger.",
-                "path_id": "trust_protector_or_manipulator__protector",
+                "belongs_to": ["trust_protector_or_manipulator__protector"],
                 "dilemma_impacts": [
                     {
                         "dilemma_id": "trust_protector_or_manipulator",
@@ -261,7 +263,7 @@ def _make_seed_output() -> dict[str, Any]:
             {
                 "beat_id": "post_protector_2",
                 "summary": "Kay gains the mentor's full support.",
-                "path_id": "trust_protector_or_manipulator__protector",
+                "belongs_to": ["trust_protector_or_manipulator__protector"],
                 "dilemma_impacts": [
                     {
                         "dilemma_id": "trust_protector_or_manipulator",
@@ -275,7 +277,7 @@ def _make_seed_output() -> dict[str, Any]:
             {
                 "beat_id": "commit_manipulator",
                 "summary": "Kay chooses to distrust the mentor.",
-                "path_id": "trust_protector_or_manipulator__manipulator",
+                "belongs_to": ["trust_protector_or_manipulator__manipulator"],
                 "dilemma_impacts": [
                     {
                         "dilemma_id": "trust_protector_or_manipulator",
@@ -289,7 +291,7 @@ def _make_seed_output() -> dict[str, Any]:
             {
                 "beat_id": "post_manipulator",
                 "summary": "The mentor manipulates Kay's choices.",
-                "path_id": "trust_protector_or_manipulator__manipulator",
+                "belongs_to": ["trust_protector_or_manipulator__manipulator"],
                 "dilemma_impacts": [
                     {
                         "dilemma_id": "trust_protector_or_manipulator",
@@ -302,7 +304,7 @@ def _make_seed_output() -> dict[str, Any]:
             {
                 "beat_id": "post_manipulator_2",
                 "summary": "Kay confronts the mentor's betrayal.",
-                "path_id": "trust_protector_or_manipulator__manipulator",
+                "belongs_to": ["trust_protector_or_manipulator__manipulator"],
                 "dilemma_impacts": [
                     {
                         "dilemma_id": "trust_protector_or_manipulator",

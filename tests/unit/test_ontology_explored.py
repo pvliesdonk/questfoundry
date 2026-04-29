@@ -386,7 +386,7 @@ class TestPruningImmutability:
                     InitialBeat(
                         beat_id=f"beat_{path_id}",
                         summary="Summary",
-                        paths=[path_id],
+                        belongs_to=[path_id],
                         entities=["character::placeholder"],
                         dilemma_impacts=[
                             {"dilemma_id": tid, "effect": "commits", "note": "Commits the dilemma"}
@@ -496,7 +496,7 @@ class TestScopedIdStandardization:
                 InitialBeat(
                     beat_id="artifact_beat_01",
                     summary="Discovery of the artifact",
-                    path_id="path::artifact_natural",  # Scoped! belongs to natural path
+                    belongs_to=["path::artifact_natural"],  # Scoped! belongs to natural path
                     entities=["entity::artifact"],
                     dilemma_impacts=[
                         {
@@ -509,7 +509,7 @@ class TestScopedIdStandardization:
                 InitialBeat(
                     beat_id="artifact_beat_02",
                     summary="Beat only for crafted path",
-                    path_id="path::artifact_crafted",  # Scoped! belongs to crafted path
+                    belongs_to=["path::artifact_crafted"],  # Scoped! belongs to crafted path
                     entities=["entity::artifact"],
                     dilemma_impacts=[
                         {
@@ -538,7 +538,7 @@ class TestScopedIdStandardization:
 
         # Beat 1 should still point to natural path (scoped ID preserved)
         beat_1 = next(b for b in pruned.initial_beats if b.beat_id == "artifact_beat_01")
-        assert beat_1.path_id == "path::artifact_natural"
+        assert beat_1.belongs_to[0] == "path::artifact_natural"
         # Demoted dilemma should keep canonical and move non-canonical to unexplored
         pruned_dilemma = next(
             d for d in pruned.dilemmas if d.dilemma_id == "dilemma::artifact_origin"
@@ -592,7 +592,7 @@ class TestScopedIdStandardization:
                 InitialBeat(
                     beat_id="beat_1",
                     summary="Test beat",
-                    paths=["path::th_a"],
+                    belongs_to=["path::th_a"],
                     entities=["character::placeholder"],
                     dilemma_impacts=[{"dilemma_id": "t1", "effect": "commits", "note": "n"}],
                 ),
@@ -643,7 +643,7 @@ class TestScopedIdStandardization:
                 InitialBeat(
                     beat_id="keeper_beat_1",
                     summary="Meeting the keeper",
-                    path_id="path::keeper_protector",  # Scoped!
+                    belongs_to=["path::keeper_protector"],  # Scoped!
                     entities=["character::keeper"],
                     dilemma_impacts=[
                         {
@@ -773,7 +773,7 @@ class TestCanonicalAnswerFromGraph:
                 InitialBeat(
                     beat_id="beat_1",
                     summary="Test",
-                    path_id="path_b",  # Belongs to the graph-default path
+                    belongs_to=["path_b"],  # Belongs to the graph-default path
                     entities=["character::protagonist"],
                     dilemma_impacts=[{"dilemma_id": "t1", "effect": "commits", "note": "n"}],
                 ),
@@ -824,7 +824,7 @@ class TestCanonicalAnswerFromGraph:
                 InitialBeat(
                     beat_id="beat_1",
                     summary="Test",
-                    path_id="path_a",  # Belongs to explored[0] (canonical without graph)
+                    belongs_to=["path_a"],  # Belongs to explored[0] (canonical without graph)
                     entities=["character::protagonist"],
                     dilemma_impacts=[{"dilemma_id": "t1", "effect": "commits", "note": "n"}],
                 ),

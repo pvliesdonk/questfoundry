@@ -388,18 +388,17 @@ class TestHelperFunctions:
         error so small models (qwen3:4b) can recover from constraint-to-value
         mapping loss across long context. See @prompt-engineer Rule 5.
         """
-        errors = ["beats.0.also_belongs_to: Field required"]
+        errors = ["beats.0.belongs_to: Field required"]
         hint = (
             "ACTION REQUIRED — your previous output was rejected.\n"
-            "  - `path_id` MUST be `path::x__a`\n"
-            "  - `also_belongs_to` MUST be `path::x__b`"
+            '  - `belongs_to` MUST be `["path::x__a", "path::x__b"]`'
         )
 
         feedback = _build_error_feedback(errors, extra_hints=[hint])
 
         # Validator output still present
         assert "validation errors" in feedback.lower()
-        assert "beats.0.also_belongs_to" in feedback
+        assert "beats.0.belongs_to" in feedback
         # Hint preserved verbatim — sibling path id ECHOED (not just named)
         assert "path::x__b" in feedback
         assert "ACTION REQUIRED" in feedback
@@ -413,7 +412,7 @@ class TestHelperFunctions:
         message) and out-attends the directive at the end. The fix
         reverses ordering — hint-block first, validator errors after.
         """
-        errors = ["beats.0.also_belongs_to: Field required"]
+        errors = ["beats.0.belongs_to: Field required"]
         hint_marker = "ACTION REQUIRED — your previous output was rejected."
 
         feedback = _build_error_feedback(errors, extra_hints=[hint_marker])
@@ -1252,7 +1251,7 @@ class TestBeatRetryAndContextRefresh:
 
     @pytest.mark.asyncio
     async def test_beats_retry_preserves_shared_beats(self) -> None:
-        """Shared pre-commit beats (with also_belongs_to) must survive beats retry.
+        """Shared pre-commit beats (with dual belongs_to) must survive beats retry.
 
         Regression for #1246: the retry code replaced collected["initial_beats"]
         with only per-path beats, dropping all shared beats and destroying the
@@ -1274,13 +1273,12 @@ class TestBeatRetryAndContextRefresh:
             )
         ]
 
-        # Per-path beats returned by retry (no also_belongs_to)
+        # Per-path beats returned by retry (single-element belongs_to)
         retried_per_path_beats = [
             {
                 "beat_id": "path_beat_01",
                 "summary": "Post-commit beat",
-                "path_id": "path::test_dilemma__alt1",
-                "also_belongs_to": None,
+                "belongs_to": ["path::test_dilemma__alt1"],
                 "dilemma_impacts": [
                     {"dilemma_id": "dilemma::test_dilemma", "effect": "commits", "note": "x"}
                 ],
@@ -1319,8 +1317,7 @@ class TestBeatRetryAndContextRefresh:
         shared_beat = {
             "beat_id": "shared_setup_01",
             "summary": "Shared beat",
-            "path_id": "path::test_dilemma__alt1",
-            "also_belongs_to": "path::test_dilemma__alt2",
+            "belongs_to": ["path::test_dilemma__alt1", "path::test_dilemma__alt2"],
             "dilemma_impacts": [
                 {"dilemma_id": "dilemma::test_dilemma", "effect": "reveals", "note": "x"}
             ],
@@ -1366,7 +1363,7 @@ class TestBeatRetryAndContextRefresh:
 
             # Critical: shared beat must survive the retry
             beats = result.artifact.model_dump()["initial_beats"]
-            shared_in_output = [b for b in beats if b.get("also_belongs_to")]
+            shared_in_output = [b for b in beats if len(b.get("belongs_to") or []) >= 2]
             assert len(shared_in_output) == 1, (
                 f"Shared beat dropped during retry! "
                 f"Found {len(shared_in_output)} shared beats, expected 1"
@@ -2265,7 +2262,7 @@ class TestBuildPerPathBeatContext:
         summary: str = "The hero enters the tavern.",
         dilemma_id: str = "dilemma::dilemma_a",
         path_id: str = "path::dilemma_a__answer_x",
-        also_belongs_to: str = "path::dilemma_a__answer_y",
+        sibling_path_id: str = "path::dilemma_a__answer_y",
         location: str | None = "location::tavern",
         entities: list[str] | None = None,
         effect: str = "advances",
@@ -2274,8 +2271,7 @@ class TestBuildPerPathBeatContext:
         return {
             "beat_id": beat_id,
             "summary": summary,
-            "path_id": path_id,
-            "also_belongs_to": also_belongs_to,
+            "belongs_to": [path_id, sibling_path_id],
             "location": location,
             "entities": entities or ["character::hero"],
             "dilemma_impacts": [{"dilemma_id": dilemma_id, "effect": effect, "note": note}],
@@ -2424,7 +2420,9 @@ _MOCK_PATHS_FOR_BINARY = [
     },
 ]
 
-_SHARED_BEAT_PROMPT = "DID={dilemma_id} Q={dilemma_question} PID={path_id} SIB={also_belongs_to}"
+_SHARED_BEAT_PROMPT = (
+    "DID={dilemma_id} Q={dilemma_question} PID={belongs_to_primary} SIB={belongs_to_sibling}"
+)
 
 
 class TestSerializeSharedBeatsForDilemma:
@@ -2482,7 +2480,7 @@ class TestSerializeSharedBeatsForDilemma:
 
     @pytest.mark.asyncio
     async def test_beat_path_ids_returned_from_llm(self) -> None:
-        """Returned beats should carry path_id and also_belongs_to as set by the LLM."""
+        """Returned beats should carry belongs_to list as set by the LLM."""
         from questfoundry.agents.serialize import _serialize_shared_beats_for_dilemma
 
         primary = "path::host_benevolent_or_selfish__benevolent"
@@ -2490,8 +2488,7 @@ class TestSerializeSharedBeatsForDilemma:
         beat = {
             "beat_id": "shared_setup_01",
             "summary": "A shared scene",
-            "path_id": primary,
-            "also_belongs_to": sibling,
+            "belongs_to": [primary, sibling],
             "dilemma_impacts": [],
             "entities": [],
             "location": None,
@@ -2518,8 +2515,7 @@ class TestSerializeSharedBeatsForDilemma:
             )
 
         assert len(beats) == 1
-        assert beats[0]["path_id"] == primary
-        assert beats[0]["also_belongs_to"] == sibling
+        assert beats[0]["belongs_to"] == [primary, sibling]
 
     @pytest.mark.asyncio
     async def test_prompt_interpolated_with_dilemma_context(self) -> None:
@@ -2784,8 +2780,10 @@ class TestSerializeSeedAsFunctionSharedBeats:
         shared_beat = {
             "beat_id": "shared_host_01",
             "summary": "Shared setup",
-            "path_id": "path::host_benevolent_or_selfish__benevolent",
-            "also_belongs_to": "path::host_benevolent_or_selfish__selfish",
+            "belongs_to": [
+                "path::host_benevolent_or_selfish__benevolent",
+                "path::host_benevolent_or_selfish__selfish",
+            ],
             "dilemma_impacts": [],
             "entities": ["char_test"],
             "location": None,
@@ -2795,8 +2793,7 @@ class TestSerializeSeedAsFunctionSharedBeats:
         per_path_beat = {
             "beat_id": "benevolent_beat_01",
             "summary": "Post-commit beat",
-            "path_id": "path::host_benevolent_or_selfish__benevolent",
-            "also_belongs_to": None,
+            "belongs_to": ["path::host_benevolent_or_selfish__benevolent"],
             "dilemma_impacts": [],
             "entities": ["char_test"],
             "location": None,
