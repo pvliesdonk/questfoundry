@@ -102,6 +102,11 @@ system: |
   3. Each path has at least the configured number of POST-COMMIT beats
      (`belongs_to` length 1).
   4. Pre-commit beats appear before commit beats in the listing (or, if `temporal_hint` is set, its `position` is `before_commit`). `temporal_hint` is OPTIONAL — listing order alone is sufficient.
+  5. For each path, the FIRST post-commit beat listed under that path has
+     `effect: commits` (or the beat labeled as the commit beat appears FIRST
+     in the path's exclusive-beat sequence). The commit beat is ALWAYS beat 1
+     of the exclusive sequence — placing it at position 2+ is a structural
+     violation (seed.md R-3.11 / SGO Part 1).
 
   If any of the above is missing, the serializer will fail and the repair
   loop will rebuild the section from scratch — fix the gap here.
