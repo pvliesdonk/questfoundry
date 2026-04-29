@@ -940,8 +940,8 @@ This section documents where the current implementation (`docs/design/00-spec.md
 
 ### InitialBeat.paths — Same-Dilemma Dual belongs_to
 
-**Current:** `InitialBeat.paths` is `list[str]` with `min_length=1`. The mutation creates one `belongs_to` edge per path in the list.
+**Current (pre-#1206 original):** `InitialBeat.paths` is `list[str]` with `min_length=1`. The mutation creates one `belongs_to` edge per path in the list.
 
 **This document:** Pre-commit beats belong to both paths of their dilemma (two `belongs_to` edges); post-commit beats belong to one path (one `belongs_to` edge). This is structurally correct: pre-commit beats are experienced by all players before the choice is made. The historical prohibition on multi-path `belongs_to` (Part 8) targeted cross-dilemma multi-assignment — the pattern that caused hard-convergence violations. Same-dilemma pre-commit dual membership is a different structural relationship and is explicitly permitted (see Part 8, "Path Membership ≠ Scene Participation").
 
-**Impact:** `InitialBeat` needs a mechanism to signal which beats are pre-commit (dual `belongs_to`) vs post-commit (singular `belongs_to`). The recommended approach is an `also_belongs_to: str | null` field — null for post-commit beats, the other path's ID for pre-commit beats. GROW and POLISH consumers that assume one `belongs_to` per beat need auditing. See #1206.
+**Impact:** `InitialBeat.belongs_to` is `list[str]` with `min_length=1, max_length=2`. The mutation layer creates one `belongs_to` graph edge per element. Pre-commit beats supply two path IDs (one per path of their dilemma); commit, post-commit, and gap beats supply one. Cross-dilemma dual membership remains forbidden and is rejected by the mutation layer. The asymmetric `path_id` + `also_belongs_to: str | null` form previously recommended in this section (introduced by #1206) is replaced by the list shape — see #1564.
