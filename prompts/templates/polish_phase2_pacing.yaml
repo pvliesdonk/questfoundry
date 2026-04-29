@@ -67,7 +67,7 @@ system: |
       {{
         "after_beat_id": "beat::tense_confrontation",
         "summary": "A heavy silence settles over the room as both parties consider what was said",
-        "entity_ids": ["entity::mentor", "entity::protagonist"]
+        "entity_ids": ["character::mentor", "character::protagonist"]
       }}
     ]
   }}
