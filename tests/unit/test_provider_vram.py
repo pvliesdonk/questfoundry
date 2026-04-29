@@ -85,6 +85,30 @@ def _llama8b_show_fixture(quant: str = "Q4_K_M") -> dict[str, Any]:
     }
 
 
+def _gemma4_e2b_show_fixture(quant: str = "Q4_K_M") -> dict[str, Any]:
+    """Realistic /api/show shape for gemma4:e2b (5.1B params, 262K vocab).
+
+    Captures the huge-vocab pattern that breaks the flat-rate weights
+    formula — see #1523 for the field-observed mismatch (calculator
+    predicted 2.9 GB weights, Ollama loaded 5.4 GB onto CPU).
+    """
+    return {
+        "details": {
+            "family": "gemma3",
+            "parameter_size": "5.1B",
+            "quantization_level": quant,
+        },
+        "model_info": {
+            "general.architecture": "gemma3",
+            "gemma3.block_count": 30,
+            "gemma3.embedding_length": 2304,
+            "gemma3.attention.head_count": 8,
+            "gemma3.attention.head_count_kv": 4,
+            "gemma3.vocab_size": 262_144,
+        },
+    }
+
+
 class TestCalculateMaxContext:
     def test_typical_8b_q4_at_12gb(self) -> None:
         """8B Q4_K_M at 12 GB VRAM yields a reasonable context (≥16K)."""
@@ -157,3 +181,45 @@ class TestCalculateMaxContext:
         ctx_with_gqa = calculate_max_context(12.0, with_gqa)
         # GQA factor 4 means 4x smaller KV cache → much larger ctx
         assert ctx_with_gqa > ctx_no_gqa
+
+    def test_huge_vocab_applies_fp16_embedding_surcharge(self) -> None:
+        """Models with vocab_size ≥ 100K get an FP16 embedding+lm_head surcharge.
+
+        Regression for #1523: gemma4-class models (262K vocab) actually use
+        ~5.4 GB for weights when the flat-rate formula predicts only 2.9 GB,
+        because embedding/lm_head matrices stay at FP16 while the rest of the
+        model is quantized. Without this surcharge the calculator silently
+        over-estimates available KV-cache budget and Ollama spills weights
+        to CPU at runtime.
+        """
+        # Same model run twice, only difference is presence of vocab_size hint.
+        gemma_with_vocab = _gemma4_e2b_show_fixture()
+        gemma_no_vocab = _gemma4_e2b_show_fixture()
+        del gemma_no_vocab["model_info"]["gemma3.vocab_size"]
+
+        ctx_with_surcharge = calculate_max_context(7.5, gemma_with_vocab)
+        ctx_no_surcharge = calculate_max_context(7.5, gemma_no_vocab)
+
+        # The surcharge eats VRAM that would otherwise go to KV cache, so the
+        # context with surcharge applied is strictly smaller.
+        assert ctx_with_surcharge < ctx_no_surcharge, (
+            f"FP16 embedding surcharge must reduce context budget; "
+            f"got {ctx_with_surcharge} (with) >= {ctx_no_surcharge} (without)"
+        )
+        # And the gap should be sizeable for a 262K-vocab model — at Q4_K_M,
+        # the surcharge is ~1.7 GB, plenty to noticeably shrink num_ctx.
+        assert ctx_no_surcharge - ctx_with_surcharge >= 8 * NUM_CTX_ALIGNMENT
+
+    def test_normal_vocab_no_surcharge_applied(self) -> None:
+        """Models with vocab_size < 100K skip the FP16 surcharge (boundary)."""
+        # Llama-3-8B has vocab_size ≈ 128K which IS ≥ 100K — but qwen2.5/Mistral
+        # families use ~32K. Test with an explicit small vocab.
+        small_vocab = _llama8b_show_fixture()
+        small_vocab["model_info"]["llama.vocab_size"] = 32_000
+
+        small_no_vocab_field = _llama8b_show_fixture()  # no vocab_size key
+
+        ctx_small = calculate_max_context(12.0, small_vocab)
+        ctx_no_field = calculate_max_context(12.0, small_no_vocab_field)
+        # No surcharge in either case → identical num_ctx.
+        assert ctx_small == ctx_no_field
