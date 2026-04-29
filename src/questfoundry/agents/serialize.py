@@ -2130,9 +2130,17 @@ async def serialize_seed_as_function(
                     else:
                         # Fallback for LLM schema deviations: the SharedBeatsSection
                         # validator and prompt schema normally ensure
-                        # dilemma_impacts[0] is present, but parse the dilemma from
-                        # path_id as a last resort if the LLM omits dilemma_impacts.
-                        path_ref = beat.get("path_id", "")
+                        # dilemma_impacts[0] is present, but recover the dilemma from
+                        # belongs_to[0] (post-#1564 schema) as a last resort if the
+                        # LLM omits dilemma_impacts. The path ID format is
+                        # `path::<dilemma>__<answer>`, so the same rsplit logic
+                        # extracts the dilemma name. If belongs_to is also missing or
+                        # empty (truly malformed beat), raw_did stays empty and the
+                        # beat lands in shared_beats_by_dilemma[""] which no per-path
+                        # call consumes — silent discard, surfaced by the seam
+                        # validator.
+                        belongs_to_list = beat.get("belongs_to") or []
+                        path_ref = str(belongs_to_list[0]) if belongs_to_list else ""
                         raw_pid = strip_scope_prefix(path_ref)
                         # path ID format is <dilemma>__<answer>; take the dilemma part
                         raw_did = raw_pid.rsplit("__", 1)[0] if "__" in raw_pid else raw_pid

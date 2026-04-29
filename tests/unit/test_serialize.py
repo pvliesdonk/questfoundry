@@ -2897,6 +2897,93 @@ class TestSerializeSeedAsFunctionSharedBeats:
         # 3 sections * 10 + 15 paths + 77 shared + 20 per_path = 142
         assert result.tokens_used == 142
 
+    @pytest.mark.asyncio
+    async def test_orphan_beat_fallback_uses_belongs_to_not_path_id(self) -> None:
+        """Regression: when a shared beat has dilemma_impacts=[] the grouping loop
+        must read belongs_to[0] to extract the dilemma name.  Before the fix it
+        read the dead path_id field (removed in #1564), which always returned ""
+        causing every orphan beat to land in shared_beats_by_dilemma[""] — a key
+        no per-path call ever queries, silently discarding the beat.
+
+        Verifies that shared_beats_by_dilemma["trust_or_betray"] is populated when
+        belongs_to=["path::trust_or_betray__trust"] even though dilemma_impacts=[].
+        """
+        from questfoundry.agents.serialize import serialize_seed_as_function
+
+        orphan_beat = {
+            "beat_id": "shared_setup_01",
+            "summary": "An orphaned shared beat",
+            # belongs_to carries the path ID; dilemma_impacts is empty (LLM deviation)
+            "belongs_to": ["path::trust_or_betray__trust"],
+            "dilemma_impacts": [],
+            "entities": ["character::protagonist"],  # min_length=1 required by InitialBeat
+            "location": None,
+            "location_alternatives": [],
+            "temporal_hint": None,
+        }
+        mock_path = {
+            "path_id": "path::trust_or_betray__trust",
+            "dilemma_id": "dilemma::trust_or_betray",
+            "answer_id": "trust",
+            "name": "Trust",
+            "description": "desc",
+            "path_importance": "major",
+            "unexplored_answer_ids": ["betray"],
+        }
+        mock_dilemma_two = {
+            "dilemma_id": "dilemma::trust_or_betray",
+            "explored": ["trust", "betray"],
+            "unexplored": [],
+        }
+
+        captured_shared_by_dilemma: list[dict[str, Any]] = []
+
+        async def _mock_per_path(
+            *_args: Any, shared_beats_by_dilemma: Any = None, **_kw: Any
+        ) -> tuple[list[Any], int]:
+            if shared_beats_by_dilemma is not None:
+                captured_shared_by_dilemma.append(dict(shared_beats_by_dilemma))
+            return [], 0
+
+        with (
+            patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_serialize,
+            patch(
+                "questfoundry.agents.serialize._serialize_paths_per_dilemma",
+                return_value=([mock_path], 10),
+            ),
+            patch(
+                "questfoundry.agents.serialize._serialize_shared_beats_per_dilemma",
+                return_value=([orphan_beat], 5),
+            ),
+            patch(
+                "questfoundry.agents.serialize._serialize_beats_per_path",
+                side_effect=_mock_per_path,
+            ),
+        ):
+            mock_serialize.side_effect = [
+                (MagicMock(model_dump=lambda: {"entities": []}), 10, 1),
+                (MagicMock(model_dump=lambda: {"dilemmas": [mock_dilemma_two]}), 10, 1),
+                (MagicMock(model_dump=lambda: {"consequences": []}), 10, 1),
+            ]
+            with patch("questfoundry.agents.serialize.validate_seed_mutations", return_value=[]):
+                await serialize_seed_as_function(
+                    model=MagicMock(),
+                    brief="brief",
+                    graph=MagicMock(),
+                )
+
+        assert len(captured_shared_by_dilemma) == 1, "_serialize_beats_per_path was not called"
+        grouped = captured_shared_by_dilemma[0]
+        # The orphan beat must land under "trust_or_betray", NOT under "" (the dead
+        # path_id fallback that the pre-fix code always produced).
+        assert "trust_or_betray" in grouped, (
+            f"expected dilemma key 'trust_or_betray' in shared_beats_by_dilemma, got: {list(grouped.keys())}"
+        )
+        assert "" not in grouped, (
+            "empty key '' must not appear — that is the dead path_id fallback bucket"
+        )
+        assert grouped["trust_or_betray"] == [orphan_beat]
+
 
 class TestBuildSharedBeatContext:
     """Unit tests for _build_shared_beat_context."""
