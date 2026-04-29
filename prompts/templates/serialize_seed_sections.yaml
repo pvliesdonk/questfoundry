@@ -644,11 +644,10 @@ per_path_beats_prompt: |
   This beat represents the moment where this path's dilemma is locked in.
   The commits beat MUST NOT be the last beat — at least one consequence beat MUST follow it.
 
-  WRONG (rejected): commits is the last beat — no consequence
-  `[advances, commits]` or `[advances, reveals, commits]` ← pipeline fails
+  WRONG (commits not first): `[advances, commits, advances]` or `[reveals, commits, complicates]` ← position violation; see COMMIT BEAT POSITION below
+  WRONG (commits last): `[commits, advances, commits]` ← cardinality violation, no aftermath after the second commits
 
-  RIGHT (valid): aftermath beat follows the decision
-  `[advances, commits, advances]` or `[reveals, commits, complicates]` ← passes
+  RIGHT: `[commits, advances]` or `[commits, advances, reveals]` or `[commits, reveals, complicates]` ← passes
 
   ## COMMIT BEAT POSITION (HARD CONSTRAINT — structural, not narrative)
 
