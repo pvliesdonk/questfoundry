@@ -172,9 +172,9 @@ where `pre_commit_*` beats have two `belongs_to` edges (both paths of this dilem
 
 **Rules:**
 
-R-3.6. Pre-commit beats have exactly two `belongs_to` edges, both referencing Paths of the same Dilemma. In YAML form, this is represented by `path_id` (primary) and `also_belongs_to` (other path); in the graph, it is two distinct `belongs_to` edges.
+R-3.6. Pre-commit beats have exactly two `belongs_to` edges, both referencing Paths of the same Dilemma. In YAML form, `belongs_to` is a list of length 2 containing both path IDs; in the graph, two distinct `belongs_to` edges are created.
 
-R-3.7. Commit beats have exactly one `belongs_to` edge AND `dilemma_impacts` contains an entry with `effect: commits` naming which path locks in. In YAML, `also_belongs_to` is absent or null on commit beats.
+R-3.7. Commit beats have exactly one `belongs_to` edge AND `dilemma_impacts` contains an entry with `effect: commits` naming which path locks in. In YAML, `belongs_to` contains exactly one path ID on commit beats.
 
 R-3.8. Post-commit beats have exactly one `belongs_to` edge AND `dilemma_impacts` contains no entry with `effect: commits`.
 
@@ -199,7 +199,7 @@ R-3.15. Setup and epilogue beats are optional — a story may have zero of each.
 | Beat has `belongs_to` edges to `path::mentor_trust__protector` and `path::artifact_nature__salvation` | Cross-dilemma dual `belongs_to` — conflates path membership with scene co-occurrence | R-3.9 |
 | Setup beat has `belongs_to` to a path | Structural beat wrongly assigned path membership | R-3.14 |
 | Epilogue beat has `dilemma_impacts.effect: commits` | Epilogue is post-all-commits; cannot commit a dilemma | R-3.14 |
-| Commit beat has `also_belongs_to` set | Commit beats are exclusive to one path; `also_belongs_to` must be null | R-3.7 |
+| Commit beat has more than one `belongs_to` entry | Commit beats are exclusive to one path; `belongs_to` must contain exactly one path ID | R-3.7 |
 | Post-commit beat has `dilemma_impacts.effect: commits` | Post-commit beats must not contain a commits impact (that would make them a commit beat) | R-3.8 |
 | Dilemma has zero pre-commit beats | Y-fork missing — per the Y-shape requirement stated in the Overview, the last shared pre-commit beat is the divergence point that seeds the Y-fork. Without it, POLISH Phase 4c's `compute_choice_edges()` finds no divergence and produces zero choices | R-3.10 |
 | Path has zero commit beats | Path cannot "commit" — no point of irreversible choice | R-3.11 |
@@ -669,8 +669,9 @@ For `dilemma::mentor_trust`, LLM generates Y-shape scaffold:
 # Shared pre-commit chain (two belongs_to edges per beat — same dilemma)
 - id: beat_mentor_warning
   summary: "Mentor delivers cryptic warning about the investigation"
-  path_id: path::mentor_trust__protector
-  also_belongs_to: path::mentor_trust__manipulator
+  belongs_to:
+    - path::mentor_trust__protector
+    - path::mentor_trust__manipulator
   dilemma_impacts:
     - dilemma_id: dilemma::mentor_trust
       effect: advances
