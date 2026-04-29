@@ -529,11 +529,11 @@ class TestSerializeResult:
             patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_ser,
             patch(
                 "questfoundry.agents.serialize._serialize_paths_per_dilemma",
-                return_value=([mock_path], 15),
+                return_value=([mock_path], 15, 1),
             ),
             patch(
                 "questfoundry.agents.serialize._serialize_beats_per_path",
-                return_value=([], 20),
+                return_value=([], 20, 1),
             ),
         ):
             mock_ser.side_effect = [
@@ -593,11 +593,11 @@ class TestSerializeResult:
             patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_ser,
             patch(
                 "questfoundry.agents.serialize._serialize_paths_per_dilemma",
-                return_value=([mock_path], 15),
+                return_value=([mock_path], 15, 1),
             ),
             patch(
                 "questfoundry.agents.serialize._serialize_beats_per_path",
-                return_value=([], 20),
+                return_value=([], 20, 1),
             ),
         ):
             # 3 initial sections + 1 retry for entities (semantic error triggers retry)
@@ -669,11 +669,11 @@ class TestSerializeSeedAsFunction:
             patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_serialize,
             patch(
                 "questfoundry.agents.serialize._serialize_paths_per_dilemma",
-                return_value=([mock_path], 15),  # Returns (paths_list, tokens)
+                return_value=([mock_path], 15, 1),  # Returns (paths_list, tokens)
             ),
             patch(
                 "questfoundry.agents.serialize._serialize_beats_per_path",
-                return_value=([], 20),  # Returns (beats_list, tokens)
+                return_value=([], 20, 1),  # Returns (beats_list, tokens)
             ),
         ):
             # Sections: entities, dilemmas, consequences
@@ -697,6 +697,67 @@ class TestSerializeSeedAsFunction:
                 assert result.semantic_errors == []
                 # 3 sections * 10 tokens + 15 from paths + 20 from beats
                 assert result.tokens_used == 65
+                # 3 sections (1 each) + 1 paths + 1 beats = 5 calls
+                assert result.call_count == 5
+
+    @pytest.mark.asyncio
+    async def test_call_count_reflects_retry_attempts(self) -> None:
+        """SerializeResult.call_count must include Pydantic-retry attempts.
+
+        Regression for #1550: previously seed.py hardcoded ``+= 6`` for the
+        whole serialization phase, so retries were invisible to the operator.
+        Each call to ``serialize_to_artifact`` returns ``(result, tokens, calls)``
+        where ``calls`` ≥ 1 when retries occurred. The orchestrator must sum
+        these into ``SerializeResult.call_count``.
+        """
+        from questfoundry.agents.serialize import SerializeResult, serialize_seed_as_function
+
+        mock_model = MagicMock()
+        mock_graph = MagicMock()
+
+        mock_path = {
+            "path_id": "path::test_dilemma__alt1",
+            "dilemma_id": "dilemma::test_dilemma",
+            "answer_id": "alt1",
+            "name": "Test Path",
+            "description": "A test path",
+            "unexplored_answer_ids": [],
+            "path_importance": "major",
+        }
+
+        with (
+            patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_serialize,
+            # Helpers: one retry on the per-dilemma path call (calls=2), and
+            # the per-path beats call (calls=1).
+            patch(
+                "questfoundry.agents.serialize._serialize_paths_per_dilemma",
+                return_value=([mock_path], 15, 2),
+            ),
+            patch(
+                "questfoundry.agents.serialize._serialize_beats_per_path",
+                return_value=([], 20, 1),
+            ),
+        ):
+            # Section calls: entities=1, dilemmas=3 (Pydantic retried twice),
+            # consequences=1. Total direct serialize_to_artifact calls = 5,
+            # plus paths=2 and beats=1 from the helpers = 8 LLM calls.
+            mock_serialize.side_effect = [
+                (MagicMock(model_dump=lambda: {"entities": []}), 10, 1),
+                (MagicMock(model_dump=lambda: {"dilemmas": [_MOCK_DILEMMA]}), 30, 3),
+                (MagicMock(model_dump=lambda: {"consequences": []}), 10, 1),
+            ]
+
+            with patch("questfoundry.agents.serialize.validate_seed_mutations", return_value=[]):
+                result = await serialize_seed_as_function(
+                    model=mock_model,
+                    brief="Test brief",
+                    graph=mock_graph,
+                )
+
+                assert isinstance(result, SerializeResult)
+                # entities(1) + dilemmas(3 — two retries) + consequences(1)
+                # + paths(2) + beats(1) = 8
+                assert result.call_count == 8
 
     @pytest.mark.asyncio
     async def test_returns_result_with_errors_when_semantic_validation_fails(self) -> None:
@@ -720,11 +781,11 @@ class TestSerializeSeedAsFunction:
             patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_serialize,
             patch(
                 "questfoundry.agents.serialize._serialize_paths_per_dilemma",
-                return_value=([], 15),
+                return_value=([], 15, 1),
             ),
             patch(
                 "questfoundry.agents.serialize._serialize_beats_per_path",
-                return_value=([], 20),
+                return_value=([], 20, 1),
             ),
         ):
             mock_serialize.side_effect = [
@@ -760,11 +821,11 @@ class TestSerializeSeedAsFunction:
             patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_serialize,
             patch(
                 "questfoundry.agents.serialize._serialize_paths_per_dilemma",
-                return_value=([], 15),
+                return_value=([], 15, 1),
             ),
             patch(
                 "questfoundry.agents.serialize._serialize_beats_per_path",
-                return_value=([], 20),
+                return_value=([], 20, 1),
             ),
         ):
             # 3 sections (paths + beats handled separately)
@@ -830,11 +891,11 @@ class TestSerializeSeedAsFunction:
             ),
             patch(
                 "questfoundry.agents.serialize._serialize_paths_per_dilemma",
-                return_value=([], 15),
+                return_value=([], 15, 1),
             ),
             patch(
                 "questfoundry.agents.serialize._serialize_beats_per_path",
-                return_value=([], 20),
+                return_value=([], 20, 1),
             ),
             patch("questfoundry.agents.serialize.validate_seed_mutations", return_value=errors),
         ):
@@ -891,11 +952,11 @@ class TestSerializeSeedAsFunction:
             ),
             patch(
                 "questfoundry.agents.serialize._serialize_paths_per_dilemma",
-                return_value=([], 15),
+                return_value=([], 15, 1),
             ),
             patch(
                 "questfoundry.agents.serialize._serialize_beats_per_path",
-                return_value=([], 20),
+                return_value=([], 20, 1),
             ),
             patch("questfoundry.agents.serialize.validate_seed_mutations", return_value=errors),
         ):
@@ -954,11 +1015,11 @@ class TestSerializeSeedAsFunction:
             ),
             patch(
                 "questfoundry.agents.serialize._serialize_paths_per_dilemma",
-                return_value=([], 15),
+                return_value=([], 15, 1),
             ),
             patch(
                 "questfoundry.agents.serialize._serialize_beats_per_path",
-                return_value=([], 20),
+                return_value=([], 20, 1),
             ),
             patch("questfoundry.agents.serialize.validate_seed_mutations", return_value=errors),
         ):
@@ -1190,7 +1251,7 @@ class TestBeatRetryAndContextRefresh:
 
         def increment_and_return(*_args, **_kwargs):
             beat_retry_count[0] += 1
-            return ([], 20)
+            return ([], 20, 1)
 
         mock_beats = AsyncMock(side_effect=increment_and_return)
 
@@ -1219,7 +1280,7 @@ class TestBeatRetryAndContextRefresh:
             patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_serialize,
             patch(
                 "questfoundry.agents.serialize._serialize_paths_per_dilemma",
-                return_value=([mock_path], 15),
+                return_value=([mock_path], 15, 1),
             ),
             patch(
                 "questfoundry.agents.serialize._serialize_beats_per_path",
@@ -1291,7 +1352,7 @@ class TestBeatRetryAndContextRefresh:
 
         def mock_beats_retry(*_args, **_kwargs):
             retry_count[0] += 1
-            return (retried_per_path_beats, 20)
+            return (retried_per_path_beats, 20, 1)
 
         mock_beats = AsyncMock(side_effect=mock_beats_retry)
 
@@ -1329,7 +1390,7 @@ class TestBeatRetryAndContextRefresh:
             patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_serialize,
             patch(
                 "questfoundry.agents.serialize._serialize_paths_per_dilemma",
-                return_value=([mock_path], 15),
+                return_value=([mock_path], 15, 1),
             ),
             patch(
                 "questfoundry.agents.serialize._serialize_beats_per_path",
@@ -1337,7 +1398,7 @@ class TestBeatRetryAndContextRefresh:
             ),
             patch(
                 "questfoundry.agents.serialize._serialize_shared_beats_per_dilemma",
-                return_value=([shared_beat], 10),
+                return_value=([shared_beat], 10, 1),
             ),
             patch(
                 "questfoundry.agents.serialize.validate_seed_mutations",
@@ -1403,7 +1464,7 @@ class TestBeatRetryAndContextRefresh:
 
         async def mock_paths_fn(*_args, **_kwargs):
             path_call_count[0] += 1
-            return ([mock_path], 15)
+            return ([mock_path], 15, 1)
 
         validation_call_count = [0]
 
@@ -1437,7 +1498,7 @@ class TestBeatRetryAndContextRefresh:
             ),
             patch(
                 "questfoundry.agents.serialize._serialize_beats_per_path",
-                return_value=([], 20),
+                return_value=([], 20, 1),
             ),
             patch(
                 "questfoundry.agents.serialize.validate_seed_mutations",
@@ -1484,7 +1545,7 @@ class TestBeatRetryAndContextRefresh:
             call_count[0] += 1
             if call_count[0] == 1:
                 # First call succeeds (initial beat generation)
-                return ([], 20)
+                return ([], 20, 1)
             # Retry call fails with SerializationError
             raise SerializationError(
                 "Beat serialization failed",
@@ -1518,7 +1579,7 @@ class TestBeatRetryAndContextRefresh:
             patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_serialize,
             patch(
                 "questfoundry.agents.serialize._serialize_paths_per_dilemma",
-                return_value=([mock_path], 15),
+                return_value=([mock_path], 15, 1),
             ),
             patch(
                 "questfoundry.agents.serialize._serialize_beats_per_path",
@@ -1643,7 +1704,9 @@ class TestSerializeBeatsPerPathConcurrency:
         current_concurrent = 0
         lock = asyncio.Lock()
 
-        async def _mock_serialize_path_beats(**_kwargs: Any) -> tuple[list[dict[str, Any]], int]:
+        async def _mock_serialize_path_beats(
+            **_kwargs: Any,
+        ) -> tuple[list[dict[str, Any]], int, int]:
             nonlocal peak_concurrent, current_concurrent
             async with lock:
                 current_concurrent += 1
@@ -1651,7 +1714,7 @@ class TestSerializeBeatsPerPathConcurrency:
             await asyncio.sleep(0.05)
             async with lock:
                 current_concurrent -= 1
-            return [{"beat_id": "b1"}], 100
+            return [{"beat_id": "b1"}], 100, 1
 
         paths = [{"path_id": f"path_{i}"} for i in range(6)]
 
@@ -1659,7 +1722,7 @@ class TestSerializeBeatsPerPathConcurrency:
             "questfoundry.agents.serialize._serialize_path_beats",
             side_effect=_mock_serialize_path_beats,
         ):
-            beats, tokens = await _serialize_beats_per_path(
+            beats, tokens, calls = await _serialize_beats_per_path(
                 model=MagicMock(),
                 paths=paths,
                 per_path_prompt="test",
@@ -1672,6 +1735,7 @@ class TestSerializeBeatsPerPathConcurrency:
 
         assert len(beats) == 6
         assert tokens == 600
+        assert calls == 6
         # Semaphore should cap concurrency at 2
         assert peak_concurrent <= 2
 
@@ -1779,7 +1843,7 @@ class TestEarlyValidateDilemmaAnswers:
             {"dilemma_id": "trust_or_betray", "explored": ["trust"], "unexplored": ["betray"]}
         ]
 
-        result, tokens = await _early_validate_dilemma_answers(
+        result, tokens, calls = await _early_validate_dilemma_answers(
             model=mock_model,
             dilemma_decisions=decisions,
             graph=mock_graph,
@@ -1792,6 +1856,7 @@ class TestEarlyValidateDilemmaAnswers:
 
         assert result == decisions
         assert tokens == 0
+        assert calls == 0
 
     @pytest.mark.asyncio
     async def test_invalid_answer_triggers_reserialize(self) -> None:
@@ -1836,7 +1901,7 @@ class TestEarlyValidateDilemmaAnswers:
         with patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_serialize:
             mock_serialize.return_value = (corrected, 50, 1)
 
-            result, tokens = await _early_validate_dilemma_answers(
+            result, tokens, calls = await _early_validate_dilemma_answers(
                 model=mock_model,
                 dilemma_decisions=decisions,
                 graph=mock_graph,
@@ -1849,6 +1914,7 @@ class TestEarlyValidateDilemmaAnswers:
 
         # Should have re-serialized and returned corrected data
         assert tokens == 50
+        assert calls == 1
         assert result[0]["explored"] == ["trust"]
         mock_serialize.assert_called_once()
 
@@ -2435,7 +2501,7 @@ class TestSerializeSharedBeatsForDilemma:
 
         mock_model = MagicMock()
 
-        beats, tokens = await _serialize_shared_beats_for_dilemma(
+        beats, tokens, _calls = await _serialize_shared_beats_for_dilemma(
             model=mock_model,
             dilemma_decision=_MOCK_DILEMMA_SINGLE,
             paths=[],
@@ -2463,7 +2529,7 @@ class TestSerializeSharedBeatsForDilemma:
             new_callable=AsyncMock,
             return_value=(mock_section, 42, 1),
         ) as mock_sat:
-            beats, tokens = await _serialize_shared_beats_for_dilemma(
+            beats, tokens, _calls = await _serialize_shared_beats_for_dilemma(
                 model=MagicMock(),
                 dilemma_decision=_MOCK_DILEMMA_BINARY,
                 paths=_MOCK_PATHS_FOR_BINARY,
@@ -2503,7 +2569,7 @@ class TestSerializeSharedBeatsForDilemma:
             new_callable=AsyncMock,
             return_value=(mock_section, 10, 1),
         ):
-            beats, _tokens = await _serialize_shared_beats_for_dilemma(
+            beats, _tokens, _calls = await _serialize_shared_beats_for_dilemma(
                 model=MagicMock(),
                 dilemma_decision=_MOCK_DILEMMA_BINARY,
                 paths=_MOCK_PATHS_FOR_BINARY,
@@ -2625,15 +2691,15 @@ class TestSerializeSharedBeatsPerDilemma:
 
         call_count: list[int] = [0]
 
-        async def _mock_single(**_kw: Any) -> tuple[list[Any], int]:
+        async def _mock_single(**_kw: Any) -> tuple[list[Any], int, int]:
             call_count[0] += 1
-            return [], 10
+            return [], 10, 1
 
         with patch(
             "questfoundry.agents.serialize._serialize_shared_beats_for_dilemma",
             side_effect=_mock_single,
         ):
-            beats, tokens = await _serialize_shared_beats_per_dilemma(
+            beats, tokens, _calls = await _serialize_shared_beats_per_dilemma(
                 model=MagicMock(),
                 dilemma_decisions=[dilemma_a, dilemma_b, dilemma_single],
                 paths=[],
@@ -2653,7 +2719,7 @@ class TestSerializeSharedBeatsPerDilemma:
         """Should return empty + 0 tokens when no dilemma has 2+ explored."""
         from questfoundry.agents.serialize import _serialize_shared_beats_per_dilemma
 
-        beats, tokens = await _serialize_shared_beats_per_dilemma(
+        beats, tokens, _calls = await _serialize_shared_beats_per_dilemma(
             model=MagicMock(),
             dilemma_decisions=[_MOCK_DILEMMA_SINGLE],
             paths=[],
@@ -2685,15 +2751,15 @@ class TestSerializeSharedBeatsPerDilemma:
             "question": "Q?",
         }
 
-        async def _mock_single(**kw: Any) -> tuple[list[Any], int]:
+        async def _mock_single(**kw: Any) -> tuple[list[Any], int, int]:
             did = kw["dilemma_decision"]["dilemma_id"].replace("dilemma::", "")
-            return [{"beat_id": f"shared_{did}_01", "summary": "s"}], 5
+            return [{"beat_id": f"shared_{did}_01", "summary": "s"}], 5, 1
 
         with patch(
             "questfoundry.agents.serialize._serialize_shared_beats_for_dilemma",
             side_effect=_mock_single,
         ):
-            beats, tokens = await _serialize_shared_beats_per_dilemma(
+            beats, tokens, _calls = await _serialize_shared_beats_per_dilemma(
                 model=MagicMock(),
                 dilemma_decisions=[dilemma_a, dilemma_b],
                 paths=[],
@@ -2720,13 +2786,13 @@ class TestSerializeSeedAsFunctionSharedBeats:
 
         call_order: list[str] = []
 
-        async def _mock_shared(*_args: Any, **_kwargs: Any) -> tuple[list[Any], int]:
+        async def _mock_shared(*_args: Any, **_kwargs: Any) -> tuple[list[Any], int, int]:
             call_order.append("shared")
-            return [], 5
+            return [], 5, 1
 
-        async def _mock_per_path(*_args: Any, **_kwargs: Any) -> tuple[list[Any], int]:
+        async def _mock_per_path(*_args: Any, **_kwargs: Any) -> tuple[list[Any], int, int]:
             call_order.append("per_path")
-            return [], 5
+            return [], 5, 1
 
         mock_path = {
             "path_id": "path::host_benevolent_or_selfish__benevolent",
@@ -2747,7 +2813,7 @@ class TestSerializeSeedAsFunctionSharedBeats:
             patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_serialize,
             patch(
                 "questfoundry.agents.serialize._serialize_paths_per_dilemma",
-                return_value=([mock_path], 10),
+                return_value=([mock_path], 10, 1),
             ),
             patch(
                 "questfoundry.agents.serialize._serialize_shared_beats_per_dilemma",
@@ -2819,15 +2885,15 @@ class TestSerializeSeedAsFunctionSharedBeats:
             patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_serialize,
             patch(
                 "questfoundry.agents.serialize._serialize_paths_per_dilemma",
-                return_value=([mock_path], 10),
+                return_value=([mock_path], 10, 1),
             ),
             patch(
                 "questfoundry.agents.serialize._serialize_shared_beats_per_dilemma",
-                return_value=([shared_beat], 5),
+                return_value=([shared_beat], 5, 1),
             ),
             patch(
                 "questfoundry.agents.serialize._serialize_beats_per_path",
-                return_value=([per_path_beat], 5),
+                return_value=([per_path_beat], 5, 1),
             ),
         ):
             mock_serialize.side_effect = [
@@ -2871,15 +2937,15 @@ class TestSerializeSeedAsFunctionSharedBeats:
             patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_serialize,
             patch(
                 "questfoundry.agents.serialize._serialize_paths_per_dilemma",
-                return_value=([mock_path], 15),
+                return_value=([mock_path], 15, 1),
             ),
             patch(
                 "questfoundry.agents.serialize._serialize_shared_beats_per_dilemma",
-                return_value=([], 77),
+                return_value=([], 77, 1),
             ),
             patch(
                 "questfoundry.agents.serialize._serialize_beats_per_path",
-                return_value=([], 20),
+                return_value=([], 20, 1),
             ),
         ):
             mock_serialize.side_effect = [
@@ -2940,20 +3006,20 @@ class TestSerializeSeedAsFunctionSharedBeats:
 
         async def _mock_per_path(
             *_args: Any, shared_beats_by_dilemma: Any = None, **_kw: Any
-        ) -> tuple[list[Any], int]:
+        ) -> tuple[list[Any], int, int]:
             if shared_beats_by_dilemma is not None:
                 captured_shared_by_dilemma.append(dict(shared_beats_by_dilemma))
-            return [], 0
+            return [], 0, 0
 
         with (
             patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_serialize,
             patch(
                 "questfoundry.agents.serialize._serialize_paths_per_dilemma",
-                return_value=([mock_path], 10),
+                return_value=([mock_path], 10, 1),
             ),
             patch(
                 "questfoundry.agents.serialize._serialize_shared_beats_per_dilemma",
-                return_value=([orphan_beat], 5),
+                return_value=([orphan_beat], 5, 1),
             ),
             patch(
                 "questfoundry.agents.serialize._serialize_beats_per_path",

@@ -423,9 +423,7 @@ class SeedStage:
                 on_phase_progress=on_phase_progress,
                 size_profile=size_profile,
             )
-            # Iterative serialization makes one call per section plus potential retries
-            # (actual count depends on serialize_seed_as_function implementation)
-            total_llm_calls += 6
+            total_llm_calls += result.call_count
             total_tokens += result.tokens_used
 
             # Success - break out of outer loop
