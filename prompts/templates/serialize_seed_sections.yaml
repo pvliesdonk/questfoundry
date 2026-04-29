@@ -411,9 +411,9 @@ shared_beats_prompt: |
 
   ## YOUR TWO EXPLORED PATHS
 
-  These beats MUST belong to BOTH of these paths:
-  - `path_id` (primary):     `{path_id}`
-  - `also_belongs_to` (sibling): `{also_belongs_to}`
+  These beats MUST belong to BOTH of these paths — emit them as a 2-element list:
+  - primary path:  `{belongs_to_primary}`
+  - sibling path:  `{belongs_to_sibling}`
 
   ## What Are Shared Pre-Commit Beats?
   In QuestFoundry v5, every dilemma is Y-shaped:
@@ -432,8 +432,7 @@ shared_beats_prompt: |
   pre-commit beats (1–2 is the sweet spot for most stories).
 
   Each shared beat:
-    - **MUST have `also_belongs_to` = `{also_belongs_to}` (the sibling path above) — REQUIRED.** This is the single most-frequently-missed field; setting it correctly is what makes the beat a "shared" beat. Omitting it converts the beat to a single-path beat and breaks the Y-shape.
-    - MUST have `path_id` = `{path_id}` (the primary path above).
+    - **MUST have `belongs_to` = `["{belongs_to_primary}", "{belongs_to_sibling}"]` — REQUIRED.** This two-element list is what makes the beat a "shared" beat. A single-element list or missing field is rejected by the Y-shape guard rail.
     - MUST have `effect` in {{advances, reveals, complicates}}. NEVER `commits`.
     - MUST reference the current dilemma in `dilemma_impacts[0].dilemma_id`.
     - SHOULD explore the dilemma's central tension without privileging either answer.
@@ -445,8 +444,7 @@ shared_beats_prompt: |
       {{
         "beat_id": "shared_setup_dilemma_name_01",
         "summary": "A beat that sets up the choice without committing to either answer.",
-        "path_id": "{path_id}",
-        "also_belongs_to": "{also_belongs_to}",
+        "belongs_to": ["{belongs_to_primary}", "{belongs_to_sibling}"],
         "dilemma_impacts": [
           {{
             "dilemma_id": "{dilemma_id}",
@@ -464,27 +462,27 @@ shared_beats_prompt: |
 
   ## WHAT NOT TO DO
   - Do NOT set `effect: commits` on any shared beat.
-  - Do NOT leave `also_belongs_to` null — set it to `{also_belongs_to}`.
-  - Do NOT set `also_belongs_to` to a path from a DIFFERENT dilemma
+  - Do NOT emit `belongs_to` as a single-element list — it MUST contain BOTH path IDs.
+  - Do NOT use paths from a DIFFERENT dilemma in `belongs_to`
     (same-dilemma constraint; Story Graph Ontology Part 8 guard rail 1).
   - Do NOT omit a shared beat for this dilemma — every Y-shape needs at least one.
   - Do NOT use path IDs from other dilemmas.
 
-  ### `also_belongs_to` type contrast
-  This field is the most-frequently-missed value. Type rules:
+  ### `belongs_to` shape rules
+  This field is the most-frequently-missed value. Type and length rules:
   ```
-  GOOD: "also_belongs_to": "{also_belongs_to}"        ← plain string, copy exactly
-  BAD:  "also_belongs_to": null                       ← rejected — this is a SHARED beat
-  BAD:  "also_belongs_to": ["{also_belongs_to}"]      ← rejected — must be a string, not a list
-  BAD:  (field omitted entirely)                      ← rejected — field is REQUIRED
+  GOOD: "belongs_to": ["{belongs_to_primary}", "{belongs_to_sibling}"]   ← list of 2 strings
+  BAD:  "belongs_to": ["{belongs_to_primary}"]                           ← rejected — length 1, must be 2 for shared beats
+  BAD:  "belongs_to": []                                                 ← rejected — empty list
+  BAD:  "belongs_to": ["{belongs_to_primary}", "{belongs_to_primary}"]  ← rejected — elements must be distinct
+  BAD:  (field omitted entirely)                                         ← rejected — field is REQUIRED
   ```
 
   ## FINAL CHECK (verify before output)
   For EACH beat you generate:
-  1. `path_id` is `{path_id}`
-  2. `also_belongs_to` is `{also_belongs_to}`
-  3. `dilemma_impacts[0].dilemma_id` is `{dilemma_id}`
-  4. `effect` is NOT `commits`
+  1. `belongs_to` is `["{belongs_to_primary}", "{belongs_to_sibling}"]` (list of exactly 2)
+  2. `dilemma_impacts[0].dilemma_id` is `{dilemma_id}`
+  3. `effect` is NOT `commits`
 
   ## Output
   Return ONLY valid JSON with the "initial_beats" array.
@@ -499,7 +497,7 @@ per_path_beats_prompt: |
   This path has already been set up by shared pre-commit beats. Your job
   is to generate the COMMIT beat (where this path forks from the sibling)
   plus the aftermath beats that prove THIS answer. All beats in this call
-  are single-membership — `also_belongs_to` MUST be null.
+  are single-membership — `belongs_to` MUST be a single-element list.
 
   ## YOUR PATH ID (MEMORIZE THIS)
 
@@ -514,21 +512,21 @@ per_path_beats_prompt: |
 
   WRONG OUTPUT (will fail validation):
   ```json
-  "path_id": "{dilemma_id}"  // WRONG! This is a DILEMMA ID
+  "belongs_to": ["{dilemma_id}"]  // WRONG! This is a DILEMMA ID
   ```
 
   CORRECT OUTPUT:
   ```json
-  "path_id": "{path_id}"  // RIGHT! This is the PATH ID
+  "belongs_to": ["{path_id}"]  // RIGHT! This is the PATH ID
   ```
 
-  RULE: Dilemma IDs go in `dilemma_impacts[].dilemma_id`, never in `path_id`.
+  RULE: Dilemma IDs go in `dilemma_impacts[].dilemma_id`, never in `belongs_to`.
 
   ## YOUR DILEMMA ID (for dilemma_impacts only)
 
   Parent dilemma: `{dilemma_id}`
 
-  This goes in `dilemma_impacts[].dilemma_id`, NOT in `path_id`.
+  This goes in `dilemma_impacts[].dilemma_id`, NOT in `belongs_to`.
 
   ## BEAT ID NAMING (CRITICAL - ensures uniqueness)
 
@@ -547,7 +545,7 @@ per_path_beats_prompt: |
 
   ALL beats you generate MUST:
   1. Have beat_id starting with `{path_name}_beat_` (see BEAT ID NAMING above)
-  2. Have `path_id: "{path_id}"` (exactly this path ID)
+  2. Have `belongs_to: ["{path_id}"]` (single-element list with exactly this path ID)
   3. Have at least one dilemma_impact with `dilemma_id: "{dilemma_id}"`
   4. Include at least one beat with `effect: "commits"` for `{dilemma_id}`
 
@@ -559,8 +557,7 @@ per_path_beats_prompt: |
       {{
         "beat_id": "{path_name}_beat_01",
         "summary": "What happens in this beat",
-        "path_id": "{path_id}",
-        "also_belongs_to": null,
+        "belongs_to": ["{path_id}"],
         "dilemma_impacts": [
           {{
             "dilemma_id": "{dilemma_id}",
@@ -616,7 +613,7 @@ per_path_beats_prompt: |
   ## Rules
   - Generate exactly {size_post_commit_beats_per_path} beats for path `{path_id}`
   - Beat IDs MUST start with `{path_name}_beat_` (e.g., `{path_name}_beat_01`)
-  - EVERY beat must have `path_id: "{path_id}"`
+  - EVERY beat must have `belongs_to: ["{path_id}"]` (single-element list)
   - EVERY beat must have at least one dilemma_impact for `{dilemma_id}`
   - At least ONE beat must have `effect: "commits"` for `{dilemma_id}`
   - effect must be "advances", "reveals", "commits", or "complicates"
@@ -653,19 +650,19 @@ per_path_beats_prompt: |
   - Do NOT skip the commits beat
   - Do NOT make commits the last beat — a consequence beat MUST follow it
   - Do NOT use IDs not in the manifest
-  - Do NOT put the dilemma ID in the `path_id` field (see COMMON MISTAKE above)
-  - Do NOT set `also_belongs_to` — these are post-commit beats, single-membership only
+  - Do NOT put the dilemma ID in the `belongs_to` list (see COMMON MISTAKE above)
+  - Do NOT emit `belongs_to` with 2 elements — these are post-commit beats, single-membership only
 
   ## FINAL VERIFICATION (check before outputting)
 
   For EACH beat you generate, verify:
-  1. `path_id` is `{path_id}`
+  1. `belongs_to` is `["{path_id}"]` (single-element list with exactly this path ID)
   2. `dilemma_impacts[0].dilemma_id` is `{dilemma_id}`
-  3. `also_belongs_to` is `null` (these are POST-COMMIT beats, exclusive
+  3. `belongs_to` has exactly 1 element (these are POST-COMMIT beats, exclusive
      to one path — never shared)
 
-  If you see a dilemma ID in your `path_id` value, YOU MADE A MISTAKE. Fix it.
-  If `also_belongs_to` is anything other than `null`, YOU MADE A MISTAKE. Fix it.
+  If you see a dilemma ID in your `belongs_to` list, YOU MADE A MISTAKE. Fix it.
+  If `belongs_to` has 2 elements, YOU MADE A MISTAKE. Fix it.
 
   ## Output
   Return ONLY valid JSON with the "initial_beats" array ({size_post_commit_beats_per_path} beats).

@@ -116,31 +116,32 @@ system: |
   - Vary locations (not all beats in one place)
   - Impact dilemmas (advance, reveal, commit, complicate)
 
-  **Y-shape beat shape (R-3.6, CRITICAL).** Each beat carries a `path_id`
-  (its primary path). Pre-commit beats — beats SHARED between the two
-  paths of one dilemma — also set `also_belongs_to: <other_path_id>` (a
-  PLAIN STRING, not a list) to declare the dual membership. Commit beats
-  and post-commit beats are exclusive to one path; they set
-  `also_belongs_to: null`.
+  **Y-shape beat shape (R-3.6, CRITICAL).** Each beat carries a `belongs_to`
+  list of path IDs. Pre-commit beats — beats SHARED between the two paths of
+  one dilemma — have a 2-element list containing both path IDs. Commit beats
+  and post-commit beats are exclusive to one path; they have a 1-element list.
 
-  GOOD (Y-shape with `path_id` + `also_belongs_to` as plain string):
+  GOOD (Y-shape with `belongs_to` as a list):
   ```
-  shared pre-commit:  path_id = path::keeper_honest, also_belongs_to = path::keeper_hiding
-  commit (honest):    path_id = path::keeper_honest, also_belongs_to = null
-  post-commit (honest): path_id = path::keeper_honest, also_belongs_to = null
-  commit (hiding):    path_id = path::keeper_hiding, also_belongs_to = null
-  post-commit (hiding): path_id = path::keeper_hiding, also_belongs_to = null
+  shared pre-commit:    belongs_to = [path::keeper_honest, path::keeper_hiding]
+  commit (honest):      belongs_to = [path::keeper_honest]
+  post-commit (honest): belongs_to = [path::keeper_honest]
+  commit (hiding):      belongs_to = [path::keeper_hiding]
+  post-commit (hiding): belongs_to = [path::keeper_hiding]
   ```
 
-  BAD (legacy `paths: [...]` list — DEPRECATED, do not use):
+  BAD (legacy fields — DEPRECATED, do not use):
   ```
-  paths: [path::keeper_honest, path::keeper_hiding]   # DROP — use path_id + also_belongs_to
+  paths: [path::keeper_honest, path::keeper_hiding]   # DROP — use belongs_to list
+  path_id: path::keeper_honest                        # WRONG — use belongs_to: [...]
+  also_belongs_to: path::keeper_hiding                # WRONG — use belongs_to: [...]
   ```
 
-  BAD (`also_belongs_to` as a list — REJECTED by validator):
+  BAD (wrong list shapes — REJECTED by validator):
   ```
-  also_belongs_to: [path::keeper_hiding]   # WRONG — must be a plain string
-  also_belongs_to: path::keeper_hiding     # CORRECT
+  belongs_to: []                                      # WRONG — empty list rejected
+  belongs_to: path::keeper_hiding                     # WRONG — must be a list, not string
+  belongs_to: [path::keeper_honest, path::keeper_honest]  # WRONG — elements must be distinct
   ```
 
   Beats may also carry optional `temporal_hint` (rough scene ordering),

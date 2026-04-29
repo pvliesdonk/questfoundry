@@ -853,33 +853,23 @@ def _prefix_entity_id(category: str, raw_id: str) -> str:
 
 
 def _get_path_ids_from_beat(beat: dict[str, Any]) -> tuple[str, ...]:
-    """Extract path IDs from a beat dict, supporting current and legacy formats.
+    """Extract path IDs from a SEED beat dict, in declaration order.
 
-    Supports:
-    - Y-shape current: ``path_id`` + optional ``also_belongs_to``.
-    - Legacy single: ``path_id`` alone.
-    - Legacy list: ``paths: [p]`` or ``paths: [p_a, p_b]`` (pre-Y-shape).
+    Reads the symmetric ``belongs_to`` list (#1564). Returns 0 (no
+    membership — structural beats), 1 (singular — commit / post-commit /
+    gap), or 2 (dual — pre-commit shared) raw path IDs.
 
     Args:
-        beat: Beat dict, either model-dumped or raw LLM output.
+        beat: Beat dict (typically from an ``InitialBeat.model_dump()``
+            or graph node data).
 
     Returns:
-        Tuple of 0, 1, or 2 raw path IDs in declaration order (``path_id``
-        first, then ``also_belongs_to``). A return of 2 always represents a
-        pre-commit Y-shape beat. A return of 0 means the beat has no path
-        reference (caught by validation).
+        Tuple of 0, 1, or 2 raw path IDs in declaration order. A return
+        of 2 always represents a shared pre-commit beat with dual
+        ``belongs_to`` to two paths of the same dilemma.
     """
-    if beat.get("path_id"):
-        primary = str(beat["path_id"])
-        also = beat.get("also_belongs_to")
-        if also:
-            return (primary, str(also))
-        return (primary,)
-    # Legacy fallback.
-    paths = beat.get("paths")
-    if isinstance(paths, list) and paths:
-        return tuple(str(p) for p in paths[:2])
-    return ()
+    belongs_to = beat.get("belongs_to") or []
+    return tuple(str(p) for p in belongs_to)
 
 
 def _resolve_entity_ref(graph: Graph, entity_ref: str) -> str:
@@ -1422,10 +1412,10 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
                     )
                 )
 
-        # 6. Path references (Y-shape: path_id + optional also_belongs_to).
+        # 6. Path references (belongs_to list — 1 or 2 elements).
         raw_path_ids = _get_path_ids_from_beat(beat)
         for idx, raw_path_id in enumerate(raw_path_ids):
-            field_name = "path_id" if idx == 0 else "also_belongs_to"
+            field_name = f"belongs_to[{idx}]"
             _validate_id(
                 raw_path_id,
                 "path",
@@ -1641,7 +1631,7 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
     path_beat_effects: dict[str, list[tuple[int, set[str]]]] = {}
     for i, beat in enumerate(output.get("initial_beats", [])):
         # Resolve beat's primary path; pre-commit beats have a second membership
-        # (also_belongs_to) but the commits-per-path accumulator is only
+        # (belongs_to[1]) but the commits-per-path accumulator is only
         # concerned with single-membership commit beats (guard rail 2).
         raw_path_ids = _get_path_ids_from_beat(beat)
         if not raw_path_ids:
@@ -2003,7 +1993,7 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
         graph.create_node(beat_id, beat_data)
 
         # Link beat to its path(s). Post-commit beats emit one belongs_to;
-        # pre-commit (Y-shape) beats with ``also_belongs_to`` emit two.
+        # pre-commit (Y-shape) beats with two-element belongs_to emit two.
         raw_path_ids = _get_path_ids_from_beat(beat)
         is_dual = len(raw_path_ids) == 2
 
@@ -2014,26 +2004,26 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
             d1 = _path_to_dilemma.get(strip_scope_prefix(raw_path_ids[1]))
             if d0 is None:
                 msg = (
-                    f"beat {raw_id!r}: path_id={raw_path_ids[0]!r} has no known dilemma "
+                    f"beat {raw_id!r}: belongs_to[0]={raw_path_ids[0]!r} has no known dilemma "
                     "(not in output paths); cannot enforce guard rail 1."
                 )
                 raise ValueError(msg)
             if d1 is None:
                 msg = (
-                    f"beat {raw_id!r}: also_belongs_to={raw_path_ids[1]!r} has no known dilemma "
+                    f"beat {raw_id!r}: belongs_to[1]={raw_path_ids[1]!r} has no known dilemma "
                     "(not in output paths); cannot enforce guard rail 1."
                 )
                 raise ValueError(msg)
             if d0 != d1:
                 msg = (
                     "cross-dilemma dual belongs_to is forbidden (guard rail 1). "
-                    f"Beat {raw_id!r} has path_id={raw_path_ids[0]!r} (dilemma={d0!r}) and "
-                    f"also_belongs_to={raw_path_ids[1]!r} (dilemma={d1!r})."
+                    f"Beat {raw_id!r} has belongs_to[0]={raw_path_ids[0]!r} (dilemma={d0!r}) and "
+                    f"belongs_to[1]={raw_path_ids[1]!r} (dilemma={d1!r})."
                 )
                 raise ValueError(msg)
             if strip_scope_prefix(raw_path_ids[0]) == strip_scope_prefix(raw_path_ids[1]):
                 msg = (
-                    f"beat {raw_id!r}: path_id and also_belongs_to must be distinct paths "
+                    f"beat {raw_id!r}: belongs_to elements must be distinct paths "
                     f"({raw_path_ids[0]!r} == {raw_path_ids[1]!r})."
                 )
                 raise ValueError(msg)
@@ -2048,8 +2038,8 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
             if has_commit:
                 msg = (
                     "guard rail 2: a beat with effect=commits must have a single "
-                    f"belongs_to (no also_belongs_to). Beat {raw_id!r} has both "
-                    f"a commits impact and also_belongs_to={raw_path_ids[1]!r}."
+                    f"belongs_to (length 1). Beat {raw_id!r} has both "
+                    f"a commits impact and belongs_to[1]={raw_path_ids[1]!r}."
                 )
                 raise ValueError(msg)
 

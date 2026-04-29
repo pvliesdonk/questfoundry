@@ -234,7 +234,7 @@ async def serialize_to_artifact(
             attempt — the validator-error dump follows as supporting context.
             Used to echo expected values for constraint-to-value mappings the
             model loses across long context (e.g. SEED shared-beats
-            `also_belongs_to` sibling path id). Per @prompt-engineer Rule 5,
+            `belongs_to` list with both path IDs). Per @prompt-engineer Rule 5,
             the model does not re-read the system prompt on retry — only the
             new user-message — and small models attend disproportionately to
             the opening tokens, so the actionable hint must lead and be
@@ -1183,8 +1183,8 @@ async def _serialize_shared_beats_for_dilemma(
     """Serialize shared pre-commit beats for a single dilemma (Y-shape, #1227).
 
     Issues ONE LLM call that generates the pre-commit beats both explored paths
-    of the dilemma share.  Each returned beat will have ``path_id`` set to the
-    primary explored path and ``also_belongs_to`` set to the sibling path.
+    of the dilemma share.  Each returned beat will have ``belongs_to`` set to a
+    two-element list containing both explored path IDs.
 
     Per Story Graph Ontology Part 8: multi-``belongs_to`` is ONLY valid for
     pre-commit beats within a single dilemma.
@@ -1193,8 +1193,8 @@ async def _serialize_shared_beats_for_dilemma(
         model: Chat model to use.
         dilemma_decision: Dilemma decision dict with dilemma_id, explored, question.
         paths: All serialized paths (for context enrichment).
-        shared_beats_prompt_template: Prompt template with {dilemma_id}, {path_id},
-            {also_belongs_to}, and {dilemma_question} placeholders.
+        shared_beats_prompt_template: Prompt template with {dilemma_id},
+            {belongs_to_primary}, {belongs_to_sibling}, and {dilemma_question} placeholders.
         entity_context: Entity IDs context for character/location references.
         provider_name: Provider name for strategy selection.
         max_retries: Maximum Pydantic validation retries.
@@ -1221,7 +1221,7 @@ async def _serialize_shared_beats_for_dilemma(
     prefixed_dilemma_id = normalize_scoped_id(dilemma_id, SCOPE_DILEMMA)
     dilemma_name = prefixed_dilemma_id.removeprefix(f"{SCOPE_DILEMMA}::")
 
-    # First explored path is primary; second is the sibling (also_belongs_to)
+    # Both explored paths go into belongs_to; primary is first, sibling is second
     primary_path_id = f"path::{dilemma_name}__{explored[0]}"
     sibling_path_id = f"path::{dilemma_name}__{explored[1]}"
 
@@ -1229,8 +1229,8 @@ async def _serialize_shared_beats_for_dilemma(
     prompt = shared_beats_prompt_template.format(
         dilemma_id=prefixed_dilemma_id,
         dilemma_question=question,
-        path_id=primary_path_id,
-        also_belongs_to=sibling_path_id,
+        belongs_to_primary=primary_path_id,
+        belongs_to_sibling=sibling_path_id,
     )
 
     brief = _build_shared_beat_context(dilemma_decision, paths, entity_context)
@@ -1242,33 +1242,31 @@ async def _serialize_shared_beats_for_dilemma(
         sibling_path_id=sibling_path_id,
     )
 
-    # Per-attempt repair hint — the validator's `also_belongs_to`-missing
-    # error names the field but doesn't echo the value, and small models
-    # (qwen3:4b production default) lose the constraint-to-value mapping
-    # across retry attempts (@prompt-engineer Rule 5 small-model repair-loop
-    # blindness — the model doesn't re-read the system prompt on retry).
-    # The hint is dilemma-specific so it always applies to this call.
+    # Per-attempt repair hint — the validator's `belongs_to`-missing or
+    # wrong-length error names the field but doesn't echo the required value,
+    # and small models (qwen3:4b production default) lose the constraint-to-value
+    # mapping across retry attempts (@prompt-engineer Rule 5 small-model
+    # repair-loop blindness — the model doesn't re-read the system prompt on
+    # retry). The hint is dilemma-specific so it always applies to this call.
     #
-    # Format chosen for #1521: leads with a copy-paste JSON snippet, names
-    # the type explicitly (STRING not list/null), and includes a
-    # self-contained mini-checklist mirroring the system prompt FINAL CHECK
-    # so the model doesn't need to re-read upstream context on retry.
-    also_belongs_to_hint = (
+    # Format chosen for #1521 (updated for #1564 list shape): leads with a
+    # copy-paste JSON snippet, names the type explicitly (LIST of two strings),
+    # and includes a self-contained mini-checklist mirroring the system prompt
+    # FINAL CHECK so the model doesn't need to re-read upstream context on retry.
+    belongs_to_repair_hint = (
         "ACTION REQUIRED — your previous output was rejected.\n\n"
-        "Add this to EVERY beat in `initial_beats` (copy exactly):\n\n"
+        "Set `belongs_to` in EVERY beat in `initial_beats` (copy exactly):\n\n"
         "```json\n"
-        f'  "path_id": "{primary_path_id}",\n'
-        f'  "also_belongs_to": "{sibling_path_id}"\n'
+        f'  "belongs_to": ["{primary_path_id}", "{sibling_path_id}"]\n'
         "```\n\n"
-        "Type rules for `also_belongs_to`:\n"
-        "  - It is a STRING (not a list, not null).\n"
-        f"  - For this dilemma, the value MUST be `{sibling_path_id}` exactly.\n"
-        "  - Without it, every beat is rejected by the Y-shape guard rail "
+        "Type rules for `belongs_to`:\n"
+        "  - It is a LIST of exactly 2 strings (not null, not a single string).\n"
+        f"  - For this dilemma, the value MUST be "
+        f'["{primary_path_id}", "{sibling_path_id}"] exactly.\n'
+        "  - Without both path IDs, every beat is rejected by the Y-shape guard rail "
         "(Story Graph Ontology Part 8).\n\n"
         f"Self-check before submitting (for dilemma `{prefixed_dilemma_id}`):\n"
-        f'  [ ] Every beat has `"path_id": "{primary_path_id}"`\n'
-        f'  [ ] Every beat has `"also_belongs_to": "{sibling_path_id}"` '
-        "(STRING, not list)\n"
+        f'  [ ] Every beat has `"belongs_to": ["{primary_path_id}", "{sibling_path_id}"]`\n'
         f'  [ ] No beat has `"effect": "commits"` '
         "(these are pre-commit beats, not commits)\n"
         f"  [ ] Every beat's first dilemma_impact has "
@@ -1284,7 +1282,7 @@ async def _serialize_shared_beats_for_dilemma(
         system_prompt=prompt,
         callbacks=callbacks,
         stage="seed",
-        extra_repair_hints=[also_belongs_to_hint],
+        extra_repair_hints=[belongs_to_repair_hint],
     )
 
     beats = result.model_dump().get("initial_beats", [])
@@ -2132,9 +2130,17 @@ async def serialize_seed_as_function(
                     else:
                         # Fallback for LLM schema deviations: the SharedBeatsSection
                         # validator and prompt schema normally ensure
-                        # dilemma_impacts[0] is present, but parse the dilemma from
-                        # path_id as a last resort if the LLM omits dilemma_impacts.
-                        path_ref = beat.get("path_id", "")
+                        # dilemma_impacts[0] is present, but recover the dilemma from
+                        # belongs_to[0] (post-#1564 schema) as a last resort if the
+                        # LLM omits dilemma_impacts. The path ID format is
+                        # `path::<dilemma>__<answer>`, so the same rsplit logic
+                        # extracts the dilemma name. If belongs_to is also missing or
+                        # empty (truly malformed beat), raw_did stays empty and the
+                        # beat lands in shared_beats_by_dilemma[""] which no per-path
+                        # call consumes — silent discard, surfaced by the seam
+                        # validator.
+                        belongs_to_list = beat.get("belongs_to") or []
+                        path_ref = str(belongs_to_list[0]) if belongs_to_list else ""
                         raw_pid = strip_scope_prefix(path_ref)
                         # path ID format is <dilemma>__<answer>; take the dilemma part
                         raw_did = raw_pid.rsplit("__", 1)[0] if "__" in raw_pid else raw_pid
@@ -2347,7 +2353,9 @@ async def serialize_seed_as_function(
                     # per-path post-commit beats.  The initial serialization
                     # at line ~2336 does the same prepend; the retry must match.
                     shared = [
-                        b for b in collected.get("initial_beats", []) if b.get("also_belongs_to")
+                        b
+                        for b in collected.get("initial_beats", [])
+                        if len(b.get("belongs_to") or []) >= 2
                     ]
                     collected["initial_beats"] = shared + beats
                     total_tokens += beats_tokens

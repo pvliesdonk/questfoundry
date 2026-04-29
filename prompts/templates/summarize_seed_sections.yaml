@@ -226,17 +226,14 @@ beats_system: |
   - `summary`: one sentence describing what happens
   - `location`: a RETAINED location entity ID
   - `entities`: key entity IDs present in this beat
-  - `path_id`: the beat's primary path (REQUIRED, single path ID)
-  - `also_belongs_to`: for SHARED pre-commit beats, the sibling path ID as
-    a PLAIN STRING (not a list). E.g., `path::keeper_hiding` on a shared
-    beat whose `path_id` is `path::keeper_honest`. For COMMIT and
-    POST-COMMIT beats, use `null`.
+  - `belongs_to`: list of path IDs this beat belongs to (REQUIRED).
+    For SHARED pre-commit beats, list BOTH explored paths: `[path::keeper_honest, path::keeper_hiding]`.
+    For COMMIT and POST-COMMIT beats, list exactly ONE path: `[path::keeper_honest]`.
 
-    GOOD: `also_belongs_to: path::keeper_hiding`  (plain string)
-    BAD:  `also_belongs_to: [path::keeper_hiding]`  (list — REJECTED)
-
-  **Do NOT use the legacy `paths: [a, b]` list field — it was deprecated
-  in the Y-shape refactor (#1206) and the serializer will reject it.**
+    GOOD: `belongs_to: [path::keeper_honest, path::keeper_hiding]`  (shared — 2 elements)
+    GOOD: `belongs_to: [path::keeper_honest]`  (commit/post-commit — 1 element)
+    BAD:  `belongs_to: []`  (empty — REJECTED)
+    BAD:  `belongs_to: path::keeper_hiding`  (plain string — must be a list)
 
   ## Output Format
   List beats grouped by the dilemma they belong to, then by path.

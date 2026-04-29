@@ -87,25 +87,20 @@ system: |
   - `summary`: one sentence describing what happens
   - `location`: primary location entity ID (must be a retained location)
   - `entities`: key entity IDs present in this beat
-  - `path_id`: the beat's primary path (REQUIRED, single path ID)
-  - `also_belongs_to`: for SHARED pre-commit beats, list the other path(s) this
-    beat is shared with (e.g., `[path::keeper_hiding]` on a shared beat whose
-    `path_id` is `path::keeper_honest`). For COMMIT and POST-COMMIT beats, use
-    `null` (they are exclusive to one path).
-
-  **Do NOT use the legacy `paths: [a, b]` list field — it was deprecated in
-  the Y-shape refactor (#1206) and will be rejected by the serializer.**
+  - `belongs_to`: list of path IDs this beat belongs to (REQUIRED).
+    For SHARED pre-commit beats, list BOTH paths: `[path::keeper_honest, path::keeper_hiding]`.
+    For COMMIT and POST-COMMIT beats, list exactly ONE path: `[path::keeper_honest]`.
 
   **Location Diversity**: Use at least 2 different locations across your beats.
 
   ### VERIFY (run BEFORE moving to Convergence Sketch)
   For EACH dilemma with 2 fully-explored paths, confirm in the summary:
-  1. At least 1 SHARED pre-commit beat exists with `path_id` set to one path
-     AND `also_belongs_to` listing the other path.
-  2. Each path has exactly 1 COMMIT beat (`also_belongs_to: null`, exclusive
+  1. At least 1 SHARED pre-commit beat exists with `belongs_to` of length 2
+     (both explored paths of the dilemma).
+  2. Each path has exactly 1 COMMIT beat (`belongs_to` length 1, exclusive
      to its path).
   3. Each path has at least the configured number of POST-COMMIT beats
-     (`also_belongs_to: null`).
+     (`belongs_to` length 1).
   4. Pre-commit beats appear before commit beats in the listing (or, if `temporal_hint` is set, its `position` is `before_commit`). `temporal_hint` is OPTIONAL — listing order alone is sufficient.
 
   If any of the above is missing, the serializer will fail and the repair

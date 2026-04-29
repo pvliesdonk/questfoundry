@@ -602,11 +602,11 @@ def _log_beat_summary_stats(artifact_data: dict[str, Any]) -> None:
     """Advisory warnings about Y-shape beat counts.
 
     Under Y-shape, beats come in two kinds:
-    - Shared pre-commit beats (``also_belongs_to`` set) — only multi-path
+    - Shared pre-commit beats (``belongs_to`` of length 2) — only multi-path
       dilemmas need them; they form the chain that diverges into per-path
       commit beats. Single-path soft dilemmas (locked-dilemma shadow) have
       no Y-divergence and need no shared beat.
-    - Post-commit beats (``also_belongs_to`` null) — one per path, including
+    - Post-commit beats (``belongs_to`` of length 1) — one per path, including
       the commit and its consequences.
 
     A healthy SEED output has ~1-2 shared beats per *multi-path* dilemma
@@ -621,8 +621,8 @@ def _log_beat_summary_stats(artifact_data: dict[str, Any]) -> None:
     paths_per_dilemma = Counter(p.get("dilemma_id") for p in paths if p.get("dilemma_id"))
     multi_path_dilemmas = sum(1 for n in paths_per_dilemma.values() if n >= 2)
 
-    shared = [b for b in beats if b.get("also_belongs_to")]
-    post_commit = [b for b in beats if not b.get("also_belongs_to")]
+    shared = [b for b in beats if len(b.get("belongs_to") or []) >= 2]
+    post_commit = [b for b in beats if len(b.get("belongs_to") or []) < 2]
 
     shared_avg = (len(shared) / multi_path_dilemmas) if multi_path_dilemmas else 0.0
     post_avg = (len(post_commit) / path_count) if path_count else 0.0

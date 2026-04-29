@@ -420,7 +420,7 @@ class BrainstormStage:
         # ≥1 entity via `central_entity_ids`. Pydantic now enforces this with
         # min_length=1 (#1524), but a hint is still cheap to ship: it leads
         # the repair message with the value to populate, mirroring the SEED
-        # also_belongs_to fix from #1522. See @prompt-engineer Rule 5
+        # belongs_to list shape fix from #1521/#1564. See @prompt-engineer Rule 5
         # (small-model repair-loop blindness).
         central_entity_hint = (
             "ACTION REQUIRED — your previous output was rejected.\n\n"

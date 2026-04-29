@@ -404,8 +404,7 @@ def _make_complete_seed_output(entities: list[dict[str, Any]]) -> dict[str, Any]
             {
                 "beat_id": "discovery",
                 "summary": "Protagonist learns the secret.",
-                "path_id": "truth_or_secret__reveal",
-                "also_belongs_to": "truth_or_secret__conceal",
+                "belongs_to": ["truth_or_secret__reveal", "truth_or_secret__conceal"],
                 "entities": ["character::butler"],
                 "dilemma_impacts": [
                     {
@@ -418,7 +417,7 @@ def _make_complete_seed_output(entities: list[dict[str, Any]]) -> dict[str, Any]
             {
                 "beat_id": "reveal_choice",
                 "summary": "Protagonist tells the truth.",
-                "path_id": "truth_or_secret__reveal",
+                "belongs_to": ["truth_or_secret__reveal"],
                 "entities": ["character::lady_beatrice"],
                 "dilemma_impacts": [
                     {
@@ -431,7 +430,7 @@ def _make_complete_seed_output(entities: list[dict[str, Any]]) -> dict[str, Any]
             {
                 "beat_id": "reveal_aftermath_1",
                 "summary": "Aftermath of revelation.",
-                "path_id": "truth_or_secret__reveal",
+                "belongs_to": ["truth_or_secret__reveal"],
                 "entities": ["character::lady_beatrice"],
                 "dilemma_impacts": [
                     {
@@ -444,7 +443,7 @@ def _make_complete_seed_output(entities: list[dict[str, Any]]) -> dict[str, Any]
             {
                 "beat_id": "reveal_aftermath_2",
                 "summary": "Resolution of revelation.",
-                "path_id": "truth_or_secret__reveal",
+                "belongs_to": ["truth_or_secret__reveal"],
                 "entities": ["character::butler"],
                 "dilemma_impacts": [
                     {
@@ -457,7 +456,7 @@ def _make_complete_seed_output(entities: list[dict[str, Any]]) -> dict[str, Any]
             {
                 "beat_id": "conceal_choice",
                 "summary": "Protagonist keeps the secret.",
-                "path_id": "truth_or_secret__conceal",
+                "belongs_to": ["truth_or_secret__conceal"],
                 "entities": ["character::butler"],
                 "dilemma_impacts": [
                     {
@@ -470,7 +469,7 @@ def _make_complete_seed_output(entities: list[dict[str, Any]]) -> dict[str, Any]
             {
                 "beat_id": "conceal_aftermath_1",
                 "summary": "Tension from keeping secret.",
-                "path_id": "truth_or_secret__conceal",
+                "belongs_to": ["truth_or_secret__conceal"],
                 "entities": ["character::lady_beatrice"],
                 "dilemma_impacts": [
                     {
@@ -483,7 +482,7 @@ def _make_complete_seed_output(entities: list[dict[str, Any]]) -> dict[str, Any]
             {
                 "beat_id": "conceal_aftermath_2",
                 "summary": "Secret remains hidden.",
-                "path_id": "truth_or_secret__conceal",
+                "belongs_to": ["truth_or_secret__conceal"],
                 "entities": ["character::butler"],
                 "dilemma_impacts": [
                     {

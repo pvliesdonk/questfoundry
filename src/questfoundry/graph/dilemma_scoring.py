@@ -89,7 +89,7 @@ def _get_paths_for_dilemma(
 
 def _get_beats_for_path(seed_output: SeedOutput, path_id: str) -> list[InitialBeat]:
     """Get all beats that belong to a given path."""
-    return [b for b in seed_output.initial_beats if b.path_id == path_id]
+    return [b for b in seed_output.initial_beats if path_id in b.belongs_to]
 
 
 def _get_consequences_for_path(seed_output: SeedOutput, path_id: str) -> list[Consequence]:
