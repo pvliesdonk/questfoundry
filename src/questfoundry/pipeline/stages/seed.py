@@ -520,9 +520,9 @@ class SeedStage:
             dilemmas_fully_explored = sum(
                 1 for d in pruned_artifact.dilemmas if len(d.explored) >= 2
             )
-            # arc_count = 2^n where n = fully-explored dilemmas; the user-facing
-            # recovery hint must scale with min_arcs_required (#1555). For long
-            # stories (max_arcs=32, min_arcs_required=8) this is 3, not 2.
+            # arc_count = 2^n where n = fully-explored dilemmas; the recovery
+            # hint must scale with min_arcs_required. For long stories
+            # (max_arcs=32, min_arcs_required=8) this is 3, not 2.
             min_fully_explored = max(1, math.ceil(math.log2(min_arcs_required)))
             raise SeedStageError(
                 f"SEED produced only {final_arc_count} arc(s) "

@@ -928,27 +928,28 @@ async def test_low_arc_count_raises_seed_stage_error() -> None:
 
 
 @pytest.mark.parametrize(
-    ("preset", "expected_min_fully_explored", "expected_phrase"),
+    ("preset", "expected_phrase"),
     [
         # max_arcs=2  → min_arcs_required=2 → log2(2)=1 → "at least 1 dilemma"
-        ("micro", 1, "at least 1 dilemma"),
+        ("micro", "at least 1 dilemma"),
         # max_arcs=8  → min_arcs_required=2 → log2(2)=1 → "at least 1 dilemma"
-        ("short", 1, "at least 1 dilemma"),
+        ("short", "at least 1 dilemma"),
         # max_arcs=16 → min_arcs_required=4 → log2(4)=2 → "at least 2 dilemmas"
-        ("medium", 2, "at least 2 dilemmas"),
+        ("medium", "at least 2 dilemmas"),
         # max_arcs=32 → min_arcs_required=8 → log2(8)=3 → "at least 3 dilemmas"
-        ("long", 3, "at least 3 dilemmas"),
+        ("long", "at least 3 dilemmas"),
     ],
 )
 @pytest.mark.asyncio
 async def test_low_arc_error_message_scales_with_size_preset(
-    preset: str, expected_min_fully_explored: int, expected_phrase: str
+    preset: str, expected_phrase: str
 ) -> None:
-    """SeedStageError recovery hint scales with min_arcs_required (#1555).
+    """SeedStageError recovery hint scales with min_arcs_required.
 
-    The hardcoded "at least 2 dilemmas" was wrong for `long` stories where
-    min_arcs_required=8 and the user actually needs 3+ fully-explored.
-    The message now derives the count from log2(min_arcs_required).
+    The recovery message must derive the "at least N" dilemma count from
+    log2(min_arcs_required), so long stories (min_arcs_required=8)
+    correctly tell the user to fully-explore 3+ dilemmas instead of the
+    historical hardcoded 2.
     """
     from questfoundry.pipeline.size import get_size_profile
 
@@ -990,8 +991,7 @@ async def test_low_arc_error_message_scales_with_size_preset(
 
     msg = str(exc_info.value)
     assert expected_phrase in msg, (
-        f"Expected message to contain {expected_phrase!r} for preset={preset!r} "
-        f"(min_fully_explored={expected_min_fully_explored}); got: {msg!r}"
+        f"Expected message to contain {expected_phrase!r} for preset={preset!r}; got: {msg!r}"
     )
 
 
