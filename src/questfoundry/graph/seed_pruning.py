@@ -275,10 +275,13 @@ def _prune_demoted_dilemmas(
         c for c in seed_output.consequences if strip_scope_prefix(c.path_id) not in paths_to_drop
     ]
 
-    # 3. Filter beats — drop any beat whose primary path (belongs_to[0]) is being
-    # pruned.  Pre-commit shared beats (belongs_to of length 2) are also dropped
-    # when their dilemma is demoted to single-path; both paths of a demoted
-    # dilemma are in paths_to_drop, so checking belongs_to[0] suffices.
+    # 3. Filter beats by primary path. Post-commit beats (belongs_to length 1)
+    # are dropped when their sole path is pruned. Pre-commit shared beats
+    # (belongs_to length 2) are dropped only when belongs_to[0] is the
+    # non-canonical path — paths_to_drop contains only non-canonical paths
+    # (line 241 above), so if belongs_to[0] == canonical the shared beat
+    # survives with a now-stale belongs_to[1] reference (silently ignored
+    # by the graph mutation layer when the sibling path node is absent).
     pruned_beats: list[InitialBeat] = [
         beat
         for beat in seed_output.initial_beats
