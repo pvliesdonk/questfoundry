@@ -668,8 +668,10 @@ per_path_beats_prompt: |
     Beat 1: effect: "advances"  ← "passive listening" feels less decisive
     Beat 2: effect: "commits"   ← "active suppression" feels more dramatic
     Beat 3: effect: "reveals"   ← aftermath
-  The beat ordering above VIOLATES the Y-fork contract. The validator checks that
-  the FIRST exclusive beat is the commit beat and will reject this output.
+  The beat ordering above VIOLATES the Y-fork contract. Downstream validation
+  (GROW R-1.4 Y-fork postcondition, see seed.md R-3.11) rejects this output —
+  the failure surfaces after SEED at the GROW exit-validator, requiring a full
+  re-serialize pass.
 
   ## What NOT to Do
   - Do NOT use generic beat IDs like `beat_001` (must include path name prefix)

@@ -106,8 +106,10 @@ system: |
      `effect: commits`. The commit beat is ALWAYS beat 1 of the exclusive sequence;
      placing it at position 2+ is a structural violation (seed.md R-3.11 / SGO Part 1).
 
-  If any of the above is missing, the serializer will fail and the repair
-  loop will rebuild the section from scratch — fix the gap here.
+  If items 1–4 are missing, the serializer will fail and the repair loop
+  will rebuild the section from scratch. Item 5 (commit-beat position) is
+  validated downstream at GROW R-1.4 — fixing it here saves a full GROW
+  re-serialize pass. Fix all gaps here.
 
   ### Convergence Sketch
   - convergence_points: where paths should merge
