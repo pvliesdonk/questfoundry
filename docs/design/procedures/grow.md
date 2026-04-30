@@ -163,11 +163,11 @@ R-2.8. Intersection rejection due to the invariant is logged at INFO with the ca
 
 #### Base DAG Simulation
 
-**What:** Build a simulated DAG using all non-hint ordering edges — serial/wraps relationships plus heuristic commit-ordering edges for concurrent dilemmas. This is the substrate against which temporal hints are tested.
+**What:** Build a simulated DAG using all non-hint ordering edges from `serial` and `wraps` Dilemma relationships. This is the substrate against which temporal hints are tested. `concurrent` relationships contribute no base-DAG edges by design — concurrent has no mandatory ordering, so the base DAG remains permissive and any acyclic schedule that respects `serial` + `wraps` is correct.
 
 **Rules:**
 
-R-3.1. Base DAG uses deterministic ordering from Dilemma ordering relationships (`wraps`, `concurrent`, `serial`) only. Temporal hints are excluded from base.
+R-3.1. Base DAG contains only the deterministic ordering edges implied by `serial` and `wraps` Dilemma relationships (plus any predecessor edges already on the graph from earlier phases). `concurrent` relationships contribute no edges to the base DAG. Temporal hints are excluded from base.
 
 **Violations:**
 
@@ -244,7 +244,7 @@ This phase produces a structurally complete and minimally annotated beat DAG. Na
 
 ### 4a — Interleave
 
-**Purpose:** Apply cross-dilemma ordering edges to weave the per-dilemma Y-shapes into a single DAG. Use the Dilemma ordering relationships (`wraps`/`concurrent`/`serial`) plus the surviving temporal hints from Phase 3. No cycles possible — Phase 3 guaranteed acyclicity.
+**Purpose:** Apply cross-dilemma ordering edges across the per-dilemma Y-shapes. Use the mandatory ordering implied by `wraps` and `serial` Dilemma relationships plus the surviving temporal hints from Phase 3. `concurrent` contributes no edges. The output is *any* acyclic predecessor DAG that satisfies the constraints — no further ordering is invented. No cycles possible — Phase 3 guaranteed acyclicity.
 
 #### Input Contract
 
@@ -254,7 +254,7 @@ This phase produces a structurally complete and minimally annotated beat DAG. Na
 
 ##### Cross-Dilemma Ordering Edge Creation
 
-**What:** Add `predecessor` edges between beats of different Dilemmas according to `wraps`/`concurrent`/`serial` plus temporal hints. Each edge reflects "beat X must come before beat Y in any arc that traverses both."
+**What:** Add `predecessor` edges between beats of different Dilemmas as required by `serial` / `wraps` Dilemma relationships and surviving temporal hints. Each edge reflects "beat X must come before beat Y in any arc that traverses both." `concurrent` adds no edges — its contract is "either order is valid," so Phase 4a leaves concurrent pairs unordered. The result is *any* acyclic schedule that satisfies the mandatory edges; Phase 4a does not invent additional ordering to reach a preferred shape.
 
 **Rules:**
 
@@ -262,11 +262,13 @@ R-4a.1. `serial` Dilemmas: the last beat of Dilemma A precedes the first beat of
 
 R-4a.2. `wraps` Dilemmas (A wraps B): A's introduction beats precede B's introduction beats; B's final beats precede A's commit beats.
 
-R-4a.3. `concurrent` Dilemmas: no mandatory ordering from the relationship itself; interleaving is governed by temporal hints and heuristics.
+R-4a.3. `concurrent` Dilemmas contribute zero `predecessor` edges in Phase 4a. Concurrent has no mandatory ordering, and Phase 4a does not synthesize ordering that the spec does not require. Temporal hints between the two Dilemmas (R-4a.4) are the only mechanism that may emit edges between concurrent pairs.
 
 R-4a.4. Temporal hints that survived Phase 3 are applied as `predecessor` edges.
 
 R-4a.5. No cycles are introduced. If a cycle would be introduced, the input from Phase 3 was faulty — this is a hard failure, not a silent skip.
+
+R-4a.6. Phase 4a output may have multiple beat-DAG roots when no `serial` / `wraps` / hint relationship orders them. This is by design under R-4a.3 — root unification, if needed by a downstream stage, is a downstream concern (tracked in #1584), not a Phase 4a edge to invent.
 
 **Violations:**
 
@@ -477,11 +479,11 @@ R-6.4. If a soft Dilemma **with two explored paths** has no structural convergen
 
 #### Arc Enumeration and Integrity Checks
 
-**What:** For each combination of one path per explored Dilemma, walk the DAG from root, following the successor matching the arc's selected path at each Y-fork. The traversal is the arc's beat sequence. Validate it.
+**What:** For each combination of one path per explored Dilemma (the Cartesian product of paths across dilemmas), collect the union of beats belonging to any constituent path and topologically sort that union to produce the arc's beat sequence. Validate it. The topological-sort step handles multi-root beat DAGs (R-4a.6) implicitly: the union of paths is a single connected acyclic subgraph, and topo-sort yields a deterministic linear sequence regardless of root count.
 
 **Rules:**
 
-R-7.1. Arc traversal starts at the DAG root and walks `predecessor` successors. At each Y-fork, the traversal follows the successor matching the arc's selected path for that Dilemma.
+R-7.1. An arc is the topological sort of the union of beats belonging to one selected path per explored Dilemma. The sort is over the beat union as a single subgraph; multi-root structure (R-4a.6) is absorbed by the sort and does not require per-root walking.
 
 R-7.2. Arcs are computed on demand, not stored as graph nodes. If materialized for debugging, they must use the `materialized_` prefix.
 
@@ -489,7 +491,7 @@ R-7.3. Every computed arc reaches a terminal beat (no dead ends).
 
 R-7.4. Every arc traverses exactly one commit beat per explored Dilemma.
 
-R-7.5. Every beat in the graph is reachable from the root via at least one arc. Unreachable beats are pruning candidates (Phase 8) — not errors at this stage, but logged at INFO.
+R-7.5. Every beat in the graph is reachable from at least one root via at least one arc. Unreachable beats are pruning candidates (Phase 8) — not errors at this stage, but logged at INFO.
 
 R-7.6. No cycles in `predecessor` edges.
 
@@ -551,7 +553,7 @@ R-8.4. Pruning never deletes a beat that has `belongs_to` to an explored Path �
 
 ## Stage Output Contract
 
-1. The beat DAG is acyclic: every beat node has either ≥1 predecessor or is the root; ≥1 successor or is a terminal.
+1. The beat DAG is acyclic: every beat node has either ≥1 predecessor or is a root; ≥1 successor or is a terminal. Multi-root output is permitted per R-4a.6 — root unification, if any, is the responsibility of a downstream stage (see #1584).
 2. Every computed arc from root to terminal is complete — no dead ends.
 3. Every arc includes exactly one commit beat per explored Dilemma.
 4. Zero or more Intersection Group nodes exist. No group contains two beats from the same Dilemma.
@@ -564,7 +566,7 @@ R-8.4. Pruning never deletes a beat that has `belongs_to` to an explored Path �
 11. Every hard Dilemma has `converges_at: null` and `convergence_payoff: null`.
 12. No Passage, Choice, variant passage, residue beat, or character arc metadata exists.
 13. No cycles in `predecessor` edges.
-14. No orphan beats (all reachable from root by at least one arc).
+14. No orphan beats (all reachable from at least one root by at least one arc).
 15. Setup beats from SEED persist (structural, zero `belongs_to`, zero `dilemma_impacts`) — GROW does not add to or remove from them.
 16. Epilogue beats from SEED persist (structural, zero `belongs_to`, zero `dilemma_impacts`) — GROW does not add to or remove from them.
 17. Every beat has `scene_type`, `narrative_function`, and `exit_mood` populated by Phase 4b. Partial coverage (LLM missed some beats) emits a WARNING; downstream consumers handle absent fields via the R-4b.1 fallback (default `scene_type` to `"scene"`).
@@ -610,7 +612,7 @@ R-2.5: `belongs_to` edges never modified by intersection assignment.
 R-2.6: Intersection Groups carry resolved scene context.
 R-2.7: No-Conditional-Prerequisites Invariant: `paths(B) ⊇ paths(A_post_intersection)`.
 R-2.8: Intersection rejections logged at INFO.
-R-3.1: Base DAG excludes temporal hints.
+R-3.1: Base DAG contains only `serial` + `wraps` edges; concurrent and temporal hints are excluded.
 R-3.2: Hints cycling alone are mandatory drops.
 R-3.3: Mandatory drops logged with reason.
 R-3.4: Swap pairs resolved by LLM with context.
@@ -619,9 +621,10 @@ R-3.6: Swap resolutions logged.
 R-3.7: After Phase 3, surviving hints + base DAG are acyclic (hard invariant).
 R-4a.1: Serial: last beat of A precedes first beat of B.
 R-4a.2: Wraps: A's intros precede B's; B's finals precede A's commits.
-R-4a.3: Concurrent: no mandatory ordering from relationship alone.
+R-4a.3: Concurrent contributes zero Phase 4a edges; only temporal hints can order concurrent pairs.
 R-4a.4: Surviving temporal hints applied as edges.
 R-4a.5: No cycles in Phase 4a output; no silent skip.
+R-4a.6: Multi-root beat DAG is permitted output of Phase 4a; root unification is downstream.
 R-4b.1: Every beat receives `scene_type ∈ {scene, sequel, micro_beat}`; partial coverage emits WARNING.
 R-4b.2: Every beat receives `narrative_function ∈ {introduce, develop, complicate, confront, resolve}`.
 R-4b.3: Every beat receives `exit_mood` (2–40 character descriptor).
@@ -642,7 +645,7 @@ R-6.1: `converges_at` computed from DAG reachability.
 R-6.2: `convergence_payoff` is min exclusive-beat count per path.
 R-6.3: Hard Dilemmas have both fields null.
 R-6.4: Soft Dilemma with TWO explored paths and no structural convergence → halt (classification error). Single-path soft Dilemmas are out of scope.
-R-7.1: Arc traversal walks `predecessor` successors; follows path at forks.
+R-7.1: Arc = topological sort of the union of beats from one selected path per Dilemma; multi-root absorbed by sort.
 R-7.2: Arcs computed, not stored (materialized uses `materialized_` prefix).
 R-7.3: Every arc reaches a terminal beat.
 R-7.4: Every arc has exactly one commit per explored Dilemma.
@@ -734,7 +737,7 @@ No temporal hints in this run; acyclicity trivially holds.
 
 ### Phase 4a
 
-Cross-dilemma `predecessor` edges added per `concurrent` interleaving heuristic.
+`concurrent` contributes no `predecessor` edges (R-4a.3). With only one concurrent relationship in the run and no temporal hints, Phase 4a creates zero cross-dilemma edges and exits cleanly. The two Y-shapes remain independent roots in the beat DAG, to be unified at POLISH time.
 
 ### Phase 4b
 
