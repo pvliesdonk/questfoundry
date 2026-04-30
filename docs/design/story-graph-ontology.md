@@ -329,7 +329,7 @@ temporal_hint:
 - `before_introduce` — this beat should be placed before `relative_to`'s first beat
 - `after_introduce` — this beat should be placed after `relative_to`'s first beat
 
-Temporal hints are optional. A beat with no hint has no constraint on its placement relative to other dilemmas — GROW places it using dilemma ordering relationships (`serial` / `wraps`) alone. `concurrent` adds no Phase 4a edges (per `procedures/grow.md` R-4a.3), so beats whose only cross-dilemma relationship is concurrent are left unordered relative to those dilemmas; any acyclic schedule is correct. Hints that conflict with dilemma ordering relationships (e.g., a hint saying "after B's commit" when A wraps B and A's commit comes first) are treated as advisory — GROW resolves the conflict in favor of the ordering relationship.
+Temporal hints are optional. A beat with no hint has no constraint on its placement relative to other dilemmas — GROW places it using structural heuristics and dilemma ordering relationships alone. Hints that conflict with dilemma ordering relationships (e.g., a hint saying "after B's commit" when A wraps B and A's commit comes first) are treated as advisory — GROW resolves the conflict in favor of the ordering relationship.
 
 ### The 2^N Law in Graph Terms
 
