@@ -854,22 +854,11 @@ def _build_beat_dilemma_map(graph: Graph) -> dict[str, set[str]]:
 
 
 def check_single_root_beat(graph: Graph) -> ValidationCheck:
-    """Diagnostic helper: report whether the beat DAG has exactly one root beat.
+    """Verify the beat DAG has exactly one root beat.
 
     A root beat is a beat with no prerequisites — it does not appear as
-    ``from_id`` in any predecessor edge.
-
-    .. note::
-       Post-#1583 (R-4a.3 / R-4a.6 in ``docs/design/procedures/grow.md``)
-       multi-root output from GROW Phase 4a is permitted by design: a
-       ``concurrent`` dilemma pair with no temporal hint contributes no
-       cross-dilemma edges, and the resulting per-dilemma chains stay
-       independent. As a result this function is **not wired into
-       ``run_grow_checks()``** and is retained as an ad-hoc / unit-test
-       diagnostic only. A ``"fail"`` result no longer indicates a pipeline
-       error — it merely reports the multi-root state. Whether downstream
-       stages (POLISH passage formation) require single-root is a separate
-       policy decision tracked in #1584.
+    ``from_id`` in any predecessor edge. The beat DAG must have exactly one
+    root for POLISH to produce a single start passage.
 
     Synthetic beat roles (micro_beat, residue_beat, false_branch_beat) are
     excluded since they are created by POLISH, not GROW.
@@ -878,9 +867,8 @@ def check_single_root_beat(graph: Graph) -> ValidationCheck:
         graph: The story graph to validate.
 
     Returns:
-        A ValidationCheck with severity ``"pass"`` if exactly one root beat
-        exists, or ``"fail"`` if zero or multiple roots are found. Under
-        R-4a.6 the latter is informational, not an invariant violation.
+        A ValidationCheck with severity "pass" if exactly one root beat
+        exists, or "fail" if zero or multiple roots are found.
     """
     beat_nodes = graph.get_nodes_by_type("beat")
     if not beat_nodes:
@@ -1432,15 +1420,8 @@ def run_grow_checks(graph: Graph) -> ValidationReport:
             ]
         )
 
-    # check_single_root_beat is intentionally NOT in this list. R-4a.6 of
-    # docs/design/procedures/grow.md (added with #1583) explicitly permits
-    # multi-root beat-DAG output from Phase 4a when no serial / wraps / hint
-    # relationship orders the dilemmas. Root unification — if any — is
-    # downstream. The validator is retained as a public diagnostic helper
-    # (callable ad-hoc and exercised by unit tests) but is no longer wired
-    # into ``run_grow_checks`` / ``run_all_checks``. See #1584 for the
-    # deliberate downstream-unification policy decision.
     checks: list[ValidationCheck] = [
+        check_single_root_beat(graph),
         check_single_start(graph),
         check_passage_dag_cycles(graph),
         check_spine_arc_exists(graph),

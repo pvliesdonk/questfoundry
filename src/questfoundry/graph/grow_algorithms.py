@@ -2646,17 +2646,11 @@ def _iter_temporal_hint_edges(
 def detect_temporal_hint_conflicts(graph: Graph) -> list[TemporalHintConflict]:
     """Simulate temporal hint edge application and return hints that would create cycles.
 
-    Tests each temporal hint against the cumulative ``serial`` + ``wraps``
-    base DAG (R-3.1 / R-4a.3 — concurrent contributes no edges).  Hints whose
-    edges would close a cycle are returned as ``TemporalHintConflict`` objects
+    Replicates the full edge-building logic of ``interleave_cross_path_beats``
+    (serial, wraps, and concurrent including heuristic commit-ordering edges)
+    without committing any edges to the graph.  Hints that would be
+    skipped as cycle-creating are returned as ``TemporalHintConflict`` objects
     for LLM resolution before interleave runs.
-
-    The simulation is two-pass: every non-hint mandatory edge is added first,
-    then concurrent pairs' hints are tested against the fully-built base.
-    This means hints that only conflict transitively with mandatory edges from
-    a *later* dilemma pair are caught at detection time rather than crashing
-    apply.  Iteration order is no longer load-bearing; the function's behavior
-    matches ``_build_hint_base_dag`` (used by ``build_hint_conflict_graph``).
 
     Returns:
         List of conflicting hints.  Empty if all hints are consistent.
@@ -2709,7 +2703,7 @@ def detect_temporal_hint_conflicts(graph: Graph) -> list[TemporalHintConflict]:
         return not from_groups.intersection(to_groups)
 
     def _sim_add(from_b: str, to_b: str) -> bool:
-        """Simulate adding a non-hint mandatory edge (serial/wraps), updating state."""
+        """Simulate adding a non-hint edge (serial/wraps/heuristic), updating state."""
         if not _is_valid_edge_candidate(from_b, to_b):
             return False
         if _would_create_cycle(from_b, to_b, successors, beat_set):
@@ -2720,33 +2714,26 @@ def detect_temporal_hint_conflicts(graph: Graph) -> list[TemporalHintConflict]:
 
     conflicts: list[TemporalHintConflict] = []
 
-    # Two-pass simulation matching the new contract:
-    #   Pass 1 — pre-load all non-hint mandatory edges (serial + wraps).  This
-    #   builds the same base DAG that `_build_hint_base_dag` uses, so a hint
-    #   targeting a concurrent pair is tested against the cumulative ordering
-    #   from every relationship in the graph (R-3.1).
-    #   Pass 2 — for each concurrent pair, generate hint edges and test each
-    #   against the fully-built base; a hint that cycles is reported.
+    # Collect ALL relationship edges in the same order as interleave_cross_path_beats.
     relationship_edges: list[tuple[str, str, str]] = []
-    for ordering in ("serial", "wraps", "concurrent"):
+    for ordering in ("concurrent", "wraps", "serial"):
         for edge in graph.get_edges(from_id=None, to_id=None, edge_type=ordering):
             a = edge["from"]
             b = edge["to"]
             if a in dilemma_paths and b in dilemma_paths:
                 relationship_edges.append((a, b, ordering))
 
-    # Pass 1: serial + wraps edges.
     for dilemma_a, dilemma_b, ordering in relationship_edges:
-        if ordering == "concurrent":
-            continue
         paths_a = dilemma_paths.get(dilemma_a, [])
         paths_b = dilemma_paths.get(dilemma_b, [])
         if not paths_a or not paths_b:
             continue
+
         ordered_a = [_get_path_beats_ordered(graph, p, path_beats_map) for p in paths_a]
         ordered_b = [_get_path_beats_ordered(graph, p, path_beats_map) for p in paths_b]
         all_beats_a = [b for seq in ordered_a for b in seq]
         all_beats_b = [b for seq in ordered_b for b in seq]
+
         if not all_beats_a or not all_beats_b:
             continue
 
@@ -2756,7 +2743,8 @@ def detect_temporal_hint_conflicts(graph: Graph) -> list[TemporalHintConflict]:
             for last_a in sorted(last_beats_a):
                 for first_b in sorted(first_beats_b):
                     _sim_add(first_b, last_a)
-        else:  # wraps
+
+        elif ordering == "wraps":
             first_beats_a = {seq[0] for seq in ordered_a if seq}
             first_beats_b = {seq[0] for seq in ordered_b if seq}
             last_beats_b = {seq[-1] for seq in ordered_b if seq}
@@ -2768,50 +2756,78 @@ def detect_temporal_hint_conflicts(graph: Graph) -> list[TemporalHintConflict]:
                 for commit_a in sorted(commits_a):
                     _sim_add(commit_a, last_b)
 
-    # Pass 2: concurrent pairs.  Concurrent contributes no edges (R-4a.3); only
-    # surviving temporal hints can introduce ordering between concurrent pairs.
-    for dilemma_a, dilemma_b, ordering in relationship_edges:
-        if ordering != "concurrent":
-            continue
-        paths_a = dilemma_paths.get(dilemma_a, [])
-        paths_b = dilemma_paths.get(dilemma_b, [])
-        if not paths_a or not paths_b:
-            continue
-        ordered_a = [_get_path_beats_ordered(graph, p, path_beats_map) for p in paths_a]
-        ordered_b = [_get_path_beats_ordered(graph, p, path_beats_map) for p in paths_b]
-        all_beats_a = [b for seq in ordered_a for b in seq]
-        all_beats_b = [b for seq in ordered_b for b in seq]
-        if not all_beats_a or not all_beats_b:
-            continue
-
-        for hint_edge in _iter_temporal_hint_edges(
-            all_beats_a + all_beats_b,
-            beat_nodes,
-            dilemma_a,
-            dilemma_b,
-            all_beats_a,
-            ordered_a,
-            all_beats_b,
-            ordered_b,
-            beat_id_to_dilemmas,
-        ):
-            from_b, to_b = hint_edge.from_beat, hint_edge.to_beat
-            if not _is_valid_edge_candidate(from_b, to_b):
-                continue
-            if _would_create_cycle(from_b, to_b, successors, beat_set):
-                conflicts.append(
-                    TemporalHintConflict(
-                        beat_id=hint_edge.beat_id,
-                        hint_relative_to=hint_edge.relative_to,
-                        hint_position=hint_edge.position,
-                        from_beat=from_b,
-                        to_beat=to_b,
-                        beat_summary=beat_nodes.get(hint_edge.beat_id, {}).get("summary", ""),
+        elif ordering == "concurrent":
+            # Temporal hints first (same order as interleave_cross_path_beats)
+            for hint_edge in _iter_temporal_hint_edges(
+                all_beats_a + all_beats_b,
+                beat_nodes,
+                dilemma_a,
+                dilemma_b,
+                all_beats_a,
+                ordered_a,
+                all_beats_b,
+                ordered_b,
+                beat_id_to_dilemmas,
+            ):
+                from_b, to_b = hint_edge.from_beat, hint_edge.to_beat
+                if not _is_valid_edge_candidate(from_b, to_b):
+                    continue
+                if _would_create_cycle(from_b, to_b, successors, beat_set):
+                    conflicts.append(
+                        TemporalHintConflict(
+                            beat_id=hint_edge.beat_id,
+                            hint_relative_to=hint_edge.relative_to,
+                            hint_position=hint_edge.position,
+                            from_beat=from_b,
+                            to_beat=to_b,
+                            beat_summary=beat_nodes.get(hint_edge.beat_id, {}).get("summary", ""),
+                        )
                     )
-                )
-            else:
-                existing.add((from_b, to_b))
-                successors[to_b].add(from_b)
+                else:
+                    existing.add((from_b, to_b))
+                    successors[to_b].add(from_b)
+
+            # Heuristic commit-ordering edges — MUST match interleave_cross_path_beats
+            # so later concurrent pairs see the same graph state.
+            commits_a = set(_commits_beats_for_dilemma(all_beats_a, dilemma_a, beat_nodes))
+            commits_b = set(_commits_beats_for_dilemma(all_beats_b, dilemma_b, beat_nodes))
+            if commits_a and commits_b:
+                if dilemma_a < dilemma_b:
+                    prereq_commits, dependent_commits = commits_a, commits_b
+                else:
+                    prereq_commits, dependent_commits = commits_b, commits_a
+                for prereq in sorted(prereq_commits):
+                    for dependent in sorted(dependent_commits):
+                        _sim_add(dependent, prereq)
+            # Entry-beat ordering across dilemmas is intentionally omitted from
+            # the simulated DAG. Entry-beat edges in interleave_cross_path_beats
+            # are added as soft heuristics via `_add_predecessor(...,
+            # from_hint=False)`, which soft-skip cycle conflicts with previously-
+            # applied hints. Including them in the simulated base DAG would
+            # promote the heuristic to a hard constraint, causing valid
+            # hints that override the heuristic to be classified as mandatory
+            # solo drops. The peer function `_build_hint_base_dag` makes the
+            # same omission for the same reason.
+
+    # Order entry beats within the alphabetically first dilemma —
+    # MUST match interleave_cross_path_beats (#1192).
+    # Note: the early-return above (len(dilemma_paths) < 2) means this block
+    # is only reached for multi-dilemma stories. interleave_cross_path_beats
+    # has the same guard, so single-dilemma stories skip intra-dilemma
+    # ordering in both functions. This is acceptable because single-dilemma
+    # stories are not a production scenario (every story has >= 2 dilemmas).
+    first_dilemma = sorted(dilemma_paths.keys())[0]
+    first_paths = dilemma_paths[first_dilemma]
+    first_entry_beats: list[str] = []
+    for p in first_paths:
+        seq = _get_path_beats_ordered(graph, p, path_beats_map)
+        if seq:
+            first_entry_beats.append(seq[0])
+    if len(first_entry_beats) > 1:
+        first_entry_beats.sort()
+        # Chain alphabetically: beat[0] is root, beat[i+1] requires beat[i]
+        for i in range(len(first_entry_beats) - 1):
+            _sim_add(first_entry_beats[i + 1], first_entry_beats[i])
 
     return conflicts
 
@@ -3002,14 +3018,18 @@ def _build_hint_base_dag(
 ) -> tuple[set[tuple[str, str]], dict[str, set[str]]]:
     """Build the base DAG for hint conflict detection/postcondition checking.
 
-    Pre-loads non-hint mandatory edges (existing ``predecessor`` edges + ``serial``
-    + ``wraps``) from all relationship pairs into the base DAG.  ``concurrent``
-    relationships contribute no edges per R-3.1 / R-4a.3 — concurrent has no
-    mandatory ordering, and the base DAG mirrors Phase 4a's semantics so that
-    hint conflict detection and Phase 4a apply produce consistent results.
-    Hints are NOT included.  This shared construction is used by both
+    Pre-loads non-hint heuristic edges (predecessor + serial + wraps + concurrent
+    commit-ordering) from all relationship pairs into the base DAG.  Hints are
+    NOT included.  This is the shared DAG construction used by both
     ``build_hint_conflict_graph`` (detection) and ``verify_hints_acyclic``
-    (postcondition).
+    (postcondition), ensuring they produce consistent results.
+
+    Concurrent entry-beat ordering is intentionally absent from this base DAG.
+    Entry-beat ordering is a soft heuristic that must yield to hints rather than
+    block them.  Cycle-safety is preserved at apply time: in
+    ``interleave_cross_path_beats`` the entry-beat heuristic is added with
+    ``from_hint=False``, so cycle conflicts with previously-applied hints are
+    soft-skipped rather than rejecting the hint.
 
     Args:
         graph: The story graph.
@@ -3072,10 +3092,18 @@ def _build_hint_base_dag(
             for last_b in sorted({seq[-1] for seq in ordered_b if seq}):
                 for commit_a in sorted(commits_a):
                     _sim(commit_a, last_b)
-        # R-3.1: concurrent contributes no edges to the base DAG.
-        # The base DAG against which hints are tested is exactly the closure of
-        # serial + wraps edges (plus pre-existing predecessor edges). Phase 4a
-        # mirrors this: concurrent pairs are unordered there too.
+        elif ordering == "concurrent":
+            # Heuristic commit-ordering only (no hints applied here)
+            commits_a = set(_commits_beats_for_dilemma(all_beats_a, dilemma_a, beat_nodes))
+            commits_b = set(_commits_beats_for_dilemma(all_beats_b, dilemma_b, beat_nodes))
+            if commits_a and commits_b:
+                if dilemma_a < dilemma_b:
+                    prereq_commits, dependent_commits = commits_a, commits_b
+                else:
+                    prereq_commits, dependent_commits = commits_b, commits_a
+                for prereq in sorted(prereq_commits):
+                    for dependent in sorted(dependent_commits):
+                        _sim(dependent, prereq)
 
     return existing, succ
 
@@ -3086,9 +3114,8 @@ def build_hint_conflict_graph(graph: Graph) -> HintConflictResult:
     Unlike ``detect_temporal_hint_conflicts`` (single-pass, cascade-blind),
     this function:
 
-    1. Builds a *base DAG* by simulating all non-hint mandatory edges (serial,
-       wraps) without any hints.  Concurrent contributes no edges per R-3.1 /
-       R-4a.3.
+    1. Builds a *base DAG* by simulating all non-hint edges (serial, wraps,
+       heuristic commit-ordering) without any hints.
     2. Tests each hint alone against the base DAG — hints that cycle alone
        are mandatory drops.
     3. Runs a greedy minimum-drop-set (MDS) loop using
@@ -3545,18 +3572,17 @@ def interleave_cross_path_beats(graph: Graph) -> int:
     """Create predecessor edges between beats from different dilemma paths.
 
     Reads dilemma relationship edges (concurrent/wraps/serial) and applies
-    cross-path ordering rules per ``docs/design/procedures/grow.md`` R-4a:
+    cross-path ordering rules:
 
     - ``serial`` (A before B): Last beats of every A path must precede first
-      beats of every B path (R-4a.1).
+      beats of every B path.
     - ``wraps`` (A wraps B): A's intro beats precede B's intro beats; B's
-      last beats precede A's commit beats (R-4a.2).
-    - ``concurrent``: contributes zero ordering edges (R-4a.3). Surviving
-      temporal hints (R-4a.4) are the only mechanism that orders concurrent
-      pairs; pairs with no hints stay unordered. The output may be multi-root
-      (R-4a.6) — root unification, if any, is downstream.
+      last beats precede A's commit beats.
+    - ``concurrent``: Temporal hints on beats drive specific orderings; without
+      hints, commit beats of one dilemma are ordered before commit beats of the
+      other to ensure pacing.
 
-    Any edge that would create a cycle raises GrowContractError (R-3.7 / R-4a.5).
+    Any edge that would create a cycle raises GrowContractError (R-3.7 / R-4.5).
     resolve_temporal_hints must prevent hint-induced cycles before this phase runs.
 
     Args:
@@ -3614,15 +3640,19 @@ def interleave_cross_path_beats(graph: Graph) -> int:
         return 0
 
     # Initialise the cycle-detection DAG from the same base as detection/postcondition.
-    # _build_hint_base_dag pre-loads non-hint mandatory edges (serial + wraps) so that a
-    # hint accepted by build_hint_conflict_graph cannot create a cycle here due to a
-    # narrower incremental DAG (#1147).  Concurrent contributes no edges per R-3.1 /
-    # R-4a.3, so detection and apply share an identical base.
+    # _build_hint_base_dag pre-loads non-hint heuristic edges (serial, wraps, commit-ordering)
+    # so that a hint accepted by build_hint_conflict_graph cannot create a cycle here
+    # due to a narrower incremental DAG (#1147).  Entry-beat ordering is intentionally
+    # absent from _build_hint_base_dag — it is a soft heuristic that must yield to hints
+    # rather than block them.  Below, the entry-beat heuristic is applied with
+    # ``from_hint=False``, so cycle conflicts with previously-applied hints soft-skip
+    # the heuristic edge instead of rejecting the hint.
     #
+    # ``_base_edges`` contains real graph edges + simulated heuristic edges.
     # ``successors`` is derived from the full base and is used for cycle detection.
     # ``existing_predecessors`` tracks only edges actually written to the graph —
-    # initialised from real graph edges so that the apply loop doesn't double-count
-    # edges already on the graph.
+    # initialised from real graph edges so that simulated edges are still written
+    # by _add_predecessor (avoiding silent drops of valid edges).
     _, successors = _build_hint_base_dag(
         graph,
         beat_nodes,
@@ -3679,20 +3709,16 @@ def interleave_cross_path_beats(graph: Graph) -> int:
             )
             return False
         if _would_create_cycle(from_beat, to_beat, successors, beat_set):
-            # Per R-3.7 / R-4a.5: any cycle detected at interleave time is a
+            # Per R-3.7 / R-4.5: any cycle detected at interleave time is a
             # hard pipeline failure — Silent Degradation policy forbids silent
-            # skip.  Possible sources:
-            #   - "temporal hint": resolve_temporal_hints (Phase 3) was meant
-            #     to clear cyclic hints; reaching here means R-3.7 was
-            #     violated.
-            #   - "wraps/serial": SEED produced a contradictory dilemma
-            #     relationship graph (e.g. wraps + serial that admit no
-            #     acyclic schedule); not a Phase 3 issue.
+            # skip.  Hint-induced cycles should have been cleared by
+            # resolve_temporal_hints; heuristic-induced cycles indicate that
+            # Phase 3's acyclicity guarantee was not upheld.
             from questfoundry.graph.grow_validation import (
                 GrowContractError,  # local to avoid circular import
             )
 
-            source = "temporal hint" if from_hint else "wraps/serial"
+            source = "temporal hint" if from_hint else "heuristic"
             log.error(
                 "interleave_cycle_skipped",
                 from_beat=from_beat,
@@ -3700,12 +3726,9 @@ def interleave_cross_path_beats(graph: Graph) -> int:
                 source=source,
             )
             raise GrowContractError(
-                f"R-3.7 / R-4a.5: interleave would close a cycle "
+                f"R-3.7 / R-4.5: interleave would close a cycle "
                 f"({from_beat!r} → {to_beat!r}, source={source!r}). "
-                f"Halting per Silent Degradation policy. If source is "
-                f"'wraps/serial', the SEED dilemma relationship graph is "
-                f"contradictory; if 'temporal hint', Phase 3's acyclicity "
-                f"guarantee was violated."
+                f"Phase 3's acyclicity guarantee was violated. Halting."
             )
         graph.add_edge("predecessor", from_beat, to_beat)
         existing_predecessors.add((from_beat, to_beat))
@@ -3763,9 +3786,7 @@ def interleave_cross_path_beats(graph: Graph) -> int:
                     _add_predecessor(commit_a, last_b)
 
         elif ordering == "concurrent":
-            # R-4a.3: concurrent contributes no commit-/entry-beat ordering edges.
-            # The only Phase 4a edges between concurrent pairs come from surviving
-            # temporal hints (R-4a.4).
+            # Apply temporal hints first
             hints_applied = 0
             for hint_edge in _iter_temporal_hint_edges(
                 all_beats_a + all_beats_b,
@@ -3788,6 +3809,56 @@ def interleave_cross_path_beats(graph: Graph) -> int:
                     dilemma_b=dilemma_b,
                     count=hints_applied,
                 )
+
+            # Heuristic fallback for concurrent: commits of A before commits of B
+            # (deterministic: use alphabetical dilemma ordering to pick direction)
+            commits_a = set(_commits_beats_for_dilemma(all_beats_a, dilemma_a, beat_nodes))
+            commits_b = set(_commits_beats_for_dilemma(all_beats_b, dilemma_b, beat_nodes))
+            if commits_a and commits_b:
+                # Alphabetically earlier dilemma's commits go first as a stable heuristic
+                if dilemma_a < dilemma_b:
+                    # A commits before B commits
+                    for ca in sorted(commits_a):
+                        for cb in sorted(commits_b):
+                            _add_predecessor(cb, ca)
+                else:
+                    # B commits before A commits
+                    for cb in sorted(commits_b):
+                        for ca in sorted(commits_a):
+                            _add_predecessor(ca, cb)
+
+            # Entry beats follow the same relative ordering as commit beats:
+            # whichever dilemma's commits go first also has its entry beats first.
+            # This ensures the beat DAG has a single root even when all dilemmas
+            # are concurrent (no serial/wraps edges) — fixing #1186.
+            first_beats_a = {seq[0] for seq in ordered_a if seq}
+            first_beats_b = {seq[0] for seq in ordered_b if seq}
+            if first_beats_a and first_beats_b:
+                if dilemma_a < dilemma_b:
+                    # A entry beats before B entry beats (consistent with A commits first)
+                    for fa in sorted(first_beats_a):
+                        for fb in sorted(first_beats_b):
+                            _add_predecessor(fb, fa)
+                else:
+                    # B entry beats before A entry beats (consistent with B commits first)
+                    for fb in sorted(first_beats_b):
+                        for fa in sorted(first_beats_a):
+                            _add_predecessor(fa, fb)
+
+    # Order entry beats within the alphabetically first dilemma to ensure
+    # a single DAG root when that dilemma has multiple paths (#1192).
+    first_dilemma = sorted(dilemma_paths.keys())[0]
+    first_paths = dilemma_paths[first_dilemma]
+    first_entry_beats: list[str] = []
+    for p in first_paths:
+        seq = _get_path_beats_ordered(graph, p, path_beats_map)
+        if seq:
+            first_entry_beats.append(seq[0])
+    if len(first_entry_beats) > 1:
+        first_entry_beats.sort()
+        # Chain alphabetically: beat[0] is root, beat[i+1] requires beat[i]
+        for i in range(len(first_entry_beats) - 1):
+            _add_predecessor(first_entry_beats[i + 1], first_entry_beats[i])
 
     log.info(
         "interleave_cross_path_beats_complete",
